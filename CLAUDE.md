@@ -135,6 +135,18 @@ convention every note and every reconstructed routine here uses.
 | `0x33d2` | PRNG state, advanced by `0x5ec5` per call |
 | `0x3164` | ten words the PRNG folds in |
 | `0x9020` | **font**: 40 glyphs of 8x12, 24 bytes each |
+| `0x2f10` | the level being played: an 8-byte header then 12x14 cells |
+| `0x13c9` | lives |
+| `0x13ca` | offset of the current level in the table |
+| `0x13cc` | level number, 0-0x31 |
+| `0x13cd` | the score, as eight ASCII digits |
+| `0x13d5` | the player's name, 12 characters |
+| `0x1487` | **the frame delay**, reloaded from `0x1489` every frame |
+| `0x1485`, `0x1486` | how often the ball is allowed to step, and the limit |
+| `0x2d0d` | table of four paddle sprite bases |
+| `0x2e73` | clear when the last ball is lost |
+| `0x4903` | the paddle sprites: four sets of four pre-shifted 7x44 images |
+| `0xc46c` | **the level table**: fifty records of 176 bytes |
 | `0x10250` | 32,000-byte backup of the CGA screen (`0xc46:0x3df0`) |
 
 ### Code addresses identified so far
@@ -166,6 +178,13 @@ Segment-relative (add `0x1ac20` for the image offset).
 | `0x27d7` | `ball_step` — the Bresenham stepper |
 | `0x3257` | unlink an entity from the list |
 | `0x40c0` | `random` — BIOS ticks, ten words at `0x3164`, and an LCG at `0x33d2`; returns `AH = value % DL` |
+| `0x1c4f` | the level intro: the border, the lives, and a figure walking the paddle row |
+| `0x1e50` | one 12x7 sprite, shifted to a pixel x and XORed in at the paddle row |
+| `0x2281` | `blit_xor` - seven rows of eleven bytes, XORed |
+| `0x22de` | `paddle_row_offsets` - seven CGA offsets from an x |
+| `0x2f5` | `play_session` - a whole game, level by level |
+| `0x5680` | `read_speed_setting` - POPSPEED's value, out of **interrupt vector 0x68** |
+| `0x14b3` | `build_shifted_sprites` - generates three of every four sprite phases at startup |
 | `0x5630` | the screen blit: waits on 0x3da bit 3, then `rep movsb` per row |
 
 ### The INT 09h handler, `0x03e3`
@@ -231,7 +250,9 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `autoplay.py` | walks the menu and plays the game, for unattended runs |
 | `dump_data.py` | extracts a data structure and renders it back out |
 | `tools_dis.py` | disassemble a range; `load_image()` is the shared loader |
-| `reconstruct/` | the C port: `exepack.c` reads the player's own EXE, `sdl_io.c` is the platform, `game.c` the transcribed routines |
+| `verify.py` | checks a transcribed routine against the original, on the same call |
+| `compare_screen.py` | diffs the port's screen against the emulator's, byte for byte |
+| `reconstruct/` | the C port: `exepack.c` reads the player's own EXE, `sdl_io.c` is the platform, `game.c` the transcribed routines, `stubs.c` what is not done yet |
 
 ### Running the game
 
@@ -338,6 +359,27 @@ Two traps, each of which cost a debugging round:
 - **The slope pair is stored (dy, dx).** Both branches of the stepper come out
   as `x_offset / y_offset = [+0x17] / [+0x16]`. Reading it the other way round
   makes a predicted landing point wrong by the square of the slope.
+
+## The level format
+
+Fifty levels of 176 bytes at image `0xc46c` - the block the program reaches as
+segment `0xc46`. `play_session` copies one at a time to `0x2f10`, and the play
+loop watches the first byte of that copy to know when the level is cleared.
+
+| offset | what |
+| --- | --- |
+| `+0x00` | **brick count** - checked against the non-zero cells of four levels and exact every time |
+| `+0x01` | a second count, used by `0x36fb` |
+| `+0x02` | a short list `0x36fb` walks, `[+0x01]` entries long |
+| `+0x08` | the cells: **12 columns by 14 rows**, one byte each |
+
+The geometry is not a guess. At twelve wide the first level reads as four bands
+of two solid rows alternating between cell values 2 and 1, which is exactly
+what the game draws; at any other width it is diagonal nonsense.
+
+`POPGEN.EXE` writes `.PPC` files of the same shape - `poptab.ppc` is 8,630
+bytes against the built-in table's 8,800 - but the loader at `0x08c8` has not
+been read yet, and the port uses the built-in table.
 
 ## The font
 
