@@ -37,13 +37,16 @@ int main(int argc, char **argv)
     const char *dump = NULL;
     int scale = 3;
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--dump-image") && i + 1 < argc)
+        if (!strcmp(argv[i], "--verify") && i + 2 < argc)
+            return verify_main(argv[i + 1], argv[i + 2]);
+        else if (!strcmp(argv[i], "--dump-image") && i + 1 < argc)
             dump = argv[++i];
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc)
             scale = atoi(argv[++i]);
         else {
-            fprintf(stderr, "usage: %s [--scale N] [--dump-image FILE]\n",
-                    argv[0]);
+            fprintf(stderr, "usage: %s [--scale N] [--dump-image FILE]\n"
+                            "       %s --verify STATE-IN RESULT-OUT\n",
+                    argv[0], argv[0]);
             return 2;
         }
     }

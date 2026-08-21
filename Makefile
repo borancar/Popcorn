@@ -13,7 +13,7 @@ CFLAGS  ?= -O2 -g -std=c99 -Wall -Wextra -Wno-unused-parameter
 CFLAGS  += $(shell pkg-config --cflags sdl3)
 LDLIBS  += $(shell pkg-config --libs sdl3) -lm
 
-OBJS = main.o exepack.o sdl_io.o game.o
+OBJS = main.o exepack.o sdl_io.o game.o verify.o
 BIN  = popcorn
 
 all: $(BIN)
