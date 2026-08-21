@@ -228,6 +228,10 @@ void play_session(void);          /* 1ac2:02f5 */
 void panel_draw(void);            /* 1ac2:0b0b */
 void level_colours(void);         /* 1ac2:044b */
 void level_intro(void);           /* 1ac2:1eb9 */
+void draw_brick_row(unsigned y);  /* 1ac2:2034 */
+void draw_sprite_20x6(unsigned x, unsigned y, unsigned src); /* 1ac2:20b9 */
+void cell_special(unsigned row, unsigned di);   /* 1ac2:41e5 */
+void field_edges(unsigned y);     /* 1ac2:1fc1 */
 void life_lost(void);             /* 1ac2:0735 */
 void screen_game_over(void);      /* 1ac2:0473 */
 void screen_end_of_game(void);    /* 1ac2:0d2e */
@@ -292,6 +296,10 @@ void play_session(void);          /* 1ac2:02f5 */
 void panel_draw(void);            /* 1ac2:0b0b */
 void level_colours(void);         /* 1ac2:044b */
 void level_intro(void);           /* 1ac2:1eb9 */
+void draw_brick_row(unsigned y);  /* 1ac2:2034 */
+void draw_sprite_20x6(unsigned x, unsigned y, unsigned src); /* 1ac2:20b9 */
+void cell_special(unsigned row, unsigned di);   /* 1ac2:41e5 */
+void field_edges(unsigned y);     /* 1ac2:1fc1 */
 void life_lost(void);             /* 1ac2:0735 */
 void screen_game_over(void);      /* 1ac2:0473 */
 void screen_end_of_game(void);    /* 1ac2:0d2e */

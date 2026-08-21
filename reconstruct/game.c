@@ -1258,3 +1258,119 @@ void play_session(void)
         }
     }
 }
+
+/* ========================================================================
+ * The playfield.
+ * ===================================================================== */
+
+/* The address of a pixel, the way the game computes it everywhere:
+ *
+ *     di = x >> 2                       four pixels to a byte
+ *     if (y & 1) di += 0x2000           odd scan lines live in the far half
+ *     di += (y >> 1) * 80               `shl ax,4` then `shl ax,2` twice more
+ */
+static unsigned cga_at(unsigned x, unsigned y)
+{
+    unsigned di = x >> 2;
+    if (y & 1)
+        di += CGA_PLANE;
+    return di + (y >> 1) * CGA_STRIDE;
+}
+
+/* 1ac2:2034  draw_brick_row
+ *
+ * One scan line of the brick field. The playfield starts two bytes in - eight
+ * pixels - and six scan lines down, and a brick is **16 pixels wide and eight
+ * scan lines tall**: `(y - 6) >> 3` picks the row of cells and `((y - 6) & 7)
+ * * 4` picks which of its eight lines to copy. Twelve cells across, four bytes
+ * each, which is where the 12x14 grid in the level record comes from.
+ *
+ * Cell 0x0c is not a brick - it hands off to 0x41e5. Cells from 0x18 up have
+ * their bitmaps in the block the program reaches as segment 0x14a1 rather than
+ * in the table at 0x3080.
+ */
+#define BRICK_TOP        6              /* first scan line of the field */
+#define BRICK_LEFT       2              /* bytes, so eight pixels */
+#define BRICK_COLS      12
+#define BRICK_HEIGHT     8              /* scan lines */
+#define BRICK_BYTES      4              /* 16 pixels */
+#define CELL_TABLE  0x3080              /* cell value -> bitmap pointer */
+#define SEG_14A1   0x14a10
+
+void draw_brick_row(unsigned y)
+{
+    unsigned di = cga_at(0, y) + BRICK_LEFT;
+    unsigned row = (y - BRICK_TOP) & 0xff;
+    unsigned sub = (row & 7) * 4;
+    unsigned si = LEVEL_CELLS + 8 + (row >> 3) * BRICK_COLS;
+
+    for (int c = 0; c < BRICK_COLS; c++, si++, di += BRICK_BYTES) {
+        unsigned cell = g_image[si];
+        if (cell == 0x0c) {
+            cell_special(row & 0xff, di);
+            continue;
+        }
+        unsigned idx = cell * 2;
+        unsigned base = (idx >= 0x30 ? SEG_14A1 : 0) + img_w(CELL_TABLE + idx);
+        const unsigned char *src = g_image + base + sub;
+        for (int b = 0; b < BRICK_BYTES; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
+    }
+}
+
+/* 1ac2:20b9  draw_sprite_20x6
+ *
+ * Six rows of five bytes at a pixel position - the popcorn kernels the level
+ * intro sweeps down the screen.
+ */
+void draw_sprite_20x6(unsigned x, unsigned y, unsigned src)
+{
+    unsigned di = cga_at(x, y);
+    for (int r = 0; r < 6; r++) {
+        for (int b = 0; b < 5; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + r * 5 + b];
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:1eb9  level_intro, second phase (from 0x1f57)
+ *
+ * Paints the brick field one scan line at a time from the top, sweeping four
+ * kernels along ahead of it. The first phase, which sweeps them the other way
+ * to clear the previous level, is not transcribed yet.
+ */
+#define SWEEP_Y     0x2f0c              /* four kernel positions */
+#define SWEEP_STATE 0x2efc              /* four records of four bytes */
+
+void level_intro(void)
+{
+    g_image[SWEEP_Y + 3] = 0xc2;
+    g_image[SWEEP_Y + 2] = 0xbd;
+    g_image[SWEEP_Y + 1] = 0xb8;
+    g_image[SWEEP_Y + 0] = 0xb3;
+
+    /* The original runs this as two sweeps of four popcorn kernels: phase one
+     * counts [0x2f0c] down from 0xb3 to 0x0c clearing the previous level,
+     * phase two counts it back up painting the new one. The loop is not driven
+     * by a counter of its own - [0x2f0c] *is* kernel zero's position, and it
+     * advances only when that kernel's timer at [0x2efc] runs out, which is
+     * what paces the reveal.
+     *
+     * Those timer records are set up by 0x2109, which is not transcribed yet,
+     * so the reveal is driven directly here instead: the field is painted a
+     * scan line at a time, in order, with no kernels. The picture that leaves
+     * on screen is right; the way it arrives is not, and this is the first
+     * thing to put back when 0x2109 lands.
+     */
+    for (unsigned p = 0x0c; p != 0xb3; p++) {
+        unsigned y = (p - 6) & 0xff;
+        draw_brick_row(y);
+        field_edges((y + 1) & 0xff);
+        for (int i = 0; i < 0xa; i++)
+            game_delay();
+        io_present();
+        if (!io_pump())
+            return;
+    }
+    g_image[SWEEP_Y] = 0xb3;
+}

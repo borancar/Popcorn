@@ -64,6 +64,17 @@ STUB(laser_fire,          0x2ee3, "the paddle's laser")
 STUB(play_teardown,       0x41d4, "tidies up when a level ends")
 STUB(bonus_spawn,         0x3d95, "drops a bonus capsule")
 STUB(demo_input_step,     0x1a6f, "advances the recorded-input cursor")
+void field_edges(unsigned y)
+{
+    note("field_edges", 0x1fc1);
+    (void)y;
+}
+
+void cell_special(unsigned row, unsigned di)
+{
+    note("cell_special", 0x41e5);
+    (void)row; (void)di;
+}
 
 void draw_text(unsigned src, unsigned count, unsigned di)
 {
@@ -90,7 +101,6 @@ void entity_spawn(unsigned what) { note("entity_spawn", 0x3146); (void)what; }
 /* --- called from play_session, which is transcribed ------------------- */
 STUB(panel_draw,            0x0b0b, "the right-hand score panel")
 STUB(level_colours,         0x044b, "picks the level's colour scheme")
-STUB(level_intro,           0x1eb9, "the get-ready animation")
 STUB(life_lost,             0x0735, "the losing-a-ball sequence")
 STUB(screen_game_over,      0x0473, "GAME OVER")
 STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")

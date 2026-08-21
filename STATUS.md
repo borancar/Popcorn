@@ -193,6 +193,24 @@ a rendering reference but unable to resume.
   Python. Less obviously needed now than it was in Ducks: `verify.py` checks
   the **C** against the original directly, which is what `native.py` existed to
   make possible, so the Python middle layer may never be worth writing.
+### The playfield draws
+
+`draw_brick_row` (`0x2034`) and `draw_sprite_20x6` (`0x20b9`) are in, and they
+settle the level geometry from the code rather than from staring at the data: a
+brick is **16 pixels wide and eight scan lines tall**, the field starts eight
+pixels in and six lines down, twelve to a row. `(y - 6) >> 3` picks the row of
+cells and `((y - 6) & 7) * 4` picks which of its eight lines to copy - which is
+where the 12x14 grid comes from, independently of the eyeball reading of the
+table.
+
+Pressing F1 now paints level one's brick field correctly, over a working
+paddle. What is not right is *how* it arrives: the original reveals it behind
+four popcorn kernels sweeping the screen, and the loop is not driven by a
+counter of its own - `[0x2f0c]` **is** kernel zero's position, and the reveal
+advances only when that kernel's timer at `[0x2efc]` runs out. Those records
+are set up by `0x2109`, which is not transcribed, so the reveal is driven
+directly instead and no kernels appear.
+
 - **The play path is half done.** `play_loop` (`0x1873`) and `play_session`
   (`0x02f5`) are transcribed, and F1 now enters a level with a working paddle.
   What is still empty is everything they call into: `level_draw` (`0x1c4f`,
