@@ -65,6 +65,50 @@ worth knowing before the C port touches this code:
   square of the slope, which presents as a paddle that jerks at each bounce and
   catches the ball only when the geometry happens to agree.
 
+### Eight routines are transcribed, and all eight are proven
+
+`verify.py` stops the emulator at a routine's entry, captures the machine, lets
+the **original** body run to its return, captures again, then runs the C on the
+first capture and diffs against the second. The comparison is between the C and
+the original *on the same call inside one run*, so it needs no determinism to
+mean anything — the host clock and the game's RNG cannot make it flaky.
+
+```
+  ok   draw_char           (0x0c64): 25 calls, identical
+  ok   input_keyboard      (0x1712): 25 calls, identical
+  ok   draw_paddle         (0x221a): 25 calls, identical
+  ok   blit_xor            (0x2281): 25 calls, identical
+  ok   paddle_row_offsets  (0x22de): 25 calls, identical
+  ok   ball_step           (0x27d7): 25 calls, identical
+  ok   save_screen         (0x5099):  1 call,  identical
+  ok   restore_screen      (0x50bc):  1 call,  identical
+```
+
+It reports "NOT REACHED, so unproven" separately from "agreed", because zero
+mismatches over a state that never reaches the routine reads exactly like a
+pass. `input_keyboard` was in that category until `--keyboard` was added: the
+bot plays through the mouse, so `0x16d2` never ran.
+
+The first run of this caught four things, and three were real:
+
+- **`draw_paddle` was missing `sub word [0x1487], 0x1e0`** — taken only when
+  the paddle actually moves. `[0x1487]` is a countdown the play loop reloads
+  from `[0x1489]`; most likely the level time bonus, charged for moving.
+- **`save_screen` copies 16,000 bytes, not the 16,384 of the aperture** — two
+  `rep movsw` of `0xfa0` words, which is the 200 visible scan lines at 80 bytes
+  for every other one. The 192 bytes of padding at the end of each half are
+  neither saved nor restored, and the two halves land *adjacent* in the buffer
+  rather than 0x2000 apart. A `memcpy` of the whole aperture is wrong twice
+  over.
+- **`input_keyboard`'s equal case is not a no-op.** With neither key held it
+  resets the acceleration to 5 and clamps the paddle to the right-hand limit;
+  with *both* held it moves in the direction of whichever key was pressed most
+  recently, which the INT 09h handler records at `[0x2d4a]`.
+
+The fourth was the harness's own: the stack is scratch, not state, and
+comparing it flags every routine that pushes anything. It is excluded, and the
+note says why.
+
 ### The code segment is mapped
 
 `analyze.py` follows control flow from the entry point and the INT 09h handler
@@ -104,17 +148,24 @@ a rendering reference but unable to resume.
 ### Not started
 
 - `native.py` — routines hooked at their entry points and reimplemented in
-  Python, each byte-checked against the code it replaces.
-- The C reconstruction on SDL3.
+  Python. Less obviously needed now than it was in Ducks: `verify.py` checks
+  the **C** against the original directly, which is what `native.py` existed to
+  make possible, so the Python middle layer may never be worth writing.
+- The C port does not yet **run** the game. It has the platform layer, the data
+  loader and eight routines; what it has not got is `main`, the menus, the
+  level loader or the play loop.
 
 ## Next
 
-1. Snapshots, so a test can start at a screen rather than play to it.
-2. Name the rest of the code map, working outwards from the play loop at
-   `0x1873` — which is where the game actually is.
-3. Decode the built-in level table.
-4. Start `native.py` with the drawing primitives, since those are what the C
-   port needs to agree with first.
+1. Keep transcribing outwards from the play loop at `0x1873`, verifying each
+   routine as it lands. The order that gets the port running soonest is: the
+   sprite blitters the entity handlers use, the level loader, then the play
+   loop itself.
+2. Decode the built-in level table.
+3. Snapshots, so a verification run can start at a screen rather than play to
+   it — the 60-second runs are dominated by getting into a level.
+4. The menus, which are a large fraction of the code and none of it is
+   transcribed.
 
 ## Deferred
 

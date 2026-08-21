@@ -133,4 +133,23 @@ static inline void img_setw(unsigned off, unsigned v)
     g_image[off + 1] = (unsigned char)(v >> 8);
 }
 
+/* ------------------------------------------------------- the game code ---
+ *
+ * Each carries the image offset it was transcribed from; verify.c maps those
+ * offsets to these calls, and the mapping of registers to arguments is part of
+ * what the check asserts.
+ */
+void ball_step(unsigned ball);                          /* 1ac2:27d7 */
+void input_keyboard(void);                              /* 1ac2:1712 */
+void input_mouse(unsigned mouse_x, unsigned buttons);   /* 1ac2:169f */
+void save_screen(void);                                 /* 1ac2:5099 */
+void restore_screen(void);                              /* 1ac2:50bc */
+void paddle_row_offsets(unsigned x, unsigned rows_out); /* 1ac2:22de */
+void blit_xor(unsigned pixels, unsigned rows);          /* 1ac2:2281 */
+void draw_paddle(unsigned sprite);                      /* 1ac2:221a */
+void draw_char(unsigned char c, unsigned di);           /* 1ac2:0c64 */
+unsigned game_random(unsigned ticks, unsigned limit);   /* 1ac2:40c0 */
+
+int verify_main(const char *in_path, const char *out_path);
+
 #endif /* POPCORN_GAME_H */

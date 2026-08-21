@@ -65,6 +65,13 @@ from emulation import VgaDos, KEYMAP, GAME_CODE, IPS_8086_8MHZ, make_surface
 from trace_dos import UNPACKED
 
 # --------------------------------------------------------------- the addresses
+# The three bytes the game's INT 09h handler maintains, and the only thing its
+# keyboard input routine at 0x16d2 reads. Used only by --keyboard; the mouse
+# path needs none of them.
+KEY_ACTION = 0x2D4C
+KEY_RIGHT = 0x2D4D
+KEY_LEFT = 0x2D4E
+
 PADDLE_X = 0x2E54          # left edge, pixels
 PADDLE_MIN = 0x2D3E
 PADDLE_MAX = 0x2D3F
@@ -98,15 +105,45 @@ WALL_L, WALL_R = 9, 195    # the ball's turning points, measured in play
 ROUTE_PLAY = ["@0206:f3", "@0206:f1",
               "@13d2:b", "@13d2:o", "@13d2:t", "@13d2:return", "@13d2:return"]
 ROUTE_DEMO = ["@0206:f2"]
+# The same route through F4 instead, which leaves the game on its keyboard
+# input routine. Worse to play with - see the note above - but it is the only
+# way to exercise 1ac2:16d2 at all, which verify.py needs.
+ROUTE_PLAY_KEYS = ["@0206:f4"] + ROUTE_PLAY[1:]
 
 
 class Bot:
     """Keep the paddle under the ball, through the mouse."""
 
-    def __init__(self, m):
+    def __init__(self, m, keyboard=False):
         self.m = m
         self.base = m.load_seg * 16
         self.idle = 0
+        # Drive the three key-state bytes instead of the pointer. Only for
+        # exercising the keyboard input routine: the paddle then moves one
+        # pixel per repeat tick and the bot plays much worse.
+        self.keyboard = keyboard
+
+    def wr(self, off, value):
+        self.m.uc.mem_write(self.base + off, bytes([value & 0xFF]))
+
+    def step_keys(self):
+        """The same decision, expressed as keys held."""
+        self.wr(KEY_ACTION, 1)
+        live = self.balls()
+        if not live:
+            self.wr(KEY_LEFT, 0)
+            self.wr(KEY_RIGHT, 0)
+            return "serve"
+        target = min(live, key=lambda b: (b[2] == 1, -b[1]))
+        bx, by, dy_up = target[0], target[1], target[2]
+        aim = bx if dy_up else self.predict(bx, by, target[4], target[5],
+                                            target[3])
+        lo, hi = self.rd(PADDLE_MIN)[0], self.rd(PADDLE_MAX)[0]
+        px = self.rd(PADDLE_X)[0]
+        want = max(lo, min(hi, aim - PADDLE_W // 2))
+        self.wr(KEY_RIGHT, 1 if want > px + 3 else 0)
+        self.wr(KEY_LEFT, 1 if want < px - 3 else 0)
+        return f"keys {px:3d}->{want:3d}"
 
     def rd(self, off, n=1):
         return bytes(self.m.uc.mem_read(self.base + off, n))
@@ -143,6 +180,8 @@ class Bot:
 
     def step(self):
         """One decision. Returns a short string for the status line."""
+        if self.keyboard:
+            return self.step_keys()
         live = self.balls()
         lo, hi = self.rd(PADDLE_MIN)[0], self.rd(PADDLE_MAX)[0]
         px = self.rd(PADDLE_X)[0]
