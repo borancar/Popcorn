@@ -121,7 +121,21 @@ convention every note and every reconstructed routine here uses.
 | `0x2d51` | **action** key scan code (default `0x39`, Space) |
 | `0x344f` | player-name table, `0x11b` bytes per player |
 | `0x3f08` | players entered so far |
-| `0xc460+0x3df0` | 32,000-byte backup of the CGA screen |
+| `0x2d40` | paddle repeat counter, counts down to the next allowed step |
+| `0x2d4b` | paddle repeat divider; decremented while a key is held, so the paddle accelerates |
+| `0x2e54` | **paddle x**, the left edge in pixels |
+| `0x2d3e` | lowest paddle position (8) |
+| `0x2d3f` | highest paddle position (172) |
+| `0x2ea1` | **ball pool**: four entries of `0x1e` bytes |
+| `0x3138` | head node of the entity list; its `+0x0c` link is `0x3144` |
+| `0x3142` | previous-node cursor, for unlinking |
+| `0x3144` | first entity link; `0xffff` terminates the chain |
+| `0x3146` | entity node pool, stride `0x0e` |
+| `0x313a` | "remove me" flag an entity handler sets |
+| `0x33d2` | PRNG state, advanced by `0x5ec5` per call |
+| `0x3164` | ten words the PRNG folds in |
+| `0x9020` | **font**: 40 glyphs of 8x12, 24 bytes each |
+| `0x10250` | 32,000-byte backup of the CGA screen (`0xc46:0x3df0`) |
 
 ### Code addresses identified so far
 
@@ -145,6 +159,13 @@ Segment-relative (add `0x1ac20` for the image offset).
 | `0x16d2` | keyboard input handler |
 | `0x5099` | `save_screen` — 0xb800 both halves to `0xc46:0x3df0` |
 | `0x50bc` | `restore_screen` |
+| `0x0c64` | `draw_char` — one 8x12 glyph to `ES:DI`, stepping the interlace |
+| `0x1873` | **the play loop**: serve, entity walk, ball stepping, collision |
+| `0x169f` | `input_mouse` tail: `paddle = clamp(mouse x / 2)`, buttons = action |
+| `0x172f` | `input_keyboard` tail: one pixel per repeat tick |
+| `0x27d7` | `ball_step` — the Bresenham stepper |
+| `0x3257` | unlink an entity from the list |
+| `0x40c0` | `random` — BIOS ticks, ten words at `0x3164`, and an LCG at `0x33d2`; returns `AH = value % DL` |
 | `0x5630` | the screen blit: waits on 0x3da bit 3, then `rep movsb` per row |
 
 ### The INT 09h handler, `0x03e3`
@@ -206,7 +227,11 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `trace_dos.py` | headless DOS/BIOS shim; **read-only** on the host filesystem |
 | `emulation.py` | CGA + SDL window on top of it — the reference implementation |
 | `analyze.py` | recursive-descent map of the code segment |
+| `coverage.py` | records what actually executes, across several menu routes |
+| `autoplay.py` | walks the menu and plays the game, for unattended runs |
+| `dump_data.py` | extracts a data structure and renders it back out |
 | `tools_dis.py` | disassemble a range; `load_image()` is the shared loader |
+| `reconstruct/` | the C port: `exepack.c` reads the player's own EXE, `sdl_io.c` is the platform, `game.c` the transcribed routines |
 
 ### Running the game
 
@@ -252,6 +277,64 @@ The program is stated in its own readme to be public domain
 ("Ce programme fait parti du domaine public"), but that is the authors' word
 about their own distribution, not a licence grant we can re-publish under, so
 nothing of it is redistributed here.
+
+## The entity system
+
+The play loop at `0x1873` walks a **linked list** and calls each node's handler:
+
+```
+1b4d  mov word [0x3142], 0x3138   ; the previous-node cursor, at the head
+1b53  mov bx, [0x3144]            ; the first link
+1b57  cmp bx, 0xffff / je done
+1b5d  push bx / call word ptr [bx] / pop bx
+1b61  cmp byte [0x313a], 0        ; did the handler ask to be removed?
+1b68  mov [0x3142], bx / mov bx, [bx+0xc] / jmp 1b57
+1b71  mov cx, [bx+0xc] / call 0x3257 / mov bx, cx / jmp 1b57
+```
+
+So a node is `+0x00` its per-frame handler and `+0x0c` the next link, the pool
+is at `0x3146` with stride `0x0e`, and `0xffff` ends the chain. **Nothing that
+follows control flow can reach a handler**, which is why static reachability
+stopped at 62.4%; walking the list while the game played found eight of them
+(`0x3273`, `0x3386`, `0x3561`, `0x3717`, `0x390d`, `0x39fa`, `0x3aee`,
+`0x3b2a`) and took it to 76.9%.
+
+## The ball structure
+
+Four entries of `0x1e` bytes at `0x2ea1`, stepped by `ball_step` at `0x27d7`.
+
+| offset | what |
+| --- | --- |
+| `+0x00`, `+0x01` | **the live position**, in pixels |
+| `+0x14`, `+0x15` | direction flags; non-zero negates that axis (`+0x15` set = moving up) |
+| `+0x16`, `+0x17` | the slope, stored **(dy, dx)** |
+| `+0x18`, `+0x19` | the anchor: where the current straight segment began |
+| `+0x1a`, `+0x1b` | Bresenham accumulators, counting away from the anchor |
+| `+0x1c` | state: 0 idle, 1-2 in play |
+
+Two traps, each of which cost a debugging round:
+
+- **`+0x18`/`+0x19` is not the position.** It is the anchor, and it does not
+  move again until the next bounce. The live position is `+0x00`/`+0x01`, which
+  matches the drawn sprite to the pixel.
+- **The slope pair is stored (dy, dx).** Both branches of the stepper come out
+  as `x_offset / y_offset = [+0x17] / [+0x16]`. Reading it the other way round
+  makes a predicted landing point wrong by the square of the slope.
+
+## The font
+
+`draw_char` at `0x0c64` maps a character to a glyph index — `' '` to 0, `'-'`
+to `0x0b`, `':'` to `0x26`, `0xff` to `0x27`, `'0'`-`'9'` to `al - 0x2f`,
+`'A'`-`'Z'` to `al - 0x35` — multiplies by 24 and indexes a table at `0x9020`.
+Each glyph is 12 rows of one word: **8x12 at two bits per pixel**. The
+destination steps the CGA interlace and backs `DI` up two bytes each row to
+stay in one column.
+
+Glyph 0, what a space maps to, is **not blank**: it is a solid block of colour
+2, which is how the game paints the red bars its headings sit on.
+`dump_data.py font` renders the sheet, which is the check — a wrong stride is
+obvious at a glance and invisible in a hex dump. This is the score-panel font;
+the menu uses a second, larger one that has not been located yet.
 
 ## Conventions
 
