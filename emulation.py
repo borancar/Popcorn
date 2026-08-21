@@ -94,6 +94,27 @@ def shift_ascii(mapped, text):
 TRACE_TEXT = False          # set by --text-trace
 WATCH_DGROUP = []           # set by --watch-dgroup
 
+# Instructions per second of an 8 MHz 8086 - the machine Popcorn's default
+# speed setting is written for, according to its own readme.
+#
+# Popcorn programs PIT channel 0 never: the only ports it writes all game are
+# 0x42, 0x43 and 0x61, and those are the PC speaker. Its pacing comes from two
+# places, and instruction throughput is the clock for both:
+#
+#   * the busy-wait at 0x164c - `push cx; mov cx,N; loop $; pop cx; ret` -
+#     whose N is the value POPSPEED.EXE patches in, default 110
+#   * the wait on port 0x3da bit 3 for vertical retrace, around its blits
+#
+# So an emulator that runs as fast as it can plays the game as fast as it can.
+# An 8086 averages roughly ten cycles an instruction across a mix like this, and
+# `loop` alone is seventeen taken, which puts 8 MHz at about 800k instructions
+# a second.  Tune with --ips; --ips 0 turns pacing off.
+IPS_8086_8MHZ = 800_000
+
+# Where Popcorn's one code segment starts in the load image. Only used to turn
+# the offsets the disassembly prints into addresses the emulator can hook.
+GAME_CODE = 0x1AC20
+
 MODE_GEOM = {0x13: (320, 200), 0x00: (320, 200), 0x01: (320, 200),
              0x04: (320, 200), 0x05: (320, 200), 0x06: (640, 200),
              0x0D: (320, 200),
@@ -192,6 +213,10 @@ class VgaDos(DosMachine):
         # there means the program's own handler is live; see
         # guest_owns_keyboard().
         self.boot_int09 = (0, 0)
+        # Set when a console-input call rewound IP and stopped the slice
+        # because no key was waiting. The pacer must not charge that slice a
+        # full chunk of instruction time: nothing ran.
+        self.blocked_on_input = False
         self.cga_mode_ctrl = 0x0A
         self.cga_colour = 0x30
         # Scan codes waiting to reach the guest, as (code, ascii) with the
@@ -387,7 +412,10 @@ class VgaDos(DosMachine):
             # transition of bit 0 for every single word it copies, so this bit
             # must flip far faster than the emulator can be clocked from wall
             # time; toggle it per read instead.
-            vsync = 0x08 if (el * 70.0) % 1.0 > 0.92 else 0x00
+            # CGA is 60 Hz, not the VGA 70 the Ducks model assumed. The game
+            # waits for this bit around every blit, so the rate it comes back
+            # at is one of the two things setting the frame rate.
+            vsync = 0x08 if (el * 60.0) % 1.0 > 0.92 else 0x00
             return vsync | (0x01 if (n & 1) else 0x00)
         if port in (0x40, 0x41, 0x42):
             ch = port - 0x40
@@ -614,6 +642,7 @@ class VgaDos(DosMachine):
                     and not self.key_buf):
                 self._set(UC_X86_REG_IP,
                           (self._reg(UC_X86_REG_IP) - 2) & 0xFFFF)
+                self.blocked_on_input = True
                 self.uc.emu_stop()
                 return
             # DOS delivers extended keys (arrows, function keys) as TWO reads:
@@ -1162,13 +1191,22 @@ def main():
                     help="DOS command tail: the level file to load, e.g. poptab")
     ap.add_argument("--scale", type=int, default=3)
     ap.add_argument("--blaster", action="store_true")
-    ap.add_argument("--chunk", type=int, default=400_000,
+    ap.add_argument("--chunk", type=int, default=20_000,
                     help="instructions to run between display updates")
+    ap.add_argument("--ips", type=int, default=IPS_8086_8MHZ,
+                    help="pace the guest to this many instructions per second "
+                         "(default: an 8 MHz 8086, the machine the game's "
+                         "default speed setting is written for). 0 runs as "
+                         "fast as the host can")
     ap.add_argument("--shots", type=int, default=0,
                     help="save this many PNG frames then exit (headless)")
     ap.add_argument("--shot-every", type=float, default=1.5,
                     help="seconds between saved frames")
     ap.add_argument("--shot-dir", default="shots")
+    ap.add_argument("--window", action="store_true",
+                    help="show the window even when --shots would otherwise "
+                         "run headless, so a scripted play-through can be "
+                         "watched while it is being captured")
     ap.add_argument("--status-every", type=float, default=5.0)
     ap.add_argument("--wav", default="popcorn_audio.wav",
                     help="dump captured PCM here on exit")
@@ -1184,10 +1222,15 @@ def main():
                     help="log cursor moves and direct text-buffer writes")
     ap.add_argument("--keys", default="",
                     help="scripted input for an unattended run: a comma-"
-                         "separated list of TIME:KEY, e.g. 4:f1,9:right,"
-                         "9.5:-right. TIME is seconds of wall clock, KEY is a "
-                         "pygame key name; a leading '-' makes it a release "
-                         "rather than a press-and-release")
+                         "separated list of WHEN:KEY. WHEN is either seconds "
+                         "of wall clock (4:f1) or @ and a code offset in the "
+                         "game's own segment (@13d2:return), which fires the "
+                         "first time execution reaches it and is the "
+                         "reproducible form - the emulator's speed varies with "
+                         "what the game is drawing, so a timed script tuned on "
+                         "one run can miss on the next. KEY is a pygame key "
+                         "name; a leading '-' makes it a release rather than a "
+                         "press-and-release")
     ap.add_argument("--run-seconds", type=float, default=0.0,
                     help="stop after this many seconds (0 = run until quit)")
     ap.add_argument("--mouse-debug", action="store_true",
@@ -1198,10 +1241,14 @@ def main():
     TRACE_TEXT = args.text_trace
     WATCH_DGROUP = [int(x, 0) for x in args.watch_dgroup.split(",") if x.strip()]
 
-    headless = args.shots > 0
+    # --shots normally implies headless, because its usual job is unattended
+    # capture. --window keeps the same run visible: the shots are still taken
+    # and the run still exits after the last one.
+    headless = args.shots > 0 and not args.window
+    if args.shots > 0:
+        os.makedirs(args.shot_dir, exist_ok=True)
     if headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
-        os.makedirs(args.shot_dir, exist_ok=True)
 
     pygame.init()
     m = VgaDos(args.exe, blaster=args.blaster, max_insns=1 << 62,
@@ -1232,7 +1279,7 @@ def main():
     # Scripted input, so a screen several menus deep can be reached without a
     # person at the keyboard. Parsed up front: a typo in --keys should fail
     # before the machine starts, not four seconds into a run.
-    script = []
+    script, triggers = [], []
     for item in (x.strip() for x in args.keys.split(",") if x.strip()):
         when, _, name = item.partition(":")
         release = name.startswith("-")
@@ -1242,9 +1289,44 @@ def main():
                     if k is not None), None)
         if key is None or key not in KEYMAP:
             raise SystemExit(f"--keys: no scan code for {name!r}")
-        script.append((float(when), key, release))
+        if when.startswith("@"):
+            triggers.append([int(when[1:], 16), key, release, 0])
+        else:
+            script.append((float(when), key, release))
     script.sort()
     script.reverse()          # popped from the end, earliest first
+
+    def send(key, release, why):
+        sc, asc = KEYMAP[key]
+        if release:
+            m.press_key(sc, asc, down=False)
+        else:
+            m.press_key(sc, asc, down=True)
+            m.press_key(sc, asc, down=False)
+        print(f"  [keys] {why} {'release' if release else 'press'} "
+              f"scan {sc:#04x}")
+
+    if triggers:
+        # One hook for the whole script. The offsets are in the game's own code
+        # segment, so they are the addresses the disassembly prints. Several
+        # triggers may name the same offset: they fire on successive arrivals,
+        # in the order written, which is how a sequence of characters is typed
+        # into one input loop. Each fires once - a loop head would otherwise
+        # re-arm every frame.
+        want = {}
+        for t in triggers:
+            want.setdefault(t[0], deque()).append(t)
+        code_base = m.load_seg * 16 + GAME_CODE
+
+        def on_code(uc, address, size, user):
+            q = want.get(address - code_base)
+            if q:
+                t = q.popleft()
+                send(t[1], t[2], f"@{t[0]:04x}")
+
+        m.uc.hook_add(UC_HOOK_CODE, on_code,
+                      None, code_base, code_base + 0x10000)
+        print(f"    [keys] {len(triggers)} code triggers armed")
 
     cs = m._reg(UC_X86_REG_CS)
     ip = m._reg(UC_X86_REG_IP)
@@ -1260,8 +1342,11 @@ def main():
           "shift+F12 quit; every other key goes to the game")
     print("    or from a shell: touch capture.request / touch pause.request")
 
+    budget_t = time.perf_counter()
     while running:
         if not paused:
+            slice_start = time.perf_counter()
+            m.blocked_on_input = False
             # Run the chunk in slices, servicing sound between each. A whole
             # chunk between IRQ deliveries is an enormous latency by the
             # guest's standards - real hardware interrupts within microseconds
@@ -1288,16 +1373,27 @@ def main():
             if audio is not None:
                 audio.push(m.sb)
 
+            # Hold the guest to --ips. The chunk is a fixed number of
+            # instructions, so the wall-clock time it should take is
+            # chunk/ips; sleep out whatever is left. A slice that stopped
+            # early waiting for a key ran almost nothing and is not charged,
+            # or every menu would crawl.
+            if args.ips and not m.blocked_on_input:
+                budget_t += args.chunk / args.ips
+                spare = budget_t - time.perf_counter()
+                if spare > 0.0005:
+                    time.sleep(spare)
+                elif spare < -0.25:
+                    # Far behind - the host cannot hold this rate. Start again
+                    # from now rather than accumulating a debt that turns into
+                    # a burst of uncapped speed the moment it catches up.
+                    budget_t = time.perf_counter()
+            else:
+                budget_t = time.perf_counter()
+
         while script and script[-1][0] <= m._elapsed():
             when, key, release = script.pop()
-            sc, asc = KEYMAP[key]
-            if release:
-                m.press_key(sc, asc, down=False)
-            else:
-                m.press_key(sc, asc, down=True)
-                m.press_key(sc, asc, down=False)
-            print(f"  [keys] t={when:.1f}s "
-                  f"{'release' if release else 'press'} scan {sc:#04x}")
+            send(key, release, f"t={when:.1f}s")
         if args.run_seconds and m._elapsed() >= args.run_seconds:
             print(f"  [ctl] --run-seconds {args.run_seconds} reached")
             running = False
