@@ -37,6 +37,24 @@ CODE_BASE = CODE_SEG * 16
 # Each is justified where it is used; an unjustified one hides a gap.
 EXTRA_ENTRIES = {
     0x03E3: "int09_handler (installed by the DOS set-vector at startup)",
+    # The two input routines, selected into [0x2d45]/[0x2d47] by F3/F4 and
+    # called through that pointer from the play loop.
+    0x1654: "input_mouse (INT 33h; paddle = clamp(mouse x / 2))",
+    0x16D2: "input_keyboard (steps the paddle one pixel per repeat tick)",
+    # Entity handlers. The play loop at 0x1873 walks a linked list from the
+    # head link at 0x3144 and calls each node's `+0x00` - so none of these is
+    # reachable by following control flow, and all of them are the game.
+    # Collected by walking that list while the game played; the node pool is
+    # at 0x3146, stride 0x0e, and `+0x0c` is the next link with 0xffff as the
+    # terminator.
+    0x3273: "entity handler (seen every frame in play)",
+    0x3386: "entity handler",
+    0x3561: "entity handler",
+    0x3717: "entity handler",
+    0x390D: "entity handler",
+    0x39FA: "entity handler",
+    0x3AEE: "entity handler",
+    0x3B2A: "entity handler",
 }
 
 # Data locations worth naming as they show up in an operand.

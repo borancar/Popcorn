@@ -22,3 +22,7 @@ venv/
 __pycache__/
 *.pyc
 *.o
+
+# Built by reconstruct/
+reconstruct/popcorn
+coverage.bin

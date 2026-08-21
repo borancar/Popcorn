@@ -8,6 +8,12 @@ byte-identical to what EXEPACK's own stub leaves in memory at that segment.
 If that holds, the unpacked file is the original image by construction, and
 its relocation table is the one the stub would have applied.
 
+If reconstruct/popcorn has been built, its own unpacker is checked too. That
+one is a hundred lines of C that decode EXEPACK's RLE directly rather than
+running the stub, and the port depends on it to read the player's copy of the
+game at startup - so "it agrees with the emulator" is the property that
+matters, and it is cheap to assert.
+
 Usage:
     python validate.py
     python validate.py --seg 0x1234
@@ -15,7 +21,9 @@ Usage:
 import argparse
 import os
 import struct
+import subprocess
 import sys
+import tempfile
 
 from unpack_popcorn import MZ, ExepackHeader, DEFAULT_EXE, unpack_at
 
@@ -33,6 +41,46 @@ def load_flat(path, seg):
         v = struct.unpack_from("<H", img, a)[0]
         struct.pack_into("<H", img, a, (v + seg) & 0xFFFF)
     return mz, bytes(img)
+
+
+def check_c_unpacker(packed, reference, seg):
+    """Compare reconstruct/popcorn's unpacker against this one, if it is built.
+
+    The C image comes out with relocations unapplied, which is the same thing
+    the round-trip reference holds before `seg` is added - so they are directly
+    comparable only at seg 0. Rather than special-case that, the C output is
+    compared against the unpacked file's own image, which is what the port
+    actually consumes.
+    """
+    exe = os.path.join(HERE, "reconstruct", "popcorn")
+    if not os.path.exists(exe):
+        print("reconstruct/popcorn is not built; skipping the C unpacker check")
+        return True
+    with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tmp:
+        out = tmp.name
+    try:
+        r = subprocess.run([exe, "--dump-image", out],
+                           capture_output=True, text=True,
+                           env={**os.environ, "POPCORN_EXE": packed})
+        if r.returncode != 0:
+            print(f"FAIL reconstruct/popcorn exited {r.returncode}: "
+                  f"{r.stderr.strip()}")
+            return False
+        got = open(out, "rb").read()
+    finally:
+        os.unlink(out)
+
+    _, want = load_flat(os.path.join(HERE, "popcorn.unpacked.exe"), 0)
+    if got == want:
+        print(f"the C unpacker agrees: {len(got)} bytes identical")
+        return True
+    if len(got) != len(want):
+        print(f"FAIL the C unpacker produced {len(got)} bytes, not {len(want)}")
+        return False
+    bad = [i for i in range(len(got)) if got[i] != want[i]]
+    print(f"FAIL the C unpacker differs in {len(bad)} bytes, "
+          f"first at {bad[0]:#08x}")
+    return False
 
 
 def main():
@@ -62,6 +110,8 @@ def main():
         else:
             print(f"round trip at seg {a.seg:#06x}: "
                   f"{len(ours)} bytes identical")
+
+    ok = check_c_unpacker(a.packed, ours, a.seg) and ok
 
     for name, got, want in (("entry cs", umz.cs, xh.real_cs),
                             ("entry ip", umz.ip, xh.real_ip),
