@@ -109,6 +109,13 @@ The fourth was the harness's own: the stack is scratch, not state, and
 comparing it flags every routine that pushes anything. It is excluded, and the
 note says why.
 
+### The built-in level table is decoded
+
+Fifty levels of 176 bytes at image `0xc46c`, which main copies to `0x2f10` one
+at a time. The first byte of each is the **brick count** - checked against the
+non-zero cells of the first four levels and exact every time - and the
+remaining 175 bytes are the cells.
+
 ### The C port draws the menu, and it is the emulator's screen exactly
 
 `make -C reconstruct && ./reconstruct/popcorn` reads your own `POPCORN.EXE`,
@@ -186,10 +193,14 @@ a rendering reference but unable to resume.
   Python. Less obviously needed now than it was in Ducks: `verify.py` checks
   the **C** against the original directly, which is what `native.py` existed to
   make possible, so the Python middle layer may never be worth writing.
-- **The play path.** F1 reaches a stub: `screen_player_names` (`0x10de`),
-  `play_prepare` (`0x0cc5`), `play_loop` (`0x1873`) and the eight entity
-  handlers are all still empty. This is the largest remaining piece and it is
-  what stands between the port and being playable.
+- **The play path is half done.** `play_loop` (`0x1873`) and `play_session`
+  (`0x02f5`) are transcribed, and F1 now enters a level with a working paddle.
+  What is still empty is everything they call into: `level_draw` (`0x1c4f`,
+  the playfield and the brick reveal), `ball_collide` (`0x2827`), `ball_draw`
+  (`0x2881`), `panel_draw` (`0x0b0b`), the eight entity handlers, and the
+  end-of-level and end-of-game screens. Until `ball_collide` is real the ball
+  cannot be lost and no brick can be hit, so a level neither ends nor
+  progresses.
 - **The other screens.** F5 (define keys), F6 (hall of fame), F8 (palette),
   F10, and the demo are stubs. `reconstruct/stubs.c` is the list, and
   `POPCORN_TRACE_STUBS=1` prints each one the first time it is reached, so

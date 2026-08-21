@@ -12,6 +12,7 @@
  * shuffling - and where a routine genuinely cannot be written that way, it is
  * written literally and the comment says why.
  */
+#include <setjmp.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -259,10 +260,14 @@ void draw_paddle(unsigned sprite)
         return;
 
     /* `sub word [0x1487], 0x1e0`, taken only when the paddle actually moves.
-     * [0x1487] is a countdown the play loop reloads from [0x1489] (0x1f4 at
-     * the start of a level), and 0x2187 also touches it. Most likely the level
-     * time bonus, charged for moving; transcribed as it is because what it
-     * means does not change what it does. */
+     *
+     * [0x1487] is the frame's delay count: the play loop reloads it from
+     * [0x1489] (0x1f4) at the top of every frame and spends it at the bottom
+     * with `mov cx,[0x1487] / loop $`. Taking 0x1e0 off it here leaves 0x14
+     * instead of 0x1f4, so a frame in which the paddle moved waits almost not
+     * at all - this is compensation for what the redraw itself cost, which is
+     * what keeps the game running at one speed whether the paddle is moving
+     * or not. It is not a score. */
     img_setw(0x1487, (img_w(0x1487) - 0x1e0) & 0xffff);
 
     /* What is on screen now becomes what has to be erased. */
@@ -887,7 +892,10 @@ void game_main(const char *dir, unsigned speed)
                     break;
                 }
                 play_prepare();
-                play_loop();
+                /* play_session() never returns normally: it is left by the
+                 * stack-throwing jump the original does at 1ac2:167e. */
+                if (setjmp(g_back_to_menu) == 0)
+                    play_session();
                 back_to_menu = 1;
                 break;
             case 0x01:                                  /* Esc: quit */
@@ -898,6 +906,355 @@ void game_main(const char *dir, unsigned speed)
             if (g_image[0x3f1b] != 1)
                 menu_extra();
             io_present();
+        }
+    }
+}
+
+/* 1ac2:1ab1 and 1ac2:1a4f  game_input
+ *
+ * `call word ptr [0x2d45]` - whichever of the two input routines the menu
+ * selected. The mouse one needs the pointer, which is the platform's; the
+ * keyboard one reads only the three state bytes, which the platform maintains.
+ */
+void game_input(void)
+{
+    if (img_w(INPUT_ACTIVE) == INPUT_MOUSE)
+        input_mouse(io_mouse_x(), io_mouse_buttons());
+    else
+        input_keyboard();
+}
+
+/* ========================================================================
+ * 1ac2:1873  play_loop
+ *
+ * A level, from the moment it is drawn to the moment it is won or lost.
+ * Returns 1 (the original's carry) when the last ball was lost and 0 when the
+ * bricks ran out.
+ *
+ * The shape of a frame:
+ *
+ *     reload the frame delay from [0x1489]
+ *     step the recorded-input cursor, if a demo is playing
+ *     if [0x2e73] is clear the ball is gone      -> lost
+ *     if [0x2f10] is clear the bricks are gone   -> won
+ *     read the input through [0x2d45]
+ *     draw the paddle
+ *     step each of the three balls: move, collide, react
+ *     walk the entity list, calling each node's handler
+ *     age the laser shot and the extra ball
+ *     sound_tick, then spend the frame delay
+ *
+ * The entity walk is the part worth reading twice: a handler may ask to be
+ * taken out of the list by setting [0x313a], and the unlink needs the node
+ * *before* it, which is why [0x3142] trails one step behind.
+ * ===================================================================== */
+#define LEVEL_NUMBER    0x13cc
+#define LEVEL_NUM_TEXT  0x1410
+#define LEVEL_CELLS     0x2f10          /* the copy the level is played from */
+#define FRAME_DELAY     0x1487
+#define FRAME_DELAY_SET 0x1489
+#define BALL_ALIVE      0x2e73          /* clear when the last one is lost */
+#define GAME_OVER       0x2e78
+#define PADDLE_SUPPRESS 0x2d3b
+#define PADDLE_KIND     0x2d39
+#define PADDLE_SPRITES  0x2d0d          /* four-entry table of sprite bases */
+#define LASER_ON        0x2e7e
+#define SHOT_ON         0x2e81
+#define SHOT_TIMER      0x2e84
+#define SHOT_POS        0x2e85
+#define SHOT_LIFE       0x2e82
+#define EXTRA_ON        0x2e79
+#define EXTRA_TIMER     0x2e7c
+#define EXTRA_POS       0x2e87
+#define SERVE_TIMEOUT   0x2e7a
+#define CAUGHT          0x2e75
+#define ENTITY_REMOVE   0x313a
+#define ENTITY_PREV     0x3142
+#define SPEED_TIMER     0x148b
+#define SPEED_STEP      0x1485
+#define SPEED_LIMIT     0x1486
+
+static void erase_shot(unsigned pos_var, unsigned reload, unsigned timer)
+{
+    unsigned di = img_w(pos_var);
+    g_vram[di & (CGA_SIZE - 1)] = 0;
+    g_vram[(di + 1) & (CGA_SIZE - 1)] = 0;
+    di = cga_next_row(di);
+    img_setw(pos_var, di);
+    g_image[timer] = (unsigned char)reload;
+}
+
+int play_loop(void)
+{
+    /* The level number, drawn into the header bar as two digits. */
+    unsigned n = (g_image[LEVEL_NUMBER] + 1) & 0xff;
+    img_setw(LEVEL_NUM_TEXT, ((n % 10) << 8 | (n / 10)) + 0x3030);
+
+    unsigned di = 0x177e;
+    for (int i = 0; i < 12; i++, di += 2) {
+        g_vram[di & (CGA_SIZE - 1)] = 0xaa;
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = 0xaa;
+    }
+    draw_text(0x1407, 0xc, 0x377e);
+    di = 0x377e + 0x1e0;
+    for (int i = 0; i < 12; i++, di += 2) {
+        g_vram[di & (CGA_SIZE - 1)] = 0xaa;
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = 0xaa;
+    }
+
+    level_draw();                       /* 1ac2:1c4f */
+
+    /* Wipe the header bar again, upwards. */
+    di = 0x177e;
+    for (int dl = 0xe; dl > 0; dl--) {
+        for (int i = 0; i < 24; i++)
+            g_vram[(di + i) & (CGA_SIZE - 1)] = 0;
+        di = cga_next_row((di - 0x18) & 0xffff);
+    }
+
+    g_image[PADDLE_X] = g_image[PADDLE_PREV_X] = 0x64;
+    g_image[PADDLE_KIND] = 0;
+    g_image[0x2d3a] = g_image[PADDLE_SPRITES + 3];
+    g_image[PADDLE_MAX] = 0xac;
+    g_image[PADDLE_MIN] = 0x08;
+    g_image[REPEAT_COUNT] = 5;
+    g_image[REPEAT_DIV] = 5;
+    io_mouse_warp(0x64 * 2, 0xb8);
+
+    paddle_row_offsets(g_image[PADDLE_X], PADDLE_ROWS_CUR);
+    memcpy(g_image + PADDLE_PIX_CUR, g_image + SPRITE_BASE, 0x27 * 2);
+    g_image[BALL_ALIVE] = 1;
+    memcpy(g_image + BALLS + 4, g_image + 0x48fb, 8);
+    img_setw(FRAME_DELAY_SET, 0x1f4);
+    g_image[KEY_RIGHT] = g_image[KEY_LEFT] = 0;
+    g_image[REPEAT_DIV] = 0;
+    g_image[KEY_ACTION] = 0;
+    g_image[SPEED_STEP] = g_image[SPEED_LIMIT] = 0xfa;
+    if (g_image[DELAY_ENTRY] != 0xc3) {
+        g_image[SPEED_STEP] = 3;
+        g_image[SPEED_LIMIT] = 3;
+    }
+    img_setw(SPEED_TIMER, 0x4e20);
+    g_image[ENTITY_REMOVE] = 0;
+    g_image[0x33d5] = g_image[0x33d6] = g_image[0x3384] = 0;
+    g_image[PADDLE_SUPPRESS] = 0;
+    g_image[SHOT_ON] = g_image[CAUGHT] = 0;
+    g_image[GAME_OVER] = g_image[EXTRA_ON] = g_image[LASER_ON] = 0;
+
+    /* The serve: ball 0 on the paddle, the other two idle. */
+    unsigned char *b = g_image + BALLS;
+    b[0x00] = b[0x02] = 0x70;
+    b[0x01] = b[0x03] = 0xb5;
+    b[B_DY] = 1;
+    b[B_DX] = 2;
+    b[B_DIR_X] = 0;
+    b[B_DIR_Y] = 1;
+    b[B_ANCHOR_X] = b[0x00];
+    b[B_ANCHOR_Y] = b[0x01];
+    b[B_ACC_X] = b[B_ACC_Y] = 0;
+    b[B_STATE] = 1;
+    b[0x1d] = 0;
+    b[0x1c + BALL_STRIDE] = 0;          /* +0x3a: ball 1 idle */
+    b[0x1c + BALL_STRIDE * 2] = 0;      /* +0x58: ball 2 idle */
+    ball_draw(BALLS + 4, b[0x00], b[0x01]);
+
+    io_flush_keys();
+
+    /* Wait for the action key, or two thousand ticks, before serving. */
+    if (img_w(INPUT_ACTIVE) != 0x1785) {
+        img_setw(SERVE_TIMEOUT, 0x7d0);
+        for (;;) {
+            img_setw(SERVE_TIMEOUT, img_w(SERVE_TIMEOUT) - 1);
+            if (img_w(SERVE_TIMEOUT) == 0)
+                break;
+            for (int i = 0; i < 0xf; i++)
+                game_delay();
+            game_input();
+            if (g_image[KEY_ACTION] == 1)
+                break;
+            draw_paddle(SPRITE_BASE);
+            io_present();
+            if (!io_pump())
+                return 1;
+        }
+    }
+
+    for (;;) {                          /* one iteration is one frame */
+        img_setw(FRAME_DELAY, img_w(FRAME_DELAY_SET));
+        demo_input_step();
+
+        if (g_image[BALL_ALIVE] == 0) {
+            play_teardown();
+            g_image[GAME_OVER] = 1;
+            return 1;                   /* the original's `stc` */
+        }
+        if (g_image[LEVEL_CELLS] == 0) {
+            play_teardown();
+            return 0;                   /* `clc`: the bricks are gone */
+        }
+
+        game_input();
+        if (g_image[PADDLE_SUPPRESS] == 0)
+            draw_paddle(img_w(PADDLE_SPRITES + g_image[PADDLE_KIND] * 4));
+        if (g_image[LASER_ON])
+            laser_fire();
+
+        /* Every 0x4e20 frames the ball is allowed to move one step more
+         * often, up to the limit - the level speeds up the longer it runs. */
+        img_setw(SPEED_TIMER, img_w(SPEED_TIMER) - 1);
+        if (img_w(SPEED_TIMER) == 0) {
+            img_setw(SPEED_TIMER, 0x61a8);
+            if (g_image[SPEED_LIMIT] != 0xff)
+                g_image[SPEED_LIMIT]++;
+            g_image[SPEED_STEP] = g_image[SPEED_LIMIT];
+        }
+
+        if (--g_image[SPEED_STEP] != 0) {
+            for (int i = 0; i < 3; i++) {
+                unsigned ball = BALLS + i * BALL_STRIDE;
+                unsigned char st = g_image[ball + B_STATE];
+                if (st == 0 || st >= 3)
+                    continue;
+                if (g_image[CAUGHT] == 1 && !ball_on_paddle(ball))
+                    continue;
+                ball_step(ball);
+                if (!ball_collide(ball)) {
+                    play_teardown();
+                    g_image[GAME_OVER] = 1;
+                    return 1;
+                }
+                if (g_image[LEVEL_CELLS] == 0) {
+                    play_teardown();
+                    return 0;
+                }
+                ball_after(ball);
+            }
+        } else {
+            g_image[SPEED_STEP] = g_image[SPEED_LIMIT];
+        }
+
+        /* The entity list. [0x3142] trails one node behind so a handler that
+         * asks to be removed can be unlinked without walking the list again. */
+        img_setw(ENTITY_PREV, 0x3138);
+        unsigned bx = img_w(ENTITY_HEAD);
+        while (bx != 0xffff) {
+            entity_call(bx);
+            if (g_image[ENTITY_REMOVE] == 0) {
+                img_setw(ENTITY_PREV, bx);
+                bx = img_w(bx + E_NEXT);
+            } else {
+                unsigned next = img_w(bx + E_NEXT);
+                entity_unlink(bx);
+                bx = next;
+            }
+        }
+
+        if (g_image[SHOT_ON]) {
+            if (--g_image[SHOT_TIMER] == 0)
+                erase_shot(SHOT_POS, 0xc8, SHOT_TIMER);
+            img_setw(SHOT_LIFE, img_w(SHOT_LIFE) - 1);
+            if (img_w(SHOT_LIFE) == 0) {
+                g_image[SHOT_ON] = 0;
+                entity_spawn(0x1554);
+            }
+        }
+        if (g_image[EXTRA_ON]) {
+            img_setw(EXTRA_TIMER, img_w(EXTRA_TIMER) - 1);
+            if (img_w(EXTRA_TIMER) == 0)
+                erase_shot(EXTRA_POS, 0, EXTRA_TIMER), img_setw(EXTRA_TIMER, 0x190);
+            img_setw(SERVE_TIMEOUT, img_w(SERVE_TIMEOUT) - 1);
+            if (img_w(SERVE_TIMEOUT) == 0)
+                g_image[EXTRA_ON] = 0;
+        }
+
+        /* A pause that gets shorter as [0x33d6] rises: three passes of 0xb4
+         * empty loops, minus one per point of it. */
+        for (int i = 3 - g_image[0x33d6]; i > 0; i--)
+            io_delay_cycles(0xb4 * CYCLES_PER_LOOP);
+
+        if (g_image[EXTRA_ON] != 1 && g_image[0x33d5] != 3 &&
+            game_random(io_ticks(), 0x86) == 0)
+            bonus_spawn();
+
+        sound_tick();
+        io_delay_cycles(img_w(FRAME_DELAY) * CYCLES_PER_LOOP);
+        game_delay();
+
+        io_present();
+        if (!io_pump())
+            return 1;
+    }
+}
+
+/* ========================================================================
+ * 1ac2:02f5  play_session
+ *
+ * A whole game: pick the starting level, then loop over levels until the
+ * lives run out. It has no exit of its own - the original leaves it the way
+ * the mouse handler does at 1ac2:167e, `mov sp,[0x1405] / jmp 0x1d1`, which
+ * throws away the stack and lands back in the menu. That is a longjmp, and it
+ * is written as one here rather than pretended away, because the routines it
+ * unwinds through really are abandoned mid-call.
+ * ===================================================================== */
+#define LIVES         0x13c9
+#define LEVEL_SRC     0x13ca            /* offset of the level in the table */
+#define PLAYER_NAME   0x13d5
+#define SCORE_TEXT    0x13cd
+#define LEVEL_TABLE   0x000c            /* within the 0xc46 block */
+#define LEVEL_BYTES     0xb0
+#define LEVEL_COUNT     0x32
+
+jmp_buf g_back_to_menu;
+
+void play_session(void)
+{
+    memcpy(g_image + PLAYER_NAME, g_image + 0x344f, 12);
+    img_setw(SCORE_TEXT + 0, 0x3030);
+    img_setw(SCORE_TEXT + 2, 0x3030);
+    img_setw(SCORE_TEXT + 4, 0x3030);
+    img_setw(SCORE_TEXT + 6, 0x3032);
+    g_image[0x3f0a] = 0;
+    g_image[0x3f09] = g_image[0x3f08];
+    g_image[LIVES] = 5;
+
+    /* A demo starts on a random level; a game always starts on the first. */
+    unsigned lv = game_random(io_ticks(), 0x1e);
+    if (img_w(INPUT_ACTIVE) != 0x1785)
+        lv = 0;
+    g_image[LEVEL_NUMBER] = (unsigned char)lv;
+    img_setw(LEVEL_SRC, lv * LEVEL_BYTES + LEVEL_TABLE);
+    panel_draw();
+
+    for (;;) {
+        level_colours();                        /* 1ac2:044b */
+        memcpy(g_image + LEVEL_CELLS,
+               g_image + SEG_C46 + img_w(LEVEL_SRC), LEVEL_BYTES);
+
+        for (;;) {                              /* one level, retried on death */
+            level_intro();                      /* 1ac2:1eb9 */
+            for (;;) {
+                int lost = play_loop();
+                speaker_off();
+                if (!lost)
+                    goto level_done;
+                life_lost();                    /* 1ac2:0735 */
+                if (g_image[0x3f1b] != 1)
+                    g_image[LIVES]--;
+                if (g_image[GAME_OVER] == 1)
+                    break;
+            }
+            screen_game_over();                 /* 1ac2:0473 */
+            screen_end_of_game();               /* 1ac2:0d2e */
+        }
+
+    level_done:
+        screen_level_done();                    /* 1ac2:0521 */
+        img_setw(LEVEL_SRC, img_w(LEVEL_SRC) + LEVEL_BYTES);
+        g_image[LEVEL_NUMBER]++;
+        if (g_image[LEVEL_NUMBER] == LEVEL_COUNT) {
+            g_image[LEVEL_NUMBER] = 0;
+            img_setw(LEVEL_SRC, LEVEL_TABLE);
+            screen_all_levels_done();           /* 1ac2:5940 */
         }
     }
 }
