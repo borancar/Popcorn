@@ -183,6 +183,8 @@ def main():
     ap.add_argument("--exe", default=UNPACKED)
     ap.add_argument("--func", type=lambda s: int(s, 0))
     ap.add_argument("--gaps", action="store_true")
+    ap.add_argument("--listing", action="store_true",
+                    help="dump every reachable routine, in address order")
     ap.add_argument("--xref", type=lambda s: int(s, 0))
     ap.add_argument("--min-gap", type=int, default=8)
     a = ap.parse_args()
@@ -207,6 +209,22 @@ def main():
         who = cm.mem.get(a.xref, set())
         print(f"data {a.xref:#06x} touched by {len(who)} routines: "
               + ", ".join(f"{x:#06x}" for x in sorted(who)))
+        return
+
+    if a.listing:
+        # The whole reachable code segment, routine by routine, in address
+        # order. Written to a file rather than the terminal because the point
+        # is to read it as a document while transcribing.
+        for e in sorted(cm.funcs):
+            body = sorted(cm.funcs[e])
+            note = EXTRA_ENTRIES.get(e, "")
+            callers = ", ".join(f"{c:04x}" for c in sorted(cm.callers[e])) or "-"
+            print(f"\n;;; ---- {e:04x}  (image {CODE_BASE + e:#07x})  "
+                  f"called by {callers}  {note}")
+            for off in body:
+                ins = cm.insns[off]
+                print(f"{off:04x}  {ins.bytes.hex():<16s} "
+                      f"{ins.mnemonic} {ins.op_str}")
         return
 
     if a.gaps:

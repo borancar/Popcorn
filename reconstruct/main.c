@@ -36,6 +36,10 @@ int main(int argc, char **argv)
 {
     const char *dump = NULL;
     int scale = 3;
+    unsigned speed = 0;          /* as if POPSPEED had never been run */
+    unsigned run_ms = 0;
+    const char *shot = NULL;
+    const char *vram = NULL;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--verify") && i + 2 < argc)
             return verify_main(argv[i + 1], argv[i + 2]);
@@ -43,6 +47,14 @@ int main(int argc, char **argv)
             dump = argv[++i];
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc)
             scale = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--speed") && i + 1 < argc)
+            speed = (unsigned)atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--run-ms") && i + 1 < argc)
+            run_ms = (unsigned)atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--shot") && i + 1 < argc)
+            shot = argv[++i];
+        else if (!strcmp(argv[i], "--dump-vram") && i + 1 < argc)
+            vram = argv[++i];
         else {
             fprintf(stderr, "usage: %s [--scale N] [--dump-image FILE]\n"
                             "       %s --verify STATE-IN RESULT-OUT\n",
@@ -84,12 +96,17 @@ int main(int argc, char **argv)
 
     if (!io_init(scale))
         return 1;
-    /* Nothing is transcribed far enough to run yet: hold a blank mode-05h
-     * screen so the platform layer can be seen to work, and quit on a key. */
-    while (io_pump()) {
-        io_present();
-        io_wait_retrace();
-    }
+    io_set_deadline(run_ms, shot, vram);
+    /* The game directory, for the high-score file: alongside the executable
+     * the data came from. */
+    char dir[512];
+    snprintf(dir, sizeof dir, "%s", path);
+    char *slash = strrchr(dir, '/');
+    if (slash)
+        slash[1] = 0;
+    else
+        dir[0] = 0;
+    game_main(dir, speed);
     io_shutdown();
     free(g_image);
     return 0;

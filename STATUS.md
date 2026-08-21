@@ -109,6 +109,41 @@ The fourth was the harness's own: the stack is scratch, not state, and
 comparing it flags every routine that pushes anything. It is excluded, and the
 note says why.
 
+### The C port draws the menu, and it is the emulator's screen exactly
+
+`make -C reconstruct && ./reconstruct/popcorn` reads your own `POPCORN.EXE`,
+unpacks it, runs the four opening animations and leaves you on the main menu
+with the function keys live.
+
+`compare_screen.py` settles what "correct" means here: it runs both to the same
+point, dumps the 0xb8000 aperture from each and diffs them.
+
+```
+visible screen: 15878 of 16000 bytes identical (99.24%)
+  10 of 200 scan lines differ
+```
+
+The 122 bytes that differ are the two animated elements that are still stubs —
+the scrolling banner across the character's belly and the bouncing kernel under
+the menu. Everything static is byte-for-byte the original: the lettering, the
+logo, the credits, the character, the arrow.
+
+Getting there took four bugs, and the eye would have passed three of them:
+
+- **`movsw` under a set direction flag copies the word *at* `si`** and steps
+  afterwards. Reading at `si-1`/`si-2` instead shifted the whole title by two
+  bytes, which drew its cyan background and none of the lettering.
+- **Two of the four logo passes run forwards.** There is a `cld` at `0x5565`
+  between them, and the interlace step reverses with it. Running all four
+  backwards drew the character as streaks across the middle of the screen.
+- **`intro_curtain` does not just draw bars.** Its second half grows the title
+  into the corner, and between the two sits a colour remap that reads two
+  source bits and emits two: a leading 0 emits `00` and *discards the bit
+  after it*. That maps colour 1 to 0 — it strips the cyan out of the leading
+  edge, which is what makes the lettering fade in rather than snap on.
+- The player-name boxes, the level loader and the play loop are stubs, so F1
+  starts nothing yet.
+
 ### The code segment is mapped
 
 `analyze.py` follows control flow from the entry point and the INT 09h handler
@@ -151,9 +186,15 @@ a rendering reference but unable to resume.
   Python. Less obviously needed now than it was in Ducks: `verify.py` checks
   the **C** against the original directly, which is what `native.py` existed to
   make possible, so the Python middle layer may never be worth writing.
-- The C port does not yet **run** the game. It has the platform layer, the data
-  loader and eight routines; what it has not got is `main`, the menus, the
-  level loader or the play loop.
+- **The play path.** F1 reaches a stub: `screen_player_names` (`0x10de`),
+  `play_prepare` (`0x0cc5`), `play_loop` (`0x1873`) and the eight entity
+  handlers are all still empty. This is the largest remaining piece and it is
+  what stands between the port and being playable.
+- **The other screens.** F5 (define keys), F6 (hall of fame), F8 (palette),
+  F10, and the demo are stubs. `reconstruct/stubs.c` is the list, and
+  `POPCORN_TRACE_STUBS=1` prints each one the first time it is reached, so
+  "that screen is blank" and "that routine is missing" are the same
+  observation.
 
 ## Next
 
