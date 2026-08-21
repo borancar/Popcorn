@@ -43,6 +43,18 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x221a:                        /* draw_paddle(si = sprite) */
         draw_paddle(r[R_SI]);
         return 1;
+    case 0x2881:                        /* ball_draw(si = sprite, bl, al) */
+        ball_draw(r[R_SI], r[R_BX] & 0xff, r[R_AX] & 0xff);
+        return 1;
+    case 0x2827:                        /* ball_redraw(si = the ball) */
+        ball_redraw(r[R_SI]);
+        return 1;
+    case 0x2034:                        /* draw_brick_row(al = screen row) */
+        draw_brick_row(r[R_AX] & 0xff);
+        return 1;
+    case 0x20b9:                        /* draw_sprite_20x6(bl, al, si) */
+        draw_sprite_20x6(r[R_BX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
+        return 1;
     case 0x0c64:                        /* draw_char(al, di) */
         draw_char((unsigned char)(r[R_AX] & 0xff), r[R_DI]);
         return 1;

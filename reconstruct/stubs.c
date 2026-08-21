@@ -82,16 +82,6 @@ void draw_text(unsigned src, unsigned count, unsigned di)
     (void)src; (void)count; (void)di;
 }
 
-void ball_draw(unsigned rec, unsigned x, unsigned y)
-{
-    note("ball_draw", 0x2881);
-    (void)rec; (void)x; (void)y;
-}
-
-/* Collision returns "the ball survived". With nothing implemented it always
- * does, so a level neither ends nor progresses - which is visible rather than
- * silent, and that is the point. */
-int ball_collide(unsigned ball) { note("ball_collide", 0x2827); (void)ball; return 1; }
 int ball_on_paddle(unsigned ball) { note("ball_on_paddle", 0x2e1e); (void)ball; return 1; }
 void ball_after(unsigned ball) { note("ball_after", 0x247f); (void)ball; }
 void entity_call(unsigned node) { note("entity_call", 0x1b5e); (void)node; }

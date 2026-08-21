@@ -44,6 +44,10 @@ ROUTINES = {
     0x221A: "draw_paddle",
     0x0C64: "draw_char",
     0x1712: "input_keyboard",
+    0x2034: "draw_brick_row",
+    0x20B9: "draw_sprite_20x6",
+    0x2827: "ball_redraw",
+    0x2881: "ball_draw",
     0x5099: "save_screen",
     0x50BC: "restore_screen",
 }

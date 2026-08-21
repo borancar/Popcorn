@@ -112,6 +112,10 @@ extern const uint32_t g_palette[4];
 #define B_ACC_X       0x1a             /* Bresenham, counting from the anchor */
 #define B_ACC_Y       0x1b
 #define B_STATE       0x1c             /* 0 idle, 1-2 in play */
+#define B_PREV_X      0x02             /* where it was, so XOR can undo it */
+#define B_PREV_Y      0x03
+#define B_SPRITE      0x04             /* four words: what is on screen now */
+#define B_PREV_SPR    0x0c             /* four words: what to erase */
 
 /* The entity list the play loop walks: a chain from the head link at 0x3144,
  * each node carrying its handler at +0x00 and the next link at +0x0c, with
@@ -206,8 +210,8 @@ unsigned char screen_player_names(void);  /* 1ac2:10de */
 int  play_loop(void);             /* 1ac2:1873 - transcribed */
 void draw_text(unsigned src, unsigned count, unsigned di);  /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
-void ball_draw(unsigned rec, unsigned x, unsigned y);       /* 1ac2:2881 */
-int  ball_collide(unsigned ball); /* 1ac2:2827 - 0 means it was lost */
+void ball_draw(unsigned sprite, unsigned x, unsigned y);    /* 1ac2:2881 */
+int  ball_redraw(unsigned ball);  /* 1ac2:2827 */
 int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
 void ball_after(unsigned ball);   /* 1ac2:247f */
 void laser_fire(void);            /* 1ac2:2ee3 */
@@ -274,8 +278,8 @@ unsigned char screen_player_names(void);  /* 1ac2:10de */
 int  play_loop(void);             /* 1ac2:1873 - transcribed */
 void draw_text(unsigned src, unsigned count, unsigned di);  /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
-void ball_draw(unsigned rec, unsigned x, unsigned y);       /* 1ac2:2881 */
-int  ball_collide(unsigned ball); /* 1ac2:2827 - 0 means it was lost */
+void ball_draw(unsigned sprite, unsigned x, unsigned y);    /* 1ac2:2881 */
+int  ball_redraw(unsigned ball);  /* 1ac2:2827 */
 int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
 void ball_after(unsigned ball);   /* 1ac2:247f */
 void laser_fire(void);            /* 1ac2:2ee3 */

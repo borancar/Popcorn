@@ -1056,7 +1056,7 @@ int play_loop(void)
     b[0x1d] = 0;
     b[0x1c + BALL_STRIDE] = 0;          /* +0x3a: ball 1 idle */
     b[0x1c + BALL_STRIDE * 2] = 0;      /* +0x58: ball 2 idle */
-    ball_draw(BALLS + 4, b[0x00], b[0x01]);
+    ball_draw(BALLS + B_SPRITE, b[0x00], b[0x01]);
 
     io_flush_keys();
 
@@ -1118,7 +1118,7 @@ int play_loop(void)
                 if (g_image[CAUGHT] == 1 && !ball_on_paddle(ball))
                     continue;
                 ball_step(ball);
-                if (!ball_collide(ball)) {
+                if (!ball_redraw(ball)) {
                     play_teardown();
                     g_image[GAME_OVER] = 1;
                     return 1;
@@ -1373,4 +1373,65 @@ void level_intro(void)
             return;
     }
     g_image[SWEEP_Y] = 0xb3;
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:2881  ball_draw
+ *
+ * Four rows of one word - 16 pixels by 4 - XORed in at a pixel position, so
+ * drawing the same sprite twice erases it. Everything that moves in this game
+ * is drawn this way.
+ */
+void ball_draw(unsigned sprite, unsigned x, unsigned y)
+{
+    unsigned di = cga_at(x, y);
+    for (int r = 0; r < 4; r++) {
+        g_vram[di & (CGA_SIZE - 1)] ^= g_image[sprite + r * 2];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[sprite + r * 2 + 1];
+        di = cga_next_row(di);
+    }
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:2827  ball_redraw
+ *
+ * Move a ball on screen: erase it where it was, draw it where it is. The
+ * structure carries both the sprite it last drew (+0x0c) and the one it is
+ * about to (+0x04), because with XOR drawing you have to erase exactly the
+ * bits you put down - a freshly shifted sprite would not cancel the old one.
+ *
+ * The shift is a `ror` of each row by `(x & 3) * 2` bits, one pixel per two,
+ * done to a fresh copy taken from 0x48fb every time. `ror` and not `shr`: a
+ * pixel leaving the right edge comes back in at the left, which is what lets
+ * one 16-pixel word cover a ball straddling a byte boundary.
+ *
+ * It returns 1 always. The play loop tests the carry after calling this, but
+ * the carry that comes out is left over from the `cmp di,0x2000` inside
+ * ball_draw and means nothing - a ball is lost by its entity handler clearing
+ * [0x2e73], not here.
+ */
+#define BALL_SPRITE_SRC 0x48fb
+
+int ball_redraw(unsigned ball)
+{
+    unsigned char *b = g_image + ball;
+
+    memcpy(b + B_PREV_SPR, b + B_SPRITE, 8);
+    memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
+
+    unsigned shift = (b[B_X] & 3) * 2;
+    if (shift) {
+        for (int r = 0; r < 4; r++) {
+            unsigned w = b[B_SPRITE + r * 2] | (b[B_SPRITE + r * 2 + 1] << 8);
+            w = ((w >> shift) | (w << (16 - shift))) & 0xffff;
+            b[B_SPRITE + r * 2] = (unsigned char)w;
+            b[B_SPRITE + r * 2 + 1] = (unsigned char)(w >> 8);
+        }
+    }
+
+    ball_draw(ball + B_PREV_SPR, b[B_PREV_X], b[B_PREV_Y]);
+    b[B_PREV_X] = b[B_X];
+    b[B_PREV_Y] = b[B_Y];
+    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+    return 1;
 }
