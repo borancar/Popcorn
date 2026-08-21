@@ -65,7 +65,42 @@ worth knowing before the C port touches this code:
   square of the slope, which presents as a paddle that jerks at each bounce and
   catches the ball only when the geometry happens to agree.
 
-### Eight routines are transcribed, and all eight are proven
+### Sixteen routines are transcribed, and the ball physics is proven exactly
+
+```
+  ok   draw_char           (0x0c64)      ok   ball_redraw     (0x2827)
+  ok   draw_brick_row      (0x2034)      ok   ball_draw       (0x2881)
+  ok   draw_sprite_20x6    (0x20b9)      ok   xor_sprite_16x7 (0x3b64)
+  ok   draw_paddle         (0x221a)      ok   score_add       (0x413d)
+  ok   blit_xor            (0x2281)      ok   save_screen     (0x5099)
+  ok   paddle_row_offsets  (0x22de)      ok   restore_screen  (0x50bc)
+  ok   ball_paddle         (0x2316)      ok   input_keyboard  (0x1712)
+  ok   ball_step           (0x27d7)
+  FAIL ball_after          (0x247f): 2 of 431 calls differ
+  FAIL ball_bricks         (0x254d): 5 of 670 calls differ
+```
+
+Both remaining failures are the same missing thing and the harness says so:
+the difference is at image `0x3138`, the **entity list head**. Hitting a brick
+allocates an entity running `0x3561` - the score popup - and that handler is
+not transcribed, so the C does not allocate it. Nothing else about the
+collision differs.
+
+### The verification harness had to be sharpened twice
+
+The first version reported "25 calls, identical" for `ball_paddle` and
+`ball_bricks` and both were **completely unproven**: their common path is an
+early return, and twenty-five agreements on an early return say nothing. That
+is the same trap as "never called", one level down, and it was invisible.
+
+So the harness now counts calls that **changed something** and caps on that
+rather than on calls made - which is what made it keep sampling `ball_bricks`
+through 670 calls until ten of them had actually hit a brick. It reports the
+distinction in every line, and says "every one was an early return: unproven"
+where it applies. Sharpening it immediately turned two false passes into two
+real failures, both of which were then real bugs.
+
+### Eight routines were transcribed first, and all eight were proven
 
 `verify.py` stops the emulator at a routine's entry, captures the machine, lets
 the **original** body run to its return, captures again, then runs the C on the

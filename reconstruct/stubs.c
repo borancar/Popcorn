@@ -83,7 +83,6 @@ void draw_text(unsigned src, unsigned count, unsigned di)
 }
 
 int ball_on_paddle(unsigned ball) { note("ball_on_paddle", 0x2e1e); (void)ball; return 1; }
-void ball_after(unsigned ball) { note("ball_after", 0x247f); (void)ball; }
 void entity_call(unsigned node) { note("entity_call", 0x1b5e); (void)node; }
 void entity_unlink(unsigned node) { note("entity_unlink", 0x3257); (void)node; }
 void entity_spawn(unsigned what) { note("entity_spawn", 0x3146); (void)what; }

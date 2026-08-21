@@ -46,8 +46,13 @@ ROUTINES = {
     0x1712: "input_keyboard",
     0x2034: "draw_brick_row",
     0x20B9: "draw_sprite_20x6",
+    0x2316: "ball_paddle",
+    0x254D: "ball_bricks",
+    0x247F: "ball_after",
     0x2827: "ball_redraw",
     0x2881: "ball_draw",
+    0x3B64: "xor_sprite_16x7",
+    0x413D: "score_add",
     0x5099: "save_screen",
     0x50BC: "restore_screen",
 }
@@ -63,9 +68,11 @@ def main():
     ap.add_argument("--cmdline", default="")
     ap.add_argument("--only", default="",
                     help="comma-separated routine offsets to check")
-    ap.add_argument("--max-per-routine", type=int, default=25,
-                    help="stop checking a routine after this many agreements, "
-                         "so one hot blitter does not crowd out the rest")
+    ap.add_argument("--max-per-routine", type=int, default=10,
+                    help="stop checking a routine once this many of its calls "
+                         "have actually changed something - counting calls "
+                         "made instead lets an early-return path fill the "
+                         "quota with agreements that prove nothing")
     ap.add_argument("--keyboard", action="store_true",
                     help="play through the keyboard input routine rather than "
                          "the mouse, which is the only way 1ac2:16d2 runs")
@@ -109,6 +116,11 @@ def main():
     started = [False]
 
     checked = collections.Counter()
+    # How many of the agreements were on a call that actually did something.
+    # A routine whose common path is an early return can agree twenty-five
+    # times without its interesting path ever running - the same trap as
+    # "never called", one level down, and worth reporting separately.
+    did_work = collections.Counter()
     mismatched = collections.Counter()
     first_bad = {}
     # Set while the original body is running, so the entry hook does not
@@ -157,7 +169,11 @@ def main():
                 inside[0] = None
             return
 
-        if off in wanted and checked[off] < args.max_per_routine:
+        # Cap on calls that *did something*, not on calls made. A routine
+        # whose common path is an early return would otherwise fill its quota
+        # with agreements that prove nothing, and stop being sampled long
+        # before its real path ever ran.
+        if off in wanted and did_work[off] < args.max_per_routine:
             sp = uc.reg_read(UC_X86_REG_SP)
             ss = uc.reg_read(UC_X86_REG_SS)
             ret = struct.unpack("<H", uc.mem_read(ss * 16 + sp, 2))[0]
@@ -199,6 +215,8 @@ def main():
                      if want_img[k] != got_img[k])
             bad.append(f"image at {i:#07x}: original {want_img[i]:#04x}, "
                        f"C {got_img[i]:#04x}")
+        if want_img != img or want_vram != vram:
+            did_work[off] += 1
         if bad:
             mismatched[off] += 1
             first_bad.setdefault(off, "; ".join(bad))
@@ -234,7 +252,12 @@ def main():
             print(f"  FAIL {name} ({off:#06x}): {bad} of {n + bad} calls "
                   f"differ - {first_bad[off]}")
         else:
-            print(f"  ok   {name} ({off:#06x}): {n} calls, identical")
+            w = did_work[off]
+            note = (f"{n} calls, identical" if w == n else
+                    f"{n} calls, identical - but only {w} changed anything")
+            if w == 0:
+                note += " (every one was an early return: unproven)"
+            print(f"  ok   {name} ({off:#06x}): {note}")
     if never:
         print(f"  NOT REACHED, so unproven: {', '.join(never)}")
     return 1 if fails or never else 0

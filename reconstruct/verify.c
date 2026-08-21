@@ -55,6 +55,21 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x20b9:                        /* draw_sprite_20x6(bl, al, si) */
         draw_sprite_20x6(r[R_BX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
         return 1;
+    case 0x247f:                        /* ball_after(si = the ball) */
+        ball_after(r[R_SI]);
+        return 1;
+    case 0x2316:                        /* ball_paddle(si = the ball) */
+        ball_paddle(r[R_SI]);
+        return 1;
+    case 0x254d:                        /* ball_bricks(si = the ball) */
+        ball_bricks(r[R_SI]);
+        return 1;
+    case 0x413d:                        /* score_add, no arguments */
+        score_add();
+        return 1;
+    case 0x3b64:                        /* xor_sprite_16x7(cl, al, si) */
+        xor_sprite_16x7(r[R_CX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
+        return 1;
     case 0x0c64:                        /* draw_char(al, di) */
         draw_char((unsigned char)(r[R_AX] & 0xff), r[R_DI]);
         return 1;

@@ -1435,3 +1435,446 @@ int ball_redraw(unsigned ball)
     ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
     return 1;
 }
+
+/* ------------------------------------------------------------------------
+ * 1ac2:247f  ball_after
+ *
+ * What happens to a ball after it has moved: walls, bricks, paddle, floor.
+ *
+ * The playfield is x in (8, 0xc4) and y from 4 down to 0xc3; y == 0xc4 is the
+ * floor. Every bounce sets the anchor at the point of contact and restarts the
+ * Bresenham accumulators, which is the same thing the ball's entity handler
+ * does and the reason `+0x18`/`+0x19` is where the last bounce was rather than
+ * where the ball is.
+ *
+ * `+0x1d` counts bounces, and every 0x23 of them the slope is picked afresh
+ * from `random(5) + 1` on each axis. That is what stops a ball settling into a
+ * loop that never reaches the remaining bricks.
+ *
+ * [0x2e81] is the safety net - the extra floor a bonus can put up. With it
+ * live the ball bounces off the bottom instead of being lost.
+ */
+#define B_BOUNCES   0x1d
+#define WALL_LEFT   0x08
+#define WALL_RIGHT  0xc4
+#define WALL_TOP    0x04
+#define FLOOR       0xc4
+#define SOUND_BOUNCE   2
+#define SAFETY_NET  0x2e81
+
+void ball_after(unsigned ball)
+{
+    unsigned char *b = g_image + ball;
+
+    if (b[B_BOUNCES] >= 0x23) {
+        b[B_BOUNCES] = 0;
+        b[B_ANCHOR_X] = b[B_X];
+        b[B_ANCHOR_Y] = b[B_Y];
+        b[B_ACC_X] = b[B_ACC_Y] = 0;
+        b[B_DY] = (unsigned char)(game_random(io_ticks(), 5) + 1);
+        b[B_DX] = (unsigned char)(game_random(io_ticks(), 5) + 1);
+    }
+
+    unsigned x = b[B_X], y = b[B_Y];
+    if (x <= WALL_LEFT || x >= WALL_RIGHT) {
+        g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+        b[B_DIR_X] = (x <= WALL_LEFT) ? 0 : 1;
+        b[B_ACC_X] = 1;
+        b[B_ACC_Y] = 0;
+        b[B_ANCHOR_X] = (unsigned char)(x <= WALL_LEFT ? 9 : 0xc3);
+        b[B_ANCHOR_Y] = (unsigned char)y;
+        b[B_BOUNCES]++;
+    }
+    if (y <= WALL_TOP) {
+        g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+        b[B_DIR_Y] = 0;                 /* downwards */
+        b[B_BOUNCES]++;
+        b[B_ACC_X] = 0;
+        b[B_ACC_Y] = 1;
+        b[B_ANCHOR_X] = (unsigned char)x;
+        b[B_ANCHOR_Y] = (unsigned char)(y + 1);
+    }
+
+    ball_bricks(ball);                  /* 1ac2:254d */
+
+    if (b[B_Y] != FLOOR) {
+        ball_paddle(ball);              /* 1ac2:2316 */
+        return;
+    }
+    if (g_image[SAFETY_NET] == 1) {     /* the net catches it */
+        g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+        b[B_ANCHOR_X] = b[B_X];
+        b[B_ANCHOR_Y] = 0xc3;
+        b[B_DIR_Y] = 1;                 /* upwards */
+        b[B_ACC_X] = 1;
+        b[B_ACC_Y] = 1;
+        return;
+    }
+    /* Lost. Erase it, mark it idle, and take one off the live count - the
+     * play loop notices [0x2e73] reaching zero at the top of the next frame. */
+    b[B_STATE] = 0;
+    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+    g_image[BALL_ALIVE]--;
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:2316  ball_paddle
+ *
+ * The paddle is 0xb5 to 0xbe deep and [0x2d3a] wide. A ball reaching it comes
+ * off at an angle that depends on where it hit, which is what makes the game
+ * playable rather than a coin toss: the outgoing slope is looked up in a table
+ * by distance from the near end.
+ *
+ *   0x2e2c   eleven slopes, indexed by how far in from either end the ball
+ *            struck the top - shallow at the ends, steep in the middle
+ *   0x2e42   ten slopes for a hit on the side, indexed by depth
+ *
+ * Each entry is a word stored (dy, dx), matching the ball's own `+0x16`,
+ * `+0x17` pair. The middle of the paddle has no table entry at all: a ball
+ * landing there keeps the slope it arrived with and only reverses.
+ *
+ * A ball moving upwards is treated as having hit the top even when it is
+ * level with the side, which is what stops one that has just come off from
+ * immediately catching the side on the way out.
+ */
+#define PADDLE_TOP    0xb5
+#define PADDLE_BOTTOM 0xbe
+#define PADDLE_WIDTH  0x2d3a
+#define SLOPE_TOP     0x2e2c
+#define SLOPE_SIDE    0x2e42
+#define SOUND_PADDLE     1
+
+/* The common tail of every top-of-paddle bounce: reverse vertically, anchor
+ * one pixel clear of the paddle, and restart the accumulators. */
+static void paddle_bounce_up(unsigned char *b)
+{
+    unsigned ah = b[B_Y];
+    if (b[B_Y] == PADDLE_BOTTOM) {
+        b[B_DIR_Y] = 0;                 /* it came from below: send it down */
+        ah++;
+    } else {
+        b[B_DIR_Y] = 1;
+        ah--;
+    }
+    b[B_ANCHOR_X] = b[B_X];
+    b[B_ANCHOR_Y] = (unsigned char)ah;
+    b[B_ACC_X] = b[B_ACC_Y] = 1;
+    b[B_BOUNCES] = 0;
+    g_image[SOUND_REQUEST] = SOUND_PADDLE;
+}
+
+static void paddle_slope(unsigned char *b, unsigned table, unsigned index)
+{
+    unsigned w = img_w(table + index * 2);
+    b[B_DY] = (unsigned char)w;
+    b[B_DX] = (unsigned char)(w >> 8);
+}
+
+void ball_paddle(unsigned ball)
+{
+    unsigned char *b = g_image + ball;
+    unsigned y = b[B_Y];
+
+    if (y < PADDLE_TOP || y > PADDLE_BOTTOM)
+        return;
+
+    if (y > PADDLE_TOP && b[B_DIR_Y] != 1) {
+        /* The sides. Only the two single columns just outside the paddle
+         * count, which is why this is an equality and not a range. */
+        unsigned left = (g_image[PADDLE_X] - 3) & 0xff;
+        unsigned bx = b[B_X];
+        int from_left = 1;
+        if (bx != left) {
+            unsigned off = (bx - left) & 0xff;
+            if (off != ((g_image[PADDLE_WIDTH] + 3) & 0xff))
+                return;
+            from_left = 0;
+        }
+        unsigned depth = (y - 0xb6) & 0xff;
+        b[B_DIR_Y] = (depth <= 5) ? 1 : 0;
+        b[B_DIR_X] = (unsigned char)from_left;
+        b[B_ANCHOR_X] = from_left
+            ? (unsigned char)(g_image[PADDLE_X] - 4)
+            : (unsigned char)(g_image[PADDLE_X] + g_image[PADDLE_WIDTH] + 1);
+        b[B_ANCHOR_Y] = (unsigned char)y;
+        b[B_ACC_X] = b[B_ACC_Y] = 1;
+        b[B_BOUNCES] = 0;
+        paddle_slope(b, SLOPE_SIDE, depth);
+        g_image[SOUND_REQUEST] = SOUND_PADDLE;
+        return;
+    }
+
+    /* The top. */
+    unsigned left = (g_image[PADDLE_X] - 3) & 0xff;
+    if (b[B_X] < left)
+        return;
+    unsigned off = (b[B_X] - left) & 0xff;
+
+    if (off <= 0x0a) {                          /* the left end */
+        paddle_slope(b, SLOPE_TOP, off);
+        b[B_DIR_X] = 1;                         /* away to the left */
+        paddle_bounce_up(b);
+        return;
+    }
+    unsigned span = (g_image[PADDLE_WIDTH] + 3) & 0xff;
+    if (off > span)
+        return;
+    unsigned from_right = (span - off) & 0xff;
+    if (from_right <= 0x0a) {                   /* the right end */
+        paddle_slope(b, SLOPE_TOP, from_right);
+        b[B_DIR_X] = 0;                         /* away to the right */
+        paddle_bounce_up(b);
+        return;
+    }
+    /* The middle: no table, so the slope it arrived with is kept. */
+    paddle_bounce_up(b);
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:2755  probe_cell
+ *
+ * Is there a brick at this pixel? The arithmetic is the clearest statement in
+ * the program of what a level record means:
+ *
+ *     di  = (y & 0xf8) + ((y & 0xf8) >> 1)      the row: (y >> 3) * 12
+ *     di += x >> 4                              the column: 16 pixels a brick
+ *     di += 0x2f18                              the cells
+ *
+ * so the grid is twelve wide, a brick is sixteen pixels by eight, and the
+ * cells start eight bytes into the record. Cell 0 is empty and cell 0x0c is
+ * not a brick either.
+ *
+ * A hit records the cell's address in the slot and the brick's centre after
+ * it, and counts itself in [0x2e74].
+ */
+#define HIT_COUNT  0x2e74
+#define HIT_SLOTS  0x2e89               /* four of four bytes */
+#define HIT_DIRS   0x2e99               /* the direction to leave in, per slot */
+
+static void probe_cell(unsigned x, unsigned y, unsigned slot)
+{
+    if (x > 0xbf || y > 0xc4) {
+        img_setw(slot, 0);
+        return;
+    }
+    unsigned row = y & 0xf8;
+    unsigned di = row + (row >> 1) + (x >> 4) + LEVEL_CELLS + 8;
+    unsigned cell = g_image[di];
+    if (cell == 0x0c || cell == 0) {
+        img_setw(slot, 0);
+        return;
+    }
+    img_setw(slot, di);
+    g_image[HIT_COUNT]++;
+    g_image[slot + 2] = (unsigned char)((x & 0xf0) + 8);   /* the brick's */
+    g_image[slot + 3] = (unsigned char)((y & 0xf8) + 6);   /* centre */
+}
+
+/* 1ac2:27b7  drop_duplicate_hits
+ *
+ * Two corners of the ball can land in the same brick. Later slots naming a
+ * centre an earlier one already has are cleared, so the brick is only hit
+ * once.
+ */
+static void drop_duplicate_hits(void)
+{
+    for (int i = 0; i < 3; i++) {
+        unsigned si = HIT_SLOTS + i * 4;
+        if (!img_w(si))
+            continue;
+        unsigned centre = img_w(si + 2);
+        for (int j = i + 1; j < 4; j++) {
+            unsigned di = HIT_SLOTS + j * 4;
+            if (img_w(di) && img_w(di + 2) == centre)
+                img_setw(di, 0);
+        }
+    }
+}
+
+/* Reverse one axis, anchoring one pixel back the way the ball came. */
+static void bounce_x(unsigned char *b)
+{
+    if (b[B_DIR_X] == 0) {
+        b[B_DIR_X] = 1;
+        b[B_ANCHOR_X] = (unsigned char)(b[B_X] - 1);
+    } else {
+        b[B_DIR_X] = 0;
+        b[B_ANCHOR_X] = (unsigned char)(b[B_X] + 1);
+    }
+}
+
+static void bounce_y(unsigned char *b)
+{
+    if (b[B_DIR_Y] == 0) {
+        b[B_DIR_Y] = 1;
+        b[B_ANCHOR_Y] = (unsigned char)(b[B_Y] - 1);
+    } else {
+        b[B_DIR_Y] = 0;
+        b[B_ANCHOR_Y] = (unsigned char)(b[B_Y] + 1);
+    }
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:254d  ball_bricks
+ *
+ * Probe the ball's four corners against the brick grid and work out which way
+ * it should leave. One corner in a brick means a corner hit and the direction
+ * comes straight out of the table at 0x2e99; two adjacent corners mean a flat
+ * face and only that axis reverses; three or four mean it is wedged and both
+ * reverse.
+ *
+ * The corners are a 4x4 box offset by (-8, -6) from the ball's position -
+ * the ball sprite is 16 by 4 but only its middle counts for collision, which
+ * is why it can graze a brick without taking it.
+ */
+void ball_bricks(unsigned ball)
+{
+    unsigned char *b = g_image + ball;
+    g_image[HIT_COUNT] = 0;
+
+    unsigned x = (b[B_X] - 8) & 0xff, y = (b[B_Y] - 6) & 0xff;
+    probe_cell(x, y, HIT_SLOTS + 0);
+    probe_cell((x + 3) & 0xff, y, HIT_SLOTS + 4);
+    probe_cell((x + 3) & 0xff, (y + 3) & 0xff, HIT_SLOTS + 8);
+    probe_cell(x, (y + 3) & 0xff, HIT_SLOTS + 12);
+
+    unsigned n = g_image[HIT_COUNT];
+    if (n == 0)
+        return;
+
+    unsigned s0 = img_w(HIT_SLOTS + 0), s1 = img_w(HIT_SLOTS + 4);
+    unsigned s2 = img_w(HIT_SLOTS + 8), s3 = img_w(HIT_SLOTS + 12);
+
+    if (n == 3 || (n == 2 && ((s0 && s2) || (!s0 && s1 && s3)))) {
+        bounce_x(b);                    /* wedged, or hit on the diagonal */
+        bounce_y(b);
+    } else if (n == 2) {
+        /* A flat face: the pair tells which axis it was. */
+        if (s0 && s1)
+            bounce_y(b), b[B_ANCHOR_X] = b[B_X];
+        else if (s2 && s3)
+            bounce_y(b), b[B_ANCHOR_X] = b[B_X];
+        else
+            bounce_x(b), b[B_ANCHOR_Y] = b[B_Y];
+    } else {
+        /* One corner, or all four: leave in the direction its slot names. */
+        int i = 0;
+        while (i < 4 && !img_w(HIT_SLOTS + i * 4))
+            i++;
+        if (i < 4) {
+            unsigned d = img_w(HIT_DIRS + i * 2);
+            b[B_DIR_X] = (unsigned char)(d & 0xff);
+            b[B_DIR_Y] = (unsigned char)(d >> 8);
+            b[B_ANCHOR_Y] = (unsigned char)(b[B_Y] + (b[B_DIR_Y] ? -1 : 1));
+            b[B_ANCHOR_X] = (unsigned char)(b[B_X] + (b[B_DIR_X] ? -1 : 1));
+        }
+    }
+
+    /* Three hits means one of them is a corner that should not count. */
+    if (n == 3) {
+        if (s0) {
+            if (s2) {
+                img_setw(HIT_SLOTS + 4, 0);
+                img_setw(HIT_SLOTS + 12, 0);
+            } else {
+                img_setw(HIT_SLOTS + 0, 0);
+            }
+        } else {
+            img_setw(HIT_SLOTS + 8, 0);
+        }
+    }
+
+    b[B_ACC_X] = b[B_ACC_Y] = 1;
+    drop_duplicate_hits();
+
+    for (int i = 0; i < 4; i++) {
+        unsigned cell = img_w(HIT_SLOTS + i * 4);
+        if (cell)
+            brick_hit(HIT_SLOTS + i * 4, cell, ball);
+    }
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:28cb and the table at 0x3044
+ *
+ * Each cell value has its own handler; the table maps value to routine, and a
+ * value of 0 or above 12 has none. Only the ordinary brick - value 1, routine
+ * 0x28cb - is transcribed, and every other type falls back to it, so the
+ * unusual bricks currently behave as ordinary ones rather than not at all.
+ *
+ * The real one has two paths and both clear the cell and take one off the
+ * count: usually the brick vanishes at once, but one time in three (while
+ * [0x3384] is under 3) it hands itself to an entity running 0x3b2a, which is
+ * the crumbling animation.
+ */
+#define SCORE_ADD_LO  0x1415
+#define SCORE_ADD_MID 0x1417
+#define SCORE_ADD_HI  0x1419
+#define SOUND_BRICK      3
+
+void brick_hit(unsigned slot, unsigned cell, unsigned ball)
+{
+    img_setw(SCORE_ADD_LO, 0);
+    img_setw(SCORE_ADD_MID, 0);
+    img_setw(SCORE_ADD_HI, 2);
+    score_add();                        /* 1ac2:413d */
+    g_image[SOUND_REQUEST] = SOUND_BRICK;
+    if (ball)
+        g_image[ball + B_BOUNCES] = 0;
+
+    /* The immediate-removal path at 0x2929: clear the cell, take one off the
+     * count, and XOR the brick's own picture off the screen. The other path
+     * hands it to an entity running 0x3b2a that crumbles it over several
+     * frames; that entity is not transcribed, so every brick goes at once. */
+    g_image[LEVEL_CELLS]--;
+    g_image[cell] = 0;
+    xor_sprite_16x7(g_image[slot + 2], g_image[slot + 3],
+                    img_w(CELL_TABLE + 1 * 2));
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:3b64  xor_sprite_16x7
+ *
+ * Seven rows of four bytes, XORed in. A brick's cell is eight scan lines
+ * apart but only seven of them are drawn - the eighth is the gap between
+ * rows - so this both draws a brick and, run again, rubs it out.
+ */
+void xor_sprite_16x7(unsigned x, unsigned y, unsigned src)
+{
+    unsigned di = cga_at(x, y);
+    for (int r = 0; r < 7; r++) {
+        for (int b = 0; b < 4; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[src + r * 4 + b];
+        di = cga_next_row(di);
+    }
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:413d  score_add
+ *
+ * Add the six-digit figure at [0x1415] to the score at [0x13cd], in decimal,
+ * and redraw it. Both are held as ASCII digits, so the addition masks off the
+ * 0x30 before working and puts it back after.
+ *
+ * The carry is the classic decimal adjust: add six to the sum and see whether
+ * it carries out of the low nibble. If it does, the digit really was ten or
+ * more and the adjusted value is the right one; if not, the unadjusted value
+ * is kept. The original keeps the carry in `bl` rather than in the flags,
+ * because the masking in between would destroy it.
+ */
+void score_add(void)
+{
+    unsigned si = 0x13d2, di = 0x141a;
+    unsigned carry = 0;
+    for (int i = 0; i < 6; i++, si--, di--) {
+        unsigned sum = (g_image[si] & 0x0f) + g_image[di] + (carry ? 1 : 0);
+        unsigned adjusted = (sum + 6) & 0xff;
+        carry = (adjusted & 0xf0) || (sum & 0xf0);
+        g_image[si] = (unsigned char)(0x30 | ((carry ? adjusted : sum) & 0x0f));
+    }
+    /* Redraw the six digits into the panel. */
+    si = 0x13cd;
+    di = 0x15d2;
+    for (int i = 0; i < 6; i++, si++, di += 2)
+        draw_char(g_image[si], di);
+}
