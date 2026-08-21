@@ -1,0 +1,24 @@
+# The game is never part of this repository.
+popcorn/
+game/
+*.exe
+*.ppc
+*.hsc
+*.doc
+*.bat
+
+# Derived from the game, and therefore just as copyrighted.
+popcorn.unpacked.exe
+snapshots/
+*.snap
+debug/
+*.png
+*.wav
+
+# One-shot edit scripts, per docs/notes/editing-conventions.md
+edit_*.py
+
+venv/
+__pycache__/
+*.pyc
+*.o
