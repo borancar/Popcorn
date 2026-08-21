@@ -54,6 +54,18 @@ static inline unsigned cga_next_row(unsigned di)
     return di < CGA_PLANE ? di + CGA_PLANE : di - (CGA_PLANE - CGA_STRIDE);
 }
 
+/* And back up one, which the intro animations use to draw upwards. Note the
+ * original's test is `cmp di,0x2000 / ja`, strictly greater, so an offset of
+ * exactly 0x2000 takes the other branch - kept, because it is what runs. */
+static inline unsigned cga_prev_row(unsigned di)
+{
+    return di > CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
+}
+
+/* One of the 35 relocated segment constants: the program reaches a block of
+ * its own data as segment 0xc46, which is image offset 0xc460. */
+#define SEG_C46 0xc460
+
 /* The four colours mode 05h displays on an RGB monitor: the colour-burst-kill
  * bit selects background / cyan / red / white regardless of the palette bit. */
 extern const uint32_t g_palette[4];
@@ -120,6 +132,12 @@ void io_present(void);                 /* g_vram to the screen */
 int  io_pump(void);                    /* poll input; 0 means quit */
 void io_wait_retrace(void);            /* what `in al,0x3da` / test 8 did */
 void io_sound(unsigned divisor);       /* PIT channel 2; 0 silences */
+void io_delay_cycles(unsigned cycles); /* what the busy-wait at 0x164c cost */
+int  io_key_ready(void);               /* INT 16h AH=01 */
+unsigned io_get_key(void);             /* INT 16h AH=00: scan<<8 | ascii */
+void io_flush_keys(void);
+int  io_save_shot(const char *path);
+void io_set_deadline(unsigned ms, const char *shot, const char *vram);
 
 /* Little-endian accessors, so a transcribed `mov ax,[0x3144]` reads the way it
  * reads in the disassembly. */
@@ -149,6 +167,70 @@ void blit_xor(unsigned pixels, unsigned rows);          /* 1ac2:2281 */
 void draw_paddle(unsigned sprite);                      /* 1ac2:221a */
 void draw_char(unsigned char c, unsigned di);           /* 1ac2:0c64 */
 unsigned game_random(unsigned ticks, unsigned limit);   /* 1ac2:40c0 */
+void speaker_on(void);                                  /* 1ac2:0085 */
+void speaker_off(void);                                 /* 1ac2:0090 */
+void sound_tick(void);                                  /* 1ac2:0097 */
+void game_delay(void);                                  /* 1ac2:164c */
+void read_speed_setting(unsigned speed);                /* 1ac2:5680 */
+void build_shifted_sprites(void);                       /* 1ac2:14b3 */
+void load_high_scores(const char *dir);                 /* 1ac2:4d96 */
+void intro_curtain(void);                               /* 1ac2:078b */
+void intro_logo(void);                                  /* 1ac2:54d6 */
+void intro_reveal(void);                                /* 1ac2:55e5 */
+void intro_scroll(void);                                /* 1ac2:4a7a */
+void game_main(const char *dir, unsigned speed);
+
+/* --------------------------------------------------------- not yet done ---
+ * Implemented as no-ops in stubs.c; see the note at the top of that file.
+ */
+void menu_particles_init(void);   /* 1ac2:5476 */
+void menu_particles_tick(void);   /* 1ac2:53c2 */
+void menu_banner_tick(void);      /* 1ac2:50df */
+void menu_arrow(void);            /* 1ac2:490d */
+void screen_define_keys(void);    /* 1ac2:1581 */
+void screen_high_scores(void);    /* 1ac2:4e1a */
+void palette_cycle(void);         /* 1ac2:5196 */
+void menu_extra(void);            /* 1ac2:5171 */
+void employee_enter(void);        /* 1ac2:4ae0 */
+void employee_leave(void);        /* 1ac2:4b4f */
+void demo_prepare(void);          /* 1ac2:1212 */
+void demo_start(void);            /* 1ac2:1509 */
+void play_prepare(void);          /* 1ac2:0cc5 */
+void play_loop(void);             /* 1ac2:1873 */
+void level_load_file(void);       /* 1ac2:08c8 */
+unsigned char screen_player_names(void);  /* 1ac2:10de */
+void speaker_on(void);                                  /* 1ac2:0085 */
+void speaker_off(void);                                 /* 1ac2:0090 */
+void sound_tick(void);                                  /* 1ac2:0097 */
+void game_delay(void);                                  /* 1ac2:164c */
+void read_speed_setting(unsigned speed);                /* 1ac2:5680 */
+void build_shifted_sprites(void);                       /* 1ac2:14b3 */
+void load_high_scores(const char *dir);                 /* 1ac2:4d96 */
+void intro_curtain(void);                               /* 1ac2:078b */
+void intro_logo(void);                                  /* 1ac2:54d6 */
+void intro_reveal(void);                                /* 1ac2:55e5 */
+void intro_scroll(void);                                /* 1ac2:4a7a */
+void game_main(const char *dir, unsigned speed);
+
+/* --------------------------------------------------------- not yet done ---
+ * Implemented as no-ops in stubs.c; see the note at the top of that file.
+ */
+void menu_particles_init(void);   /* 1ac2:5476 */
+void menu_particles_tick(void);   /* 1ac2:53c2 */
+void menu_banner_tick(void);      /* 1ac2:50df */
+void menu_arrow(void);            /* 1ac2:490d */
+void screen_define_keys(void);    /* 1ac2:1581 */
+void screen_high_scores(void);    /* 1ac2:4e1a */
+void palette_cycle(void);         /* 1ac2:5196 */
+void menu_extra(void);            /* 1ac2:5171 */
+void employee_enter(void);        /* 1ac2:4ae0 */
+void employee_leave(void);        /* 1ac2:4b4f */
+void demo_prepare(void);          /* 1ac2:1212 */
+void demo_start(void);            /* 1ac2:1509 */
+void play_prepare(void);          /* 1ac2:0cc5 */
+void play_loop(void);             /* 1ac2:1873 */
+void level_load_file(void);       /* 1ac2:08c8 */
+unsigned char screen_player_names(void);  /* 1ac2:10de */
 
 int verify_main(const char *in_path, const char *out_path);
 

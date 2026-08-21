@@ -16,6 +16,8 @@
  * is the same elapsed time without the spin.
  */
 #include <stdio.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <SDL3/SDL.h>
@@ -40,6 +42,18 @@ static SDL_Texture *tex;
 static SDL_AudioStream *audio;
 static uint64_t next_retrace_ns;
 static unsigned tone_divisor;
+
+/* The BIOS keyboard buffer the menus read through INT 16h. Sixteen entries,
+ * as the real one had, each `scan << 8 | ascii`. */
+#define KEYQ 16
+static unsigned key_q[KEYQ];
+static int key_head, key_tail;
+
+/* Time owed to the game's busy-wait at 0x164c. It is called in tight loops,
+ * so each call is accumulated and paid off only when enough has built up to
+ * be worth a syscall - the elapsed time comes out the same and no core is
+ * burned spinning. */
+static double delay_owed_ns;
 
 #define FRAME_NS (SDL_NS_PER_SECOND / 60)
 
@@ -110,8 +124,98 @@ void io_present(void)
     SDL_RenderPresent(ren);
 }
 
+void io_delay_cycles(unsigned cycles)
+{
+    delay_owed_ns += cycles * (1e9 / 8000000.0);   /* an 8 MHz 8086 */
+    if (delay_owed_ns >= 1e6) {                    /* a millisecond or more */
+        uint64_t ns = (uint64_t)delay_owed_ns;
+        delay_owed_ns -= ns;
+        SDL_DelayNS(ns);
+    }
+}
+
+int io_key_ready(void)
+{
+    return key_head != key_tail;
+}
+
+unsigned io_get_key(void)
+{
+    if (key_head == key_tail)
+        return 0;
+    unsigned k = key_q[key_head];
+    key_head = (key_head + 1) % KEYQ;
+    return k;
+}
+
+void io_flush_keys(void)
+{
+    key_head = key_tail = 0;
+}
+
+static void key_push(unsigned scan, unsigned ascii)
+{
+    int next = (key_tail + 1) % KEYQ;
+    if (next == key_head)
+        return;                          /* full: the real BIOS beeped */
+    key_q[key_tail] = scan << 8 | ascii;
+    key_tail = next;
+}
+
+/* Write the framebuffer out as it stands, for comparing against the emulator.
+ * Decodes exactly the way io_present() does, so a difference in the picture is
+ * a difference in the game and not in how it was saved. */
+int io_save_shot(const char *path)
+{
+    SDL_Surface *s = SDL_CreateSurface(CGA_W, CGA_H, SDL_PIXELFORMAT_ARGB8888);
+    if (!s)
+        return 0;
+    for (int y = 0; y < CGA_H; y++) {
+        const unsigned char *row =
+            g_vram + (y & 1 ? CGA_PLANE : 0) + (y >> 1) * CGA_STRIDE;
+        uint32_t *out = (uint32_t *)((unsigned char *)s->pixels
+                                     + (size_t)y * s->pitch);
+        for (int x = 0; x < CGA_STRIDE; x++) {
+            unsigned b = row[x];
+            *out++ = g_palette[(b >> 6) & 3];
+            *out++ = g_palette[(b >> 4) & 3];
+            *out++ = g_palette[(b >> 2) & 3];
+            *out++ = g_palette[b & 3];
+        }
+    }
+    int ok = SDL_SaveBMP(s, path);
+    SDL_DestroySurface(s);
+    return ok;
+}
+
+/* A deadline for unattended runs: --run-ms. Checked from the retrace wait,
+ * which every animation and every frame goes through. */
+static uint64_t deadline_ns;
+static const char *shot_path;
+static const char *vram_path;
+
+void io_set_deadline(unsigned ms, const char *shot, const char *vram)
+{
+    deadline_ns = ms ? SDL_GetTicksNS() + (uint64_t)ms * SDL_NS_PER_MS : 0;
+    shot_path = shot;
+    vram_path = vram;
+}
+
 void io_wait_retrace(void)
 {
+    if (deadline_ns && SDL_GetTicksNS() >= deadline_ns) {
+        if (shot_path)
+            io_save_shot(shot_path);
+        if (vram_path) {
+            FILE *f = fopen(vram_path, "wb");
+            if (f) {
+                fwrite(g_vram, 1, CGA_SIZE, f);
+                fclose(f);
+            }
+        }
+        io_shutdown();
+        exit(0);
+    }
     uint64_t now = SDL_GetTicksNS();
     if (next_retrace_ns > now)
         SDL_DelayNS(next_retrace_ns - now);
@@ -164,6 +268,21 @@ int io_pump(void)
             if (sc == g_image[KEY_SCAN_L]) g_image[KEY_LEFT] = (unsigned char)down;
             if (sc == g_image[KEY_SCAN_R]) g_image[KEY_RIGHT] = (unsigned char)down;
             if (sc == g_image[KEY_SCAN_A]) g_image[KEY_ACTION] = (unsigned char)down;
+            /* ... and separately, what the BIOS would have put in its buffer
+             * for the menus to read through INT 16h. Only on the make: a
+             * break code never reached that buffer. */
+            if (down) {
+                unsigned ascii = 0;
+                if (ev.key.key >= 0x20 && ev.key.key < 0x7f)
+                    ascii = (unsigned)SDL_toupper((int)ev.key.key);
+                else if (ev.key.scancode == SDL_SCANCODE_RETURN)
+                    ascii = 0x0d;
+                else if (ev.key.scancode == SDL_SCANCODE_ESCAPE)
+                    ascii = 0x1b;
+                else if (ev.key.scancode == SDL_SCANCODE_BACKSPACE)
+                    ascii = 0x08;
+                key_push((unsigned)sc, ascii);
+            }
             break;
         }
         default:
