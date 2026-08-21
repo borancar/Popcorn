@@ -299,6 +299,24 @@ stopped at 62.4%; walking the list while the game played found eight of them
 (`0x3273`, `0x3386`, `0x3561`, `0x3717`, `0x390d`, `0x39fa`, `0x3aee`,
 `0x3b2a`) and took it to 76.9%.
 
+The node layout, as far as `0x39fa` (a ball's handler) reads it:
+
+| offset | what |
+| --- | --- |
+| `+0x00` | the per-frame handler — **and it is rewritten in place**, so a node is a small state machine |
+| `+0x04`, `+0x05` | two bytes passed to the draw call as `cl` and `al`; position, most likely |
+| `+0x06` | a pointer to a pointer to the sprite |
+| `+0x08` | flags; the low nibble is the kind |
+| `+0x0c` | the next link |
+
+`0x39fa` is worth reading whole, because it independently confirms the ball
+structure: on a bounce it sets the anchor from the live position with one
+`mov ax,[di] / mov [di+0x18],ax`, zeroes the accumulators at `+0x1a`, flips
+both direction flags, and picks a fresh slope with two `random(7) + 1` into
+`+0x16` and `+0x17`. It also writes `cs:[0xf4] = 6` to start a sound, and
+replaces its own handler with `0x3aee`. `[0x33d4]` carries the collision result
+the step produced.
+
 ## The ball structure
 
 Four entries of `0x1e` bytes at `0x2ea1`, stepped by `ball_step` at `0x27d7`.
