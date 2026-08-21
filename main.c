@@ -40,6 +40,7 @@ int main(int argc, char **argv)
     unsigned run_ms = 0;
     const char *shot = NULL;
     const char *vram = NULL;
+    const char *keys = NULL;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--verify") && i + 2 < argc)
             return verify_main(argv[i + 1], argv[i + 2]);
@@ -55,6 +56,8 @@ int main(int argc, char **argv)
             shot = argv[++i];
         else if (!strcmp(argv[i], "--dump-vram") && i + 1 < argc)
             vram = argv[++i];
+        else if (!strcmp(argv[i], "--keys") && i + 1 < argc)
+            keys = argv[++i];
         else {
             fprintf(stderr, "usage: %s [--scale N] [--dump-image FILE]\n"
                             "       %s --verify STATE-IN RESULT-OUT\n",
@@ -97,6 +100,18 @@ int main(int argc, char **argv)
     if (!io_init(scale))
         return 1;
     io_set_deadline(run_ms, shot, vram);
+    /* --keys 3b@30000,39@34000 : scan code, then when to press it. */
+    for (const char *k = keys; k && *k; ) {
+        unsigned scan = (unsigned)strtoul(k, (char **)&k, 16);
+        if (*k == '@')
+            k++;
+        unsigned ms = (unsigned)strtoul(k, (char **)&k, 10);
+        io_script_key(scan, ms);
+        if (*k == ',')
+            k++;
+        else
+            break;
+    }
     /* The game directory, for the high-score file: alongside the executable
      * the data came from. */
     char dir[512];

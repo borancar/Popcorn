@@ -9,6 +9,7 @@
 #define POPCORN_GAME_H
 
 #include <stddef.h>
+#include <setjmp.h>
 #include <stdint.h>
 
 /* ------------------------------------------------------------ the image ---
@@ -136,6 +137,7 @@ void io_delay_cycles(unsigned cycles); /* what the busy-wait at 0x164c cost */
 int  io_key_ready(void);               /* INT 16h AH=01 */
 unsigned io_get_key(void);             /* INT 16h AH=00: scan<<8 | ascii */
 void io_flush_keys(void);
+void io_script_key(unsigned scan, unsigned ms);
 int  io_save_shot(const char *path);
 void io_set_deadline(unsigned ms, const char *shot, const char *vram);
 
@@ -196,9 +198,41 @@ void employee_leave(void);        /* 1ac2:4b4f */
 void demo_prepare(void);          /* 1ac2:1212 */
 void demo_start(void);            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
-void play_loop(void);             /* 1ac2:1873 */
+
 void level_load_file(void);       /* 1ac2:08c8 */
 unsigned char screen_player_names(void);  /* 1ac2:10de */
+
+/* Called by play_loop; the ones still empty live in stubs.c too. */
+int  play_loop(void);             /* 1ac2:1873 - transcribed */
+void draw_text(unsigned src, unsigned count, unsigned di);  /* 1ac2:10d1 */
+void level_draw(void);            /* 1ac2:1c4f */
+void ball_draw(unsigned rec, unsigned x, unsigned y);       /* 1ac2:2881 */
+int  ball_collide(unsigned ball); /* 1ac2:2827 - 0 means it was lost */
+int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
+void ball_after(unsigned ball);   /* 1ac2:247f */
+void laser_fire(void);            /* 1ac2:2ee3 */
+void play_teardown(void);         /* 1ac2:41d4 */
+void entity_call(unsigned node);  /* through node+0 */
+void entity_unlink(unsigned node);/* 1ac2:3257 */
+void entity_spawn(unsigned what); /* 1ac2:3146 */
+void bonus_spawn(void);           /* 1ac2:3d95 */
+void demo_input_step(void);       /* the recorded-input cursor at 0x3134 */
+void game_input(void);            /* calls whichever routine [0x2d45] names */
+void io_mouse_warp(unsigned x, unsigned y);
+unsigned io_ticks(void);
+unsigned io_mouse_x(void);
+unsigned io_mouse_buttons(void);
+
+extern jmp_buf g_back_to_menu;
+void play_session(void);          /* 1ac2:02f5 */
+void panel_draw(void);            /* 1ac2:0b0b */
+void level_colours(void);         /* 1ac2:044b */
+void level_intro(void);           /* 1ac2:1eb9 */
+void life_lost(void);             /* 1ac2:0735 */
+void screen_game_over(void);      /* 1ac2:0473 */
+void screen_end_of_game(void);    /* 1ac2:0d2e */
+void screen_level_done(void);     /* 1ac2:0521 */
+void screen_all_levels_done(void);/* 1ac2:5940 */
 void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
 void sound_tick(void);                                  /* 1ac2:0097 */
@@ -228,9 +262,41 @@ void employee_leave(void);        /* 1ac2:4b4f */
 void demo_prepare(void);          /* 1ac2:1212 */
 void demo_start(void);            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
-void play_loop(void);             /* 1ac2:1873 */
+
 void level_load_file(void);       /* 1ac2:08c8 */
 unsigned char screen_player_names(void);  /* 1ac2:10de */
+
+/* Called by play_loop; the ones still empty live in stubs.c too. */
+int  play_loop(void);             /* 1ac2:1873 - transcribed */
+void draw_text(unsigned src, unsigned count, unsigned di);  /* 1ac2:10d1 */
+void level_draw(void);            /* 1ac2:1c4f */
+void ball_draw(unsigned rec, unsigned x, unsigned y);       /* 1ac2:2881 */
+int  ball_collide(unsigned ball); /* 1ac2:2827 - 0 means it was lost */
+int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
+void ball_after(unsigned ball);   /* 1ac2:247f */
+void laser_fire(void);            /* 1ac2:2ee3 */
+void play_teardown(void);         /* 1ac2:41d4 */
+void entity_call(unsigned node);  /* through node+0 */
+void entity_unlink(unsigned node);/* 1ac2:3257 */
+void entity_spawn(unsigned what); /* 1ac2:3146 */
+void bonus_spawn(void);           /* 1ac2:3d95 */
+void demo_input_step(void);       /* the recorded-input cursor at 0x3134 */
+void game_input(void);            /* calls whichever routine [0x2d45] names */
+void io_mouse_warp(unsigned x, unsigned y);
+unsigned io_ticks(void);
+unsigned io_mouse_x(void);
+unsigned io_mouse_buttons(void);
+
+extern jmp_buf g_back_to_menu;
+void play_session(void);          /* 1ac2:02f5 */
+void panel_draw(void);            /* 1ac2:0b0b */
+void level_colours(void);         /* 1ac2:044b */
+void level_intro(void);           /* 1ac2:1eb9 */
+void life_lost(void);             /* 1ac2:0735 */
+void screen_game_over(void);      /* 1ac2:0473 */
+void screen_end_of_game(void);    /* 1ac2:0d2e */
+void screen_level_done(void);     /* 1ac2:0521 */
+void screen_all_levels_done(void);/* 1ac2:5940 */
 
 int verify_main(const char *in_path, const char *out_path);
 

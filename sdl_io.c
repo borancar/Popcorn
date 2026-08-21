@@ -134,6 +134,30 @@ void io_delay_cycles(unsigned cycles)
     }
 }
 
+/* INT 33h AX=0004: put the pointer somewhere. The game does this at the start
+ * of a level so the paddle starts centred rather than wherever the pointer
+ * happened to be. */
+static unsigned mouse_x = 320, mouse_y = 100;
+
+void io_mouse_warp(unsigned x, unsigned y)
+{
+    mouse_x = x;
+    mouse_y = y;
+}
+
+unsigned io_mouse_x(void) { return mouse_x; }
+unsigned io_mouse_buttons(void)
+{
+    float fx, fy;
+    return SDL_GetMouseState(&fx, &fy) & 3;
+}
+
+/* The BIOS tick counter at 0040:006c, which the PRNG stirs in. */
+unsigned io_ticks(void)
+{
+    return (unsigned)(SDL_GetTicks() * 182 / 10000);   /* 18.2 Hz */
+}
+
 int io_key_ready(void)
 {
     return key_head != key_tail;
@@ -153,7 +177,45 @@ void io_flush_keys(void)
     key_head = key_tail = 0;
 }
 
-static void key_push(unsigned scan, unsigned ascii)
+/* Scripted input, for unattended runs: a list of `scan@ms` fired from the
+ * retrace wait, which every frame and every animation goes through. The same
+ * idea as emulation.py's --keys, and used the same way - to reach a screen
+ * without a person at the keyboard. */
+void key_push(unsigned scan, unsigned ascii);
+
+#define SCRIPT_MAX 32
+static struct { unsigned scan, ms; int done; } script[SCRIPT_MAX];
+static int script_n;
+
+void io_script_key(unsigned scan, unsigned ms)
+{
+    if (script_n < SCRIPT_MAX) {
+        script[script_n].scan = scan;
+        script[script_n].ms = ms;
+        script[script_n].done = 0;
+        script_n++;
+    }
+}
+
+static void script_pump(void)
+{
+    if (!script_n)
+        return;
+    uint64_t now = SDL_GetTicks();
+    for (int i = 0; i < script_n; i++) {
+        if (script[i].done || now < script[i].ms)
+            continue;
+        script[i].done = 1;
+        unsigned sc = script[i].scan;
+        key_push(sc, 0);
+        if (sc == g_image[KEY_SCAN_L]) g_image[KEY_LEFT] = 1;
+        if (sc == g_image[KEY_SCAN_R]) g_image[KEY_RIGHT] = 1;
+        if (sc == g_image[KEY_SCAN_A]) g_image[KEY_ACTION] = 1;
+        fprintf(stderr, "popcorn: [keys] scan %#04x at %ums\n", sc, script[i].ms);
+    }
+}
+
+void key_push(unsigned scan, unsigned ascii)
 {
     int next = (key_tail + 1) % KEYQ;
     if (next == key_head)
@@ -201,21 +263,30 @@ void io_set_deadline(unsigned ms, const char *shot, const char *vram)
     vram_path = vram;
 }
 
+/* The unattended deadline. Checked from both the retrace wait and the event
+ * pump, because the play loop goes through the pump every frame but not
+ * through the retrace wait - it paces itself on its own delay instead. */
+static void check_deadline(void)
+{
+    if (!deadline_ns || SDL_GetTicksNS() < deadline_ns)
+        return;
+    if (shot_path)
+        io_save_shot(shot_path);
+    if (vram_path) {
+        FILE *f = fopen(vram_path, "wb");
+        if (f) {
+            fwrite(g_vram, 1, CGA_SIZE, f);
+            fclose(f);
+        }
+    }
+    io_shutdown();
+    exit(0);
+}
+
 void io_wait_retrace(void)
 {
-    if (deadline_ns && SDL_GetTicksNS() >= deadline_ns) {
-        if (shot_path)
-            io_save_shot(shot_path);
-        if (vram_path) {
-            FILE *f = fopen(vram_path, "wb");
-            if (f) {
-                fwrite(g_vram, 1, CGA_SIZE, f);
-                fclose(f);
-            }
-        }
-        io_shutdown();
-        exit(0);
-    }
+    script_pump();
+    check_deadline();
     uint64_t now = SDL_GetTicksNS();
     if (next_retrace_ns > now)
         SDL_DelayNS(next_retrace_ns - now);
@@ -251,6 +322,8 @@ static int scancode_of(SDL_Scancode sc)
 
 int io_pump(void)
 {
+    script_pump();
+    check_deadline();
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {

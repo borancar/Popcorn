@@ -56,8 +56,46 @@ STUB(employee_leave,      0x4b4f, "and its exit")
 STUB(demo_prepare,        0x1212, "sets the demo up")
 STUB(demo_start,          0x1509, "and starts it")
 STUB(play_prepare,        0xcc5,  "after the names are entered")
-STUB(play_loop,           0x1873, "the game itself: serve, entities, collision")
 STUB(level_load_file,     0x08c8, "reads a .PPC level set named on the command line")
+
+/* --- called from the play loop, which is transcribed ------------------ */
+STUB(level_draw,          0x1c4f, "paints the brick field from 0x2f10")
+STUB(laser_fire,          0x2ee3, "the paddle's laser")
+STUB(play_teardown,       0x41d4, "tidies up when a level ends")
+STUB(bonus_spawn,         0x3d95, "drops a bonus capsule")
+STUB(demo_input_step,     0x1a6f, "advances the recorded-input cursor")
+
+void draw_text(unsigned src, unsigned count, unsigned di)
+{
+    note("draw_text", 0x10d1);
+    (void)src; (void)count; (void)di;
+}
+
+void ball_draw(unsigned rec, unsigned x, unsigned y)
+{
+    note("ball_draw", 0x2881);
+    (void)rec; (void)x; (void)y;
+}
+
+/* Collision returns "the ball survived". With nothing implemented it always
+ * does, so a level neither ends nor progresses - which is visible rather than
+ * silent, and that is the point. */
+int ball_collide(unsigned ball) { note("ball_collide", 0x2827); (void)ball; return 1; }
+int ball_on_paddle(unsigned ball) { note("ball_on_paddle", 0x2e1e); (void)ball; return 1; }
+void ball_after(unsigned ball) { note("ball_after", 0x247f); (void)ball; }
+void entity_call(unsigned node) { note("entity_call", 0x1b5e); (void)node; }
+void entity_unlink(unsigned node) { note("entity_unlink", 0x3257); (void)node; }
+void entity_spawn(unsigned what) { note("entity_spawn", 0x3146); (void)what; }
+
+/* --- called from play_session, which is transcribed ------------------- */
+STUB(panel_draw,            0x0b0b, "the right-hand score panel")
+STUB(level_colours,         0x044b, "picks the level's colour scheme")
+STUB(level_intro,           0x1eb9, "the get-ready animation")
+STUB(life_lost,             0x0735, "the losing-a-ball sequence")
+STUB(screen_game_over,      0x0473, "GAME OVER")
+STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
+STUB(screen_level_done,     0x0521, "the between-levels sequence")
+STUB(screen_all_levels_done, 0x5940, "finishing all fifty")
 
 /* The player-name boxes return 0xff for "abort", anything else to go on. With
  * no implementation there is nobody to abort, so it reports a start. */
