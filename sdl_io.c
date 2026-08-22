@@ -15,6 +15,7 @@
  * a core for nothing, so it sleeps to the next 60 Hz boundary instead, which
  * is the same elapsed time without the spin.
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,7 +25,7 @@
 
 #include "game.h"
 
-unsigned char g_vram[CGA_SIZE];
+uint8_t g_vram[CGA_SIZE];
 
 /* Mode 05h on an RGB monitor: the colour-burst-kill bit in the mode-control
  * register selects this palette whatever the palette bit says.  Entry 0 is the
@@ -40,17 +41,17 @@ static SDL_Window *win;
 static SDL_Renderer *ren;
 static SDL_Texture *tex;
 static SDL_AudioStream *audio;
-static int win_scale = 3;
-static int quit_requested;
+static int32_t win_scale = 3;
+static int32_t quit_requested;
 static uint64_t next_present_ns;
 static uint64_t next_retrace_ns;
-static unsigned tone_divisor;
+static uint32_t tone_divisor;
 
 /* The BIOS keyboard buffer the menus read through INT 16h. Sixteen entries,
  * as the real one had, each `scan << 8 | ascii`. */
 #define KEYQ 16
-static unsigned key_q[KEYQ];
-static int key_head, key_tail;
+static uint32_t key_q[KEYQ];
+static int32_t key_head, key_tail;
 
 /* Time owed to the game's busy-wait at 0x164c. It is called in tight loops,
  * so each call is accumulated and paid off only when enough has built up to
@@ -60,7 +61,7 @@ static double delay_owed_ns;
 
 #define FRAME_NS (SDL_NS_PER_SECOND / 60)
 
-int io_init(int scale)
+int32_t io_init(int32_t scale)
 {
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
         fprintf(stderr, "popcorn: SDL_Init: %s\n", SDL_GetError());
@@ -107,7 +108,7 @@ void io_shutdown(void)
 static void present_now(void)
 {
     if (getenv("POPCORN_FPS")) {
-        static uint64_t t0; static unsigned n;
+        static uint64_t t0; static uint32_t n;
         uint64_t now = SDL_GetTicksNS();
         if (!t0) t0 = now;
         n++;
@@ -117,15 +118,15 @@ static void present_now(void)
         }
     }
     uint32_t *px;
-    int pitch;
+    int32_t pitch;
     if (!SDL_LockTexture(tex, NULL, (void **)&px, &pitch))
         return;
-    for (int y = 0; y < CGA_H; y++) {
-        const unsigned char *row =
+    for (int32_t y = 0; y < CGA_H; y++) {
+        const uint8_t *row =
             g_vram + (y & 1 ? CGA_PLANE : 0) + (y >> 1) * CGA_STRIDE;
-        uint32_t *out = (uint32_t *)((unsigned char *)px + (size_t)y * pitch);
-        for (int x = 0; x < CGA_STRIDE; x++) {
-            unsigned b = row[x];
+        uint32_t *out = (uint32_t *)((uint8_t *)px + (size_t)y * pitch);
+        for (int32_t x = 0; x < CGA_STRIDE; x++) {
+            uint32_t b = row[x];
             *out++ = g_palette[(b >> 6) & 3];
             *out++ = g_palette[(b >> 4) & 3];
             *out++ = g_palette[(b >> 2) & 3];
@@ -152,9 +153,9 @@ static void present_now(void)
  * framebuffer continuously, so drawing twice between two scans showed only
  * the second. Dropping a present nothing could have seen is what the hardware
  * did, not a shortcut. */
-unsigned long io_ms(void)
+uint64_t io_ms(void)
 {
-    return (unsigned long)SDL_GetTicks();
+    return (uint64_t)SDL_GetTicks();
 }
 
 void io_present(void)
@@ -186,7 +187,7 @@ static void keep_alive(void)
     io_pump();
 }
 
-void io_delay_cycles(unsigned cycles)
+void io_delay_cycles(uint32_t cycles)
 {
     if (io_lockstep())
         return;
@@ -210,7 +211,7 @@ void io_delay_cycles(unsigned cycles)
  */
 static float mouse_x = 320, mouse_y = 100;
 
-void io_mouse_warp(unsigned x, unsigned y)
+void io_mouse_warp(uint32_t x, uint32_t y)
 {
     /* A warp is what the next read returns, in lockstep as much as here: the
      * play loop centres the pointer at 1ac2:1925 before the serve, and a port
@@ -229,13 +230,13 @@ void io_mouse_warp(unsigned x, unsigned y)
                               y * (float)win_scale);
 }
 
-unsigned io_mouse_x(void)
+uint32_t io_mouse_x(void)
 {
     if (io_lockstep())
         return io_lockstep_mouse_x();
-    return (unsigned)(mouse_x < 0 ? 0 : mouse_x > 639 ? 639 : mouse_x);
+    return (uint32_t)(mouse_x < 0 ? 0 : mouse_x > 639 ? 639 : mouse_x);
 }
-unsigned io_mouse_buttons(void)
+uint32_t io_mouse_buttons(void)
 {
     if (io_lockstep())
         return io_lockstep_buttons();
@@ -247,34 +248,34 @@ unsigned io_mouse_buttons(void)
  * that a verification run can be handed the value the original saw - otherwise
  * every routine that consults random() diverges for a reason that is not a
  * bug. */
-static unsigned forced_ticks;
-static int ticks_forced;
+static uint32_t forced_ticks;
+static int32_t ticks_forced;
 
-void io_set_ticks(unsigned t)
+void io_set_ticks(uint32_t t)
 {
     forced_ticks = t;
     ticks_forced = 1;
 }
 
-unsigned io_ticks(void)
+uint32_t io_ticks(void)
 {
     if (ticks_forced)
         return forced_ticks;
-    return (unsigned)(SDL_GetTicks() * 182 / 10000);   /* 18.2 Hz */
+    return (uint32_t)(SDL_GetTicks() * 182 / 10000);   /* 18.2 Hz */
 }
 
-int io_key_ready(void)
+int32_t io_key_ready(void)
 {
     if (io_lockstep())
         return 0;
     return key_head != key_tail;
 }
 
-unsigned io_get_key(void)
+uint32_t io_get_key(void)
 {
     if (key_head == key_tail)
         return 0;
-    unsigned k = key_q[key_head];
+    uint32_t k = key_q[key_head];
     key_head = (key_head + 1) % KEYQ;
     return k;
 }
@@ -288,13 +289,13 @@ void io_flush_keys(void)
  * retrace wait, which every frame and every animation goes through. The same
  * idea as emulation.py's --keys, and used the same way - to reach a screen
  * without a person at the keyboard. */
-void key_push(unsigned scan, unsigned ascii);
+void key_push(uint32_t scan, uint32_t ascii);
 
 #define SCRIPT_MAX 32
-static struct { unsigned scan, ms; int done; } script[SCRIPT_MAX];
-static int script_n;
+static struct { uint32_t scan, ms; int32_t done; } script[SCRIPT_MAX];
+static int32_t script_n;
 
-void io_script_key(unsigned scan, unsigned ms)
+void io_script_key(uint32_t scan, uint32_t ms)
 {
     if (script_n < SCRIPT_MAX) {
         script[script_n].scan = scan;
@@ -308,7 +309,7 @@ void io_script_key(unsigned scan, unsigned ms)
  * events get this from SDL; a scripted one had nothing, so --keys could press
  * F1 but could not type a player's name - name_field reads the ASCII byte and
  * saw zero every time. Set 1 scan codes, the printable half of the keyboard. */
-static unsigned ascii_of_scan(unsigned sc)
+static uint32_t ascii_of_scan(uint32_t sc)
 {
     static const char t[0x3a] = {
         [0x02] = '1', [0x03] = '2', [0x04] = '3', [0x05] = '4', [0x06] = '5',
@@ -322,7 +323,7 @@ static unsigned ascii_of_scan(unsigned sc)
         [0x2c] = 'Z', [0x2d] = 'X', [0x2e] = 'C', [0x2f] = 'V', [0x30] = 'B',
         [0x31] = 'N', [0x32] = 'M',
     };
-    return sc < sizeof t ? (unsigned char)t[sc] : 0;
+    return sc < sizeof t ? (uint8_t)t[sc] : 0;
 }
 
 static void script_pump(void)
@@ -330,11 +331,11 @@ static void script_pump(void)
     if (!script_n)
         return;
     uint64_t now = SDL_GetTicks();
-    for (int i = 0; i < script_n; i++) {
+    for (int32_t i = 0; i < script_n; i++) {
         if (script[i].done || now < script[i].ms)
             continue;
         script[i].done = 1;
-        unsigned sc = script[i].scan;
+        uint32_t sc = script[i].scan;
         key_push(sc, ascii_of_scan(sc));
         if (sc == g_image[KEY_SCAN_L]) g_image[KEY_LEFT] = 1;
         if (sc == g_image[KEY_SCAN_R]) g_image[KEY_RIGHT] = 1;
@@ -343,9 +344,9 @@ static void script_pump(void)
     }
 }
 
-void key_push(unsigned scan, unsigned ascii)
+void key_push(uint32_t scan, uint32_t ascii)
 {
-    int next = (key_tail + 1) % KEYQ;
+    int32_t next = (key_tail + 1) % KEYQ;
     if (next == key_head)
         return;                          /* full: the real BIOS beeped */
     key_q[key_tail] = scan << 8 | ascii;
@@ -355,25 +356,25 @@ void key_push(unsigned scan, unsigned ascii)
 /* Write the framebuffer out as it stands, for comparing against the emulator.
  * Decodes exactly the way io_present() does, so a difference in the picture is
  * a difference in the game and not in how it was saved. */
-int io_save_shot(const char *path)
+int32_t io_save_shot(const char *path)
 {
     SDL_Surface *s = SDL_CreateSurface(CGA_W, CGA_H, SDL_PIXELFORMAT_ARGB8888);
     if (!s)
         return 0;
-    for (int y = 0; y < CGA_H; y++) {
-        const unsigned char *row =
+    for (int32_t y = 0; y < CGA_H; y++) {
+        const uint8_t *row =
             g_vram + (y & 1 ? CGA_PLANE : 0) + (y >> 1) * CGA_STRIDE;
-        uint32_t *out = (uint32_t *)((unsigned char *)s->pixels
+        uint32_t *out = (uint32_t *)((uint8_t *)s->pixels
                                      + (size_t)y * s->pitch);
-        for (int x = 0; x < CGA_STRIDE; x++) {
-            unsigned b = row[x];
+        for (int32_t x = 0; x < CGA_STRIDE; x++) {
+            uint32_t b = row[x];
             *out++ = g_palette[(b >> 6) & 3];
             *out++ = g_palette[(b >> 4) & 3];
             *out++ = g_palette[(b >> 2) & 3];
             *out++ = g_palette[b & 3];
         }
     }
-    int ok = SDL_SaveBMP(s, path);
+    int32_t ok = SDL_SaveBMP(s, path);
     SDL_DestroySurface(s);
     return ok;
 }
@@ -384,7 +385,7 @@ static uint64_t deadline_ns;
 static const char *shot_path;
 static const char *vram_path;
 
-void io_set_deadline(unsigned ms, const char *shot, const char *vram)
+void io_set_deadline(uint32_t ms, const char *shot, const char *vram)
 {
     deadline_ns = ms ? SDL_GetTicksNS() + (uint64_t)ms * SDL_NS_PER_MS : 0;
     shot_path = shot;
@@ -428,7 +429,7 @@ void io_wait_retrace(void)
 
 /* Scan codes, so the game's own key-configuration screen keeps working: it
  * stores whatever the keyboard produced, and compares against it later. */
-static int scancode_of(SDL_Scancode sc)
+static int32_t scancode_of(SDL_Scancode sc)
 {
     switch (sc) {
     case SDL_SCANCODE_ESCAPE:    return 0x01;
@@ -449,7 +450,7 @@ static int scancode_of(SDL_Scancode sc)
     if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_9)
         return 0x02 + (sc - SDL_SCANCODE_1);
     if (sc >= SDL_SCANCODE_A && sc <= SDL_SCANCODE_Z) {
-        static const unsigned char az[26] = {
+        static const uint8_t az[26] = {
             0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24,
             0x25, 0x26, 0x32, 0x31, 0x18, 0x19, 0x10, 0x13, 0x1f, 0x14,
             0x16, 0x2f, 0x11, 0x2d, 0x15, 0x2c,
@@ -461,7 +462,7 @@ static int scancode_of(SDL_Scancode sc)
     return 0;
 }
 
-int io_pump(void)
+int32_t io_pump(void)
 {
     if (io_lockstep())
         return 1;
@@ -487,27 +488,27 @@ int io_pump(void)
         }
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP: {
-            int down = ev.type == SDL_EVENT_KEY_DOWN;
-            int sc = scancode_of(ev.key.scancode);
+            int32_t down = ev.type == SDL_EVENT_KEY_DOWN;
+            int32_t sc = scancode_of(ev.key.scancode);
             if (!sc)
                 break;
             /* Hand it to the game's own INT 09h handler rather than
              * decoding it here a second time. */
-            int09_handler(down ? (unsigned)sc : (unsigned)sc | 0x80);
+            int09_handler(down ? (uint32_t)sc : (uint32_t)sc | 0x80);
             /* ... and separately, what the BIOS would have put in its buffer
              * for the menus to read through INT 16h. Only on the make: a
              * break code never reached that buffer. */
             if (down) {
-                unsigned ascii = 0;
+                uint32_t ascii = 0;
                 if (ev.key.key >= 0x20 && ev.key.key < 0x7f)
-                    ascii = (unsigned)SDL_toupper((int)ev.key.key);
+                    ascii = (uint32_t)SDL_toupper((int32_t)ev.key.key);
                 else if (ev.key.scancode == SDL_SCANCODE_RETURN)
                     ascii = 0x0d;
                 else if (ev.key.scancode == SDL_SCANCODE_ESCAPE)
                     ascii = 0x1b;
                 else if (ev.key.scancode == SDL_SCANCODE_BACKSPACE)
                     ascii = 0x08;
-                key_push((unsigned)sc, ascii);
+                key_push((uint32_t)sc, ascii);
             }
             break;
         }
@@ -518,7 +519,7 @@ int io_pump(void)
     return !quit_requested;
 }
 
-void io_sound(unsigned divisor)
+void io_sound(uint32_t divisor)
 {
     if (!audio || divisor == tone_divisor)
         return;
@@ -528,21 +529,21 @@ void io_sound(unsigned divisor)
     if (!divisor)
         return;
     double hz = 1193182.0 / (double)divisor;
-    const int rate = 22050, ms = 30;
-    int n = rate * ms / 1000;
+    const int32_t rate = 22050, ms = 30;
+    int32_t n = rate * ms / 1000;
     static int16_t buf[22050 / 1000 * 40];
     double period = rate / hz;
-    for (int i = 0; i < n && i < (int)(sizeof buf / sizeof *buf); i++)
-        buf[i] = (i / (period / 2.0) - (int)(i / (period / 2.0)) < 0.5)
+    for (int32_t i = 0; i < n && i < (int32_t)(sizeof buf / sizeof *buf); i++)
+        buf[i] = (i / (period / 2.0) - (int32_t)(i / (period / 2.0)) < 0.5)
                      ? 6000 : -6000;
-    SDL_PutAudioStreamData(audio, buf, (int)(n * sizeof *buf));
+    SDL_PutAudioStreamData(audio, buf, (int32_t)(n * sizeof *buf));
 }
 
 /* The two CGA registers F8 cycles. The port keeps its own palette rather than
  * a register file, so these translate: 0x3d9 bits 4 and 5 pick the intensity
  * and the palette, and 0x3d8 bit 2 kills the colour burst - which on an RGB
  * monitor is what selects the cyan/red/white set the game normally runs in. */
-static unsigned cga_mode_reg = 0x0e, cga_colour_reg = 0x30;
+static uint32_t cga_mode_reg = 0x0e, cga_colour_reg = 0x30;
 
 static const uint32_t CGA16[16] = {
     0xff000000, 0xff0000aa, 0xff00aa00, 0xff00aaaa,
@@ -553,20 +554,20 @@ static const uint32_t CGA16[16] = {
 
 static void cga_palette_update(void)
 {
-    static const unsigned char sets[8][3] = {
+    static const uint8_t sets[8][3] = {
         { 2, 4, 6 }, { 10, 12, 14 },        /* palette 0, dim and bright */
         { 3, 5, 7 }, { 11, 13, 15 },        /* palette 1 */
         { 3, 4, 7 }, { 11, 12, 15 },        /* burst off: cyan, red, white */
         { 3, 4, 7 }, { 11, 12, 15 },
     };
-    unsigned row = ((cga_mode_reg >> 2) & 1) * 4 +
+    uint32_t row = ((cga_mode_reg >> 2) & 1) * 4 +
                    ((cga_colour_reg >> 5) & 1) * 2 +
                    ((cga_colour_reg >> 4) & 1);
     uint32_t *p = (uint32_t *)g_palette;
     p[0] = CGA16[cga_colour_reg & 0x0f];
-    for (int i = 0; i < 3; i++)
+    for (int32_t i = 0; i < 3; i++)
         p[i + 1] = CGA16[sets[row][i]];
 }
 
-void io_cga_mode(unsigned v)   { cga_mode_reg = v;   cga_palette_update(); }
-void io_cga_colour(unsigned v) { cga_colour_reg = v; cga_palette_update(); }
+void io_cga_mode(uint32_t v)   { cga_mode_reg = v;   cga_palette_update(); }
+void io_cga_colour(uint32_t v) { cga_colour_reg = v; cga_palette_update(); }
