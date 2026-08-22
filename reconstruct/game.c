@@ -4580,3 +4580,34 @@ void plot_pixel(unsigned x, unsigned y, unsigned colour)
     unsigned char *p = &g_vram[di & (CGA_SIZE - 1)];
     *p = (unsigned char)((*p & ~(3u << shift)) | ((colour & 3) << shift));
 }
+
+/* 1ac2:5140  banner_shift
+ *
+ * Slide the banner one pixel left. Six rows, and each row is fourteen bytes
+ * shifted left by one bit twice - two bits being one pixel at this depth.
+ *
+ * The bytes are walked from the highest address down: `shl` the first, then
+ * `rcl` the rest so each takes the bit that left the one before it. The `stc`
+ * ahead of the `shl` does nothing - `shl` shifts a zero in regardless and
+ * overwrites the flag - which is why the banner scrolls in blank rather than
+ * repeating itself.
+ */
+#define BANNER_ROW 0x38a9
+#define BANNER_LEN     14
+
+void banner_shift(void)
+{
+    unsigned di = BANNER_ROW;
+    for (int row = 0; row < 6; row++) {
+        for (int twice = 0; twice < 2; twice++) {
+            unsigned carry = 0;
+            for (int b = 0; b < BANNER_LEN; b++) {
+                unsigned a = (di - b) & (CGA_SIZE - 1);
+                unsigned v = g_vram[a];
+                g_vram[a] = (unsigned char)((v << 1) | carry);
+                carry = (v >> 7) & 1;
+            }
+        }
+        di = cga_next_row(di);
+    }
+}
