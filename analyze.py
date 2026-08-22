@@ -51,6 +51,8 @@ EXTRA_ENTRIES = {
     # Cells 16-21 of the brick table all come here - the special
     # bricks that belong to a larger animation.
     0x2CCD: "brick: cells 16-21, the animated ones",
+    # The entity 0x2ccd installs: the animation that keeps running.
+    0x3ABF: "entity handler for an animated brick",
     # Entity handlers. The play loop at 0x1873 walks a linked list from the
     # head link at 0x3144 and calls each node's `+0x00` - so none of these is
     # reachable by following control flow, and all of them are the game.

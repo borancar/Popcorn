@@ -317,7 +317,10 @@ void xor_sprite_16xn(uint32_t x, uint32_t y, uint32_t src, uint32_t rows); /* 1a
 void brick_1(uint32_t slot, uint32_t ball);     /* 1ac2:28cb */
 void brick_2(uint32_t slot, uint32_t ball);     /* 1ac2:2985 */
 void brick_3(uint32_t slot, uint32_t ball);     /* 1ac2:2a3f */
-void brick_solid(uint32_t slot, uint32_t ball); /* 1ac2:3221 */
+void brick_solid(uint32_t slot, uint32_t ball);
+void brick_animated(uint32_t slot, uint32_t ball);   /* 1ac2:2ccd */
+void entity_anim_brick(uint32_t bx);                 /* 1ac2:3abf */
+void draw_anim_cell(uint32_t si, uint32_t x, uint32_t y); /* 1ac2:3bac */ /* 1ac2:3221 */
 void brick_5(uint32_t slot, uint32_t ball);     /* 1ac2:2a73 */
 void brick_6(uint32_t slot, uint32_t ball);     /* 1ac2:2ab4 */
 void brick_7(uint32_t slot, uint32_t ball);     /* 1ac2:2af5 */

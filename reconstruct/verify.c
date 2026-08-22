@@ -104,6 +104,10 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
                     g_image[0x33d3] << 8), r[R_DX] & 0xff);
         g_result = game_random(io_ticks(), r[R_DX] & 0xff);
         return 1;
+    case 0x3abf: entity_anim_brick(r[R_BX]); return 1;
+    case 0x3bac: draw_anim_cell(r[R_SI], r[R_CX] & 0xff, r[R_AX] & 0xff);
+                 return 1;
+    case 0x2ccd: brick_animated(r[R_SI], r[R_BP]); return 1;
     case 0x3aee: entity_sparkle(r[R_BX]); return 1;
     case 0x3b2a: entity_crumble(r[R_BX]); return 1;
     case 0x390d: entity_hatch(r[R_BX]); return 1;
