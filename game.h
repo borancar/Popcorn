@@ -56,12 +56,31 @@ static inline unsigned cga_next_row(unsigned di)
     return di < CGA_PLANE ? di + CGA_PLANE : di - (CGA_PLANE - CGA_STRIDE);
 }
 
-/* And back up one, which the intro animations use to draw upwards. Note the
- * original's test is `cmp di,0x2000 / ja`, strictly greater, so an offset of
- * exactly 0x2000 takes the other branch - kept, because it is what runs. */
+/* And back up one. The test is `cmp di,0x2000` and then whichever branch the
+ * routine happens to use, and they are not all the same - which matters only
+ * at exactly 0x2000, and there it matters a lot. Counted over the whole code
+ * segment: 103 sites step down with `jb`, five step up treating 0x2000 as the
+ * odd half (`jae` at 0xc4c, 0x46e5, 0x483a and `jb` at 0x9f3, 0x1320), and
+ * four - all inside intro_logo - use `ja` and treat 0x2000 as the even half.
+ *
+ * Getting this wrong sends an offset of 0x2000 to 0x3fb0, past the bottom of
+ * the visible screen into the padding at the end of the plane. That is what
+ * the frame's scroll was doing. */
 static inline unsigned cga_prev_row(unsigned di)
 {
+    return di >= CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
+}
+
+/* intro_logo's pair: `ja`, so 0x2000 goes the other way. Only 1ac2:54d6 uses
+ * these, at 54f6, 5535, 557a and 55b6. */
+static inline unsigned cga_prev_row_ja(unsigned di)
+{
     return di > CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
+}
+
+static inline unsigned cga_next_row_ja(unsigned di)
+{
+    return di > CGA_PLANE ? di - (CGA_PLANE - CGA_STRIDE) : di + CGA_PLANE;
 }
 
 /* One of the 35 relocated segment constants: the program reaches a block of

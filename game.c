@@ -659,7 +659,7 @@ static void logo_pass(unsigned src, unsigned di0, int rows, int erase, int back)
             si = back ? si - 2 : si + 2;
             di = back ? di - 2 : di + 2;
         }
-        di = back ? cga_prev_row(bx) : cga_next_row(bx);
+        di = back ? cga_prev_row_ja(bx) : cga_next_row_ja(bx);
         bx = di;
 
         /* The white bar that trails the slice. Backwards it starts four bytes
@@ -4185,9 +4185,46 @@ int name_field(unsigned di, unsigned char *abort)
 /* ========================================================================
  * 1ac2:10de  screen_player_names
  *
- * Ask each player for a name, one box under the last, up to eight. Returns
- * 0xff if the player backed out, anything else to start the game.
+ * Ask each player for a name, one box under the last, up to eight.
+ *
+ * The box is three things at three places, and the original keeps two of them
+ * on the stack rather than recomputing: DI at the top bar is pushed, the
+ * label line one scan line below it is pushed as well, and the bar underneath
+ * is 0x1e0 - twelve scan lines, a text line - below the label. The field the
+ * player types into is the label line again, 0x16 bytes in.
+ *
+ * Get only the field right and the typing lands correctly on a box drawn in
+ * the wrong place, which is exactly what a hardcoded address here used to do.
+ *
+ * When a name is taken the box turns into an engraved panel: four rows of
+ * fixed patterns at 0x280 below the box's top, light down the left and dark
+ * along the bottom. The next box starts a scan line and 0x50 past those.
  * ===================================================================== */
+#define NAME_PROMPT 0x13e1              /* "NOM DU JOUEUR", 0x18 characters */
+#define NAME_WIDTH  0x18                /* characters, and words of bar */
+
+static unsigned name_bar(unsigned di, unsigned word)
+{
+    for (int i = 0; i < NAME_WIDTH; i++)
+        img_vram_setw((di + i * 2) & 0xffff, word);
+    return cga_next_row(di);
+}
+
+/* One row of the engraved panel: a byte, a middle, and a byte. The middle is
+ * given as a byte so both the `rep stosw` rows and the `rep stosb` rows can
+ * use it - 0xffff is 0xff twice, 0x5555 is 0x55 twice. */
+static unsigned panel_row(unsigned di, unsigned lead, unsigned mid,
+                          unsigned tail, int has_tail)
+{
+    unsigned d = di;
+    g_vram[d++ & (CGA_SIZE - 1)] = (unsigned char)lead;
+    for (int i = 0; i < (has_tail ? 0x2e : 0x2f); i++)
+        g_vram[(d + i) & (CGA_SIZE - 1)] = (unsigned char)mid;
+    if (has_tail)
+        g_vram[(d + 0x2e) & (CGA_SIZE - 1)] = (unsigned char)tail;
+    return cga_next_row(di);
+}
+
 unsigned char screen_player_names(void)
 {
     g_image[PLAYER_COUNT] = 0;
@@ -4196,32 +4233,19 @@ unsigned char screen_player_names(void)
 
     unsigned di = 0x142;
     for (;;) {
-        unsigned top = di;
-        for (int i = 0; i < 0x18; i++) {   /* the bar above the box */
-            g_vram[(di + i * 2) & (CGA_SIZE - 1)] = 0xaa;
-            g_vram[(di + i * 2 + 1) & (CGA_SIZE - 1)] = 0xaa;
-        }
-        di = cga_next_row((di + 0x30 - 0x30) & 0xffff);
+        unsigned top = di;                      /* pushed at 1ac2:10f2 */
+        unsigned label = name_bar(top, 0xaaaa); /* pushed at 1ac2:110e */
 
-        draw_text(0x13e1, 0x18, 0x377e);
-        for (int i = 0; i < 0x18; i++) {   /* and the bar below */
-            unsigned d = (0x377e + 0x1e0 + i * 2) & 0xffff;
-            g_vram[d & (CGA_SIZE - 1)] = 0xaa;
-            g_vram[(d + 1) & (CGA_SIZE - 1)] = 0xaa;
-        }
+        draw_text(NAME_PROMPT, NAME_WIDTH, label);
+        name_bar((label + 0x1e0) & 0xffff, 0xaaaa);
 
         unsigned char abort = 0;
-        int done = name_field(cga_next_row(top) + 0x16, &abort);
+        int done = name_field((label + 0x16) & 0xffff, &abort);
         if (done) {
-            /* Rub the box out and start. */
+            /* Rub the box out and start: fourteen rows of nothing. */
             unsigned d = top;
-            for (int r = 0; r < 0x0e; r++) {
-                for (int i = 0; i < 0x18; i++) {
-                    g_vram[(d + i * 2) & (CGA_SIZE - 1)] = 0;
-                    g_vram[(d + i * 2 + 1) & (CGA_SIZE - 1)] = 0;
-                }
-                d = cga_next_row((d - 0x18) & 0xffff);
-            }
+            for (int r = 0; r < 0x0e; r++)
+                d = name_bar(d, 0);
             g_image[NAME_INDEX] = '1';
             return 0;
         }
@@ -4233,8 +4257,15 @@ unsigned char screen_player_names(void)
             g_image[NAME_INDEX] = '1';
             return 0;
         }
+
+        /* The box just filled in becomes an engraved panel. */
+        unsigned d = (top + 0x280) & 0xffff;
+        d = panel_row(d, 0x3f, 0xff, 0xfc, 1);
+        d = panel_row(d, 0xf5, 0x55, 0,    0);
+        d = panel_row(d, 0xd5, 0x15, 0,    0);
+        d = panel_row(d, 0x15, 0x55, 0x54, 1);
         g_image[NAME_INDEX]++;
-        di = cga_next_row(top) + 0x280;   /* the next box, lower down */
+        di = (d + 0x50) & 0xffff;
     }
 }
 
@@ -4291,11 +4322,17 @@ void play_frame(void)
         io_wait_retrace();
         di = bp;
         for (int dh = 6; dh > 0; dh--) {
+            /* Copy the row below over this one. `rep movsw` leaves SI
+             * 0x34 on and the `sub di, 0x34` puts it back, so what the next
+             * iteration works on is the row just read - not 0x34 to the left
+             * of it. Taking the subtraction literally walks the column left
+             * a third of a line every row, which smears the white band at
+             * the top of the frame across the whole screen. */
             unsigned src = cga_next_row(di);
             for (int i = 0; i < 0x1a * 2; i++)
                 g_vram[(di + i) & (CGA_SIZE - 1)] =
                     g_vram[(src + i) & (CGA_SIZE - 1)];
-            di = (src - 0x34) & 0xffff;
+            di = src;
         }
         di = cga_next_row(di);
 
@@ -4311,8 +4348,11 @@ void play_frame(void)
         g_image[FRAME_PHASE]++;
 
         bp = cga_prev_row(bp);
-        for (int i = 0; i < 0x5dc; i++)
-            game_delay();
+        /* `mov cx,0x5dc / loop $` - one busy-wait, not 0x5dc calls to the
+         * delay routine. Calling it 1500 times a pass, 0xc2 passes, is a
+         * third of a million trips through the platform layer for a wait
+         * the original spends entirely inside two instructions. */
+        io_delay_cycles(0x5dc * CYCLES_PER_LOOP);
         io_present();
         if (!io_pump())
             return;
