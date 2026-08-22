@@ -224,6 +224,26 @@ void io_delay_cycles(uint32_t cycles)
  */
 static float mouse_x = 320, mouse_y = 100;
 
+/* The pointer the emulator had, pinned for a verification run.
+ *
+ * game_input reads the mouse, so any routine that calls it - and the
+ * between-level screens all do, through input_and_draw_paddle - puts the
+ * paddle wherever *this* process's pointer happens to be. That is not the
+ * emulator's, so the paddle lands somewhere else and the routine is reported
+ * as differing for a reason that is not the transcription. The same argument
+ * as the BIOS tick count, one layer up.
+ */
+static int32_t mouse_pinned;
+static uint32_t pinned_x, pinned_btn;
+
+void io_pin_mouse(uint32_t x, uint32_t buttons)
+{
+    mouse_pinned = 1;
+    pinned_x = x;
+    pinned_btn = buttons;
+}
+
+
 void io_mouse_warp(uint32_t x, uint32_t y)
 {
     /* A warp is what the next read returns, in lockstep as much as here: the
@@ -245,12 +265,16 @@ void io_mouse_warp(uint32_t x, uint32_t y)
 
 uint32_t io_mouse_x(void)
 {
+    if (mouse_pinned)
+        return pinned_x;
     if (io_lockstep())
         return io_lockstep_mouse_x();
     return (uint32_t)(mouse_x < 0 ? 0 : mouse_x > 639 ? 639 : mouse_x);
 }
 uint32_t io_mouse_buttons(void)
 {
+    if (mouse_pinned)
+        return pinned_btn;
     if (io_lockstep())
         return io_lockstep_buttons();
     float fx, fy;

@@ -292,6 +292,12 @@ def main():
                 f.write(struct.pack("<I", ticks))
                 f.write(struct.pack("<I", len(img)) + img)
                 f.write(struct.pack("<I", len(vram)) + vram)
+                # The pointer the emulator had. game_input reads the mouse,
+                # so without this every routine that calls it puts the paddle
+                # somewhere the original never did.
+                mx, _my = getattr(m, "mouse_pos", (320, 100))
+                f.write(struct.pack("<HH", mx & 0xFFFF,
+                                    getattr(m, "mouse_btn", 0) & 0xFFFF))
             r = subprocess.run([PORT, "--verify", si, so],
                                capture_output=True, text=True)
             if r.returncode == 2:
