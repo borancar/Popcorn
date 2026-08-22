@@ -32,6 +32,7 @@ import argparse
 import collections
 import json
 import os
+import select
 import struct
 import subprocess
 import sys
@@ -422,12 +423,33 @@ def main():
         f.write(struct.pack("<I", len(captured["img"])) + captured["img"])
         f.write(struct.pack("<I", CGA_SIZE) + captured["vram"])
 
+    # bufsize=0, because the watchdog below selects on the pipe: with a
+    # BufferedReader the bytes can be sitting in Python's own buffer while the
+    # file descriptor looks idle, and the watchdog fires on a port that has
+    # already answered.
     port = subprocess.Popen([PORT, "--lockstep", state],
-                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            bufsize=0)
 
-    def read_exact(n):
+    def read_exact(n, first_wait=180.0):
+        """Read n bytes, but do not wait for them for ever.
+
+        io_frame_sync is only called at the frame close in play_loop, so any
+        screen with a loop of its own - the end-level bonus, the game-over
+        sequence, the ending - emits nothing at all while it runs and this
+        blocks on the pipe. That is indistinguishable from a hang, and it cost
+        an hour of staring at a run that had in fact just finished the last
+        level. Now it says which it was.
+        """
         buf = b""
         while len(buf) < n:
+            if not select.select([port.stdout], [], [],
+                                 first_wait if not buf else 30.0)[0]:
+                print(f"  the port has sent nothing for "
+                      f"{first_wait:.0f}s - it is inside a screen that has no "
+                      f"frame sync (the bonus, the game over, the ending), or "
+                      f"it has stopped", flush=True)
+                return None
             chunk = port.stdout.read(n - len(buf))
             if not chunk:
                 return None
@@ -435,17 +457,32 @@ def main():
         return buf
 
     def port_frame():
+        """One frame, or None if the port went quiet or said something else."""
+        def u32():
+            b = read_exact(4, 30.0)
+            return None if b is None else struct.unpack("<I", b)[0]
         head = read_exact(4)
         if head != b"PFRM":
             return None
-        struct.unpack("<I", read_exact(4))
-        n, = struct.unpack("<I", read_exact(4))
-        img = read_exact(n)
-        v, = struct.unpack("<I", read_exact(4))
-        vram = read_exact(v)
-        k, = struct.unpack("<I", read_exact(4))
-        got = list(struct.unpack(f"<{k}H", read_exact(k * 2))) if k else []
-        return img, vram, got
+        if u32() is None:
+            return None
+        n = u32()
+        if n is None:
+            return None
+        img = read_exact(n, 30.0)
+        v = u32()
+        if img is None or v is None:
+            return None
+        vram = read_exact(v, 30.0)
+        k = u32()
+        if vram is None or k is None:
+            return None
+        if not k:
+            return img, vram, []
+        raw = read_exact(k * 2, 30.0)
+        if raw is None:
+            return None
+        return img, vram, list(struct.unpack(f"<{k}H", raw))
 
     def port_go(mouse_x, buttons, ticks, stop_it=0):
         try:

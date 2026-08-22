@@ -6442,7 +6442,10 @@ int32_t ball_after_endgame(uint32_t ball)
                 xor_sprite_16x7(0x60, 0x38, img_w(si));
             }
             level_tally();
-            g_image[SWEEP_Y] = 0x75;
+            /* No `[0x2f0c] = 0x75` here: 1ac2:4791 goes straight from the
+             * tally to the curtain. That write belongs to the *other* ending,
+             * at 1ac2:4630, and so does the free life - the two chambers do
+             * not finish the level the same way. */
             endgame_curtain();
             return 1;
         }
