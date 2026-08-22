@@ -193,8 +193,14 @@ void game_main(const char *dir, unsigned speed);
  * Implemented as no-ops in stubs.c; see the note at the top of that file.
  */
 void menu_particles_init(void);   /* 1ac2:5476 */
+void plot_pixel(unsigned x, unsigned y, unsigned colour);
 void menu_particles_tick(void);   /* 1ac2:53c2 */
 void menu_banner_tick(void);      /* 1ac2:50df */
+void banner_shift(void);          /* 1ac2:5140 */
+void brick_11_after(unsigned x, unsigned y);  /* 1ac2:4c4b */
+unsigned particle_random(unsigned ticks, unsigned limit); /* 1ac2:5448 */
+void particle_init(unsigned si);  /* 1ac2:548a */
+#define PARTICLES 0x148d
 void menu_arrow(void);            /* 1ac2:490d */
 void screen_define_keys(void);    /* 1ac2:1581 */
 void screen_high_scores(void);    /* 1ac2:4e1a */
@@ -354,8 +360,14 @@ void game_main(const char *dir, unsigned speed);
  * Implemented as no-ops in stubs.c; see the note at the top of that file.
  */
 void menu_particles_init(void);   /* 1ac2:5476 */
+void plot_pixel(unsigned x, unsigned y, unsigned colour);
 void menu_particles_tick(void);   /* 1ac2:53c2 */
 void menu_banner_tick(void);      /* 1ac2:50df */
+void banner_shift(void);          /* 1ac2:5140 */
+void brick_11_after(unsigned x, unsigned y);  /* 1ac2:4c4b */
+unsigned particle_random(unsigned ticks, unsigned limit); /* 1ac2:5448 */
+void particle_init(unsigned si);  /* 1ac2:548a */
+#define PARTICLES 0x148d
 void menu_arrow(void);            /* 1ac2:490d */
 void screen_define_keys(void);    /* 1ac2:1581 */
 void screen_high_scores(void);    /* 1ac2:4e1a */

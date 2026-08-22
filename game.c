@@ -4396,3 +4396,187 @@ void panel_finish(void)
     }
     field_marks();
 }
+
+/* ========================================================================
+ * The menu's live decoration, and two more bricks.
+ * ===================================================================== */
+
+/* 1ac2:2d68  brick 11 - 72 points, and the cell becomes 0x0c, which is not a
+ * brick at all: the drawing code has a special case for it. */
+void brick_11(unsigned slot, unsigned ball)
+{
+    brick_common(ball, SOUND_BRICK, 0, 0, 0x0207);
+    g_image[img_w(slot)] = 0x0c;
+    g_image[LEVEL_CELLS]--;
+    unsigned x = g_image[slot + 2], y = g_image[slot + 3];
+    xor_sprite_16x7(x, y, 0x6406);
+    brick_11_after(x, y);               /* 1ac2:4c4b */
+}
+
+/* 1ac2:3d95  bonus_spawn
+ *
+ * Once in a while the play loop tries to open a hatch. One of the four marks
+ * at 0x33d7 is picked at random; it is refused if that mark is already busy
+ * ([si+3]) or if either of the two cells behind it still has a brick. The
+ * entity it starts runs 0x390d, the hatch animation, and remembers which mark
+ * it belongs to so it can free it again.
+ */
+void bonus_spawn(void)
+{
+    unsigned si = FIELD_MARKS + game_random(io_ticks(), 4) * 4;
+    if (g_image[si + 3] != 0)
+        return;                         /* that hatch is already open */
+    unsigned di = LEVEL_CELLS + 8 + g_image[si + 2];
+    if (g_image[di] != 0 || g_image[di + 0x0c] != 0)
+        return;                         /* still bricked over */
+
+    g_image[si + 3] = 1;
+    g_image[0x33d5]++;
+    unsigned node = entity_alloc();
+    img_setw(node + 0, 0x390d);
+    img_setw(node + 2, si);
+    g_image[node + 4] = g_image[si];
+    g_image[node + 5] = g_image[si + 1];
+    img_setw(node + 6, 0);
+    img_setw(node + 8, 0x2bc);
+    img_setw(node + 0x0a, 0x604e);
+}
+
+/* 1ac2:50df  menu_banner_tick
+ *
+ * The text scrolling across the character's belly. [0x13c4] is a one-bit
+ * window that walks right, and when it falls off the end a new character is
+ * fetched: `xor al,0xaa` then `sub al,0x20` decodes it - the text is stored
+ * obfuscated - and its six-byte cell is copied to 0:0000, which is where the
+ * shifter reads from.
+ */
+void menu_banner_tick(void)
+{
+    if (g_image[BANNER_STATE] == 2) {
+        g_image[BANNER_STATE] = 0x80;
+        img_setw(BANNER_PTR, img_w(BANNER_PTR) + 1);
+        unsigned c = g_image[img_w(BANNER_PTR)];
+        c = ((c ^ 0xaa) - 0x20) & 0xff;
+        unsigned src = 0xa3c0 + c * 6;
+        memcpy(g_image, g_image + src, 6);
+    }
+    banner_shift();                     /* 1ac2:5140 */
+
+    unsigned di = 0x38a9;
+    for (int i = 0; i < 6; i++) {
+        if (g_image[i] & g_image[BANNER_STATE])
+            g_vram[di & (CGA_SIZE - 1)] ^= 3;
+        di = cga_next_row(di);
+    }
+    g_image[BANNER_STATE] >>= 1;
+}
+
+/* 1ac2:5448  particle_random
+ *
+ * The other random: the eighty particle records are summed, then the BIOS tick
+ * counter's two words, then a running value at [0x1acd] which is advanced by
+ * the quotient. `div cx` leaves the remainder, so the answer is 0..dx-1.
+ */
+unsigned particle_random(unsigned ticks, unsigned limit)
+{
+    unsigned ax = 0;
+    unsigned n = img_w(PARTICLE_COUNT);
+    for (unsigned i = 0; i < n; i++)
+        ax = (ax + img_w(PARTICLES + i * 2)) & 0xffff;
+    ax = (ax + ticks) & 0xffff;
+    ax = (ax + img_w(0x1acd)) & 0xffff;
+    if (!limit)
+        return 0;
+    img_setw(0x1acd, (img_w(0x1acd) + ax / limit) & 0xffff);
+    return ax % limit;
+}
+
+/* 1ac2:548a  particle_init
+ *
+ * Set one kernel going from (0x68, 0xa0) with a random speed and a random
+ * angle. [si+0x0e] is its horizontal step and [si+0x0c] its direction; the
+ * height is a parabola computed as `step * t * t / 100`, which is why the
+ * record carries the time in [si+6] rather than a velocity.
+ */
+void particle_init(unsigned si)
+{
+    img_setw(si + 0, 0x68);
+    img_setw(si + 2, 0xa0);
+    unsigned ax = (particle_random(io_ticks(), 6) + 8) & 0xffff;
+    img_setw(si + 0x0e, ax);
+    ax = (particle_random(io_ticks(), 0x46) - 0x23) & 0xffff;
+    if (ax == 0)
+        ax = 0x0a;
+    img_setw(si + 4, ax);
+    img_setw(si + 6, ax);
+    img_setw(si + 0x0c, ax >= 0x8000 ? 1 : 0xffff);
+    int v = (int)(short)img_w(si + 0x0e);
+    int t = (int)(short)ax;
+    int h = (v * t * t) / 100;
+    img_setw(si + 0x0a, h & 0xffff);
+    img_setw(si + 8, h & 0xffff);
+}
+
+/* 1ac2:53c2  menu_particles_tick
+ *
+ * The popcorn kernels bouncing under the menu. Each is a sixteen-byte record
+ * at 0x148d: origin (+0, +2), the launch angle (+4), the time since launch
+ * (+6), the current height (+8) and the last one (+0x0a), the horizontal
+ * direction (+0x0c) and the speed (+0x0e).
+ *
+ * Points are put on the screen with INT 10h AH=0Ch, one BIOS call per pixel -
+ * which is where the six hundred thousand INT 10h calls in a minute of menu
+ * come from. The port draws them directly.
+ *
+ * The trajectory is a parabola in integer arithmetic: `height = speed * t * t
+ * / 100` with `t` counting up from the angle. A kernel that would leave the
+ * bottom of the screen is thrown away and launched again.
+ */
+void menu_particles_tick(void)
+{
+    unsigned si = PARTICLES;
+    unsigned n = img_w(PARTICLE_COUNT);
+    for (unsigned k = 0; k < n; k++, si += 0x10) {
+        /* Rub out where it was. */
+        unsigned x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
+        unsigned y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
+        if (x <= 0x13f && y <= 0xc7)
+            plot_pixel(x, y, 0);
+
+        img_setw(si + 6, (img_w(si + 6) + img_w(si + 0x0c)) & 0xffff);
+        int t = (int)(short)img_w(si + 6);
+        int v = (int)(short)img_w(si + 0x0e);
+        img_setw(si + 8, ((v * t * t) / 100) & 0xffff);
+
+        y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
+        x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
+        if (y <= 0xc7 && x <= 0x13f)
+            plot_pixel(x, y, 3);
+
+        if (y > 0xc7)
+            particle_init(si);          /* gone: launch another */
+        for (unsigned i = 0; i < n; i++)
+            game_delay();
+    }
+}
+
+/* 1ac2:5476  menu_particles_init - every kernel launched at once */
+void menu_particles_init(void)
+{
+    unsigned n = img_w(PARTICLE_COUNT);
+    for (unsigned i = 0; i < n; i++)
+        particle_init(PARTICLES + i * 0x10);
+}
+
+/* INT 10h AH=0Ch in mode 05h: one pixel, two bits, in the byte that holds it.
+ * The virtual screen the game plots into is 320 wide, so `cx` is used as it
+ * comes rather than halved. */
+void plot_pixel(unsigned x, unsigned y, unsigned colour)
+{
+    if (x >= CGA_W || y >= CGA_H)
+        return;
+    unsigned di = cga_at(x, y);
+    unsigned shift = 6 - (x & 3) * 2;
+    unsigned char *p = &g_vram[di & (CGA_SIZE - 1)];
+    *p = (unsigned char)((*p & ~(3u << shift)) | ((colour & 3) << shift));
+}
