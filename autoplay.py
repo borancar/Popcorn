@@ -109,6 +109,22 @@ ENTITY_HEAD = 0x3144       # first link; 0xffff ends the chain
 E_NEXT = 0x0C
 CAPSULE = 0x3273           # entity_capsule's handler address
 C_X, C_Y, C_KIND = 0x02, 0x03, 0x04
+# Brick 10 - the red block with the white grid - takes the ball away and hangs
+# it under a parachute, an entity running 1ac2:37e0 with +4 x, +5 y and +2 the
+# ball it is carrying. It descends a pixel a frame to y = 0xb8 and then lets
+# go: **upwards if the safety net is up, and otherwise the ball is lost**. The
+# paddle cannot catch it on the way down and cannot catch what it drops, so a
+# ball in state 4 is not something to steer at - which is why the bot used to
+# follow a parachute across the screen and lose a different ball doing it.
+#
+# What *can* save it is hitting the carrier, which releases the ball early.
+# The bot holds the action button permanently, so simply standing under a
+# parachute fires the laser at it, if a laser has been collected.
+PARACHUTE = 0x37E0
+P_BALL, P_X, P_Y = 0x02, 0x04, 0x05
+PARACHUTE_BOTTOM = 0xB8    # where it lets go
+PARACHUTE_HALF = 8         # the sprite is 16 wide, so this is its centre
+BALL_STEERABLE = (1, 2)    # state; 3 is brick 9's teleport, 4 the parachute
 CATCH_Y = 0xB6             # the first row the paddle can take it on
 CAPSULE_W = 0x0E           # the capsule's own width, from the same test
 PADDLE_WIDTH = 0x2D3A      # the live width, which the paddle morphs change
@@ -212,23 +228,35 @@ class Bot:
     def w(self, off):
         return int.from_bytes(self.rd(off, 2), "little")
 
-    def capsules(self):
-        """Every falling capsule, as (want, kind, x, y).
+    def entities(self, handler):
+        """Every live node running this handler.
 
-        Walking the entity list is the only way to see them: a capsule is not
-        in a table anywhere, it is a node whose handler word happens to be
-        1ac2:3273.  The list is the same one the play loop walks at 0x1b4d.
+        Walking the list is the only way to see one: entities are not in a
+        table, they are a chain of nodes whose handler word says what they
+        are. This is the same walk the play loop does at 0x1b4d.
         """
         out = []
         bx = self.w(ENTITY_HEAD)
         for _ in range(64):             # the pool is smaller than this
             if bx == 0xFFFF:
                 break
-            if self.w(bx) == CAPSULE:
-                kind = self.rd(bx + C_KIND)[0]
-                out.append((CAPSULE_WANT.get(kind, 0), kind,
-                            self.rd(bx + C_X)[0], self.rd(bx + C_Y)[0]))
+            if self.w(bx) == handler:
+                out.append(bx)
             bx = self.w(bx + E_NEXT)
+        return out
+
+    def parachutes(self):
+        """Carriers on their way down, as (x, y)."""
+        return [(self.rd(bx + P_X)[0], self.rd(bx + P_Y)[0])
+                for bx in self.entities(PARACHUTE)]
+
+    def capsules(self):
+        """Every falling capsule, as (want, kind, x, y)."""
+        out = []
+        for bx in self.entities(CAPSULE):
+            kind = self.rd(bx + C_KIND)[0]
+            out.append((CAPSULE_WANT.get(kind, 0), kind,
+                        self.rd(bx + C_X)[0], self.rd(bx + C_Y)[0]))
         return out
 
     def frames_to_paddle(self, b):
@@ -272,7 +300,7 @@ class Bot:
         out = []
         for i in range(BALL_COUNT):
             b = self.rd(BALLS + i * BALL_STRIDE, BALL_STRIDE)
-            if b[B_STATE]:
+            if b[B_STATE] in BALL_STEERABLE:
                 out.append((b[B_X], b[B_Y], b[B_DIRY], b[B_DIRX],
                             b[B_DX] or 1, b[B_DY] or 1))
         return out
@@ -306,7 +334,21 @@ class Bot:
         lo, hi = self.rd(PADDLE_MIN)[0], self.rd(PADDLE_MAX)[0]
         px = self.rd(PADDLE_X)[0]
 
-        if not live:
+        # Everything the paddle has to be under, soonest first. A ball under
+        # a parachute is not in `live` - its own x and y stop moving while the
+        # carrier does - so it has to come in as the carrier's position or the
+        # bot simply watches it fall, which is what it used to do.
+        aims = []
+        for b in live:
+            aims.append((self.frames_to_paddle(b),
+                         b[0] if b[2] else self.predict(b[0], b[1], b[4],
+                                                        b[5], b[3]),
+                         f"ball {b[0]},{b[1]}"))
+        for cx, cy in self.parachutes():
+            aims.append((max(0, PARACHUTE_BOTTOM - cy), cx + PARACHUTE_HALF,
+                         f"parachute {cx},{cy}"))
+
+        if not aims:
             # Between lives and between levels. Hold the button so the serve
             # goes out the moment the game asks for it, and leave the paddle
             # where the game put it.
@@ -316,21 +358,14 @@ class Bot:
             return f"serve {px}"
         self.idle = 0
 
-        # Chase the ball that is coming down and is lowest on the screen -
-        # direction flag 0 on the y axis means descending.
-        target = min(live, key=lambda b: (b[2] == 1, -b[1]))
-        bx, by, dy_up = target[0], target[1], target[2]
-        aim = bx if dy_up else self.predict(bx, by, target[4], target[5],
-                                            target[3])
-        note = f"ball {bx},{by}"
+        spare, aim, note = min(aims)
 
-        # A capsule is worth going for only while the ball can spare the
-        # paddle.  Every ball has to be safe, not just the one being chased:
-        # leaving to collect something and losing a different ball on the way
-        # is not a trade.  With one ball left the margin is the whole descent,
-        # because there is nothing to come back to.
-        spare = min((self.frames_to_paddle(b) for b in live), default=0)
-        margin = LAST_BALL_FRAMES if len(live) == 1 else SAFETY_FRAMES
+        # A capsule is worth going for only while everything else can spare
+        # the paddle - not just the nearest one. Leaving to collect something
+        # and losing a different ball on the way is not a trade. With one
+        # thing left in the air the margin is its whole descent, because there
+        # is nothing to come back to.
+        margin = LAST_BALL_FRAMES if len(aims) == 1 else SAFETY_FRAMES
         if spare > margin:
             wanted = [c for c in self.capsules()
                       if c[0] > 0 and c[3] < CATCH_Y]
@@ -340,7 +375,7 @@ class Bot:
                 aim = self.capsule_aim(cx) + self.width() // 2
                 note = (f"grab {CAPSULE_LETTER.get(kind, kind)} "
                         f"({CAPSULE_EFFECT.get(kind, '?')}) at {cx},{cy}, "
-                        f"ball {spare}f away")
+                        f"{spare}f spare")
         # See JITTER: a few pixels of wander, held for a while so the aim is
         # steady across one approach rather than shaking every frame.
         if self.held <= 0:
