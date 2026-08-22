@@ -265,6 +265,8 @@ void play_teardown(void);         /* 1ac2:41d4 */
 void entity_call(unsigned node);  /* the call at 1ac2:1b5e */
 void entity_capsule(unsigned bx);   /* 1ac2:3273 */
 void entity_paddle_fx(unsigned bx); /* 1ac2:3386 */
+void morph_begin(unsigned bx, unsigned table, unsigned kind); /* 1ac2:34c5 */
+void morph_step(unsigned bx);       /* 1ac2:34d7 */
 void entity_popup(unsigned bx);     /* 1ac2:3561 */
 void entity_capsule_frames(unsigned bx, unsigned table);
 void entity_ball_hold(unsigned bx); /* 1ac2:37e0 */
@@ -411,6 +413,8 @@ void play_teardown(void);         /* 1ac2:41d4 */
 void entity_call(unsigned node);  /* the call at 1ac2:1b5e */
 void entity_capsule(unsigned bx);   /* 1ac2:3273 */
 void entity_paddle_fx(unsigned bx); /* 1ac2:3386 */
+void morph_begin(unsigned bx, unsigned table, unsigned kind); /* 1ac2:34c5 */
+void morph_step(unsigned bx);       /* 1ac2:34d7 */
 void entity_popup(unsigned bx);     /* 1ac2:3561 */
 void entity_capsule_frames(unsigned bx, unsigned table);
 void entity_ball_hold(unsigned bx); /* 1ac2:37e0 */
