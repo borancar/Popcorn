@@ -383,10 +383,10 @@ void entity_sparkle(uint32_t bx); /* 1ac2:3aee */
 void entity_crumble(uint32_t bx); /* 1ac2:3b2a */
 void entity_hatch(uint32_t bx);   /* 1ac2:390d */
 void bonus_release(uint32_t bx);  /* 1ac2:39a1 */
-int32_t  bonus_move_right(uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
-int32_t  bonus_move_left(uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */
-int32_t  bonus_move_up(uint32_t *px, uint32_t *py);    /* 1ac2:3caf */
-int32_t  bonus_move_down(uint32_t *px, uint32_t *py);  /* 1ac2:3d3c */
+int32_t  bonus_move_right(uint32_t bx, uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
+int32_t  bonus_move_left(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */
+int32_t  bonus_move_up(uint32_t bx, uint32_t *px, uint32_t *py);    /* 1ac2:3caf */
+int32_t  bonus_move_down(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3d3c */
 int32_t  bonus_steer(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3bf7 */
 int32_t  bonus_script(uint32_t bx, uint32_t *px, uint32_t *py); /* 1ac2:3c35 */
 void demo_input_step(void);       /* 1ac2:1a6f */
@@ -591,10 +591,10 @@ void entity_sparkle(uint32_t bx); /* 1ac2:3aee */
 void entity_crumble(uint32_t bx); /* 1ac2:3b2a */
 void entity_hatch(uint32_t bx);   /* 1ac2:390d */
 void bonus_release(uint32_t bx);  /* 1ac2:39a1 */
-int32_t  bonus_move_right(uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
-int32_t  bonus_move_left(uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */
-int32_t  bonus_move_up(uint32_t *px, uint32_t *py);    /* 1ac2:3caf */
-int32_t  bonus_move_down(uint32_t *px, uint32_t *py);  /* 1ac2:3d3c */
+int32_t  bonus_move_right(uint32_t bx, uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
+int32_t  bonus_move_left(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */
+int32_t  bonus_move_up(uint32_t bx, uint32_t *px, uint32_t *py);    /* 1ac2:3caf */
+int32_t  bonus_move_down(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3d3c */
 int32_t  bonus_steer(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3bf7 */
 int32_t  bonus_script(uint32_t bx, uint32_t *px, uint32_t *py); /* 1ac2:3c35 */
 void demo_input_step(void);       /* 1ac2:1a6f */

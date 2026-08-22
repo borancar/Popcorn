@@ -2840,8 +2840,9 @@ static uint32_t cell_index(uint32_t y, uint32_t x)
     return LEVEL_CELLS + 8 + row + (row >> 1) + ((x >> 4) & 0x0f);
 }
 
-int32_t bonus_move_right(uint32_t *px, uint32_t *py)
+int32_t bonus_move_right(uint32_t bx, uint32_t *px, uint32_t *py)
 {
+    (void)bx;
     uint32_t y = *py, x = *px;
     if (x >= 0xb8)
         return 0;
@@ -2854,8 +2855,9 @@ int32_t bonus_move_right(uint32_t *px, uint32_t *py)
     return 1;
 }
 
-int32_t bonus_move_left(uint32_t *px, uint32_t *py)
+int32_t bonus_move_left(uint32_t bx, uint32_t *px, uint32_t *py)
 {
+    (void)bx;
     uint32_t y = *py, x = *px;
     if (x <= 8)
         return 0;
@@ -2868,8 +2870,9 @@ int32_t bonus_move_left(uint32_t *px, uint32_t *py)
     return 1;
 }
 
-int32_t bonus_move_up(uint32_t *px, uint32_t *py)
+int32_t bonus_move_up(uint32_t bx, uint32_t *px, uint32_t *py)
 {
+    (void)bx;
     uint32_t y = *py, x = *px;
     if (y <= 6)
         return 0;
@@ -2882,10 +2885,31 @@ int32_t bonus_move_up(uint32_t *px, uint32_t *py)
     return 1;
 }
 
-int32_t bonus_move_down(uint32_t *px, uint32_t *py)
+/* Down is the odd one of the four. It looks **ten** pixels below the capsule,
+ * not two - `add al, 0xa` - so the cell it tests is the row under its whole
+ * sixteen-pixel body rather than the one it is standing in. And it has an
+ * ending the others do not: at y 0x78 the capsule has reached the paddle row,
+ * and instead of being blocked it is handed to movement kind 4, the script at
+ * 0x8320, with its current x left in [bx+3] for the script to steer from.
+ *
+ * Missing both is what diverged frame 1310 of sidebyside.py: with `+2` the
+ * cell tested is a whole row out, so a capsule at the left wall stepped down
+ * in the port where the original found a brick and picked a new direction -
+ * two random() draws that never happened, and every draw after that offset.
+ */
+int32_t bonus_move_down(uint32_t bx, uint32_t *px, uint32_t *py)
 {
     uint32_t y = *py, x = *px;
-    uint32_t di = cell_index((y + 2) & 0xff, (x - 8) & 0xff);
+
+    if (y >= 0x78) {                    /* 1ac2:3d80 */
+        g_image[bx + 2] = 4;            /* follow a script from here on */
+        img_setw(bx + 0x0a, 0x8320);
+        g_image[bx + 3] = (uint8_t)x;
+        (*py)++;
+        return 1;
+    }
+
+    uint32_t di = cell_index((y + 0x0a) & 0xff, (x - 8) & 0xff);
     if (g_image[di])
         return 0;
     if ((((x - 8) & 0x0f) != 0) && g_image[di + 1])
@@ -2913,10 +2937,10 @@ int32_t bonus_steer(uint32_t bx, uint32_t *px, uint32_t *py)
     if (--b[3] != 0) {
         int32_t moved;
         switch (b[2]) {
-        case 0:  moved = bonus_move_right(px, py); break;
-        case 1:  moved = bonus_move_down(px, py);  break;
-        case 2:  moved = bonus_move_left(px, py);  break;
-        case 3:  moved = bonus_move_up(px, py);    break;
+        case 0:  moved = bonus_move_right(bx, px, py); break;
+        case 1:  moved = bonus_move_down(bx, px, py);  break;
+        case 2:  moved = bonus_move_left(bx, px, py);  break;
+        case 3:  moved = bonus_move_up(bx, px, py);    break;
         default: moved = 0;                        break;
         }
         if (moved)
