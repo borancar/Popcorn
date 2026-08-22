@@ -72,7 +72,6 @@ void cell_special(unsigned row, unsigned di)
 
 /* --- called from play_session, which is transcribed ------------------- */
 void field_marks_wide(unsigned di) { note("field_marks_wide", 0x0a1d); (void)di; }
-STUB(banner_shift,          0x5140, "shifts the banner one pixel")
 void brick_11_after(unsigned x, unsigned y) { note("brick_11_after", 0x4c4b); (void)x; (void)y; }
 STUB(screen_game_over,      0x0473, "GAME OVER")
 STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
