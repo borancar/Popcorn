@@ -100,6 +100,15 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, r[R_SI]);
                  return 1;
     case 0x3273: entity_capsule(r[R_BX]); return 1;
+    case 0x2daa: bonus_points(); return 1;
+    case 0x2def: bonus_catch(); return 1;
+    case 0x2e03: bonus_laser(); return 1;
+    case 0x2e16: bonus_multiball(); return 1;
+    case 0x3231: bonus_nothing(); return 1;
+    case 0x3119: bonus_net(); return 1;
+    case 0x315b: bonus_reverse(); return 1;
+    case 0x31e8: bonus_speed(); return 1;
+    case 0x41b1: fill_column(r[R_DI], r[R_AX]); return 1;
     case 0x2034:                        /* draw_brick_row(al = screen row) */
         draw_brick_row(r[R_AX] & 0xff);
         return 1;

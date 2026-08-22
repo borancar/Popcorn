@@ -243,6 +243,17 @@ void brick_11(unsigned slot, unsigned ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(unsigned x, unsigned y, unsigned src); /* 1ac2:3b64 */
 void score_add(void);             /* 1ac2:413d */
 void extra_life(void);            /* 1ac2:318b */
+void fill_column(unsigned di, unsigned value);  /* 1ac2:41b1 */
+void bonus_points(void);          /* 1ac2:2daa */
+void bonus_catch(void);           /* 1ac2:2def */
+void bonus_laser(void);           /* 1ac2:2e03 */
+void bonus_multiball(void);       /* 1ac2:2e16 */
+void bonus_nothing(void);         /* 1ac2:3231 */
+void bonus_net(void);             /* 1ac2:3119 */
+void bonus_reverse(void);         /* 1ac2:315b */
+void bonus_speed(void);           /* 1ac2:31e8 */
+void bonus_end_level(void);       /* 1ac2:2da0 */
+void bonus_effect(unsigned kind);
 void scroll_up_band(void);        /* 1ac2:2109 */
 void scroll_down_band(void);      /* 1ac2:2148 */
 void draw_paddle_raw(unsigned src);      /* 1ac2:22a9 */
@@ -376,6 +387,17 @@ void brick_11(unsigned slot, unsigned ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(unsigned x, unsigned y, unsigned src); /* 1ac2:3b64 */
 void score_add(void);             /* 1ac2:413d */
 void extra_life(void);            /* 1ac2:318b */
+void fill_column(unsigned di, unsigned value);  /* 1ac2:41b1 */
+void bonus_points(void);          /* 1ac2:2daa */
+void bonus_catch(void);           /* 1ac2:2def */
+void bonus_laser(void);           /* 1ac2:2e03 */
+void bonus_multiball(void);       /* 1ac2:2e16 */
+void bonus_nothing(void);         /* 1ac2:3231 */
+void bonus_net(void);             /* 1ac2:3119 */
+void bonus_reverse(void);         /* 1ac2:315b */
+void bonus_speed(void);           /* 1ac2:31e8 */
+void bonus_end_level(void);       /* 1ac2:2da0 */
+void bonus_effect(unsigned kind);
 void scroll_up_band(void);        /* 1ac2:2109 */
 void scroll_down_band(void);      /* 1ac2:2148 */
 void draw_paddle_raw(unsigned src);      /* 1ac2:22a9 */
