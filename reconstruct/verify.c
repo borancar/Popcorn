@@ -11,6 +11,12 @@
  * state, calls the C routine with the arguments the registers held, and writes
  * what it produced. The Python side diffs that against the "after".
  *
+ * Some routines say nothing to memory and everything to their caller -
+ * 1ac2:40c0, the PRNG, only bumps a counter by a constant whatever seed it was
+ * given. Comparing memory alone passes those whatever they compute, which is
+ * not a check at all, so a routine may also report a **result** and have that
+ * compared too.
+ *
  * The state file is deliberately dumb:
  *
  *     "PVS2"  u32 routine  u16 regs[10]  u32 ticks
@@ -27,11 +33,16 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "game.h"
 
 enum { R_AX, R_BX, R_CX, R_DX, R_SI, R_DI, R_BP, R_ES, R_DS, R_FL, R_COUNT };
+
+/* A routine's answer to its caller, where it has one. -1 means "this routine
+ * says nothing the caller reads that is not already in memory". */
+static long g_result = -1;
 
 /* Every routine transcribed so far, by the image offset it was read from.
  * The argument mapping is part of what is being asserted: getting it wrong
@@ -76,7 +87,14 @@ static int dispatch(unsigned routine, const unsigned short *r)
                  return 1;
     case 0x40f2: xor_sprite_16xn(r[R_BX] & 0xff, r[R_AX] & 0xff, r[R_SI],
                                  r[R_CX] & 0xff); return 1;
-    case 0x40c0: game_random(0, r[R_DX] & 0xff); return 1;
+    case 0x40c0:
+        if (getenv("POPCORN_DEBUG_RNG"))
+            fprintf(stderr, "rng: ticks=%u stir0=%04x state=%04x dl=%02x\n",
+                    io_ticks(), (unsigned)(g_image[0x3164] |
+                    g_image[0x3165] << 8), (unsigned)(g_image[0x33d2] |
+                    g_image[0x33d3] << 8), r[R_DX] & 0xff);
+        g_result = game_random(io_ticks(), r[R_DX] & 0xff);
+        return 1;
     case 0x3aee: entity_sparkle(r[R_BX]); return 1;
     case 0x3b2a: entity_crumble(r[R_BX]); return 1;
     case 0x390d: entity_hatch(r[R_BX]); return 1;
@@ -113,6 +131,23 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x3717: entity_multiball(r[R_BX]); return 1;
     case 0x3386: entity_paddle_fx(r[R_BX]); return 1;
     case 0x05f8: level_between(); return 1;
+    case 0x492f: arrow_head(r[R_DI]); return 1;
+    case 0x4957: arrow_tail(r[R_DI]); return 1;
+    case 0x490d: menu_arrow(); return 1;
+    case 0x50df: menu_banner_tick(); return 1;
+    case 0x5140: banner_shift(); return 1;
+    case 0x53c2: menu_particles_tick(); return 1;
+    case 0x548a: g_result = particle_init(r[R_SI], r[R_AX]); return 1;
+    case 0x5476: menu_particles_init(r[R_AX]); return 1;
+    case 0x5448: g_result = particle_random(r[R_AX], io_ticks(), r[R_DX]);
+                 return 1;
+    case 0x0598: field_marks(); return 1;
+    case 0x0911: panel_reveal(); return 1;
+    case 0x1354: frame_band(r[R_DI], r[R_AX]); return 1;
+    case 0x2d68: brick_11(r[R_SI], r[R_BP]); return 1;
+    case 0x3d95: bonus_spawn(); return 1;
+    case 0x0cc5: play_prepare(); return 1;
+    case 0x1509: demo_start(); return 1;
     case 0x2034:                        /* draw_brick_row(al = screen row) */
         draw_brick_row(r[R_AX] & 0xff);
         return 1;
@@ -214,6 +249,12 @@ int verify_main(const char *in_path, const char *out_path)
     }
     fwrite(g_image, 1, image_len, o);
     fwrite(g_vram, 1, CGA_SIZE, o);
+    unsigned char res[5];
+    res[0] = g_result >= 0;
+    res[1] = (unsigned char)(g_result & 0xff);
+    res[2] = (unsigned char)((g_result >> 8) & 0xff);
+    res[3] = res[4] = 0;
+    fwrite(res, 1, sizeof res, o);
     fclose(o);
     return 0;
 }

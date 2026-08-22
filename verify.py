@@ -44,6 +44,22 @@ ROUTINES = {
     0x221A: "draw_paddle",
     0x0C64: "draw_char",
     0x1712: "input_keyboard",
+    0x0598: "field_marks",
+    0x0911: "panel_reveal",
+    0x0CC5: "play_prepare",
+    0x1354: "frame_band",
+    0x1509: "demo_start",
+    0x2D68: "brick_11",
+    0x3D95: "bonus_spawn",
+    0x490D: "menu_arrow",
+    0x492F: "arrow_head",
+    0x4957: "arrow_tail",
+    0x50DF: "menu_banner_tick",
+    0x5140: "banner_shift",
+    0x53C2: "menu_particles_tick",
+    0x5448: "particle_random",
+    0x5476: "menu_particles_init",
+    0x548A: "particle_init",
     0x044B: "level_colours",
     0x05F8: "level_between",
     0x10C5: "draw_run",
@@ -110,6 +126,17 @@ ROUTINES = {
 }
 
 REGS = "ax bx cx dx si di bp es ds fl".split()
+
+# Routines whose answer is a register rather than a change to memory. Without
+# this they pass whatever they compute: 0x40c0 only bumps a counter by a
+# constant, so comparing memory alone says nothing about the number it
+# returned. The value is what the caller reads - AH for the two random
+# routines, since both are used as `random(dl)` with the result in AH.
+RETURNS = {
+    0x40C0: "ah",
+    0x5448: "ax",
+    0x548A: "ax",
+}
 
 
 def main():
@@ -228,7 +255,8 @@ def main():
             # done. Compare, then release.
             if address == inside[0][1]:
                 want_img, want_vram = snapshot()
-                compare(inside[0][0], inside[0][2], want_img, want_vram)
+                ax = uc.reg_read(UC_X86_REG_AX) & 0xFFFF
+                compare(inside[0][0], inside[0][2], want_img, want_vram, ax)
                 inside[0] = None
             return
 
@@ -243,7 +271,7 @@ def main():
             inside[0] = (off, uc.reg_read(UC_X86_REG_CS) * 16 + ret,
                          (regs_now(), snapshot(), bios_ticks()))
 
-    def compare(off, before, want_img, want_vram):
+    def compare(off, before, want_img, want_vram, want_ax):
         regs, (img, vram), ticks = before
         with tempfile.TemporaryDirectory() as d:
             si = os.path.join(d, "in.pvs")
@@ -264,6 +292,8 @@ def main():
                                           f"{r.stderr.strip()}")
                 return
             got = open(so, "rb").read()
+        got_res = got[len(img) + 0x4000:]
+        got = got[:len(img) + 0x4000]
         got_img = bytearray(got[:len(img)])
         got_img[STACK_LO:STACK_HI] = bytes(STACK_HI - STACK_LO)
         got_img, got_vram = bytes(got_img), got[len(img):]
@@ -283,6 +313,21 @@ def main():
 
         bad = diffs(want_vram, got_vram, "vram", 6) + \
               diffs(want_img, got_img, "image", 7)
+
+        which = RETURNS.get(off)
+        if which and len(got_res) >= 3 and got_res[0]:
+            got_val = got_res[1] | (got_res[2] << 8)
+            # The original leaves its answer in a register half; the C
+            # returns it as a value. Only the original's needs extracting -
+            # shifting both turned every non-zero remainder into zero and made
+            # this look like a mismatch when it was the comparison that was
+            # wrong.
+            want_val = (want_ax >> 8) if which == "ah" else want_ax
+            if want_val != got_val:
+                bad.append(f"returned {which}: orig {want_val:#06x} "
+                           f"C {got_val:#06x}")
+            else:
+                did_work[off] += 1      # a matching answer counts as work
         if bad:
             bad.append("regs " + " ".join(
                 f"{n}={v:04x}" for n, v in zip(REGS, regs)))

@@ -796,7 +796,7 @@ static void menu_redraw(void)
     if (img_w(INPUT_SELECTED) != INPUT_KEYBOARD)
         menu_arrow();
     img_setw(PARTICLE_COUNT, 0x50);
-    menu_particles_init();
+    menu_particles_init(0xb800);
     g_image[BANNER_STATE] = 2;
     img_setw(BANNER_PTR, 0x3f1e);
 }
@@ -2399,17 +2399,17 @@ void draw_cursor(unsigned di)
     draw_char(0xff, di + 2);
 }
 
-/* 1ac2:1642  copy_string_spaced
+/* 1ac2:1642  copy_string_text
  *
- * Copy a zero-terminated string, leaving a gap byte after each character:
- * `stosb` then `inc di` steps the destination by two. Used by the
- * key-definition screen to lay text out in a buffer whose cells are two bytes
- * wide.
+ * Copy a zero-terminated string into the **text-mode** framebuffer: `stosb`
+ * then `inc di` steps two bytes, leaving the attribute byte between characters
+ * alone. Only the key-definition screen uses it, and only because that screen
+ * switches to mode 01h rather than drawing in graphics.
  */
-void copy_string_spaced(unsigned src, unsigned dst)
+void copy_string_text(unsigned src, unsigned dst)
 {
     while (g_image[src]) {
-        g_image[dst] = g_image[src++];
+        g_vram[dst & (CGA_SIZE - 1)] = g_image[src++];
         dst += 2;
     }
 }
@@ -4476,10 +4476,14 @@ void menu_banner_tick(void)
  * The other random: the eighty particle records are summed, then the BIOS tick
  * counter's two words, then a running value at [0x1acd] which is advanced by
  * the quotient. `div cx` leaves the remainder, so the answer is 0..dx-1.
+ *
+ * It does **not** zero AX first: whatever the caller happened to leave there
+ * is part of the seed. That is why `ax` is a parameter and why particle_init
+ * threads its answer from one call to the next - starting from zero gives a
+ * different sequence and the two runs diverge from the very first kernel.
  */
-unsigned particle_random(unsigned ticks, unsigned limit)
+unsigned particle_random(unsigned ax, unsigned ticks, unsigned limit)
 {
-    unsigned ax = 0;
     unsigned n = img_w(PARTICLE_COUNT);
     for (unsigned i = 0; i < n; i++)
         ax = (ax + img_w(PARTICLES + i * 2)) & 0xffff;
@@ -4498,23 +4502,30 @@ unsigned particle_random(unsigned ticks, unsigned limit)
  * height is a parabola computed as `step * t * t / 100`, which is why the
  * record carries the time in [si+6] rather than a velocity.
  */
-void particle_init(unsigned si)
+unsigned particle_init(unsigned si, unsigned ax_in)
 {
     img_setw(si + 0, 0x68);
     img_setw(si + 2, 0xa0);
-    unsigned ax = (particle_random(io_ticks(), 6) + 8) & 0xffff;
+    unsigned ax = (particle_random(ax_in, io_ticks(), 6) + 8) & 0xffff;
     img_setw(si + 0x0e, ax);
-    ax = (particle_random(io_ticks(), 0x46) - 0x23) & 0xffff;
+    ax = (particle_random(ax, io_ticks(), 0x46) - 0x23) & 0xffff;
     if (ax == 0)
         ax = 0x0a;
     img_setw(si + 4, ax);
     img_setw(si + 6, ax);
     img_setw(si + 0x0c, ax >= 0x8000 ? 1 : 0xffff);
-    int v = (int)(short)img_w(si + 0x0e);
-    int t = (int)(short)ax;
-    int h = (v * t * t) / 100;
-    img_setw(si + 0x0a, h & 0xffff);
-    img_setw(si + 8, h & 0xffff);
+    /* `imul word [si+4]` twice then `idiv cx`. The first product is truncated
+     * to sixteen bits before the second multiply - only AX carries forward -
+     * and only the second keeps its high half, because `idiv` divides DX:AX.
+     * Doing the whole thing in 32-bit C gives a different answer as soon as
+     * the first product overflows, which it does for most angles. */
+    short v = (short)img_w(si + 0x0e);
+    short t = (short)ax;
+    short first = (short)(v * t);
+    int prod = (int)first * (int)t;
+    img_setw(si + 0x0a, (short)(prod / 100) & 0xffff);
+    img_setw(si + 8, (short)(prod / 100) & 0xffff);
+    return (unsigned)(short)(prod / 100) & 0xffff;   /* what AX is left as */
 }
 
 /* 1ac2:53c2  menu_particles_tick
@@ -4526,7 +4537,9 @@ void particle_init(unsigned si)
  *
  * Points are put on the screen with INT 10h AH=0Ch, one BIOS call per pixel -
  * which is where the six hundred thousand INT 10h calls in a minute of menu
- * come from. The port draws them directly.
+ * come from. The port draws them directly. `AX = 0x0c83` is the call: bit 7 of
+ * AL means **XOR**, so both the erase and the draw are the same operation and
+ * neither needs to know what was underneath.
  *
  * The trajectory is a parabola in integer arithmetic: `height = speed * t * t
  * / 100` with `t` counting up from the angle. A kernel that would leave the
@@ -4541,31 +4554,38 @@ void menu_particles_tick(void)
         unsigned x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
         unsigned y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
         if (x <= 0x13f && y <= 0xc7)
-            plot_pixel(x, y, 0);
+            plot_pixel_xor(x, y, 3);
 
         img_setw(si + 6, (img_w(si + 6) + img_w(si + 0x0c)) & 0xffff);
-        int t = (int)(short)img_w(si + 6);
-        int v = (int)(short)img_w(si + 0x0e);
-        img_setw(si + 8, ((v * t * t) / 100) & 0xffff);
+        short t = (short)img_w(si + 6);
+        short v = (short)img_w(si + 0x0e);
+        short first = (short)(v * t);
+        int prod = (int)first * (int)t;
+        img_setw(si + 8, (short)(prod / 100) & 0xffff);
 
         y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
         x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
         if (y <= 0xc7 && x <= 0x13f)
-            plot_pixel(x, y, 3);
+            plot_pixel_xor(x, y, 3);
 
         if (y > 0xc7)
-            particle_init(si);          /* gone: launch another */
-        for (unsigned i = 0; i < n; i++)
-            game_delay();
+            particle_init(si, y);       /* gone: launch another */
+        /* One delay per kernel, not one per kernel per kernel: `mov cx,bp`
+         * restores the loop counter and the `call` is outside any loop. */
+        game_delay();
     }
 }
 
 /* 1ac2:5476  menu_particles_init - every kernel launched at once */
-void menu_particles_init(void)
+/* `ax_in` is the seed the caller happened to leave in AX. It changes only
+ * which kernels you get, so at the real call site anything will do - but the
+ * verifier has to pass what the original had or the two diverge. */
+void menu_particles_init(unsigned ax_in)
 {
     unsigned n = img_w(PARTICLE_COUNT);
+    unsigned ax = ax_in;
     for (unsigned i = 0; i < n; i++)
-        particle_init(PARTICLES + i * 0x10);
+        ax = particle_init(PARTICLES + i * 0x10, ax);
 }
 
 /* INT 10h AH=0Ch in mode 05h: one pixel, two bits, in the byte that holds it.
@@ -4579,6 +4599,16 @@ void plot_pixel(unsigned x, unsigned y, unsigned colour)
     unsigned shift = 6 - (x & 3) * 2;
     unsigned char *p = &g_vram[di & (CGA_SIZE - 1)];
     *p = (unsigned char)((*p & ~(3u << shift)) | ((colour & 3) << shift));
+}
+
+/* The same with bit 7 of AL set: XOR rather than replace. */
+void plot_pixel_xor(unsigned x, unsigned y, unsigned colour)
+{
+    if (x >= CGA_W || y >= CGA_H)
+        return;
+    unsigned di = cga_at(x, y);
+    unsigned shift = 6 - (x & 3) * 2;
+    g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)((colour & 3) << shift);
 }
 
 /* 1ac2:5140  banner_shift
@@ -4666,4 +4696,47 @@ void demo_start(void)
     player_record_init(NAME_TABLE);
     g_image[NAME_TABLE + 0xd3] = 0;
     g_image[PLAYER_COUNT] = 1;
+}
+
+/* ========================================================================
+ * 1ac2:490d  menu_arrow
+ *
+ * The arrow that says whether the mouse or the keyboard is selected. It is
+ * XOR-drawn on both rows every time, so calling it moves the arrow from
+ * whichever row it is on to the other - there is no state to keep.
+ * ===================================================================== */
+#define ARROW_MOUSE 0x0bfe
+#define ARROW_KEYS  0x088e
+
+/* 1ac2:492f  arrow_head - nine rows of five bytes from 0x4890 */
+void arrow_head(unsigned di)
+{
+    unsigned si = 0x4890;
+    for (int r = 0; r < 9; r++) {
+        for (int b = 0; b < 5; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[si + r * 5 + b];
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:4957  arrow_tail - four blank rows, one solid, four blank: XOR-ing
+ * zero changes nothing, so what this actually draws is the single 0x5555 row
+ * in the middle. The blank rows only step the offset. */
+void arrow_tail(unsigned di)
+{
+    for (int r = 0; r < 4; r++)
+        di = cga_next_row(di);
+    for (int b = 0; b < 5; b++)
+        g_vram[(di + b) & (CGA_SIZE - 1)] ^= 0x55;
+    di = cga_next_row(di);
+    for (int r = 0; r < 4; r++)
+        di = cga_next_row(di);
+}
+
+void menu_arrow(void)
+{
+    arrow_head(ARROW_MOUSE);
+    arrow_tail(ARROW_MOUSE);
+    arrow_tail(ARROW_KEYS);
+    arrow_head(ARROW_KEYS);
 }

@@ -65,7 +65,52 @@ worth knowing before the C port touches this code:
   square of the slope, which presents as a paddle that jerks at each bounce and
   catches the ball only when the geometry happens to agree.
 
-### Sixteen routines are transcribed, and the ball physics is proven exactly
+### 129 of 179 routines transcribed; 84 of them byte-checked
+
+`port_coverage.py` measures it by the image offset each routine carries, not by
+name, and counts a routine only when its header comment appears outside
+`stubs.c`:
+
+```
+129 of 179 reachable routines transcribed, 16791 of 24062 bytes (69.8%)
+84 of those are byte-checked
+```
+
+Static reachability itself went from 62.4% to 93.7% along the way, by adding
+the three indirect jump tables as entry points — brick behaviour at `0x3044`
+indexed by cell value, bonus movement at `0x3447`, and what a bonus *does* at
+`0x33bc` — plus every entity handler installed by a `mov word ptr [si], imm`.
+None of those is reachable by following control flow, which is why the first
+count was so far out.
+
+Two routines are checked and still differ, and both are recorded rather than
+hidden: `panel_reveal` (`0x0911`) writes a different byte at vram `0x50` than
+the original leaves there, so the order of its fills is misread somewhere; and
+`menu_particles_tick` (`0x53c2`) leaves a short vertical run of pixels the
+original does not, so one kernel's erase is landing in the wrong place.
+
+### The verifier had to be sharpened three times
+
+Each time it turned passes into failures, and each time the failures were real.
+
+1. **"25 calls, identical" on a routine whose common path is an early return
+   proves nothing.** It now counts calls that *changed something* and caps on
+   that, which is what made it keep sampling `ball_bricks` through 670 calls
+   until ten had actually hit a brick.
+2. **The PRNG is seeded from the BIOS tick counter**, so a C port reading its
+   own clock diverges for a reason that is not a bug. The state file now
+   carries the value the emulator saw — and that is not the tick count either:
+   the routine adds the counter's *two words* and works in sixteen bits.
+3. **Comparing memory alone cannot check a routine whose answer is a return
+   value.** `game_random` only bumps a counter by a constant, so it passed with
+   any seed — I was literally passing it zero. The harness now compares the
+   answer too, which immediately failed it.
+
+That third one also exposed `particle_random` (`0x5448`): it does **not** zero
+AX first, so whatever the caller left there is part of the seed. Threading that
+through is the difference between the kernels bouncing the same way and not.
+
+### Sixteen routines were the first to be transcribed, and the ball physics is proven exactly
 
 ```
   ok   draw_char           (0x0c64)      ok   ball_redraw     (0x2827)
@@ -245,6 +290,14 @@ counter of its own - `[0x2f0c]` **is** kernel zero's position, and the reveal
 advances only when that kernel's timer at `[0x2efc]` runs out. Those records
 are set up by `0x2109`, which is not transcribed, so the reveal is driven
 directly instead and no kernels appear.
+
+- **50 routines are still stubs**, and `reconstruct/stubs.c` lists every one.
+  The big ones left are the hall of fame and end-of-game screen (`0x0d2e`,
+  1341 bytes), the level-transition sequence (`0x4210`, reached by the bonus
+  that ends a level throwing four words off the stack), the two menu input
+  routines (`0x1654`, `0x16d2`), the key-definition screen (`0x1581`, which
+  switches to text mode 01h and so needs a text renderer the port has not got),
+  and the `.PPC` loader (`0x08c8`).
 
 - **The play path is half done.** `play_loop` (`0x1873`) and `play_session`
   (`0x02f5`) are transcribed, and F1 now enters a level with a working paddle.
