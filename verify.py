@@ -45,6 +45,7 @@ ROUTINES = {
     0x0C64: "draw_char",
     0x1712: "input_keyboard",
     0x044B: "level_colours",
+    0x05F8: "level_between",
     0x10C5: "draw_run",
     0x10D1: "draw_text",
     0x14A7: "draw_cursor",

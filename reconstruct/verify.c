@@ -112,6 +112,7 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x41b1: fill_column(r[R_DI], r[R_AX]); return 1;
     case 0x3717: entity_multiball(r[R_BX]); return 1;
     case 0x3386: entity_paddle_fx(r[R_BX]); return 1;
+    case 0x05f8: level_between(); return 1;
     case 0x2034:                        /* draw_brick_row(al = screen row) */
         draw_brick_row(r[R_AX] & 0xff);
         return 1;
