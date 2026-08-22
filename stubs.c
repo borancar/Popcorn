@@ -57,7 +57,7 @@ STUB(employee_enter,      0x4ae0, "F10, the `touche speciale pour employes`")
 STUB(employee_leave,      0x4b4f, "and its exit")
 
 /* --- getting into a game -------------------------------------------- */
-STUB(demo_prepare,        0x1212, "sets the demo up")
+STUB(play_frame,          0x1212, "draws the playfield surround")
 STUB(demo_start,          0x1509, "and starts it")
 STUB(play_prepare,        0xcc5,  "after the names are entered")
 STUB(level_load_file,     0x08c8, "reads a .PPC level set named on the command line")
@@ -77,7 +77,6 @@ void cell_special(unsigned row, unsigned di)
 
 /* --- called from play_session, which is transcribed ------------------- */
 STUB(screen_game_over,      0x0473, "GAME OVER")
-STUB(level_between,         0x05f8, "the between-levels sequence")
 STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
 STUB(screen_all_levels_done, 0x5940, "finishing all fifty")
 
@@ -105,8 +104,4 @@ int bonus_script(unsigned bx, unsigned *px, unsigned *py)
 
 /* The player-name boxes return 0xff for "abort", anything else to go on. With
  * no implementation there is nobody to abort, so it reports a start. */
-unsigned char screen_player_names(void)
-{
-    note("screen_player_names", 0x10de);
-    return 0;
-}
+

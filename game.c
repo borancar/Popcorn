@@ -829,7 +829,7 @@ void game_main(const char *dir, unsigned speed)
                  * runs out of text start the demo, which is how the attract
                  * mode comes on by itself. */
                 if (g_image[img_w(BANNER_PTR)] == 0) {
-                    demo_prepare();
+                    play_frame();
                     demo_start();
                     back_to_menu = 1;
                     continue;
@@ -880,7 +880,7 @@ void game_main(const char *dir, unsigned speed)
                 back_to_menu = 1;
                 break;
             case 0x3c:                                  /* F2: demo */
-                demo_prepare();
+                play_frame();
                 demo_start();
                 back_to_menu = 1;
                 break;
@@ -3994,4 +3994,221 @@ void morph_step(unsigned bx)
     g_image[PADDLE_WIDTH] = g_image[PADDLE_SPRITES + kind * 4 + 2];
     g_image[PADDLE_SUPPRESS] = 0;
     morph_finish(bx);
+}
+
+/* ========================================================================
+ * 1ac2:05f8  level_between
+ *
+ * Put the playfield back the way the cells say it is: four sprites from the
+ * table at 0x33d7, then every brick redrawn from 0x2f18, then the band below
+ * it cleared. Called when a level ends and when a life is lost - anything the
+ * play loop left half-drawn is undone by simply drawing the truth again.
+ *
+ * A cell of 4 is empty and skipped; 0x0c has its own routine at 0x4cc1; and a
+ * cell of 0x18 or more takes its bitmap from the block reached as segment
+ * 0x14a1 instead of from the image, which is what the `cmp dl,0x30 / push ds`
+ * around the copy is for - 0x30 because the index has already been doubled.
+ * ===================================================================== */
+#define FIELD_MARKS 0x33d7              /* four (x, y, ...) records of 4 */
+
+void level_between(void)
+{
+    unsigned si = FIELD_MARKS;
+    for (int i = 0; i < 4; i++, si += 4) {
+        unsigned x = g_image[si], y = (g_image[si + 1] - 0x0a) & 0xff;
+        g_image[si + 3] = 0;
+        unsigned src = 0x6078, di = cga_at(x, y);
+        for (int r = 0; r < 0x25; r++) {
+            g_vram[di & (CGA_SIZE - 1)] = g_image[src + r * 2];
+            g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[src + r * 2 + 1];
+            di = cga_next_row(di);
+        }
+    }
+
+    for (int i = 0; i < 0x18; i++) {
+        g_vram[(0xa2 + i * 2) & (CGA_SIZE - 1)] = 0;
+        g_vram[(0xa3 + i * 2) & (CGA_SIZE - 1)] = 0;
+        g_vram[(0x20a2 + i * 2) & (CGA_SIZE - 1)] = 0;
+        g_vram[(0x20a3 + i * 2) & (CGA_SIZE - 1)] = 0;
+    }
+
+    unsigned di_cell = LEVEL_CELLS + 8;
+    unsigned y = 6;
+    for (int row = 0; row < 0x0e; row++, y += 8) {
+        unsigned x = 8;
+        for (int col = 0; col < 0x0c; col++, di_cell++, x += 0x10) {
+            unsigned cell = g_image[di_cell];
+            if (cell == 0x0c) {
+                cell_special(row, di_cell);
+                continue;
+            }
+            if (cell == 4)
+                continue;               /* empty */
+            unsigned idx = cell * 2;
+            unsigned src = (idx >= 0x30 ? SEG_14A1 : 0) +
+                           img_w(CELL_TABLE + idx);
+            unsigned di = cga_at(x, y);
+            for (int r = 0; r < 8; r++) {
+                for (int b = 0; b < 4; b++)
+                    g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + r * 4 + b];
+                di = cga_next_row(di);
+            }
+        }
+    }
+
+    /* And the empty band under the bricks, 0x29 rows of 48 bytes. */
+    unsigned bp = 0x1272;
+    for (int r = 0; r < 0x29; r++, bp += 0x50) {
+        for (int i = 0; i < 48; i++) {
+            g_vram[(bp + i) & (CGA_SIZE - 1)] = 0;
+            g_vram[(bp + CGA_PLANE + i) & (CGA_SIZE - 1)] = 0;
+        }
+    }
+}
+
+/* ========================================================================
+ * 1ac2:13b8  name_field
+ *
+ * One player-name box, read through INT 21h AH=07h - a blocking key with no
+ * echo. Twelve characters, upper case only, digits, space and dash; anything
+ * else is ignored rather than beeped at.
+ *
+ * The return says what to do next, and it is the original's carry: 1 means
+ * start the game, 0 means take another name - and 0 with 0xff means the
+ * player pressed Escape and the whole thing is off.
+ *
+ * Enter on an **empty** box is the "that's everyone" signal, but only once at
+ * least one name has been entered; on the first box it just waits again.
+ * ===================================================================== */
+#define NAME_TABLE   0x344f
+#define NAME_STRIDE  0x11b
+#define NAME_INDEX   0x13e9             /* ASCII '1' upwards */
+#define PLAYER_COUNT 0x3f08
+
+int name_field(unsigned di, unsigned char *abort)
+{
+    unsigned si = NAME_TABLE + (g_image[NAME_INDEX] - '1') * NAME_STRIDE;
+    unsigned len = 0;
+    *abort = 0;
+
+    di -= 2;
+    draw_cursor(di);
+    di += 2;
+
+    for (;;) {
+        unsigned c = io_get_key() & 0xff;
+        if (!c) {
+            if (!io_pump())
+                return 0;
+            io_present();
+            io_wait_retrace();
+            continue;
+        }
+
+        if (c == 0x1b) {                /* Escape */
+            *abort = 0xff;
+            return 0;
+        }
+        if (c == 8) {                   /* Backspace */
+            if (len == 0)
+                continue;
+            draw_char(len == 0x0c ? ' ' : '-', di - 4);
+            di -= 4;
+            len--;
+            draw_cursor(di);
+            di += 2;
+            g_image[--si] = 0;
+            continue;
+        }
+        if (c == 0x0d) {                /* Enter */
+            if (len != 0)
+                break;                  /* accept this name */
+            if (g_image[PLAYER_COUNT] == 0)
+                continue;               /* the first box: keep waiting */
+            return 1;                   /* that is everyone: start */
+        }
+        if (c >= 0x60)
+            c &= 0xdf;                  /* fold to upper case */
+        int ok = (c == ' ' || c == '-' ||
+                  (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'));
+        if (!ok || len == 0x0c)
+            continue;
+        g_image[si++] = (unsigned char)c;
+        len++;
+        draw_char((unsigned char)c, di);
+        draw_cursor(di);
+        di += 2;
+    }
+
+    /* Pad the rest of the field with spaces, then shift the name right by
+     * half the space left so it sits centred in the box. */
+    unsigned pad = 0x0d - len;
+    unsigned shift = (pad - 1) >> 1;
+    for (unsigned i = 0; i < pad; i++, si++, di += 2) {
+        g_image[si] = ' ';
+        draw_char(' ', di);
+    }
+    unsigned base = NAME_TABLE + (g_image[NAME_INDEX] - '1') * NAME_STRIDE + 0x0a;
+    for (unsigned n = 0; n < shift; n++) {
+        for (int k = 0x0b; k >= 0; k--)
+            g_image[base - k + 1] = g_image[base - k];
+        g_image[base - 0x0b] = ' ';
+    }
+    return 0;
+}
+
+/* ========================================================================
+ * 1ac2:10de  screen_player_names
+ *
+ * Ask each player for a name, one box under the last, up to eight. Returns
+ * 0xff if the player backed out, anything else to start the game.
+ * ===================================================================== */
+unsigned char screen_player_names(void)
+{
+    g_image[PLAYER_COUNT] = 0;
+    play_frame();                       /* 1ac2:1212 - the surround */
+    io_flush_keys();
+
+    unsigned di = 0x142;
+    for (;;) {
+        unsigned top = di;
+        for (int i = 0; i < 0x18; i++) {   /* the bar above the box */
+            g_vram[(di + i * 2) & (CGA_SIZE - 1)] = 0xaa;
+            g_vram[(di + i * 2 + 1) & (CGA_SIZE - 1)] = 0xaa;
+        }
+        di = cga_next_row((di + 0x30 - 0x30) & 0xffff);
+
+        draw_text(0x13e1, 0x18, 0x377e);
+        for (int i = 0; i < 0x18; i++) {   /* and the bar below */
+            unsigned d = (0x377e + 0x1e0 + i * 2) & 0xffff;
+            g_vram[d & (CGA_SIZE - 1)] = 0xaa;
+            g_vram[(d + 1) & (CGA_SIZE - 1)] = 0xaa;
+        }
+
+        unsigned char abort = 0;
+        int done = name_field(cga_next_row(top) + 0x16, &abort);
+        if (done) {
+            /* Rub the box out and start. */
+            unsigned d = top;
+            for (int r = 0; r < 0x0e; r++) {
+                for (int i = 0; i < 0x18; i++) {
+                    g_vram[(d + i * 2) & (CGA_SIZE - 1)] = 0;
+                    g_vram[(d + i * 2 + 1) & (CGA_SIZE - 1)] = 0;
+                }
+                d = cga_next_row((d - 0x18) & 0xffff);
+            }
+            g_image[NAME_INDEX] = '1';
+            return 0;
+        }
+        if (abort == 0xff) {
+            g_image[NAME_INDEX] = '1';
+            return 0xff;
+        }
+        if (++g_image[PLAYER_COUNT] == 9) {
+            g_image[NAME_INDEX] = '1';
+            return 0;
+        }
+        g_image[NAME_INDEX]++;
+        di = cga_next_row(top) + 0x280;   /* the next box, lower down */
+    }
 }

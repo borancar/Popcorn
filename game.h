@@ -202,12 +202,13 @@ void palette_cycle(void);         /* 1ac2:5196 */
 void menu_extra(void);            /* 1ac2:5171 */
 void employee_enter(void);        /* 1ac2:4ae0 */
 void employee_leave(void);        /* 1ac2:4b4f */
-void demo_prepare(void);          /* 1ac2:1212 */
 void demo_start(void);            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
 
 void level_load_file(void);       /* 1ac2:08c8 */
 unsigned char screen_player_names(void);  /* 1ac2:10de */
+int  name_field(unsigned di, unsigned char *abort); /* 1ac2:13b8 */
+void play_frame(void);            /* 1ac2:1212 */
 
 /* Called by play_loop; the ones still empty live in stubs.c too. */
 int  play_loop(void);             /* 1ac2:1873 - transcribed */
@@ -350,12 +351,13 @@ void palette_cycle(void);         /* 1ac2:5196 */
 void menu_extra(void);            /* 1ac2:5171 */
 void employee_enter(void);        /* 1ac2:4ae0 */
 void employee_leave(void);        /* 1ac2:4b4f */
-void demo_prepare(void);          /* 1ac2:1212 */
 void demo_start(void);            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
 
 void level_load_file(void);       /* 1ac2:08c8 */
 unsigned char screen_player_names(void);  /* 1ac2:10de */
+int  name_field(unsigned di, unsigned char *abort); /* 1ac2:13b8 */
+void play_frame(void);            /* 1ac2:1212 */
 
 /* Called by play_loop; the ones still empty live in stubs.c too. */
 int  play_loop(void);             /* 1ac2:1873 - transcribed */
