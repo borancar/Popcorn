@@ -70,6 +70,15 @@ EXTRA_ENTRIES = {
     0x2C59: "brick: cell 10",
     0x2D68: "brick: cell 11",
     # How a falling bonus moves, from the table at 0x3447 indexed by [bx+2].
+    # The rest of the entity handlers, found by collecting every
+    # `mov word ptr [si], imm` / `mov word ptr [bx], imm` that installs one -
+    # an entity's kind is its handler, and handlers install each other.
+    0x365E: "entity handler (from brick 3)",
+    0x366F: "entity handler (from brick 8)",
+    0x3696: "entity handler (from brick 9)",
+    0x36A1: "entity handler (from brick 9)",
+    0x36F6: "entity handler (from brick 9)",
+    0x37E0: "entity handler (from brick 10)",
     0x3C66: "bonus movement 0",
     0x3D3C: "bonus movement 1",
     0x3CF3: "bonus movement 2",

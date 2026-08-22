@@ -968,8 +968,6 @@ void game_input(void)
 #define EXTRA_POS       0x2e87
 #define SERVE_TIMEOUT   0x2e7a
 #define CAUGHT          0x2e75
-#define ENTITY_REMOVE   0x313a
-#define ENTITY_PREV     0x3142
 #define SPEED_TIMER     0x148b
 #define SPEED_STEP      0x1485
 #define SPEED_LIMIT     0x1486
@@ -2406,7 +2404,6 @@ void flash_bar(unsigned pattern)
  * list. Appending rather than pushing keeps entities in the order they were
  * created, which is the order they are drawn in.
  */
-#define ENTITY_FREE  0x3138
 
 unsigned entity_alloc(void)
 {
@@ -2755,5 +2752,178 @@ void xor_sprite_16xn(unsigned x, unsigned y, unsigned src, unsigned rows)
         for (int b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[src + r * 4 + b];
         di = cga_next_row(di);
+    }
+}
+
+/* ========================================================================
+ * The entities bricks leave behind.
+ *
+ * Most are entity_crumble with a tail: run the animation, and when it asks to
+ * be unlinked do something instead of, or as well as, going away.
+ * ===================================================================== */
+
+/* 1ac2:365e  from brick 3 - when the animation ends the cell becomes a 3
+ * again, so a hardened brick softens back. */
+void entity_soften(unsigned bx)
+{
+    entity_crumble(bx);
+    if (g_image[ENTITY_REMOVE] == 1)
+        g_image[img_w(bx + 2)] = 3;
+}
+
+/* 1ac2:366f  from brick 8 - plays its animation [bx+2] times over, cancelling
+ * its own removal each time round, and rubs the last frame out at the end. */
+void entity_repeat(unsigned bx)
+{
+    entity_crumble(bx);
+    if (g_image[ENTITY_REMOVE] != 1)
+        return;
+    if (--g_image[bx + 2] != 0) {
+        g_image[ENTITY_REMOVE] = 0;
+        img_setw(bx + 6, 0x67ea);
+        return;
+    }
+    xor_sprite_16x7(g_image[bx + 4], g_image[bx + 5], 0x681c);
+}
+
+/* 1ac2:3696  from brick 9 - the animation and nothing else */
+void entity_plain(unsigned bx)
+{
+    entity_crumble(bx);
+}
+
+/* 1ac2:36a1  from brick 9 - where the ball comes back
+ *
+ * When the arrival animation finishes it puts the ball down at this entity's
+ * position, eight pixels right and four up, gives it a fresh sprite, and draws
+ * it. [bx+2] is the ball, not a cell, for this one.
+ */
+void entity_ball_arrive(unsigned bx)
+{
+    entity_crumble(bx);
+    if (g_image[ENTITY_REMOVE] != 1)
+        return;
+
+    unsigned ball = img_w(bx + 2);
+    unsigned char *b = g_image + ball;
+    unsigned x = (g_image[bx + 4] + 8) & 0xff;
+    unsigned y = (g_image[bx + 5] - 4) & 0xff;
+    b[B_X] = b[B_PREV_X] = b[B_ANCHOR_X] = (unsigned char)x;
+    b[B_Y] = b[B_PREV_Y] = b[B_ANCHOR_Y] = (unsigned char)y;
+    b[B_ACC_X] = b[B_ACC_Y] = 0;
+    b[B_STATE] = 1;
+    b[B_DIR_Y] = 1;                     /* set off upwards */
+    memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
+    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+}
+
+/* 1ac2:36f6  from brick 9 - counts [bx+4] down and then puts the cells back */
+void entity_cells_timer(unsigned bx)
+{
+    img_setw(bx + 4, img_w(bx + 4) - 1);
+    if (img_w(bx + 4) == 0)
+        cells_restore();
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:2b9d  brick 9 - takes the ball away and puts it back somewhere else
+ *
+ * Twenty-five points. The cells listed at 0x2f12 all become 4s so nothing can
+ * be broken while the ball is gone, the ball is erased and parked in state 3,
+ * and three entities are set going: the animation where it left, a timer that
+ * restores the cells, and the arrival animation at a cell picked at random -
+ * any but this one.
+ *
+ * The pixel position of that cell comes out of `div cl` with cl = 12: the
+ * quotient is the row and the remainder the column, so x = column * 16 + 8 and
+ * y = row * 8 + 6, which is the same grid as everywhere else read backwards.
+ */
+void brick_9(unsigned slot, unsigned ball)
+{
+    if (!ball)
+        return;
+    brick_score(0, 0, 0x0502);
+
+    unsigned n = g_image[LEVEL_CELLS + 1];
+    for (unsigned i = 0; i < n; i++)
+        g_image[LEVEL_CELLS + 8 + g_image[LEVEL_CELLS + 2 + i]] = 4;
+
+    unsigned char *b = g_image + ball;
+    b[B_STATE] = 3;
+    b[B_BOUNCES] = 0;
+    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+
+    brick_entity(slot, 0x3696, 0x6abe, 0x32);
+
+    /* A cell that is not this one. */
+    unsigned cell, idx;
+    do {
+        idx = g_image[LEVEL_CELLS + 2 + game_random(io_ticks(), n)];
+        cell = LEVEL_CELLS + 8 + idx;
+    } while (cell == img_w(slot));
+
+    unsigned si = entity_alloc();
+    img_setw(si + 0, 0x36f6);
+    img_setw(si + 4, 0x514);
+
+    si = entity_alloc();
+    img_setw(si + 0, 0x36a1);
+    img_setw(si + 2, ball);
+    img_setw(si + 6, 0x6ad0);
+    g_image[si + 8] = g_image[si + 9] = 0x32;
+    g_image[si + 4] = (unsigned char)((idx % 12) * 16 + 8);
+    g_image[si + 5] = (unsigned char)((idx / 12) * 8 + 6);
+}
+
+/* 1ac2:2c59  brick 10 - fifty points, and the ball goes into state 4 while an
+ * entity runs at where the brick was. */
+void brick_10(unsigned slot, unsigned ball)
+{
+    brick_common(ball, SOUND_BRICK, 0, 0, 5);
+    g_image[img_w(slot)] = 0;
+    g_image[LEVEL_CELLS]--;
+    unsigned x = g_image[slot + 2], y = g_image[slot + 3];
+    xor_sprite_16x7(x, y, 0x63e6);
+    if (!ball)
+        return;
+
+    unsigned si = entity_alloc();
+    img_setw(si + 0, 0x37e0);
+    img_setw(si + 2, ball);
+    img_setw(si + 6, 0x6b88);
+    g_image[si + 4] = (unsigned char)x;
+    g_image[si + 5] = (unsigned char)y;
+    g_image[si + 8] = g_image[si + 9] = 0x69;
+    sprite_shift_draw(x, y, 0x6b9c);
+
+    unsigned char *b = g_image + ball;
+    b[B_STATE] = 4;
+    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+}
+
+/* ------------------------------------------------------------------------
+ * The `call word ptr [bx]` at 1ac2:1b5e.
+ *
+ * An entity's kind *is* its handler, and handlers install each other, so this
+ * is the whole type system. Anything not transcribed yet is dropped rather
+ * than run, which leaves it stuck in the list - so it says so once.
+ */
+void entity_call(unsigned node)
+{
+    switch (img_w(node + E_HANDLER)) {
+    case 0x3273: entity_capsule(node); break;
+    case 0x3386: entity_paddle_fx(node); break;
+    case 0x3561: entity_popup(node); break;
+    case 0x365E: entity_soften(node); break;
+    case 0x366F: entity_repeat(node); break;
+    case 0x3696: entity_plain(node); break;
+    case 0x36A1: entity_ball_arrive(node); break;
+    case 0x36F6: entity_cells_timer(node); break;
+    case 0x37E0: entity_ball_hold(node); break;
+    case 0x390D: entity_hatch(node); break;
+    case 0x39FA: entity_bonus(node); break;
+    case 0x3AEE: entity_sparkle(node); break;
+    case 0x3B2A: entity_crumble(node); break;
+    default:     entity_unknown(node); break;
     }
 }
