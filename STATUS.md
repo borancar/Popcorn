@@ -81,7 +81,7 @@ Two things about the ball structure cost a debugging round each:
 
 ### Every reachable routine is transcribed
 
-**179 of 179, all 24,062 bytes.** `port_coverage.py` measures it by the image
+**185 of 185, all 25,230 bytes.** `port_coverage.py` measures it by the image
 offset each routine carries, not by counting functions: a routine counts only
 when its `1ac2:xxxx` header appears somewhere that is not `stubs.c`, so a stub
 renamed to look finished does not move the number.
@@ -89,7 +89,21 @@ renamed to look finished does not move the number.
 `reconstruct/stubs.c` is down to `entity_unknown`, which is a safety net for a
 handler address that is not in any table. It should never fire.
 
-The last one in was `0d2e`, where a player's turn ends. Each player's whole
+The last three in were the **animated bricks**, and they are worth the
+paragraph because of how they hid. The brick table at `0x3044` is thirty words
+long; its entries 16 to 21 all point at `0x2ccd`, which is not an ordinary
+brick handler. It does not clear the cell - it **adds eight** to it, leaving
+the low nibble alone - draws the piece out of the level's animation script, and
+allocates an entity running `0x3abf`, which redraws that piece every time the
+script steps. Six cells make one picture, and nine of the fifty levels use it;
+the picture goes on moving after you have broken it.
+
+`0x3abf` was invisible to the recursive-descent map because **nothing calls
+it**: it is only ever stored into an entity node's handler slot, so its bytes
+were being counted as the tail of `entity_bonus`. Seeding it explicitly is what
+took the count from 179 to 185.
+
+Before that, `0d2e`, where a player's turn ends. Each player's whole
 state lives in a 0x11b-byte record — lives, level, score, their copy of the
 cells, and at `+0xd2` a count followed by copies of the live entities. Saving
 the entity list is what lets a player come back to a level with the capsules
@@ -104,9 +118,17 @@ value. A routine that compiles proves nothing and one that looks right on
 screen proves very little more; a blitter can be wrong in ways that still draw
 something plausible.
 
-`reconstruct/verify.c` dispatches 142 routines. Which registers a routine takes
+`reconstruct/verify.c` dispatches 145 routines. Which registers a routine takes
 its arguments in is part of what is being asserted — getting that wrong shows
 up as a mismatch, which is the point.
+
+`verify.py --resume` takes one of `sidebyside.py`'s snapshots - image, video
+memory, all fourteen registers and the BIOS tick the PRNG seeds from - and
+starts there instead of walking the menu. That is what the "snapshots would fix
+this properly" note under **Open** asked for, and it arrived because it had to:
+the three animated-brick routines only run on nine of the fifty levels, the
+first of which is about ten minutes of emulation away from the menu. Resumed at
+level 7 they verify in two minutes, ten calls each, all identical.
 
 The harness had to be sharpened four times, each time because it was agreeing
 for a reason that was not evidence:
@@ -137,36 +159,24 @@ looked like:
 
 ## Open
 
-### Two hundred thousand frames come out byte for byte
+### Four hundred thousand frames come out byte for byte
 
 `sidebyside.py` plays the emulator and the port together on the same driven
 input and compares the whole image and the whole screen after every frame.
-With `--from-session` it follows a whole game rather than one level, and runs
-**197,555 frames** before a single byte differs - not a byte of the
-133,296-byte image or the 16,384-byte screen, sound player included, nothing
-masked but the stack and the three key-state bytes. That is about fifty-five
-minutes of continuous play, through eight levels.
+With `--from-session` it follows a whole game rather than one level, and it now
+runs past **390,000 frames** without a single byte differing - not a byte of
+the 133,296-byte image or the 16,384-byte screen, sound player included,
+nothing masked but the stack and the three key-state bytes. That is around two
+hours of continuous play, through eleven levels, and the run had not stopped
+when this was written.
 
-The open lead is level 7, frame 6,159 from that level's snapshot. The port
-dispatches a brick hit for a cell holding 20 and the emulator dispatches
-nothing; the emulator's cell changes from 0x14 to 0x1c with no brick handler
-running at all, so something else rewrote it - one of the routines behind the
-multi-cell animation those cells belong to. Cell 20's low nibble is 4, and
-both 4 and 12 dispatch to 0x3221, the entry that only plays a sound and bumps
-the ball's [+0x1d], which is the other byte that differs.
+`--snapshots DIR` writes a resumable state at the start of every level and
+`--resume FILE` starts from one, so a divergence two hours in is reached in a
+couple of minutes rather than replayed. Nothing since the harness was built has
+been found without it.
 
-`--snapshots DIR` writes a resumable state at the start of every level, so a
-divergence half an hour in is reached in a couple of minutes rather than
-replayed. `--resume FILE` starts from one. That is what made the last three
-bugs findable at all.
-
-The instruction counts say those frames are real rather than empty: the sound
-tick, the ball's step gate and the entity walk each run once a frame and the
-ball steps on two in three of them, exactly what the `[0x1486] = 3` gate
-predicts, held over the whole run.
-
-Three bugs had to come out to get there, and each was found by the harness
-rather than by reading:
+Five bugs came out along the way, each found by the harness rather than by
+reading:
 
 - **sound_tick read its tunes out of the sprite data.** The tune pointers are
   offsets into the code segment, because DS is the code segment for the
@@ -179,14 +189,33 @@ rather than by reading:
   below the capsule, not two - and was missing its ending, where a capsule
   reaching the paddle row is handed to the script at 0x8320 rather than being
   blocked.
+- **The animated bricks were not transcribed at all**, because the routine
+  that runs them is reached only through an entity node. Level 7 is where the
+  first of them is, and the port passed through cells the original turned into
+  a running picture.
+- **The brick table has thirty entries, not twenty-two.** Entries 24 to 29 -
+  an animated brick that has already been hit - all point back at the solid
+  handler, so hitting one again bounces the ball and does nothing else. The
+  port had no case for those values and fell through, so the ball passed where
+  the original bounced.
 
-The last of those was found by arithmetic on the PRNG: game_random advances
-[0x33d2] by a constant, so the gap between two states is a call count. It said
-"the emulator is two draws ahead", and logging each draw's caller named
-bonus_steer.
+The last of those is the one worth remembering, because the harness reported it
+as a **disagreement about which brick** and both sides were right. The
+emulator's tag names the routine the dispatch reaches; the port's named the
+cell value; and 4, 12 and 24 to 29 all share one routine. Two bytes differed -
+a ball's bounce counter and a sound timer - for a difference of naming on top
+of a real bug underneath it. The port now canonicalises its tag, which also
+removes the same false report for cell 12.
 
-Getting there took two fixes to the harness rather than the port, and both are
-worth remembering because both made it *look* like the port was wrong:
+The table length was itself the second thing to be measured wrong the same way.
+`analyze.py --tables` audits every dispatch table and every word the code calls
+through, and it missed this one because the length was **hand-written**. A
+count you supply is not a count you checked; the fix was to read entries until
+they stop being code addresses. It now reports "every dispatch target is
+mapped" over thirty entries rather than twenty-two.
+
+Earlier, two fixes to the harness rather than the port, both of which made it
+*look* like the port was wrong:
 
 - **1ac2:1a62 is not once a frame.** It is the top of the frame, but the serve
   wait reaches it too, at 0x1a58, whenever the action button is held - and a
@@ -196,6 +225,11 @@ worth remembering because both made it *look* like the port was wrong:
   `emu_start` ran it again and the hook fired a second time with no work in
   between. Four "frames" over one real one, comparing the port's frame N+1
   against the emulator's frame N.
+
+The instruction counts say those frames are real rather than empty: the sound
+tick, the ball's step gate and the entity walk each run once a frame and the
+ball steps on two in three of them, exactly what the `[0x1486] = 3` gate
+predicts, held over the whole run.
 
 What is still set aside is the sound player's state at cs:[0xf4]-[0xf7] - the
 request, the note timer and the tune pointer. One side raises a sound request
@@ -232,12 +266,14 @@ Fourteen dispatched routines are reached by none of the three: `draw_run`,
 game states a bot does not play into.
 
 The honest limit is that **a routine no run reaches is unproven**, and
-`verify.py` prints that list rather than quietly omitting it. What would fix it
-properly is **snapshots** - saving and restoring the whole machine - so a check
-can *start* at a screen instead of playing to it. Input is currently scripted by
-code offset (`@13d2:return` fires the first time execution reaches `0x13d2`),
-which is reproducible where a timed script tuned on one run missed on the next,
-but it still has to play the game to get there.
+`verify.py` prints that list rather than quietly omitting it. Snapshots are the
+answer to it and now exist: `verify.py --resume` starts a check *at* a screen
+instead of playing to it, which is how the animated bricks were checked at all.
+Applying it to the rest of the unreached list is the outstanding job - it needs
+snapshots taken at the states a bot does not play into, not just at level
+starts. Input is otherwise scripted by code offset (`@13d2:return` fires the
+first time execution reaches `0x13d2`), which is reproducible where a timed
+script tuned on one run missed on the next.
 
 A few routines cannot be checked this way at all and are excluded on purpose:
 the ones that never return normally (`play_session` leaves by longjmp), the
@@ -274,13 +310,18 @@ original shoot.
 
 ## Next
 
-1. Widen verification coverage: longer and differently-routed runs, and then
-   snapshots, so the screens a bot does not reach can be checked too.
-2. Sound.
-3. The `.PPC` format, which is what makes the level editor's output playable.
+1. Widen verification coverage. Snapshots exist now, so the job is capturing
+   them at the states a bot does not play into - the attract demo, the keyboard
+   input path, a lost life, the between-level screens - rather than only at the
+   start of a level.
+2. Keep the side-by-side running. It is the only thing that has found a bug in
+   the last three rounds, and each fix buys another stretch of levels.
+3. Sound.
+4. The `.PPC` format, which is what makes the level editor's output playable.
 
 ## Deferred
 
-- **A full per-file inventory in `CLAUDE.md`.** It currently documents only the
-  tools that exist. Now that the transcription is complete this is the next
-  documentation job.
+- **Levels 11 and beyond.** The bot has held level 10 for a quarter of a
+  million frames without clearing it, so the levels after it are untested by
+  the side-by-side. Reaching them wants a bot that aims rather than one that
+  survives, or a snapshot taken with the level number written by hand.

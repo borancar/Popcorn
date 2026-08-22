@@ -136,6 +136,10 @@ convention every note and every reconstructed routine here uses.
 | `0x3164` | ten words the PRNG folds in |
 | `0x9020` | **font**: 40 glyphs of 8x12, 24 bytes each |
 | `0x2f10` | the level being played: an 8-byte header then 12x14 cells |
+| `0x3044` | brick behaviour table, **thirty** words indexed by cell value |
+| `0x3080` | what each hit animated brick became, indexed by the new cell value |
+| `0x3134`, `0x3135` | the animation script's counter and its reload |
+| `0x3136` | the animation script pointer, into the block at segment `0x14a1` |
 | `0x13c9` | lives |
 | `0x13ca` | offset of the current level in the table |
 | `0x13cc` | level number, 0-0x31 |
@@ -186,6 +190,9 @@ Segment-relative (add `0x1ac20` for the image offset).
 | `0x5680` | `read_speed_setting` - POPSPEED's value, out of **interrupt vector 0x68** |
 | `0x14b3` | `build_shifted_sprites` - generates three of every four sprite phases at startup |
 | `0x5630` | the screen blit: waits on 0x3da bit 3, then `rep movsb` per row |
+| `0x2ccd` | `brick_animated` - cells 16-21, the pieces of a running picture |
+| `0x3abf` | the entity that keeps one of those pieces animating |
+| `0x3bac` | `draw_anim_cell` - eight rows of four bytes, copied not XORed |
 
 ### The INT 09h handler, `0x03e3`
 
@@ -393,6 +400,21 @@ loop watches the first byte of that copy to know when the level is cleared.
 | `+0x01` | a second count, used by `0x36fb` |
 | `+0x02` | a short list `0x36fb` walks, `[+0x01]` entries long |
 | `+0x08` | the cells: **12 columns by 14 rows**, one byte each |
+
+### The animated bricks
+
+Cell values 16 to 21 are not bricks but the six pieces of one picture, and nine
+of the fifty levels use them - 7, 9, 20, 23, 30, 34, 39, 42 and 45, always all
+six together. Hitting one runs `0x2ccd`, which **adds eight** to the cell
+rather than clearing it, draws the piece from the level's animation script, and
+leaves an entity running `0x3abf` behind; that entity redraws the piece every
+time the script steps, so the picture goes on moving after it has been broken.
+Hitting the marked cell again lands on table entries 24 to 29, which all point
+back at the solid handler: it bounces and nothing more.
+
+`0x3abf` is reachable only through an entity node - **nothing calls it** - so
+anything following control flow will count its bytes as the tail of whatever
+routine precedes it.
 
 The geometry is not a guess. At twelve wide the first level reads as four bands
 of two solid rows alternating between cell values 2 and 1, which is exactly
