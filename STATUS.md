@@ -330,10 +330,26 @@ window consumes exactly one port frame. It looked like a safeguard and could
 not fail, which is the trap this file keeps recording.
 
 What can fail is comparing the *kind* of point each side stopped at, which the
-tag now carries. It reports no disagreement at the frame the two differ on, so
-the two sides really are standing in the same place: the emulator's `play_loop`
-has returned and made its spawn-gate `game_random` call, the port's has not,
-and the port is one level transition behind with a life still in hand.
+tag now carries.
+
+A third sync point, `--sync-endgame` on `ball_after_endgame`, reaches the one
+part of the bonus the scroll sync does not: its own ball loop, which is
+otherwise a single indivisible move. That takes the difference to **22 image
+bytes and 10 screen bytes**, and what they say is clear enough. A hundred and
+eight comparisons are identical; at the hundred and ninth the emulator's ball
+is back at the serve position and the port's is still falling through the
+funnel. The emulator's bonus **ended one iteration sooner**.
+
+Which points at the thing the harness cannot check. `ball_after_endgame`'s
+"the level is over" path does not return: it pops its own return address and
+runs the ending, so `verify.py` - which waits for the return address it
+captured - can sample every other path through that routine three hundred
+times and never that one. It is verified identical on the paths that come
+back and unverifiable on the path that does not, and the path that does not
+is the one the two sides disagree about.
+
+Closing it wants a harness that can check a routine which never returns -
+the same problem `play_session` has, and worth solving once for both.
 
 ### Coverage, as last measured
 

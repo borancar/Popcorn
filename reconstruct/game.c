@@ -5342,7 +5342,7 @@ void screen_scroll_up(void)
      * seven rows a hundred and eleven times and drew the paddle a hundred and
      * eleven times, where the original scrolls a hundred and eleven rows once
      * and draws it at the end. */
-    io_frame_sync_extra();              /* --sync-scroll, for the driver */
+    io_frame_sync_extra(SYNC_SCROLL);              /* --sync-scroll, for the driver */
     uint32_t di = 0x13;
     for (int32_t n = 0x6f; n > 0; n--) {
         uint32_t si = cga_next_row(di);
@@ -6403,6 +6403,9 @@ static void endgame_curtain(void)
 
 int32_t ball_after_endgame(uint32_t ball)
 {
+    /* Once per step of the bonus's own ball loop, which reaches no other sync
+     * point - the whole loop is one indivisible move otherwise. */
+    io_frame_sync_extra(SYNC_ENDGAME);
     uint8_t *b = g_image + ball;
     uint32_t x = b[B_X], y = b[B_Y];
 

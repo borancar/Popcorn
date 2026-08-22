@@ -63,19 +63,19 @@ void io_log_random(uint32_t dl)
  * to name which row a difference starts on. The driver has to be told to
  * expect the same point or the two go out of step immediately.
  */
-static int32_t extra_sync;
+static int32_t extra_sync;      /* a bit per point; see game.h */
 
-void io_lockstep_extra_sync(int32_t on) { extra_sync = on ? 1 : 0; }
+void io_lockstep_extra_sync(int32_t mask) { extra_sync = mask; }
 
-void io_frame_sync_extra(void)
+void io_frame_sync_extra(int32_t which)
 {
-    if (!extra_sync)
+    if (!(extra_sync & which))
         return;
     /* Tagged, so the driver can tell *which* sync point each side stopped at.
      * Matching counts are not enough: the port can be at its Nth scroll while
      * the emulator is at its Nth frame close, and then the two are compared
      * standing in different places with nothing to say so. */
-    io_log_random(0x9100);
+    io_log_random(0x9100 | which);
     io_frame_sync();
 }
 

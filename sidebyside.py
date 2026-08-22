@@ -49,6 +49,7 @@ FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
 # a comparison point turns the end-level bonus from one indivisible step into
 # fifty, and a difference gets a row number instead of a shrug.
 SCROLL_UP = 0x4878
+BALL_ENDGAME = 0x45A1                   # --sync-endgame, once a ball step
 #  - and NOT 0x1a62, its top: the serve wait jumps there too, at 0x1a58,
 #    whenever the action button is held, so the top is hit more than once
 #    a frame and the two sides end up compared at different points.
@@ -128,6 +129,11 @@ def main():
     ap.add_argument("--frames", type=int, default=200,
                     help="0 runs until a comparison fails or you "
                          "stop it")
+    ap.add_argument("--sync-endgame", action="store_true",
+                    help="also compare at every ball_after_endgame, which is "
+                         "once per step of the end-level bonus's own ball "
+                         "loop - the only part of that screen the scroll sync "
+                         "does not reach")
     ap.add_argument("--sync-scroll", action="store_true",
                     help="also compare at every screen_scroll_up, so a screen "
                          "with a loop of its own - the end-level bonus, the "
@@ -347,7 +353,8 @@ def main():
             captured["ticks"] = bios_ticks()
             uc.emu_stop()
         elif captured and (off == FRAME_END
-                           or (args.sync_scroll and off == SCROLL_UP)):
+                           or (args.sync_scroll and off == SCROLL_UP)
+                           or (args.sync_endgame and off == BALL_ENDGAME)):
             # emu_stop() leaves IP *at* this instruction, so the next
             # emu_start runs it again and the hook fires a second time with
             # no work done in between. Counting those as frames compares the
@@ -362,11 +369,12 @@ def main():
             if resuming[0] == off:
                 resuming[0] = None
                 return
-            if off == SCROLL_UP:
+            if off in (SCROLL_UP, BALL_ENDGAME):
                 # Tagged here rather than where the offset is first seen: the
                 # skip above runs before it, so tagging earlier reported a
                 # scroll in the window *after* the one that stopped at it.
-                draws.append((0x9100, 0))       # matches the port's tag
+                draws.append((0x9100 | (1 if off == SCROLL_UP else 2),
+                              0))       # matches the port's tag
             frame_hit["img"] = snapshot_image()
             frame_hit["vram"] = snapshot_vram()
             resuming[0] = off
@@ -453,7 +461,9 @@ def main():
     # already answered.
     port = subprocess.Popen([PORT, "--lockstep", state]
                             + (["--lockstep-sync-scroll"]
-                               if args.sync_scroll else []),
+                               if args.sync_scroll else [])
+                            + (["--lockstep-sync-endgame"]
+                               if args.sync_endgame else []),
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             bufsize=0)
 
@@ -665,9 +675,9 @@ def main():
         # port frame, so those always agree, which made the check look like a
         # safeguard while being unable to fail. The tag says which sync point
         # each side stopped at, and that can disagree.
-        if args.sync_scroll:
-            emu_scroll = any(t == 0x9100 for t, _ in draws)
-            port_scroll = 0x9100 in pdraws
+        if args.sync_scroll or args.sync_endgame:
+            emu_scroll = any(t & 0xff00 == 0x9100 for t, _ in draws)
+            port_scroll = any(t & 0xff00 == 0x9100 for t in pdraws)
             if emu_scroll != port_scroll:
                 print(f"\n*** out of step at comparison {n}: the emulator "
                       f"stopped at {'a scroll' if emu_scroll else 'a frame '
@@ -710,8 +720,8 @@ def main():
                     # reported the spawn gate at 0x1c2c as "brick44".
                     if a == 0x1fc1:
                         return "backdrop"
-                    if a == 0x9100:
-                        return "sync:scroll"
+                    if a & 0xff00 == 0x9100:
+                        return ("sync:scroll" if a & 1 else "sync:endgame")
                     if a >= 0x9000:
                         return ("exit:no-balls", "exit:no-bricks",
                                 "exit:ball-lost",
