@@ -4381,13 +4381,13 @@ void panel_finish(void)
     unsigned di = 0x1cc0;
     for (int pass = 0; pass < 6; pass++) {
         unsigned d = di;
-        field_marks_wide(d);
+        field_marks_wide(d, pass);
         d = (d - 0x7d0) & 0xffff;
-        field_marks_wide(d);
+        field_marks_wide(d, pass);
         d = (d - 0x820) & 0xffff;
-        field_marks_wide(d);
+        field_marks_wide(d, pass);
         d = (d - 0x780) & 0xffff;
-        field_marks_wide(d);
+        field_marks_wide(d, pass);
         di = di > CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
         for (int i = 0; i < 0x147; i++)
             game_delay();
@@ -5175,5 +5175,137 @@ void tall_sprite(unsigned si, unsigned di)
         for (int b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + r * 4 + b];
         di = cga_next_row(di);
+    }
+}
+
+/* ========================================================================
+ * 1ac2:0a1d  field_marks_wide
+ *
+ * One of the pillars either side of the playfield, drawn as a fixed sequence
+ * of word pairs down a column and its twin 0x32 bytes to the right. `rows` is
+ * how many of the middle segment to repeat, so the pillar grows a row per
+ * pass and appears to extend downwards.
+ * ===================================================================== */
+static unsigned pillar_pair(unsigned di, unsigned v)
+{
+    img_vram_setw(di, v);
+    img_vram_setw(di + 0x32, v);
+    return cga_next_row(di);
+}
+
+void field_marks_wide(unsigned di, unsigned rows)
+{
+    di = pillar_pair(di, 0x4001);
+    di = pillar_pair(di, 0x500f);
+    di = pillar_pair(di, 0x4435);
+    for (unsigned n = rows; n > 0; n--) {
+        di = pillar_pair(di, 0xd43f);
+        di = pillar_pair(di, 0x1005);
+    }
+    di = pillar_pair(di, 0xd43f);
+    di = pillar_pair(di, 0x4435);
+    di = pillar_pair(di, 0x500f);
+    pillar_pair(di, 0x4001);
+}
+
+/* 1ac2:59f7  ending_particle_init
+ *
+ * particle_init again for the ending: the same record, launched from
+ * (0x68, 0x98) instead of (0x68, 0xa0) and with a speed of `random(3) + 8`
+ * rather than `random(6) + 8`, so the kernels there rise more slowly.
+ */
+unsigned ending_particle_init(unsigned si, unsigned ax_in)
+{
+    img_setw(si + 0, 0x68);
+    img_setw(si + 2, 0x98);
+    unsigned ax = (particle_random(ax_in, io_ticks(), 3) + 8) & 0xffff;
+    img_setw(si + 0x0e, ax);
+    ax = (particle_random(ax, io_ticks(), 0x46) - 0x23) & 0xffff;
+    if (ax == 0)
+        ax = 0x0a;
+    img_setw(si + 4, ax);
+    img_setw(si + 6, ax);
+    img_setw(si + 0x0c, ax >= 0x8000 ? 1 : 0xffff);
+    short v = (short)img_w(si + 0x0e), t = (short)ax;
+    short first = (short)(v * t);
+    int prod = (int)first * (int)t;
+    img_setw(si + 0x0a, (short)(prod / 100) & 0xffff);
+    img_setw(si + 8, (short)(prod / 100) & 0xffff);
+    return (unsigned)(short)(prod / 100) & 0xffff;
+}
+
+/* 1ac2:5c36  ending_blob
+ *
+ * Eight rows of one word from 0x28d9, XORed at a position packed into AX: AL
+ * is the x in units of four pixels (`shr al,1` twice) and AH the row, whose
+ * bottom bit picks the half of the interlace and whose rest multiplies by
+ * 0x50. A whole address in sixteen bits, which is why the ending's script can
+ * be a list of words.
+ */
+void ending_blob(unsigned pos)
+{
+    unsigned al = (pos & 0xff) >> 2;
+    unsigned ah = (pos >> 8) & 0xff;
+    unsigned di = al;
+    if (ah & 1)
+        di += CGA_PLANE;
+    di += (ah >> 1) * 0x50;
+    for (int r = 0; r < 8; r++) {
+        g_vram[di & (CGA_SIZE - 1)] ^= g_image[0x28d9 + r * 2];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[0x28d9 + r * 2 + 1];
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:5b80  ending_blobs
+ *
+ * The script at 0x289d: a list of packed positions, zero-terminated. Each is
+ * drawn and the one before it rubbed out, one per retrace, so a trail of them
+ * crawls across the ending screen.
+ */
+void ending_blobs(void)
+{
+    unsigned si = 0x289d, prev = 0;
+    for (;;) {
+        for (int i = 0; i < 0x0f; i++)
+            game_delay();
+        unsigned pos = img_w(si);
+        si += 2;
+        if (pos == 0)
+            return;
+        io_wait_retrace();
+        ending_blob(pos);
+        if (prev)
+            ending_blob(prev);
+        prev = pos;
+        io_present();
+        if (!io_pump())
+            return;
+    }
+}
+
+/* 1ac2:5317  ending_column
+ *
+ * Eight columns of a fifteen-row sprite, walking a list of frame pointers at
+ * 0xb7a2 until 0xffff. `movsw` twice then `inc si` steps the source five
+ * bytes a row, not four - the frames are five bytes wide and only four are
+ * drawn.
+ */
+void ending_column(void)
+{
+    unsigned di = 0x34f8, bx = 0xb7a2;
+    for (int n = 8; n > 0; n--, bx += 2) {
+        if (img_w(bx) == 0xffff)
+            return;
+        unsigned si = img_w(bx), d = di;
+        for (int r = 0; r < 0x0f; r++) {
+            g_vram[d & (CGA_SIZE - 1)] = g_image[si];
+            g_vram[(d + 1) & (CGA_SIZE - 1)] = g_image[si + 1];
+            g_vram[(d + 2) & (CGA_SIZE - 1)] = g_image[si + 2];
+            g_vram[(d + 3) & (CGA_SIZE - 1)] = g_image[si + 3];
+            si += 5;
+            d = cga_next_row(d);
+        }
+        di += 4;
     }
 }
