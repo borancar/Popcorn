@@ -5821,3 +5821,133 @@ void screen_end_of_game(void)
             return;
     }
 }
+
+/* ========================================================================
+ * 1ac2:45a1  ball_after_endgame
+ *
+ * ball_after's twin, used while the level-ending bonus is running. The walls
+ * behave the same, but the bottom of the playfield is no longer fatal: the
+ * ball is meant to reach one of two chambers, at y 0x74 and y 0x3c, each with
+ * an opening between x 0x60 and 0x6c, and reaching either finishes the level.
+ *
+ * Returns 1 when the level is over - the original's carry - and 0 to carry on.
+ * ===================================================================== */
+
+/* Both endings play the same animation: a two-word cap at 0x1198, then 0x70
+ * passes that scroll a 26-word band up seven rows, lay a fresh cap, and draw
+ * one more row of the brick field as [0x2f0c] counts down. */
+static void endgame_curtain(void)
+{
+    unsigned di = 0x1198;
+    img_vram_setw(di, 0xffff);
+    img_vram_setw(di + 2, 0xffff);
+    di += CGA_PLANE;
+    img_vram_setw(di, 0x5555);
+    img_vram_setw(di + 2, 0x5555);
+    di -= 0x1fb0;
+    img_vram_setw(di, 0x1515);
+    img_vram_setw(di + 2, 0x1515);
+    di += CGA_PLANE;
+    img_vram_setw(di, 0x5555);
+    img_vram_setw(di + 2, 0x5555);
+
+    unsigned bp = 0x3130;
+    for (unsigned ah = 0x70; ah > 0; ah--) {
+        unsigned d = bp;
+        for (int r = 7; r > 0; r--) {
+            unsigned s = cga_next_row(d);
+            for (int b = 0; b < 0x1a * 2; b++)
+                g_vram[(d + b) & (CGA_SIZE - 1)] =
+                    g_vram[(s + b) & (CGA_SIZE - 1)];
+            d = s;
+        }
+        unsigned cap = (ah & 3) ? 0x50 : 0x10;
+        g_vram[d & (CGA_SIZE - 1)] = 0x0d;
+        g_vram[(d + 1) & (CGA_SIZE - 1)] = (unsigned char)cap;
+        d += 2;
+        draw_brick_row(g_image[SWEEP_Y]);
+        g_vram[d & (CGA_SIZE - 1)] = 0x0d;
+        g_vram[(d + 1) & (CGA_SIZE - 1)] = (unsigned char)cap;
+
+        bp = cga_prev_row(bp);
+        for (int i = 0; i < 0x0f; i++)
+            game_delay();
+        g_image[SWEEP_Y]--;
+        io_present();
+        if (!io_pump())
+            return;
+    }
+    io_wait_retrace();
+    panel_reveal();
+    panel_finish();
+}
+
+int ball_after_endgame(unsigned ball)
+{
+    unsigned char *b = g_image + ball;
+    unsigned x = b[B_X], y = b[B_Y];
+
+    if (x <= WALL_LEFT || x >= WALL_RIGHT) {
+        b[B_DIR_X] = (x <= WALL_LEFT) ? 0 : 1;
+        g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+        b[B_ACC_X] = 1;
+        b[B_ACC_Y] = 0;
+        b[B_ANCHOR_X] = (unsigned char)(x <= WALL_LEFT ? 9 : 0xc3);
+        b[B_ANCHOR_Y] = (unsigned char)y;
+    }
+
+    if (y == 0x74) {
+        /* The lower chamber: through the gap it goes down and on, otherwise
+         * it bounces. */
+        if (x >= 0x60 && x < 0x6c) {
+            b[B_DIR_Y] = 0;
+            b[B_BOUNCES]++;
+            b[B_ACC_X] = 0;
+            b[B_ACC_Y] = 1;
+            b[B_ANCHOR_X] = (unsigned char)x;
+            b[B_ANCHOR_Y] = (unsigned char)(y + 1);
+            g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+        }
+    } else if (y < 0x74) {
+        if (y == 0x3c) {
+            /* The upper chamber: the level is over. */
+            speaker_off();
+            ball_draw(BALLS + 4, g_image[BALLS], g_image[BALLS + 1]);
+            for (unsigned si = 0x6abe; img_w(si) != 0xffff; si += 2) {
+                for (int i = 0; i < 0x147; i++)
+                    game_delay();
+                xor_sprite_16x7(0x60, 0x38, img_w(si - 2));
+                xor_sprite_16x7(0x60, 0x38, img_w(si));
+            }
+            level_tally();
+            g_image[SWEEP_Y] = 0x75;
+            endgame_curtain();
+            return 1;
+        }
+        /* Between the chambers: the sides of the funnel at x 0x60 and 0x6c. */
+        if (x <= 0x60 || x > 0x6c) {
+            b[B_DIR_X] = (x <= 0x60) ? 0 : 1;
+            b[B_ACC_X] = 1;
+            b[B_ACC_Y] = 0;
+            b[B_ANCHOR_X] = (unsigned char)(x <= 0x60 ? 0x61 : 0x6b);
+            b[B_ANCHOR_Y] = (unsigned char)y;
+            g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+        }
+        return 0;
+    }
+
+    if (b[B_Y] != FLOOR) {
+        ball_paddle(ball);
+        return 0;
+    }
+
+    /* It reached the bottom: the level is over the other way. */
+    speaker_off();
+    blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
+    ball_draw(BALLS + 4, g_image[BALLS], g_image[BALLS + 1]);
+    if (g_image[0x3f1b] != 1)
+        g_image[LIVES]++;               /* a free life, unless cheating */
+    g_image[SWEEP_Y] = 0x75;
+    endgame_curtain();
+    return 1;
+}

@@ -275,6 +275,7 @@ int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
 void read_new_key(unsigned which);  /* 1ac2:1614 */
 int  score_before(unsigned si, unsigned di); /* 1ac2:108c */
 void ball_after(unsigned ball);   /* 1ac2:247f */
+int  ball_after_endgame(unsigned ball);  /* 1ac2:45a1 */
 void ball_bricks(unsigned ball);  /* 1ac2:254d */
 void brick_hit(unsigned slot, unsigned cell, unsigned ball);
 void xor_sprite_16xn(unsigned x, unsigned y, unsigned src, unsigned rows); /* 1ac2:40f2 */
@@ -475,6 +476,7 @@ int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
 void read_new_key(unsigned which);  /* 1ac2:1614 */
 int  score_before(unsigned si, unsigned di); /* 1ac2:108c */
 void ball_after(unsigned ball);   /* 1ac2:247f */
+int  ball_after_endgame(unsigned ball);  /* 1ac2:45a1 */
 void ball_bricks(unsigned ball);  /* 1ac2:254d */
 void brick_hit(unsigned slot, unsigned cell, unsigned ball);
 void xor_sprite_16xn(unsigned x, unsigned y, unsigned src, unsigned rows); /* 1ac2:40f2 */
