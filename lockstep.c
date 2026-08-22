@@ -153,7 +153,11 @@ int32_t lockstep_main(const char *state_path)
      * level intros, lost lives, the transitions between levels - and it is
      * left by the same stack-throwing jump the original uses, so it needs a
      * landing place. play_loop is one level and returns normally. */
-    if (lockstep_from == 0x02f5) {
+    if (lockstep_from == 0x1c3f) {
+        /* A snapshot taken at the frame's close: go straight to the frames. */
+        g_resume_at_frame_top = 1;
+        play_loop();
+    } else if (lockstep_from == 0x02f5) {
         if (setjmp(g_back_to_menu) == 0)
             play_session();             /* 1ac2:02f5 */
     } else {
