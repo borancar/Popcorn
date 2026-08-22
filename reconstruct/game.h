@@ -349,6 +349,7 @@ void bonus_reverse(void);         /* 1ac2:315b */
 void bonus_slower_ball(void);     /* 1ac2:31e8 */
 void bonus_stop_monsters(void);   /* 1ac2:3200 */
 void bonus_end_level(void);       /* 1ac2:2da0 */
+void bonus_end_level_body(void);  /* 1ac2:4210 */
 void bonus_effect(uint32_t kind);
 void scroll_up_band(void);        /* 1ac2:2109 */
 void scroll_down_band(void);      /* 1ac2:2148 */
@@ -560,6 +561,7 @@ void bonus_reverse(void);         /* 1ac2:315b */
 void bonus_slower_ball(void);     /* 1ac2:31e8 */
 void bonus_stop_monsters(void);   /* 1ac2:3200 */
 void bonus_end_level(void);       /* 1ac2:2da0 */
+void bonus_end_level_body(void);  /* 1ac2:4210 */
 void bonus_effect(uint32_t kind);
 void scroll_up_band(void);        /* 1ac2:2109 */
 void scroll_down_band(void);      /* 1ac2:2148 */
