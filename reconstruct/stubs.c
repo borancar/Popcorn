@@ -89,8 +89,6 @@ void brick_11(unsigned slot, unsigned ball) { note("brick_11", 0x2d68); (void)sl
 STUB2(entity_capsule,   0x3273)
 STUB2(entity_paddle_fx, 0x3386)
 STUB2(entity_popup,     0x3561)
-STUB2(entity_ball_hold, 0x37e0)
-STUB2(entity_bonus,     0x39fa)
 
 /* An entity whose handler has not been transcribed. Doing nothing leaves it in
  * the list for ever, so it is unlinked - the animation is lost but the list
@@ -102,7 +100,12 @@ void entity_unknown(unsigned bx)
     g_image[ENTITY_REMOVE] = 1;
 }
 
-int bonus_script(unsigned bx) { note("bonus_script", 0x3c35); (void)bx; return 1; }
+int bonus_script(unsigned bx, unsigned *px, unsigned *py)
+{
+    note("bonus_script", 0x3c35);
+    (void)bx; (void)px; (void)py;
+    return 1;
+}
 
 /* The player-name boxes return 0xff for "abort", anything else to go on. With
  * no implementation there is nobody to abort, so it reports a start. */

@@ -2512,13 +2512,16 @@ static int entity_anim(unsigned bx, void (*draw)(unsigned, unsigned, unsigned))
         return 0;                       /* not time for the next frame yet */
     g_image[bx + 8] = g_image[bx + 9];
 
+    /* [bx+6] points *into* a list of frame pointers, so one dereference gets
+     * the frame: `[si]` where si is the cursor. Dereferencing twice reads the
+     * first word of the frame's pixels as if it were an address. */
     unsigned cur = img_w(bx + 6);
     unsigned x = g_image[bx + 4], y = g_image[bx + 5];
-    draw(x, y, img_w(img_w(cur - 2)));   /* the previous frame, to erase */
+    draw(x, y, img_w(cur - 2));         /* the previous frame, to erase */
     unsigned next = img_w(cur);
     if (next == 0xffff)
         return -1;                      /* the animation is over */
-    draw(x, y, img_w(cur));
+    draw(x, y, next);
     img_setw(bx + 6, cur + 2);
     return 1;
 }
@@ -2552,7 +2555,7 @@ void entity_crumble(unsigned bx)
 
     unsigned cur = img_w(bx + 6);
     unsigned x = g_image[bx + 4], y = g_image[bx + 5];
-    xor_sprite_16x7(x, y, img_w(img_w(cur - 2)));
+    xor_sprite_16x7(x, y, img_w(cur - 2));
     xor_sprite_16x7(x, y, img_w(cur));
     img_setw(bx + 6, cur + 2);
     if (img_w(img_w(bx + 6)) == 0xffff)
@@ -2653,9 +2656,9 @@ static unsigned cell_index(unsigned y, unsigned x)
     return LEVEL_CELLS + 8 + row + (row >> 1) + ((x >> 4) & 0x0f);
 }
 
-int bonus_move_right(unsigned char *b)
+int bonus_move_right(unsigned *px, unsigned *py)
 {
-    unsigned y = b[5], x = b[4];
+    unsigned y = *py, x = *px;
     if (x >= 0xb8)
         return 0;
     unsigned di = cell_index((y - 6) & 0xff, (x + 8) & 0xff);
@@ -2663,13 +2666,13 @@ int bonus_move_right(unsigned char *b)
         return 0;
     if ((((y - 6) & 7) != 0) && g_image[di + 0x18])
         return 0;
-    b[4]++;
+    (*px)++;
     return 1;
 }
 
-int bonus_move_left(unsigned char *b)
+int bonus_move_left(unsigned *px, unsigned *py)
 {
-    unsigned y = b[5], x = b[4];
+    unsigned y = *py, x = *px;
     if (x <= 8)
         return 0;
     unsigned di = cell_index((y - 6) & 0xff, (x - 9) & 0xff);
@@ -2677,13 +2680,13 @@ int bonus_move_left(unsigned char *b)
         return 0;
     if ((((y - 6) & 7) != 0) && g_image[di + 0x18])
         return 0;
-    b[4]--;
+    (*px)--;
     return 1;
 }
 
-int bonus_move_up(unsigned char *b)
+int bonus_move_up(unsigned *px, unsigned *py)
 {
-    unsigned y = b[5], x = b[4];
+    unsigned y = *py, x = *px;
     if (y <= 6)
         return 0;
     unsigned di = cell_index((y - 7) & 0xff, (x - 8) & 0xff);
@@ -2691,19 +2694,19 @@ int bonus_move_up(unsigned char *b)
         return 0;
     if ((((x - 8) & 0x0f) != 0) && g_image[di + 1])
         return 0;
-    b[5]--;
+    (*py)--;
     return 1;
 }
 
-int bonus_move_down(unsigned char *b)
+int bonus_move_down(unsigned *px, unsigned *py)
 {
-    unsigned y = b[5], x = b[4];
+    unsigned y = *py, x = *px;
     unsigned di = cell_index((y + 2) & 0xff, (x - 8) & 0xff);
     if (g_image[di])
         return 0;
     if ((((x - 8) & 0x0f) != 0) && g_image[di + 1])
         return 0;
-    b[5]++;
+    (*py)++;
     return 1;
 }
 
@@ -2717,20 +2720,20 @@ int bonus_move_down(unsigned char *b)
  */
 #define BONUS_MOVES 0x3447
 
-int bonus_steer(unsigned bx)
+int bonus_steer(unsigned bx, unsigned *px, unsigned *py)
 {
     unsigned char *b = g_image + bx;
     if (b[2] == 4)
-        return bonus_script(bx);
+        return bonus_script(bx, px, py);
 
     if (--b[3] != 0) {
         int moved;
         switch (b[2]) {
-        case 0:  moved = bonus_move_right(b); break;
-        case 1:  moved = bonus_move_down(b);  break;
-        case 2:  moved = bonus_move_left(b);  break;
-        case 3:  moved = bonus_move_up(b);    break;
-        default: moved = 0;                   break;
+        case 0:  moved = bonus_move_right(px, py); break;
+        case 1:  moved = bonus_move_down(px, py);  break;
+        case 2:  moved = bonus_move_left(px, py);  break;
+        case 3:  moved = bonus_move_up(px, py);    break;
+        default: moved = 0;                        break;
         }
         if (moved)
             return 1;
@@ -2792,6 +2795,21 @@ void entity_plain(unsigned bx)
     entity_crumble(bx);
 }
 
+/* Put a ball down at a point and set it going upwards: position, anchor and
+ * both accumulators, a fresh sprite, and draw it. Three handlers do exactly
+ * this and only the offsets they add differ. */
+void ball_place(unsigned ball, unsigned x, unsigned y)
+{
+    unsigned char *b = g_image + ball;
+    b[B_X] = b[B_PREV_X] = b[B_ANCHOR_X] = (unsigned char)x;
+    b[B_Y] = b[B_PREV_Y] = b[B_ANCHOR_Y] = (unsigned char)y;
+    b[B_ACC_X] = b[B_ACC_Y] = 0;
+    b[B_STATE] = 1;
+    b[B_DIR_Y] = 1;                     /* set off upwards */
+    memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
+    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+}
+
 /* 1ac2:36a1  from brick 9 - where the ball comes back
  *
  * When the arrival animation finishes it puts the ball down at this entity's
@@ -2804,17 +2822,8 @@ void entity_ball_arrive(unsigned bx)
     if (g_image[ENTITY_REMOVE] != 1)
         return;
 
-    unsigned ball = img_w(bx + 2);
-    unsigned char *b = g_image + ball;
-    unsigned x = (g_image[bx + 4] + 8) & 0xff;
-    unsigned y = (g_image[bx + 5] - 4) & 0xff;
-    b[B_X] = b[B_PREV_X] = b[B_ANCHOR_X] = (unsigned char)x;
-    b[B_Y] = b[B_PREV_Y] = b[B_ANCHOR_Y] = (unsigned char)y;
-    b[B_ACC_X] = b[B_ACC_Y] = 0;
-    b[B_STATE] = 1;
-    b[B_DIR_Y] = 1;                     /* set off upwards */
-    memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
-    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+    ball_place(img_w(bx + 2), (g_image[bx + 4] + 8) & 0xff,
+               (g_image[bx + 5] - 4) & 0xff);
 }
 
 /* 1ac2:36f6  from brick 9 - counts [bx+4] down and then puts the cells back */
@@ -2926,4 +2935,254 @@ void entity_call(unsigned node)
     case 0x3B2A: entity_crumble(node); break;
     default:     entity_unknown(node); break;
     }
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:37e0  entity_ball_hold
+ *
+ * Brick 10 catches the ball. This carries it down the screen a pixel at a time
+ * until y reaches 0xb8, then lets it go - upwards if the safety net is up,
+ * and otherwise the ball is simply lost. If something hits the carrier on the
+ * way down ([0x33d4] non-zero) it releases early, and scores 33 or 50
+ * depending on what hit it.
+ */
+void entity_ball_hold(unsigned bx)
+{
+    unsigned y = g_image[bx + 5], x = g_image[bx + 4];
+
+    if ((g_image[bx + 8] & 0x0f) == 1 && ((y + 1) & 0xff) == 0xb8) {
+        /* It has arrived at the bottom. */
+        sprite_shift_draw(x, y, img_w(img_w(bx + 6)));
+        if (g_image[SAFETY_NET] == 1) {
+            g_image[ENTITY_REMOVE] = 1;
+            ball_place(img_w(bx + 2), (x + 8) & 0xff, (y + 0x0b) & 0xff);
+            return;
+        }
+        g_image[BALL_ALIVE]--;
+        g_image[img_w(bx + 2) + B_STATE] = 0;
+        g_image[ENTITY_REMOVE] = 1;
+        return;
+    }
+
+    bonus_update(bx, x, (y + 1) & 0xff);   /* 1ac2:3df1 */
+    if (g_image[0x33d4] == 0)
+        return;
+    if (g_image[0x33d4] == 2)
+        return;                         /* bounced: nothing more to do */
+
+    /* Hit: let the ball go, and score for it unless the hit was type 1. */
+    g_image[ENTITY_REMOVE] = 1;
+    unsigned ny = g_image[bx + 5];
+    if (g_image[0x33d4] != 1) {
+        brick_score(0, 0, 0x0303);
+        ny = (ny + 4) & 0xff;
+    }
+    ball_place(img_w(bx + 2), (g_image[bx + 4] + 8) & 0xff, (ny + 0x0c) & 0xff);
+    if (g_image[0x33d4] != 3)
+        brick_score(0, 0, 5);
+}
+
+/* ========================================================================
+ * The paddle's laser, and what a falling capsule collides with.
+ * ===================================================================== */
+
+/* 1ac2:30dd  pixel_xor
+ *
+ * One two-pixel dot. The mask is 0xc0 - the leftmost pixel of a byte - shifted
+ * right `(x & 3) * 2` bits to the pixel wanted. Returns the framebuffer offset
+ * it used, because 1ac2:306b carries on from there down the next two rows.
+ */
+unsigned pixel_xor(unsigned x, unsigned y)
+{
+    unsigned di = cga_at(x, y);
+    unsigned mask = 0xc0 >> ((x & 3) * 2);
+    g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)mask;
+    return di;
+}
+
+/* 1ac2:306b  shot_xor
+ *
+ * The laser: two dots three scan lines tall, 0x13 pixels apart - one under
+ * each end of the paddle. Drawing it twice rubs it out, and it leaves
+ * [0x2e7e] at 1 to say a shot is on its way.
+ */
+void shot_xor(unsigned x, unsigned y)
+{
+    for (int side = 0; side < 2; side++) {
+        unsigned sx = side ? (x + 0x13) & 0xff : x;
+        unsigned mask = 0xc0 >> ((sx & 3) * 2);
+        unsigned di = pixel_xor(sx, y);
+        for (int r = 0; r < 2; r++) {
+            di = cga_next_row(di);
+            g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)mask;
+        }
+    }
+    g_image[LASER_ON] = 1;
+}
+
+/* 1ac2:3f20  bonus_hits_ball
+ *
+ * Do a capsule's sixteen-pixel box and a ball's four overlap? Sets [0x33d4] to
+ * 2 if so, which is the answer bonus_update passes back up.
+ */
+void bonus_hits_ball(unsigned bx, unsigned ball)
+{
+    unsigned by = g_image[bx + 5], ballY = g_image[ball + B_Y];
+    if (by > ((ballY + 3) & 0xff))
+        return;
+    if (((by + 0x0f) & 0xff) < ballY)
+        return;
+    unsigned bxx = g_image[bx + 4], ballX = g_image[ball + B_X];
+    if (((bxx + 0x0f) & 0xff) < ballX)
+        return;
+    if (bxx > ((ballX + 3) & 0xff))
+        return;
+    g_image[0x33d4] = 2;
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:3df1  bonus_update
+ *
+ * Animate a falling capsule and see what it has run into, leaving the answer
+ * in [0x33d4]: 0 nothing, 1 the paddle caught it, 2 a ball hit it, 3 the laser
+ * shot it.
+ *
+ * The animation timer lives in one byte with two counters in it: the low
+ * nibble paces the movement and the high nibble the frame, which is why it is
+ * masked apart rather than simply decremented.
+ */
+#define SHOT_Y   0x2e7f
+#define SHOT_X   0x2e80
+#define HIT_KIND 0x33d4
+
+void bonus_update(unsigned bx, unsigned nx, unsigned ny)
+{
+    g_image[HIT_KIND] = 0;
+
+    if ((--g_image[bx + 8] & 0x0f) == 0) {
+        g_image[bx + 8]--;
+        g_image[bx + 8] = (unsigned char)((g_image[bx + 8] & 0xf0) |
+                                          (g_image[bx + 9] & 0x0f));
+        /* Erase where the node still says it is - the move so far has only
+         * happened in registers - then commit the new position and draw
+         * there. Moving the node first and erasing after leaves the old
+         * sprite on screen, which is what it did before this was read
+         * properly. */
+        sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
+                          img_w(img_w(bx + 6)));
+        g_image[bx + 4] = (unsigned char)nx;
+        g_image[bx + 5] = (unsigned char)ny;
+        unsigned x = nx, y = ny;
+        if ((g_image[bx + 8] >> 4) == 0) {
+            g_image[bx + 8] = g_image[bx + 9];
+            img_setw(bx + 6, img_w(bx + 6) + 2);
+            if (img_w(img_w(bx + 6)) == 0xffff)
+                img_setw(bx + 6, img_w(img_w(bx + 6) + 2));
+        }
+        sprite_shift_draw(x, y, img_w(img_w(bx + 6)));   /* draw */
+    }
+
+    /* The laser shot, if one is in flight. */
+    if (g_image[LASER_ON] == 2) {
+        unsigned sy = (g_image[SHOT_Y] + 2) & 0xff;
+        unsigned by = g_image[bx + 5];
+        if (((sy + 1) & 0xff) >= by && sy <= ((by + 0x0f) & 0xff)) {
+            unsigned sx = g_image[SHOT_X], bxx = g_image[bx + 4];
+            int hit = (sx >= bxx && sx <= ((bxx + 0x0f) & 0xff)) ||
+                      (((sx + 0x13) & 0xff) >= bxx &&
+                       ((sx + 0x13) & 0xff) <= ((bxx + 0x0f) & 0xff));
+            if (hit) {
+                g_image[HIT_KIND] = 3;
+                sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
+                                  img_w(img_w(bx + 6)));
+                shot_xor(g_image[SHOT_X], (g_image[SHOT_Y] + 2) & 0xff);
+                g_image[SHOT_Y] = 0xb3;
+                return;
+            }
+        }
+    }
+
+    /* The paddle. */
+    unsigned y = g_image[bx + 5];
+    if (y <= 0xbe && ((y + 0x0f) & 0xff) >= 0xb8) {
+        unsigned bxx = g_image[bx + 4], px = g_image[PADDLE_X];
+        if (((bxx + 0x0f) & 0xff) >= px &&
+            bxx <= ((px + g_image[PADDLE_WIDTH]) & 0xff)) {
+            g_image[HIT_KIND] = 1;
+            sprite_shift_draw(bxx, y, img_w(img_w(bx + 6)));
+            return;
+        }
+    }
+
+    /* Any ball in play. */
+    for (int i = 0; i < 3; i++) {
+        unsigned ball = BALLS + i * BALL_STRIDE;
+        if (g_image[ball + B_STATE] != 1)
+            continue;
+        bonus_hits_ball(bx, ball);
+        if (g_image[HIT_KIND] == 2)
+            return;
+    }
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:39fa  entity_bonus
+ *
+ * A capsule on its way down. Steer it, see what it hit, and react: a ball
+ * bounces off it, the paddle or the laser consumes it - seven hundred and
+ * three points and it turns into a sparkle - and reaching the bottom loses it
+ * unless the safety net is up, in which case it is consumed too.
+ */
+void entity_bonus(unsigned bx)
+{
+    unsigned x = g_image[bx + 4], y = g_image[bx + 5];
+    int skip = 0;
+    if (g_image[EXTRA_ON] != 1 && (g_image[bx + 8] & 0x0f) == 1) {
+        if (!bonus_steer(bx, &x, &y))
+            skip = 1;                   /* `cmp ah,0xff / je`: no move */
+    }
+    if (!skip)
+        bonus_update(bx, x, y);
+
+    if (g_image[HIT_KIND] == 0)
+        return;
+
+    if (g_image[HIT_KIND] == 2) {
+        /* A ball: send it back the way it came with a fresh slope. */
+        unsigned ball = BALLS;           /* bonus_hits_ball leaves it in DI */
+        for (int i = 0; i < 3; i++) {
+            unsigned b = BALLS + i * BALL_STRIDE;
+            if (g_image[b + B_STATE] == 1) {
+                ball = b;
+                break;
+            }
+        }
+        unsigned char *b = g_image + ball;
+        b[B_DY] = (unsigned char)(game_random(io_ticks(), 7) + 1);
+        b[B_DX] = (unsigned char)(game_random(io_ticks(), 7) + 1);
+        b[B_ANCHOR_X] = b[B_X];
+        b[B_ANCHOR_Y] = b[B_Y];
+        b[B_ACC_X] = b[B_ACC_Y] = 0;
+        b[B_DIR_X] ^= 1;
+        b[B_DIR_Y] ^= 1;
+        sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
+                          img_w(img_w(bx + 6)));
+        return;
+    }
+
+    /* Consumed, or lost at the bottom. */
+    if (g_image[HIT_KIND] == 0 && g_image[SAFETY_NET] != 1) {
+        g_image[ENTITY_REMOVE] = 1;
+        g_image[0x33d5]--;
+        g_image[BONUS_LIVE]--;
+        return;
+    }
+    g_image[SOUND_REQUEST] = 6;
+    img_setw(bx + 0, 0x3aee);            /* becomes a sparkle */
+    img_setw(bx + 6, 0xb7a4);
+    g_image[bx + 8] = g_image[bx + 9] = 0x0f;
+    brick_score(0, 0, 0x0703);
+    g_image[BONUS_LIVE]--;
+    sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
+                      img_w(img_w(bx + 6) - 2));
 }
