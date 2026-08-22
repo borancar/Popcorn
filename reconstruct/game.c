@@ -3854,7 +3854,12 @@ void entity_multiball(unsigned bx)
  * ===================================================================== */
 #define PADDLE_STEP  0x2d38
 #define MORPH_OWNER  0x2d3c
-#define PADDLE_WIDE  0x2d25             /* sprites for the growing paddle */
+/* Three sprite tables, and they are not interchangeable. 0x2d0d is the one
+ * the play loop draws the paddle from and the one whose `+2` byte gives the
+ * width; 0x2d25 is the shrink animation and 0x2d1d the grow. Using 0x2d0d for
+ * the grow draws a full-size paddle at every frame of it. */
+#define PADDLE_SHRINK 0x2d25
+#define PADDLE_GROW   0x2d1d
 
 static void morph_finish(unsigned bx)
 {
@@ -3928,7 +3933,7 @@ void entity_paddle_fx(unsigned bx)
      * [bx+2] is 1 while shrinking the old paddle and 0 while growing the new. */
     unsigned si, kind;
     if (g_image[bx + 2] != 0) {
-        si = PADDLE_WIDE;
+        si = PADDLE_SHRINK;
         g_image[PADDLE_STEP] = 0;
         kind = g_image[bx + 6];
         if (kind == 1)
@@ -3939,7 +3944,7 @@ void entity_paddle_fx(unsigned bx)
         }
         g_image[bx + 2] = 0;
     }
-    si = PADDLE_SPRITES;
+    si = PADDLE_GROW;
     g_image[PADDLE_STEP] = 0;
     kind = g_image[bx + 7];
     if (kind == 1)

@@ -267,17 +267,24 @@ def main():
         got_img[STACK_LO:STACK_HI] = bytes(STACK_HI - STACK_LO)
         got_img, got_vram = bytes(got_img), got[len(img):]
         checked[off] += 1
-        bad = []
-        if got_vram != want_vram:
-            i = next(k for k in range(len(want_vram))
-                     if want_vram[k] != got_vram[k])
-            bad.append(f"vram at {i:#06x}: original {want_vram[i]:#04x}, "
-                       f"C {got_vram[i]:#04x}")
-        if got_img != want_img:
-            i = next(k for k in range(len(want_img))
-                     if want_img[k] != got_img[k])
-            bad.append(f"image at {i:#07x}: original {want_img[i]:#04x}, "
-                       f"C {got_img[i]:#04x}")
+        def diffs(a, b, label, width):
+            out, n = [], 0
+            for k in range(len(a)):
+                if a[k] == b[k]:
+                    continue
+                n += 1
+                if n <= 4:
+                    out.append(f"{label} {k:#0{width}x}: "
+                               f"orig {a[k]:#04x} C {b[k]:#04x}")
+            if n > 4:
+                out.append(f"(+{n - 4} more {label})")
+            return out
+
+        bad = diffs(want_vram, got_vram, "vram", 6) + \
+              diffs(want_img, got_img, "image", 7)
+        if bad:
+            bad.append("regs " + " ".join(
+                f"{n}={v:04x}" for n, v in zip(REGS, regs)))
         if want_img != img or want_vram != vram:
             did_work[off] += 1
         if bad:
