@@ -1661,7 +1661,7 @@ void ball_paddle(unsigned ball)
 #define HIT_SLOTS  0x2e89               /* four of four bytes */
 #define HIT_DIRS   0x2e99               /* the direction to leave in, per slot */
 
-static void probe_cell(unsigned x, unsigned y, unsigned slot)
+void probe_cell_at(unsigned x, unsigned y, unsigned slot)
 {
     if (x > 0xbf || y > 0xc4) {
         img_setw(slot, 0);
@@ -1743,10 +1743,10 @@ void ball_bricks(unsigned ball)
     g_image[HIT_COUNT] = 0;
 
     unsigned x = (b[B_X] - 8) & 0xff, y = (b[B_Y] - 6) & 0xff;
-    probe_cell(x, y, HIT_SLOTS + 0);
-    probe_cell((x + 3) & 0xff, y, HIT_SLOTS + 4);
-    probe_cell((x + 3) & 0xff, (y + 3) & 0xff, HIT_SLOTS + 8);
-    probe_cell(x, (y + 3) & 0xff, HIT_SLOTS + 12);
+    probe_cell_at(x, y, HIT_SLOTS + 0);
+    probe_cell_at((x + 3) & 0xff, y, HIT_SLOTS + 4);
+    probe_cell_at((x + 3) & 0xff, (y + 3) & 0xff, HIT_SLOTS + 8);
+    probe_cell_at(x, (y + 3) & 0xff, HIT_SLOTS + 12);
 
     unsigned n = g_image[HIT_COUNT];
     if (n == 0)
@@ -3381,4 +3381,198 @@ void life_lost(void)
         bx = next;
     }
     level_between();
+}
+
+/* ========================================================================
+ * 1ac2:2e1e  ball_on_paddle
+ *
+ * The catch bonus: the ball sticks to the paddle instead of bouncing, rides
+ * along with it, and goes when the action key is pressed or the timer at
+ * [0x2e76] runs out. Returns 1 to mean "carry on and step this ball" - the
+ * original's carry - and 0 to mean the ball is held and the play loop should
+ * leave it alone this frame.
+ *
+ * [0x2e56] is the offset along the paddle where it landed, so it stays at the
+ * same point as the paddle moves rather than snapping to the middle.
+ * ===================================================================== */
+#define HOLD_TIMER  0x2e76
+#define HOLD_RESET   0x230
+#define HOLD_OFFSET 0x2e56
+#define SOUND_CATCH      7
+
+int ball_on_paddle(unsigned ball)
+{
+    unsigned char *b = g_image + ball;
+    if (g_image[PADDLE_SUPPRESS] != 0)
+        return 1;
+
+    if (img_w(HOLD_TIMER) == HOLD_RESET) {
+        /* Not holding one yet: is this ball landing on the paddle? */
+        unsigned y = b[B_Y];
+        unsigned left = (g_image[PADDLE_X] - 3) & 0xff;
+        unsigned off = (b[B_X] - left) & 0xff;
+        if (y < PADDLE_TOP || y > PADDLE_BOTTOM || b[B_X] < left ||
+            off > ((g_image[PADDLE_WIDTH] + 3) & 0xff)) {
+            img_setw(HOLD_TIMER, HOLD_RESET);
+            return 1;
+        }
+        b[B_Y] = PADDLE_TOP;
+        b[B_STATE] = 2;                 /* held */
+        img_setw(HOLD_TIMER, (img_w(HOLD_TIMER) - g_image[SPEED_LIMIT]) & 0xffff);
+        g_image[HOLD_OFFSET] = (unsigned char)(b[B_X] - g_image[PADDLE_X]);
+        ball_redraw(ball);
+        g_image[SOUND_REQUEST] = SOUND_CATCH;
+        return 0;
+    }
+
+    if (b[B_STATE] != 2)
+        return 1;                       /* a different ball; not held */
+
+    int release = g_image[KEY_ACTION] == 1;
+    if (!release) {
+        img_setw(HOLD_TIMER, img_w(HOLD_TIMER) - 1);
+        if (img_w(HOLD_TIMER) == 0) {
+            release = 1;
+        } else if (((g_image[SPEED_LIMIT] - 1) & 0xff) == g_image[SPEED_STEP]) {
+            /* On the frame the ball would have moved, the timer runs down
+             * twice, so a held ball is let go after the same amount of play
+             * however fast the level has become. */
+            img_setw(HOLD_TIMER, img_w(HOLD_TIMER) - 1);
+            if (img_w(HOLD_TIMER) == 0)
+                release = 1;
+        }
+    }
+
+    if (!release) {
+        b[B_X] = (unsigned char)(g_image[PADDLE_X] + g_image[HOLD_OFFSET]);
+        ball_redraw(ball);
+        return 0;
+    }
+
+    img_setw(HOLD_TIMER, HOLD_RESET);
+    ball_after(ball);
+    b[B_DIR_Y] = 1;                     /* away, upwards */
+    b[B_Y] = 0xb4;
+    b[B_ANCHOR_X] = b[B_X];
+    b[B_ANCHOR_Y] = 0xb4;
+    b[B_ACC_X] = b[B_ACC_Y] = 0;
+    b[B_STATE] = 1;
+    ball_redraw(ball);
+    return 1;
+}
+
+/* 1ac2:1614  read_new_key
+ *
+ * The key-definition screen: wait for a scan code that is not already one of
+ * the `bl` keys defined so far, and not one of the four the game keeps for
+ * itself at 0x2d52. Then store it as key number `bl`.
+ */
+void read_new_key(unsigned which)
+{
+    for (;;) {
+        unsigned sc = g_image[0x2d49] & 0x7f;
+        unsigned i;
+        for (i = 0; i < which; i++)
+            if (sc == g_image[KEY_SCAN_L + i])
+                break;
+        if (i < which)
+            continue;                   /* already used for another action */
+        for (i = 0; g_image[0x2d52 + i]; i++)
+            if (sc == g_image[0x2d52 + i])
+                break;
+        if (g_image[0x2d52 + i])
+            continue;                   /* reserved */
+        g_image[KEY_SCAN_L + which] = (unsigned char)sc;
+        return;
+    }
+}
+
+/* 1ac2:108c  score_before
+ *
+ * Is the six-digit score at `di - 0x12` lower than the one at `si`? The
+ * hall-of-fame sort walks the table with this. `scasb` compares and steps, so
+ * the first digit that differs decides.
+ */
+int score_before(unsigned si, unsigned di)
+{
+    for (int i = 0; i < 6; i++)
+        if (g_image[si + i] != g_image[di + i])
+            return g_image[si + i] > g_image[di + i];
+    return 0;
+}
+
+/* ========================================================================
+ * 1ac2:2ee3  laser_fire
+ *
+ * The paddle's laser. With no shot in flight the action key fires one from
+ * just above the paddle; with one in flight it moves two pixels up a frame,
+ * and when it reaches a brick the same table at 0x3044 that the ball uses
+ * decides what happens.
+ *
+ * The dots are drawn and erased by hand here rather than through shot_xor,
+ * and the row stepping is not the same on the two paths: firing touches three
+ * consecutive scan lines, moving touches y, y+1, y+3 and y+4 - the `add
+ * di,0x50` in the middle steps a row *within* the half it is already in,
+ * which is two scan lines rather than one. Transcribed as it is.
+ * ===================================================================== */
+#define SHOT_SOUND 5
+
+static void laser_dot_rows(unsigned x, unsigned y, int moving)
+{
+    unsigned mask = 0xc0 >> ((x & 3) * 2);
+    unsigned di = pixel_xor(x, y);
+    di = cga_next_row(di);
+    g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)mask;
+    if (moving) {
+        di = (di + 0x50) & 0xffff;
+        g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)mask;
+    }
+    di = cga_next_row(di);
+    g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)mask;
+}
+
+void laser_fire(void)
+{
+    if (g_image[PADDLE_SUPPRESS] == 0 && g_image[LASER_ON] != 2) {
+        if (g_image[KEY_ACTION] != 1)
+            return;
+        unsigned x = (g_image[PADDLE_X] + 4) & 0xff;
+        g_image[SOUND_REQUEST] = SHOT_SOUND;
+        g_image[SHOT_X] = (unsigned char)x;
+        unsigned y = g_image[SHOT_Y];
+        laser_dot_rows(x, y, 0);
+        laser_dot_rows((x + 0x13) & 0xff, y, 0);
+        g_image[SHOT_Y] = 0xb1;
+        g_image[LASER_ON] = 2;
+        return;
+    }
+    if (g_image[LASER_ON] != 2)
+        return;
+
+    unsigned x = g_image[SHOT_X], y = g_image[SHOT_Y];
+    laser_dot_rows(x, y, 1);
+    laser_dot_rows((x + 0x13) & 0xff, y, 1);
+    g_image[SHOT_Y] -= 2;
+
+    if (y < 4) {                        /* off the top of the playfield */
+        shot_xor(x, y);
+        g_image[SHOT_Y] = 0xb3;
+        return;
+    }
+
+    /* Probe the two cells the shot covers. */
+    g_image[HIT_COUNT] = 0;
+    unsigned py = (x - 8) & 0xff, px = (y - 6) & 0xff;
+    probe_cell_at(py, px, HIT_SLOTS + 0);
+    probe_cell_at((py + 0x13) & 0xff, px, HIT_SLOTS + 4);
+    if (g_image[HIT_COUNT] == 0)
+        return;
+
+    for (int i = 0; i < 2; i++) {
+        unsigned cell = img_w(HIT_SLOTS + i * 4);
+        if (cell)
+            brick_hit(HIT_SLOTS + i * 4, cell, 0);   /* no ball: BP is zero */
+    }
+    shot_xor(g_image[SHOT_X], (g_image[SHOT_Y] + 2) & 0xff);
+    g_image[SHOT_Y] = 0xb3;
 }

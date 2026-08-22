@@ -63,7 +63,6 @@ STUB(play_prepare,        0xcc5,  "after the names are entered")
 STUB(level_load_file,     0x08c8, "reads a .PPC level set named on the command line")
 
 /* --- called from the play loop, which is transcribed ------------------ */
-STUB(laser_fire,          0x2ee3, "the paddle's laser")
 STUB(play_teardown,       0x41d4, "tidies up when a level ends")
 STUB(bonus_spawn,         0x3d95, "drops a bonus capsule")
 STUB(demo_input_step,     0x1a6f, "advances the recorded-input cursor")
@@ -75,7 +74,6 @@ void cell_special(unsigned row, unsigned di)
     (void)row; (void)di;
 }
 
-int ball_on_paddle(unsigned ball) { note("ball_on_paddle", 0x2e1e); (void)ball; return 1; }
 
 /* --- called from play_session, which is transcribed ------------------- */
 STUB(screen_game_over,      0x0473, "GAME OVER")

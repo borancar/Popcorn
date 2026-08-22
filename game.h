@@ -218,6 +218,8 @@ void walker_step(unsigned x);     /* 1ac2:1e23 */
 void ball_draw(unsigned sprite, unsigned x, unsigned y);    /* 1ac2:2881 */
 int  ball_redraw(unsigned ball);  /* 1ac2:2827 */
 int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
+void read_new_key(unsigned which);  /* 1ac2:1614 */
+int  score_before(unsigned si, unsigned di); /* 1ac2:108c */
 void ball_after(unsigned ball);   /* 1ac2:247f */
 void ball_bricks(unsigned ball);  /* 1ac2:254d */
 void brick_hit(unsigned slot, unsigned cell, unsigned ball);
@@ -247,6 +249,7 @@ void draw_paddle_raw(unsigned src);      /* 1ac2:22a9 */
 void draw_paddle_shifted(unsigned src);  /* 1ac2:2187 */
 void ball_paddle(unsigned ball);  /* 1ac2:2316 */
 void laser_fire(void);            /* 1ac2:2ee3 */
+void probe_cell_at(unsigned x, unsigned y, unsigned slot); /* 1ac2:2755 */
 void play_teardown(void);         /* 1ac2:41d4 */
 void entity_call(unsigned node);  /* the call at 1ac2:1b5e */
 void entity_capsule(unsigned bx);   /* 1ac2:3273 */
@@ -348,6 +351,8 @@ void walker_step(unsigned x);     /* 1ac2:1e23 */
 void ball_draw(unsigned sprite, unsigned x, unsigned y);    /* 1ac2:2881 */
 int  ball_redraw(unsigned ball);  /* 1ac2:2827 */
 int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
+void read_new_key(unsigned which);  /* 1ac2:1614 */
+int  score_before(unsigned si, unsigned di); /* 1ac2:108c */
 void ball_after(unsigned ball);   /* 1ac2:247f */
 void ball_bricks(unsigned ball);  /* 1ac2:254d */
 void brick_hit(unsigned slot, unsigned cell, unsigned ball);
@@ -377,6 +382,7 @@ void draw_paddle_raw(unsigned src);      /* 1ac2:22a9 */
 void draw_paddle_shifted(unsigned src);  /* 1ac2:2187 */
 void ball_paddle(unsigned ball);  /* 1ac2:2316 */
 void laser_fire(void);            /* 1ac2:2ee3 */
+void probe_cell_at(unsigned x, unsigned y, unsigned slot); /* 1ac2:2755 */
 void play_teardown(void);         /* 1ac2:41d4 */
 void entity_call(unsigned node);  /* the call at 1ac2:1b5e */
 void entity_capsule(unsigned bx);   /* 1ac2:3273 */
