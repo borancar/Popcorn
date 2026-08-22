@@ -48,7 +48,9 @@ int32_t main(int32_t argc, char **argv)
         if (!strcmp(argv[i], "--lockstep") && i + 1 < argc)
             lockstep = argv[++i];
         else if (!strcmp(argv[i], "--lockstep-sync-scroll"))
-            extra_sync = 1;
+            extra_sync |= SYNC_SCROLL;
+        else if (!strcmp(argv[i], "--lockstep-sync-endgame"))
+            extra_sync |= SYNC_ENDGAME;
         else if (!strcmp(argv[i], "--verify") && i + 2 < argc)
             return verify_main(argv[i + 1], argv[i + 2]);
         else if (!strcmp(argv[i], "--dump-image") && i + 1 < argc)

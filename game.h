@@ -211,8 +211,14 @@ void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
 void sound_tick(void);                                  /* 1ac2:0097 */
 void io_set_grab(int32_t on);
-void io_frame_sync_extra(void);
-void io_lockstep_extra_sync(int32_t on);
+/* Opt-in lockstep sync points, one bit each, for comparing inside a screen
+ * that has a loop of its own and so reaches io_frame_sync not at all. */
+#ifndef SYNC_SCROLL
+#define SYNC_SCROLL   1                 /* screen_scroll_up, once a row */
+#define SYNC_ENDGAME  2                 /* ball_after_endgame, once a step */
+#endif
+void io_frame_sync_extra(int32_t which);
+void io_lockstep_extra_sync(int32_t mask);
 int32_t io_grabbed(void);
 void game_delay(void);                                  /* 1ac2:164c */
 void read_speed_setting(uint32_t speed);                /* 1ac2:5680 */
@@ -436,8 +442,14 @@ void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
 void sound_tick(void);                                  /* 1ac2:0097 */
 void io_set_grab(int32_t on);
-void io_frame_sync_extra(void);
-void io_lockstep_extra_sync(int32_t on);
+/* Opt-in lockstep sync points, one bit each, for comparing inside a screen
+ * that has a loop of its own and so reaches io_frame_sync not at all. */
+#ifndef SYNC_SCROLL
+#define SYNC_SCROLL   1                 /* screen_scroll_up, once a row */
+#define SYNC_ENDGAME  2                 /* ball_after_endgame, once a step */
+#endif
+void io_frame_sync_extra(int32_t which);
+void io_lockstep_extra_sync(int32_t mask);
 int32_t io_grabbed(void);
 void game_delay(void);                                  /* 1ac2:164c */
 void read_speed_setting(uint32_t speed);                /* 1ac2:5680 */
