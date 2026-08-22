@@ -248,6 +248,11 @@ void entity_capsule(unsigned bx);   /* 1ac2:3273 */
 void entity_paddle_fx(unsigned bx); /* 1ac2:3386 */
 void entity_popup(unsigned bx);     /* 1ac2:3561 */
 void entity_ball_hold(unsigned bx); /* 1ac2:37e0 */
+void ball_place(unsigned ball, unsigned x, unsigned y);
+void bonus_update(unsigned bx, unsigned nx, unsigned ny); /* 1ac2:3df1 */
+unsigned pixel_xor(unsigned x, unsigned y);        /* 1ac2:30dd */
+void shot_xor(unsigned x, unsigned y);             /* 1ac2:306b */
+void bonus_hits_ball(unsigned bx, unsigned ball);  /* 1ac2:3f20 */
 void entity_bonus(unsigned bx);     /* 1ac2:39fa */
 void entity_unknown(unsigned bx);
 void entity_unlink(unsigned node);/* 1ac2:3257 */
@@ -266,12 +271,12 @@ void entity_sparkle(unsigned bx); /* 1ac2:3aee */
 void entity_crumble(unsigned bx); /* 1ac2:3b2a */
 void entity_hatch(unsigned bx);   /* 1ac2:390d */
 void bonus_release(unsigned bx);  /* 1ac2:39a1 */
-int  bonus_move_right(unsigned char *b);  /* 1ac2:3c66 */
-int  bonus_move_left(unsigned char *b);   /* 1ac2:3cf3 */
-int  bonus_move_up(unsigned char *b);     /* 1ac2:3caf */
-int  bonus_move_down(unsigned char *b);   /* 1ac2:3d3c */
-int  bonus_steer(unsigned bx);            /* 1ac2:3bf7 */
-int  bonus_script(unsigned bx);           /* 1ac2:3c35, inside 3bf7 */
+int  bonus_move_right(unsigned *px, unsigned *py); /* 1ac2:3c66 */
+int  bonus_move_left(unsigned *px, unsigned *py);  /* 1ac2:3cf3 */
+int  bonus_move_up(unsigned *px, unsigned *py);    /* 1ac2:3caf */
+int  bonus_move_down(unsigned *px, unsigned *py);  /* 1ac2:3d3c */
+int  bonus_steer(unsigned bx, unsigned *px, unsigned *py);  /* 1ac2:3bf7 */
+int  bonus_script(unsigned bx, unsigned *px, unsigned *py); /* 1ac2:3c35 */
 void demo_input_step(void);       /* the recorded-input cursor at 0x3134 */
 void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(unsigned x, unsigned y);
@@ -366,6 +371,11 @@ void entity_capsule(unsigned bx);   /* 1ac2:3273 */
 void entity_paddle_fx(unsigned bx); /* 1ac2:3386 */
 void entity_popup(unsigned bx);     /* 1ac2:3561 */
 void entity_ball_hold(unsigned bx); /* 1ac2:37e0 */
+void ball_place(unsigned ball, unsigned x, unsigned y);
+void bonus_update(unsigned bx, unsigned nx, unsigned ny); /* 1ac2:3df1 */
+unsigned pixel_xor(unsigned x, unsigned y);        /* 1ac2:30dd */
+void shot_xor(unsigned x, unsigned y);             /* 1ac2:306b */
+void bonus_hits_ball(unsigned bx, unsigned ball);  /* 1ac2:3f20 */
 void entity_bonus(unsigned bx);     /* 1ac2:39fa */
 void entity_unknown(unsigned bx);
 void entity_unlink(unsigned node);/* 1ac2:3257 */
@@ -384,12 +394,12 @@ void entity_sparkle(unsigned bx); /* 1ac2:3aee */
 void entity_crumble(unsigned bx); /* 1ac2:3b2a */
 void entity_hatch(unsigned bx);   /* 1ac2:390d */
 void bonus_release(unsigned bx);  /* 1ac2:39a1 */
-int  bonus_move_right(unsigned char *b);  /* 1ac2:3c66 */
-int  bonus_move_left(unsigned char *b);   /* 1ac2:3cf3 */
-int  bonus_move_up(unsigned char *b);     /* 1ac2:3caf */
-int  bonus_move_down(unsigned char *b);   /* 1ac2:3d3c */
-int  bonus_steer(unsigned bx);            /* 1ac2:3bf7 */
-int  bonus_script(unsigned bx);           /* 1ac2:3c35, inside 3bf7 */
+int  bonus_move_right(unsigned *px, unsigned *py); /* 1ac2:3c66 */
+int  bonus_move_left(unsigned *px, unsigned *py);  /* 1ac2:3cf3 */
+int  bonus_move_up(unsigned *px, unsigned *py);    /* 1ac2:3caf */
+int  bonus_move_down(unsigned *px, unsigned *py);  /* 1ac2:3d3c */
+int  bonus_steer(unsigned bx, unsigned *px, unsigned *py);  /* 1ac2:3bf7 */
+int  bonus_script(unsigned bx, unsigned *px, unsigned *py); /* 1ac2:3c35 */
 void demo_input_step(void);       /* the recorded-input cursor at 0x3134 */
 void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(unsigned x, unsigned y);

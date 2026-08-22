@@ -57,6 +57,39 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x2827:                        /* ball_redraw(si = the ball) */
         ball_redraw(r[R_SI]);
         return 1;
+    case 0x044b: level_colours(); return 1;
+    case 0x10c5: draw_run((unsigned char)(r[R_AX] & 0xff), r[R_DX] & 0xff,
+                          r[R_DI]); return 1;
+    case 0x10d1: draw_text(r[R_SI], r[R_DX] & 0xff, r[R_DI]); return 1;
+    case 0x14a7: draw_cursor(r[R_DI]); return 1;
+    case 0x3146: flash_bar(r[R_DX]); return 1;
+    case 0x3232: entity_alloc(); return 1;
+    case 0x3257: entity_unlink(r[R_BX]); return 1;
+    case 0x3668: cell_set_three(r[R_BX]); return 1;
+    case 0x36fb: cells_restore(); return 1;
+    case 0x30dd: pixel_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
+    case 0x306b: shot_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
+    case 0x3f20: bonus_hits_ball(r[R_BX], r[R_SI]); return 1;
+    case 0x3f4f: sprite_shift_draw(r[R_CX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
+                 return 1;
+    case 0x406a: xor_sprite_20x16(r[R_CX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
+                 return 1;
+    case 0x40f2: xor_sprite_16xn(r[R_BX] & 0xff, r[R_AX] & 0xff, r[R_SI],
+                                 r[R_CX] & 0xff); return 1;
+    case 0x40c0: game_random(0, r[R_DX] & 0xff); return 1;
+    case 0x3aee: entity_sparkle(r[R_BX]); return 1;
+    case 0x3b2a: entity_crumble(r[R_BX]); return 1;
+    case 0x390d: entity_hatch(r[R_BX]); return 1;
+    case 0x39a1: bonus_release(r[R_BX]); return 1;
+    case 0x39fa: entity_bonus(r[R_BX]); return 1;
+    case 0x3df1: bonus_update(r[R_BX], r[R_CX] & 0xff, r[R_AX] & 0xff);
+                 return 1;
+    case 0x365e: entity_soften(r[R_BX]); return 1;
+    case 0x366f: entity_repeat(r[R_BX]); return 1;
+    case 0x3696: entity_plain(r[R_BX]); return 1;
+    case 0x36a1: entity_ball_arrive(r[R_BX]); return 1;
+    case 0x36f6: entity_cells_timer(r[R_BX]); return 1;
+    case 0x37e0: entity_ball_hold(r[R_BX]); return 1;
     case 0x2034:                        /* draw_brick_row(al = screen row) */
         draw_brick_row(r[R_AX] & 0xff);
         return 1;
