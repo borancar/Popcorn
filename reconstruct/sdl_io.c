@@ -29,7 +29,7 @@ unsigned char g_vram[CGA_SIZE];
 /* Mode 05h on an RGB monitor: the colour-burst-kill bit in the mode-control
  * register selects this palette whatever the palette bit says.  Entry 0 is the
  * background from the colour-select register, black at the BIOS default. */
-const uint32_t g_palette[4] = {
+uint32_t g_palette[4] = {
     0xff000000,     /* black */
     0xff55ffff,     /* cyan */
     0xffff5555,     /* red */
@@ -447,3 +447,36 @@ void io_sound(unsigned divisor)
                      ? 6000 : -6000;
     SDL_PutAudioStreamData(audio, buf, (int)(n * sizeof *buf));
 }
+
+/* The two CGA registers F8 cycles. The port keeps its own palette rather than
+ * a register file, so these translate: 0x3d9 bits 4 and 5 pick the intensity
+ * and the palette, and 0x3d8 bit 2 kills the colour burst - which on an RGB
+ * monitor is what selects the cyan/red/white set the game normally runs in. */
+static unsigned cga_mode_reg = 0x0e, cga_colour_reg = 0x30;
+
+static const uint32_t CGA16[16] = {
+    0xff000000, 0xff0000aa, 0xff00aa00, 0xff00aaaa,
+    0xffaa0000, 0xffaa00aa, 0xffaa5500, 0xffaaaaaa,
+    0xff555555, 0xff5555ff, 0xff55ff55, 0xff55ffff,
+    0xffff5555, 0xffff55ff, 0xffffff55, 0xffffffff,
+};
+
+static void cga_palette_update(void)
+{
+    static const unsigned char sets[8][3] = {
+        { 2, 4, 6 }, { 10, 12, 14 },        /* palette 0, dim and bright */
+        { 3, 5, 7 }, { 11, 13, 15 },        /* palette 1 */
+        { 3, 4, 7 }, { 11, 12, 15 },        /* burst off: cyan, red, white */
+        { 3, 4, 7 }, { 11, 12, 15 },
+    };
+    unsigned row = ((cga_mode_reg >> 2) & 1) * 4 +
+                   ((cga_colour_reg >> 5) & 1) * 2 +
+                   ((cga_colour_reg >> 4) & 1);
+    uint32_t *p = (uint32_t *)g_palette;
+    p[0] = CGA16[cga_colour_reg & 0x0f];
+    for (int i = 0; i < 3; i++)
+        p[i + 1] = CGA16[sets[row][i]];
+}
+
+void io_cga_mode(unsigned v)   { cga_mode_reg = v;   cga_palette_update(); }
+void io_cga_colour(unsigned v) { cga_colour_reg = v; cga_palette_update(); }
