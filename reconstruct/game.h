@@ -187,6 +187,11 @@ void intro_curtain(void);                               /* 1ac2:078b */
 void intro_logo(void);                                  /* 1ac2:54d6 */
 void intro_reveal(void);                                /* 1ac2:55e5 */
 void intro_scroll(void);                                /* 1ac2:4a7a */
+void intro_paddle(void);                                /* 1ac2:49bc */
+void int09_handler(unsigned scan);                      /* 1ac2:03e3 */
+int  drive_check(void);                                 /* 1ac2:4dea */
+int  drive_writable(void);                              /* 1ac2:4e04 */
+#define LAST_DIR 0x2d4a
 void game_main(const char *dir, unsigned speed);
 
 /* --------------------------------------------------------- not yet done ---
@@ -375,6 +380,7 @@ void ending_particles_tick(void); /* 1ac2:5a56 */
 void screen_end_of_game(void);    /* 1ac2:0d2e */
 void screen_level_done(void);     /* 1ac2:0521 */
 void screen_all_levels_done(void);/* 1ac2:5940 */
+void ending_walk(unsigned bl, unsigned bh);   /* 1ac2:5bb5 */
 void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
 void sound_tick(void);                                  /* 1ac2:0097 */
@@ -386,6 +392,11 @@ void intro_curtain(void);                               /* 1ac2:078b */
 void intro_logo(void);                                  /* 1ac2:54d6 */
 void intro_reveal(void);                                /* 1ac2:55e5 */
 void intro_scroll(void);                                /* 1ac2:4a7a */
+void intro_paddle(void);                                /* 1ac2:49bc */
+void int09_handler(unsigned scan);                      /* 1ac2:03e3 */
+int  drive_check(void);                                 /* 1ac2:4dea */
+int  drive_writable(void);                              /* 1ac2:4e04 */
+#define LAST_DIR 0x2d4a
 void game_main(const char *dir, unsigned speed);
 
 /* --------------------------------------------------------- not yet done ---
@@ -568,6 +579,7 @@ void ending_particles_tick(void); /* 1ac2:5a56 */
 void screen_end_of_game(void);    /* 1ac2:0d2e */
 void screen_level_done(void);     /* 1ac2:0521 */
 void screen_all_levels_done(void);/* 1ac2:5940 */
+void ending_walk(unsigned bl, unsigned bh);   /* 1ac2:5bb5 */
 
 int verify_main(const char *in_path, const char *out_path);
 
