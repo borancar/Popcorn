@@ -38,6 +38,7 @@ uint32_t g_palette[4] = {
 };
 
 static SDL_Window *win;
+static int32_t grabbed;
 static SDL_Renderer *ren;
 static SDL_Texture *tex;
 static SDL_AudioStream *audio;
@@ -85,6 +86,15 @@ int32_t io_init(int32_t scale)
         return 0;
     }
     SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
+
+    /* The paddle is driven by an **absolute** pointer - the game's own mouse
+     * routine at 1ac2:1654 is `paddle = clamp(mouse x / 2)` - so the pointer
+     * leaving the window means the paddle stops at the edge while the player
+     * is still moving. Confining it to the window is what makes that input
+     * usable at all. Ctrl+Alt lets go, the way a DOS box does; clicking back
+     * in takes it again.
+     */
+    io_set_grab(1);
 
     SDL_AudioSpec want = { SDL_AUDIO_S16, 1, 22050 };
     audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
@@ -462,6 +472,20 @@ static int32_t scancode_of(SDL_Scancode sc)
     return 0;
 }
 
+void io_set_grab(int32_t on)
+{
+    if (!win)
+        return;
+    grabbed = on ? 1 : 0;
+    SDL_SetWindowMouseGrab(win, grabbed ? true : false);
+    if (grabbed)
+        SDL_HideCursor();
+    else
+        SDL_ShowCursor();
+}
+
+int32_t io_grabbed(void) { return grabbed; }
+
 int32_t io_pump(void)
 {
     if (io_lockstep())
@@ -486,9 +510,23 @@ int32_t io_pump(void)
             mouse_y = ly;
             break;
         }
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            /* Clicking in the window takes the pointer back. The click still
+             * goes through to the game as the action button, which is what a
+             * player pressing it expects. */
+            if (!grabbed)
+                io_set_grab(1);
+            break;
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP: {
             int32_t down = ev.type == SDL_EVENT_KEY_DOWN;
+            /* Ctrl+Alt lets the pointer go, and is not passed on: it is the
+             * one chord the game has no use for. */
+            if (down && (ev.key.mod & SDL_KMOD_CTRL)
+                     && (ev.key.mod & SDL_KMOD_ALT)) {
+                io_set_grab(0);
+                break;
+            }
             int32_t sc = scancode_of(ev.key.scancode);
             if (!sc)
                 break;

@@ -5699,8 +5699,10 @@ void screen_game_over(void)
             return;
     }
 
-    if (g_image[LIVES] == 0)
+    if (g_image[LIVES] == 0) {
+        restore_int09();                /* 1ac2:03d1 - a no-op here */
         screen_end_of_game();           /* 1ac2:51b6 */
+    }
 }
 
 /* ========================================================================

@@ -210,6 +210,8 @@ uint32_t game_random(uint32_t ticks, uint32_t limit);   /* 1ac2:40c0 */
 void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
 void sound_tick(void);                                  /* 1ac2:0097 */
+void io_set_grab(int32_t on);
+int32_t io_grabbed(void);
 void game_delay(void);                                  /* 1ac2:164c */
 void read_speed_setting(uint32_t speed);                /* 1ac2:5680 */
 void build_shifted_sprites(void);                       /* 1ac2:14b3 */
@@ -429,6 +431,8 @@ void ending_walk(uint32_t bl, uint32_t bh);   /* 1ac2:5bb5 */
 void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
 void sound_tick(void);                                  /* 1ac2:0097 */
+void io_set_grab(int32_t on);
+int32_t io_grabbed(void);
 void game_delay(void);                                  /* 1ac2:164c */
 void read_speed_setting(uint32_t speed);                /* 1ac2:5680 */
 void build_shifted_sprites(void);                       /* 1ac2:14b3 */
