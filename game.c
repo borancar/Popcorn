@@ -5951,3 +5951,126 @@ int ball_after_endgame(unsigned ball)
     endgame_curtain();
     return 1;
 }
+
+/* ========================================================================
+ * 1ac2:2da0 and 1ac2:4210  bonus_end_level
+ *
+ * The bonus that finishes a level. In the original it does not return: it
+ * throws four words off the stack and jumps into 0x4210, abandoning the play
+ * loop and everything below it. Here it is one routine and the caller unwinds
+ * by longjmp, which is the same thing said honestly.
+ *
+ * What it does: clear the indicator columns, lose a life's worth of state,
+ * put the paddle back to plain, and then build the "next level" banner by
+ * scrolling the screen up a row at a time and laying a fresh row in at
+ * 0x3130 on each pass. The rows come from the level's own cells at
+ * [0x13ca] + 0xb8, each byte translated through the table at 0xc46:0x226c,
+ * with 0x14 for the two edges.
+ *
+ * After that it serves a fresh ball into the funnel and runs a loop of its
+ * own - input, step, collide through ball_after_endgame, four sound ticks -
+ * until that returns "the level is over".
+ * ===================================================================== */
+#define BANNER_ROW_VRAM 0x3130
+#define BANNER_XLAT     0x226c
+
+/* One row of the banner: 0x13 blank bytes, an edge, twelve translated cells,
+ * an edge, and 0x13 blank again - then the whole screen scrolls up. */
+static void banner_row(unsigned si)
+{
+    unsigned di = BANNER_ROW_VRAM;
+    for (int i = 0; i < 0x13; i++)
+        g_vram[di++ & (CGA_SIZE - 1)] = 0;
+    g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
+    for (int i = 0; i < 0x0c; i++) {
+        unsigned cell = g_image[si + i];
+        g_vram[di++ & (CGA_SIZE - 1)] =
+            g_image[SEG_C46 + BANNER_XLAT + cell * 2];
+    }
+    g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
+    for (int i = 0; i < 0x13; i++)
+        g_vram[di++ & (CGA_SIZE - 1)] = 0;
+    screen_scroll_up();
+}
+
+void bonus_end_level(void)
+{
+    play_teardown();
+    speaker_off();
+    life_lost();
+    io_wait_retrace();
+    panel_reveal();
+
+    g_image[PADDLE_KIND] = 0;
+    g_image[PADDLE_MAX] = 0xac;
+    g_image[PADDLE_MIN] = 8;
+    g_image[PADDLE_WIDTH] = g_image[PADDLE_SPRITES + 2];
+    blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
+
+    /* The wall closing in: 0x70 passes of a 26-word band scrolled up six rows
+     * with a fresh cap laid on each. */
+    unsigned bp = 0x20a0;
+    g_image[PADDLE_SUPPRESS] = 0xff;
+    for (int dh = 0x70; dh > 0; dh--) {
+        io_wait_retrace();
+        unsigned di = bp;
+        for (int dl = 6; dl > 0; dl--) {
+            unsigned s = cga_next_row(di);
+            for (int b = 0; b < 0x1a * 2; b++)
+                g_vram[(di + b) & (CGA_SIZE - 1)] =
+                    g_vram[(s + b) & (CGA_SIZE - 1)];
+            di = cga_prev_row(s);
+        }
+        di = cga_next_row(di);
+        if (dh == 0x70)
+            di = 0;
+        for (int i = 0; i < 0x1a; i++)
+            img_vram_setw(di + i * 2, 0);
+        for (int i = 0; i < 0x78; i++) {
+            input_and_draw_paddle();
+            g_image[PADDLE_SUPPRESS] = 0;
+        }
+        bp = cga_prev_row(bp);
+        io_present();
+        if (!io_pump())
+            return;
+    }
+
+    /* The banner: a fixed row, a blank one, then the level's own cells. */
+    for (int i = 0; i < 0x1a; i++)
+        img_vram_setw(BANNER_ROW_VRAM + i * 2, img_w(0x2b6d + i * 2));
+    screen_scroll_up();
+
+    unsigned si = (img_w(LEVEL_SRC) + 0xb8) & 0xffff;
+    for (int n = 0x0e; n > 0; n--, si -= 0x0c)
+        banner_row(SEG_C46 + si);
+
+    /* And a fresh ball, played until ball_after_endgame says the level is
+     * over. */
+    unsigned char *b = g_image + BALLS;
+    b[B_DY] = 1;
+    b[B_DX] = 2;
+    b[B_DIR_X] = 0;
+    b[B_DIR_Y] = 1;
+    b[B_ANCHOR_X] = b[B_X];
+    b[B_ANCHOR_Y] = b[B_Y];
+    b[B_ACC_X] = b[B_ACC_Y] = 0;
+    b[B_STATE] = 1;
+    ball_draw(BALLS + B_SPRITE, b[B_X], b[B_Y]);
+
+    for (;;) {
+        input_and_draw_paddle();
+        ball_step(BALLS);
+        ball_redraw(BALLS);
+        if (ball_after_endgame(BALLS))
+            return;
+        for (int i = 0; i < 4; i++) {
+            sound_tick();
+            for (int k = 0; k < 9; k++)
+                game_delay();
+        }
+        io_present();
+        if (!io_pump())
+            return;
+    }
+}
