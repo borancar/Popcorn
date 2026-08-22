@@ -259,7 +259,9 @@ void screen_scroll_up(void);      /* 1ac2:4878 */
 void level_tally(void);           /* 1ac2:48ce */
 void screen_stash(void);          /* 1ac2:4ba9 */
 void screen_restore(void);        /* 1ac2:4b4f */
-void demo_start(void);            /* 1ac2:1509 */
+void demo_start(void);
+void input_demo(void);            /* 1ac2:1785 */
+int  cheat_sequence(unsigned char key); /* 1ac2:58b3 */            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
 
 int  level_load_file(const char *dir);  /* 1ac2:08c8 */
@@ -471,7 +473,9 @@ void screen_scroll_up(void);      /* 1ac2:4878 */
 void level_tally(void);           /* 1ac2:48ce */
 void screen_stash(void);          /* 1ac2:4ba9 */
 void screen_restore(void);        /* 1ac2:4b4f */
-void demo_start(void);            /* 1ac2:1509 */
+void demo_start(void);
+void input_demo(void);            /* 1ac2:1785 */
+int  cheat_sequence(unsigned char key); /* 1ac2:58b3 */            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
 
 int  level_load_file(const char *dir);  /* 1ac2:08c8 */

@@ -762,6 +762,28 @@ void intro_scroll(void)
     }
 }
 
+/* 1ac2:02c8  the demo
+ *
+ * F2, and the same three instructions the menu falls into by itself when the
+ * banner runs out of text - which is how attract mode comes on. The original
+ * is `call 0x85 / call 0x1212 / call 0x1509 / jmp 0x2f5`: the last is a jump,
+ * not a call, so the demo *is* a session and it ends the way any session
+ * ends. Doing the first three and going back to the menu, which is what this
+ * used to do, starts nothing at all.
+ *
+ * Unlike F1 there is no play_prepare and no INT 09h: demo_start points the
+ * screen handler at 0x1785, which replays a recorded script instead of
+ * reading a keyboard.
+ */
+static void start_demo(void)
+{
+    speaker_on();                       /* 1ac2:0085 */
+    play_frame();                       /* 1ac2:1212 */
+    demo_start();                       /* 1ac2:1509 */
+    if (setjmp(g_back_to_menu) == 0)
+        play_session();                 /* 1ac2:02f5, left by longjmp */
+}
+
 /* ========================================================================
  * 1ac2:0113  game_main
  *
@@ -782,6 +804,7 @@ void intro_scroll(void)
 #define INPUT_SELECTED  0x2d47          /* 0x16d2 keyboard, 0x1654 mouse */
 #define INPUT_ACTIVE    0x2d45
 #define INPUT_KEYBOARD  0x16d2
+#define INPUT_DEMO      0x1785          /* demo_start installs this one */
 #define INPUT_MOUSE     0x1654
 
 #define BANNER_PTR      0x13c5          /* the scrolling text's cursor */
@@ -830,8 +853,7 @@ void game_main(const char *dir, unsigned speed)
                  * runs out of text start the demo, which is how the attract
                  * mode comes on by itself. */
                 if (g_image[img_w(BANNER_PTR)] == 0) {
-                    play_frame();
-                    demo_start();
+                    start_demo();
                     back_to_menu = 1;
                     continue;
                 }
@@ -881,8 +903,7 @@ void game_main(const char *dir, unsigned speed)
                 back_to_menu = 1;
                 break;
             case 0x3c:                                  /* F2: demo */
-                play_frame();
-                demo_start();
+                start_demo();
                 back_to_menu = 1;
                 break;
             case 0x3b:                                  /* F1: play */
@@ -893,6 +914,8 @@ void game_main(const char *dir, unsigned speed)
                     break;
                 }
                 play_prepare();
+                if (img_w(INPUT_ACTIVE) == 0x16d2)
+                    install_int09();            /* 1ac2:02ea, keyboard only */
                 /* play_session() never returns normally: it is left by the
                  * stack-throwing jump the original does at 1ac2:167e. */
                 if (setjmp(g_back_to_menu) == 0)
@@ -914,14 +937,23 @@ void game_main(const char *dir, unsigned speed)
 
 /* 1ac2:1ab1 and 1ac2:1a4f  game_input
  *
- * `call word ptr [0x2d45]` - whichever of the two input routines the menu
- * selected. The mouse one needs the pointer, which is the platform's; the
- * keyboard one reads only the three state bytes, which the platform maintains.
+ * `call word ptr [0x2d45]` - whichever input routine is installed. There are
+ * **three**, not two: the mouse at 0x1654, the keyboard at 0x16d2, and the
+ * demo's own at 0x1785, which demo_start puts there. Dispatching only the
+ * first two sends the demo to the keyboard routine, which without a key held
+ * never moves the paddle - so the demo loses its ball and ends immediately.
+ *
+ * The mouse one needs the pointer, which is the platform's; the keyboard one
+ * reads only the three state bytes, which the platform maintains; the demo's
+ * reads the ball.
  */
 void game_input(void)
 {
-    if (img_w(INPUT_ACTIVE) == INPUT_MOUSE)
+    unsigned which = img_w(INPUT_ACTIVE);
+    if (which == INPUT_MOUSE)
         input_mouse(io_mouse_x(), io_mouse_buttons());
+    else if (which == INPUT_DEMO)
+        input_demo();
     else
         input_keyboard();
 }
@@ -4756,7 +4788,7 @@ void play_prepare(void)
 /* The demo plays itself: [0x2d45] points at 0x1785, a third input routine that
  * reads a recorded script instead of a keyboard or a mouse, and cs:[0x1784] is
  * set to 0xff to say it is running. One player, with the name at 0x13f9. */
-#define INPUT_DEMO   0x1785
+
 
 void demo_start(void)
 {
@@ -6422,4 +6454,161 @@ void bonus_slow(void)
     img_setw(EXTRA_TIMER, 0x190);
     fill_column(0x1a8b, 0xaaaa);
     img_setw(EXTRA_POS, 0x1a8b);
+}
+
+/* ========================================================================
+ * 1ac2:1785  input_demo
+ *
+ * The third input routine, and the one nothing static can reach: `demo_start`
+ * stores it in [0x2d45] exactly the way F1 stores 0x1654 or 0x16d2, and the
+ * play loop calls whatever is there. It was missing from the map for that
+ * reason, and so the demo had no way to move its paddle.
+ *
+ * It is the whole of the computer's play. `cs:[0x1784]` is which ball it is
+ * chasing, 0xff for none: with none it scans the three balls for one past
+ * y 0x82 that is in play and coming down, and with one it steps the paddle a
+ * single pixel towards that ball's x - the same one pixel a frame the human
+ * keyboard path gets, which is why the demo is beatable.
+ *
+ * Any key ends it. The key goes to the cheat matcher first, and only a key
+ * that is not part of the sequence throws the stack away and returns to the
+ * menu.
+ * ===================================================================== */
+#define DEMO_BALL   (CS_BASE + 0x1784)    /* cs:[0x1784], which ball */
+#define PADDLE_LOW    0x2d3e
+#define PADDLE_HIGH   0x2d3f
+#define DEMO_CHASE_Y  0x82
+
+/* Both tails clamp the paddle to the right-hand limit before returning. */
+static void demo_clamp(void)
+{
+    if (g_image[PADDLE_X] >= g_image[PADDLE_HIGH])
+        g_image[PADDLE_X] = g_image[PADDLE_HIGH];
+}
+
+void input_demo(void)
+{
+    if (io_key_ready()) {
+        unsigned key = io_get_key();
+        if ((key >> 8) == 0x44) {               /* F10 */
+            employee_enter();                   /* 1ac2:4ae0 */
+            while ((io_get_key() >> 8) == 0x44)
+                ;
+            screen_restore();                   /* 1ac2:4b4f */
+        } else if ((key >> 8) == 0x43) {        /* F9: sound */
+            g_image[SOUND_ON] ^= 1;
+        } else if (!cheat_sequence((unsigned char)(key & 0xff))) {
+            entities_clear();                   /* 1ac2:055e */
+            longjmp(g_back_to_menu, 1);         /* sp = [0x1405]; jmp 0x1d1 */
+        }
+    }
+
+    unsigned chasing = g_image[DEMO_BALL];
+    if (chasing != 0xff) {
+        unsigned b = BALLS + chasing * BALL_STRIDE;
+        if (g_image[b + B_Y] >= DEMO_CHASE_Y &&
+            g_image[b + B_DIR_Y] != 1 &&
+            g_image[b + B_STATE] != 0) {
+            /* Hold the action key down while the laser is armed, so the
+             * demo fires as well as chases. */
+            g_image[KEY_ACTION] = g_image[LASER_ON] != 0;
+
+            unsigned ball_x = g_image[b + B_X];
+            unsigned paddle = g_image[PADDLE_X];
+            if (ball_x < paddle) {
+                if (paddle != g_image[PADDLE_LOW])
+                    g_image[PADDLE_X]--;
+                return;
+            }
+            if (ball_x < ((paddle + g_image[PADDLE_WIDTH]) & 0xff))
+                return;                         /* already under it */
+            if (paddle != g_image[PADDLE_HIGH])
+                g_image[PADDLE_X]++;
+            return;
+        }
+    }
+
+    /* Nothing to chase, or the one we had is gone: pick another. */
+    for (unsigned cl = 0; cl < 3; cl++) {
+        unsigned b = BALLS + cl * BALL_STRIDE;
+        if (g_image[b + B_Y] > DEMO_CHASE_Y &&
+            g_image[b + B_STATE] != 0 &&
+            g_image[b + B_DIR_Y] != 1) {
+            g_image[DEMO_BALL] = (unsigned char)cl;
+            demo_clamp();
+            return;
+        }
+    }
+    g_image[DEMO_BALL] = 0xff;
+    demo_clamp();
+}
+
+/* 1ac2:58b3  cheat_sequence
+ *
+ * A key at a time against a sequence stored XORed with 0xaa at cs:[0x56a5],
+ * with cs:[0x56a2] the cursor into it and cs:[0x56a4] the last byte matched.
+ * Returns true while the key is part of the sequence - the caller reads that
+ * as "consumed, carry on" - and false for anything else, which is what ends
+ * the demo. Repeating the last matched key is tolerated so a held key does
+ * not break the run.
+ *
+ * Completing it shows a hidden message: mode 3, the text decoded a byte at a
+ * time with a rolling key, 0x5c meaning a new line, then a key and back to
+ * mode 5. The port has no text renderer - the same gap as screen_define_keys
+ * - so the message is decoded and put on stderr rather than on the screen,
+ * and everything else about the sequence behaves as it does in the original.
+ */
+#define CHEAT_CURSOR (CS_BASE + 0x56a2)
+#define CHEAT_LAST   (CS_BASE + 0x56a4)
+#define CHEAT_START  0x56a5
+#define CHEAT_TEXT   0x56b5
+
+int cheat_sequence(unsigned char key)
+{
+    unsigned si = img_w(CHEAT_CURSOR);
+    unsigned al = key ^ 0xaa;
+
+    if (al != g_image[CS_BASE + si]) {
+        /* Not the next one. The same key twice is not a failure. */
+        if (al == g_image[CHEAT_LAST])
+            return 1;
+        img_setw(CHEAT_CURSOR, CHEAT_START);
+        g_image[CHEAT_LAST] = 0;
+        return 0;
+    }
+
+    g_image[CHEAT_LAST] = (unsigned char)al;
+    img_setw(CHEAT_CURSOR, si + 1);
+    if (g_image[CS_BASE + si + 1] != 0xaa)
+        return 1;                       /* more to go */
+
+    /* The whole sequence. Mode 3, the message, a key, mode 5 again. */
+    io_cga_mode(3);
+    {
+        char line[256];
+        unsigned n = 0, ah = 0x20, s = CHEAT_TEXT;
+        for (;;) {
+            unsigned c = (g_image[CS_BASE + s++] ^ ah) ^ 0xaa;
+            ah = c;
+            if (c == 0)
+                break;
+            if (c == 0x5c) {            /* a new line */
+                line[n] = 0;
+                fprintf(stderr, "popcorn: [message] %s\n", line);
+                n = 0;
+                continue;
+            }
+            if (n < sizeof line - 1)
+                line[n++] = (char)c;
+        }
+        if (n) {
+            line[n] = 0;
+            fprintf(stderr, "popcorn: [message] %s\n", line);
+        }
+    }
+    io_get_key();
+    io_cga_mode(5);
+    img_setw(CHEAT_CURSOR, CHEAT_START);
+    g_image[CHEAT_LAST] = 0xff;
+    return 1;
 }
