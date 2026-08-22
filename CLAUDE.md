@@ -444,6 +444,28 @@ Glyph 0, what a space maps to, is **not blank**: it is a solid block of colour
 obvious at a glance and invisible in a hex dump. This is the score-panel font;
 the menu uses a second, larger one that has not been located yet.
 
+## The parachute
+
+**Brick 10** - cell value 10, the red block with the white grid - does not
+just break. `0x2c59` puts the ball into **state 4** and allocates an entity
+running `0x37e0` which carries it down the screen under a parachute, a pixel a
+frame, from where the brick was to `y = 0xb8`. Then it lets go: the ball comes
+back **upwards if the safety net is up**, and otherwise it is lost.
+
+The paddle can catch it. `entity_ball_hold` runs the carrier through
+`bonus_update` at `0x3df1`, the same collision a falling capsule uses, so the
+paddle, another ball or the laser all release it early - `[0x33d4]` says
+which. The catch window is the capsule one: `y <= 0xbe && y + 0x0f >= 0xb8`,
+and the sprite spans `x..x+0x0f`.
+
+The trap for anything reading the game's state is that **a held ball's own
+`+0x00`/`+0x01` stop moving**. The position on screen is the carrier's `+4`
+and `+5`; the ball array says the ball is still where the brick was. A bot
+that only reads the ball array does not see the parachute at all.
+
+Brick 9 (`0x2b9d`) is the same idea with state 3: the ball is taken away and
+put back somewhere else.
+
 ## The capsules
 
 Eight of the eleven kinds can come out of a hatch (the table at `0xac60`);
