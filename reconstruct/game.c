@@ -4212,3 +4212,90 @@ unsigned char screen_player_names(void)
         di = cga_next_row(top) + 0x280;   /* the next box, lower down */
     }
 }
+
+/* ========================================================================
+ * 1ac2:1354  frame_band
+ *
+ * One horizontal band of the playfield surround: three bytes from 0x48d2
+ * chosen by cs:[0x5c6d], 0x17 words of `ax`, then three more from 0x48bd. The
+ * counter advances every call, so consecutive bands use different corner
+ * pieces and the border does not repeat.
+ * ===================================================================== */
+#define FRAME_PHASE (CS_BASE + 0x5c6d)
+
+unsigned frame_band(unsigned di, unsigned fill)
+{
+    unsigned n = g_image[FRAME_PHASE] * 3;
+    for (int i = 0; i < 3; i++)
+        g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[0x48d2 + n + i];
+    di += 3;
+    for (int i = 0; i < 0x17; i++, di += 2) {
+        g_vram[di & (CGA_SIZE - 1)] = (unsigned char)fill;
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = (unsigned char)(fill >> 8);
+    }
+    for (int i = 0; i < 3; i++)
+        g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[0x48bd + n + i];
+    g_image[FRAME_PHASE]++;
+    return di + 3;
+}
+
+/* ========================================================================
+ * 1ac2:1212  play_frame
+ *
+ * The playfield surround: six bands down the top, then the side walls built
+ * by scrolling a 0x1a-word column up 0xc2 times and laying a fresh two-byte
+ * cap on each pass, which is what makes them look woven. The cap alternates
+ * between 0x50 and 0x10 every fourth row - `and al,3` on the same counter the
+ * bands use.
+ * ===================================================================== */
+void play_frame(void)
+{
+    g_image[FRAME_PHASE] = 0;
+
+    unsigned di = 0x1e50;
+    static const unsigned fills[6] = { 0xffff, 0x5555, 0x5454, 0x5555, 0, 0 };
+    for (int i = 0; i < 6; i++) {
+        frame_band(di, fills[i]);
+        if (i < 5)
+            di = cga_next_row(di);
+    }
+
+    /* The walls. Each pass scrolls the column up six rows and caps it. */
+    unsigned bp = 0x3e00;
+    for (int pass = 0xc2; pass > 0; pass--) {
+        io_wait_retrace();
+        di = bp;
+        for (int dh = 6; dh > 0; dh--) {
+            unsigned src = cga_next_row(di);
+            for (int i = 0; i < 0x1a * 2; i++)
+                g_vram[(di + i) & (CGA_SIZE - 1)] =
+                    g_vram[(src + i) & (CGA_SIZE - 1)];
+            di = (src - 0x34) & 0xffff;
+        }
+        di = cga_next_row(di);
+
+        unsigned cap = (g_image[FRAME_PHASE] & 3) ? 0x50 : 0x10;
+        g_vram[di++ & (CGA_SIZE - 1)] = 0x0d;
+        g_vram[di++ & (CGA_SIZE - 1)] = (unsigned char)cap;
+        for (int i = 0; i < 0x18; i++, di += 2) {
+            g_vram[di & (CGA_SIZE - 1)] = 0;
+            g_vram[(di + 1) & (CGA_SIZE - 1)] = 0;
+        }
+        g_vram[di++ & (CGA_SIZE - 1)] = 0x0d;
+        g_vram[di & (CGA_SIZE - 1)] = (unsigned char)cap;
+        g_image[FRAME_PHASE]++;
+
+        bp = cga_prev_row(bp);
+        for (int i = 0; i < 0x5dc; i++)
+            game_delay();
+        io_present();
+        if (!io_pump())
+            return;
+    }
+
+    panel_reveal();                     /* 1ac2:0911 */
+    for (int b = 5; b > 0; b--)
+        for (int i = 0; i < 0x147; i++)
+            game_delay();
+    panel_finish();                     /* 1ac2:09c5 */
+}

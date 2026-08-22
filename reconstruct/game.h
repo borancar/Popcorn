@@ -209,6 +209,9 @@ void level_load_file(void);       /* 1ac2:08c8 */
 unsigned char screen_player_names(void);  /* 1ac2:10de */
 int  name_field(unsigned di, unsigned char *abort); /* 1ac2:13b8 */
 void play_frame(void);            /* 1ac2:1212 */
+unsigned frame_band(unsigned di, unsigned fill);  /* 1ac2:1354 */
+void panel_reveal(void);          /* 1ac2:0911 */
+void panel_finish(void);          /* 1ac2:09c5 */
 
 /* Called by play_loop; the ones still empty live in stubs.c too. */
 int  play_loop(void);             /* 1ac2:1873 - transcribed */
@@ -358,6 +361,9 @@ void level_load_file(void);       /* 1ac2:08c8 */
 unsigned char screen_player_names(void);  /* 1ac2:10de */
 int  name_field(unsigned di, unsigned char *abort); /* 1ac2:13b8 */
 void play_frame(void);            /* 1ac2:1212 */
+unsigned frame_band(unsigned di, unsigned fill);  /* 1ac2:1354 */
+void panel_reveal(void);          /* 1ac2:0911 */
+void panel_finish(void);          /* 1ac2:09c5 */
 
 /* Called by play_loop; the ones still empty live in stubs.c too. */
 int  play_loop(void);             /* 1ac2:1873 - transcribed */
