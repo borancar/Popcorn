@@ -45,7 +45,6 @@ static void note(const char *name, unsigned off)
 /* --- the menu's live decoration ------------------------------------- */
 
 /* --- the screens behind the function keys ---------------------------- */
-STUB(screen_define_keys,  0x1581, "F5: read three scan codes into 0x2d4f")
 
 /* --- getting into a game -------------------------------------------- */
 
@@ -55,7 +54,6 @@ STUB(demo_input_step,     0x1a6f, "advances the recorded-input cursor")
 
 
 /* --- called from play_session, which is transcribed ------------------- */
-STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
 
 
 

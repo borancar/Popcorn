@@ -5698,3 +5698,126 @@ void screen_high_scores(void)
             return;
     }
 }
+
+/* ========================================================================
+ * 1ac2:1581  screen_define_keys
+ *
+ * F5. The one screen in the game that is not graphics: it switches the card to
+ * **text mode 01h**, draws a double-line box out of code page 437 characters
+ * straight into 0xb800 as character/attribute pairs, asks for three keys, and
+ * switches back to mode 05h.
+ *
+ * Reading a key is 0x1614, which refuses one already used for another action
+ * or reserved at 0x2d52. [0x2d49] is set to 1 first so the handler has
+ * something to compare against that cannot match.
+ *
+ * The box and the prompts are transcribed; drawing them needs a text renderer,
+ * which the port has not got, so what a player sees here is a blank screen
+ * with the keys still being read. That is the whole of what is missing.
+ * ===================================================================== */
+void screen_define_keys(void)
+{
+    io_cga_mode(1);                     /* INT 10h AX=0001: 40x25 text */
+    install_int09();
+
+    unsigned di = 0;
+    /* The frame: 0xc9 0xcd... 0xbb, then 0x17 rows of 0xba ... 0xba, then
+     * 0xc8 0xcd... 0xbc, all in attribute 3. */
+    img_vram_setw(di, 0x03c9); di += 2;
+    for (int i = 0; i < 0x26; i++, di += 2)
+        img_vram_setw(di, 0x03cd);
+    img_vram_setw(di, 0x03bb); di += 2;
+    for (int r = 0x17; r > 0; r--) {
+        img_vram_setw(di, 0x03ba); di += 2;
+        for (int i = 0; i < 0x26; i++, di += 2)
+            img_vram_setw(di, 0x0720);
+        img_vram_setw(di, 0x03ba); di += 2;
+    }
+    img_vram_setw(di, 0x03c8); di += 2;
+    for (int i = 0; i < 0x26; i++, di += 2)
+        img_vram_setw(di, 0x03cd);
+    img_vram_setw(di, 0x03bc);
+
+    copy_string_text(0x2b03, 0x62);     /* "...finition des Touches" */
+    copy_string_text(0x2b1a, 0x69a);    /* "Tapez la Touche correspondante" */
+
+    img_setw(KEY_SCAN_L, 0);            /* forget the old left and right */
+    g_image[KEY_SCAN_A] = 0;
+
+    di = 0x14c;
+    for (unsigned which = 0; which < 3; which++, di += 0xa0) {
+        copy_string_text(0x2d5c + which * 0x17, di);
+        g_image[0x2d49] = 1;            /* a code no key can produce */
+        read_new_key(which);
+    }
+
+    restore_int09();
+    io_cga_mode(0x0e);                  /* back to mode 05h */
+}
+
+/* ========================================================================
+ * 1ac2:51b6  screen_end_of_game
+ *
+ * The picture that comes up when the last life is gone. It scrolls the screen
+ * up 0x96 rows, then builds the image at 0xa6d0 into it 0x87 bands at a time,
+ * one band of 0x21 bytes per pass.
+ *
+ * The merge is the interesting part. Each byte holds four pixels, and a pixel
+ * from the new image is taken **only where the old one is transparent** -
+ * where its two bits are zero. That is what the four `and al,mask / jne / and
+ * ah,mask / add bh,ah` groups do, one per pixel, testing the destination and
+ * adding the source's bits only when there is room. So the picture appears
+ * through the gaps in what is already there rather than over it.
+ * ===================================================================== */
+void screen_end_of_game(void)
+{
+    /* Scroll the whole screen up 0x96 rows, 0x21 bytes wide. */
+    unsigned si = 8, di = 0;
+    for (int n = 0x96; n > 0; n--) {
+        for (int b = 0; b < 0x21; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] =
+                g_vram[(si + b) & (CGA_SIZE - 1)];
+        si = cga_next_row(si);
+    }
+
+    img_setw(0x13c0, 8);
+    img_setw(0x13c2, 0x21);
+
+    for (int pass = 0x87; pass > 0; pass--) {
+        /* Take the band that is there now, and let the new picture through
+         * wherever a pixel is still zero. */
+        memcpy(g_image + 0x1aef, g_vram + (img_w(0x13c2) & (CGA_SIZE - 1)),
+               0x1ef);
+        unsigned src = 0xa6d0, dst = 0x1aef;
+        for (int i = 0; i < 0x1ef; i++, src++, dst++) {
+            unsigned old = g_image[dst], add = g_image[src], out = old;
+            for (int shift = 6; shift >= 0; shift -= 2) {
+                unsigned mask = 3u << shift;
+                if ((old & mask) == 0)
+                    out += add & mask;
+            }
+            g_image[dst] = (unsigned char)out;
+        }
+
+        /* Put one band on screen, then the merged block under it. */
+        di = img_w(0x13c0);
+        unsigned s = (img_w(0x13c2) - 0x21) & 0xffff;
+        for (int b = 0; b < 0x21; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] =
+                g_vram[(s + b) & (CGA_SIZE - 1)];
+        di = cga_next_row(di);
+        img_setw(0x13c0, di);
+
+        unsigned m = 0x1aef;
+        for (int r = 0x0f; r > 0; r--) {
+            for (int b = 0; b < 0x21; b++)
+                g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[m + b];
+            di = cga_next_row(di);
+        }
+        img_setw(0x13c2, img_w(0x13c2) + 0x21);
+
+        io_present();
+        if (!io_pump())
+            return;
+    }
+}
