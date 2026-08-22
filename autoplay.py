@@ -549,9 +549,19 @@ def run_port(args):
     code = base + GAME_CODE
     captured = {}
 
+    start_at = SBS.PLAY_SESSION
     if args.resume:
-        lv, fr, _extra = SNAP.restore(m, args.resume)
+        lv, fr, extra = SNAP.restore(m, args.resume)
         print(f"resumed {os.path.basename(args.resume)}: level {lv}")
+        # A snapshot is already inside a level, so play_session will not come
+        # round again - the handover point is the frame close instead, which
+        # is what the snapshot was taken on. Same choice sidebyside.py makes.
+        _lv, _fr, regs, ticks, img, vram, _x = SNAP.read(args.resume)
+        captured["regs"] = list(regs[:10])
+        captured["img"] = img
+        captured["vram"] = vram
+        captured["ticks"] = ticks
+        start_at = SBS.FRAME_END
 
     pending = collections.defaultdict(collections.deque)
     if not args.resume:
@@ -565,7 +575,7 @@ def run_port(args):
             sc, asc = KEYMAP[q.popleft()]
             m.press_key(sc, asc, True)
             m.press_key(sc, asc, False)
-        if off == SBS.PLAY_SESSION and not captured:
+        if off == start_at and not captured:
             captured["regs"] = [uc.reg_read(r) & 0xFFFF for r in (
                 UC_X86_REG_AX, UC_X86_REG_BX, UC_X86_REG_CX, UC_X86_REG_DX,
                 UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP, UC_X86_REG_ES,
@@ -604,7 +614,8 @@ def run_port(args):
                 return False
         return True
 
-    print("walking the menu to hand the port a starting state...")
+    if not captured:
+        print("walking the menu to hand the port a starting state...")
     addr = m._reg(UC_X86_REG_CS) * 16 + m._reg(UC_X86_REG_IP)
     ticks_shown = 0
     while not captured and m._elapsed() < 120:
@@ -624,7 +635,7 @@ def run_port(args):
     state = os.path.join(os.environ.get("TMPDIR", "/tmp"),
                          "popcorn_autoplay.pvs")
     with open(state, "wb") as f:
-        f.write(b"PVS2" + struct.pack("<I", SBS.PLAY_SESSION))
+        f.write(b"PVS2" + struct.pack("<I", start_at))
         f.write(struct.pack("<10H", *captured["regs"]))
         f.write(struct.pack("<I", captured["ticks"]))
         f.write(struct.pack("<I", len(captured["img"])) + captured["img"])
@@ -704,7 +715,7 @@ def run_port(args):
         if args.status_every and frames % (args.status_every * 40) == 0:
             print(f"  [port] {frames:6d} frames  level "
                   f"{view.img[0x13cc]:2d}  lives {view.img[0x13c9]:2d}  "
-                  f"{note}", flush=True)
+                  f"bricks {view.img[0x2f10]:3d}  {note}", flush=True)
         # Nothing here has to match anything, so the tick the PRNG stirs in
         # just has to advance the way the BIOS one would: 18.2 a second.
         ticks = int((time.time() - start) * 18.2) & 0xFFFF

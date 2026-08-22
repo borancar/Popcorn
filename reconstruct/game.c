@@ -5871,6 +5871,12 @@ void ending_walk(uint32_t bl, uint32_t bh)
  * ===================================================================== */
 void screen_all_levels_done(void)
 {
+    /* The only place the game reaches after the fiftieth level is cleared.
+     * Said out loud because it is otherwise invisible: this screen has no
+     * frame sync, so a lockstep driver is simply blocked while it runs and
+     * cannot tell "finished" from "hung". */
+    fprintf(stderr, "popcorn: the last level is finished - "
+                    "screen_all_levels_done (1ac2:5940)\n");
     for (int32_t n = 0x32; n > 0; n--)
         for (int32_t i = 0; i < 0xc8; i++)
             game_delay();

@@ -282,6 +282,31 @@ reasons that were not evidence, which is the recurring lesson here:
   comparing a version that also tears the play loop down against one that
   does not.
 
+### The port has finished the last level
+
+On 2026-08-23 the C port played **level 49, the last of the fifty, to
+completion**: 168 bricks of cell 11 and nothing else, from 158 down to 0, and
+then `screen_all_levels_done` at `1ac2:5940` - the one place the game reaches
+after the fiftieth level is cleared. The port says so itself now, because that
+screen has no frame sync and a lockstep driver blocked while it runs cannot
+tell "finished" from "hung".
+
+Two honest qualifications. The port was **placed** at level 49 rather than
+walking there: a snapshot poked onto level 48 and cleared, so `play_session`
+loads level 49 the way it normally would. And it cannot yet walk there - it
+stalls on level 10, whose row of cell 3 hardens into indestructible 4s and
+walls the top of the field off, so a bot that survives indefinitely still
+never clears it.
+
+Getting there found the bug that would have stopped it. `brick_11` at
+`1ac2:2d68` scores, sounds, turns the cell to 0x0c and draws, and **never
+touches the ball** - no `inc [di+0x1d]`, no bp anywhere in it. The C routed it
+through `brick_common`, which zeroes the bounce counter, so the
+every-0x23-bounces slope shuffle fired at a different moment. On any other
+level that is one brick in a mixed field; on level 49 it is every brick. The
+two sides disagreed on the level's 189th frame and ran fifty-one thousand
+frames together once it was fixed.
+
 ### Coverage, as last measured
 
 `verify_all.py --summary FILE` writes this; it is a number that was measured
