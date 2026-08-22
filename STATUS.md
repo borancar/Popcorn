@@ -137,18 +137,20 @@ looked like:
 
 ## Open
 
-### Sixty thousand frames of a real game come out byte for byte
+### A hundred and thirty thousand frames come out byte for byte
 
 `sidebyside.py` plays the emulator and the port together on the same driven
 input and compares the whole image and the whole screen after every frame.
 With `--from-session` it follows a whole game rather than one level, and runs
-**62,536 frames** before a single byte differs - not a byte of the
+**131,852 frames** before a single byte differs - not a byte of the
 133,296-byte image or the 16,384-byte screen, sound player included, nothing
-masked but the stack and the three key-state bytes. That is over seventeen
-minutes of continuous play, across level transitions and lost lives.
+masked but the stack and the three key-state bytes. That is around
+thirty-seven minutes of continuous play, through five levels.
 
-What differs at 62,536 is one byte: `[bx+3]` of an entity, the movement
-counter, with the PRNG and the screen both still in step. Not yet chased.
+`--snapshots DIR` writes a resumable state at the start of every level, so a
+divergence half an hour in is reached in a couple of minutes rather than
+replayed. `--resume FILE` starts from one. That is what made the last three
+bugs findable at all.
 
 The instruction counts say those frames are real rather than empty: the sound
 tick, the ball's step gate and the entity walk each run once a frame and the
