@@ -196,6 +196,18 @@ def main():
         lo, hi = struct.unpack("<HH", m.uc.mem_read(0x46C, 4))
         return (lo + hi) & 0xFFFF
 
+    def raw_ticks():
+        """The counter itself, not what the PRNG folds it into.
+
+        game_random adds the two words at 0040:006c and keeps sixteen bits, so
+        a snapshot that stored the fold restored a *different* counter - one
+        whose high word was zero. Everything seeded from it then walked a
+        different sequence, and a snapshot taken beside a divergence did not
+        reproduce it while one taken at the level start did, which is a
+        confusing way to find out.
+        """
+        return struct.unpack("<I", m.uc.mem_read(0x46C, 4))[0]
+
     REGS_10 = (UC_X86_REG_AX, UC_X86_REG_BX, UC_X86_REG_CX, UC_X86_REG_DX,
                UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP, UC_X86_REG_ES,
                UC_X86_REG_DS, UC_X86_REG_EFLAGS)
@@ -212,7 +224,7 @@ def main():
         with open(path, "wb") as f:
             f.write(SNAP_MAGIC + struct.pack("<II", level, frame))
             f.write(struct.pack(f"<{SNAP_REGS}H", *regs_now(REGS_ALL)))
-            f.write(struct.pack("<I", bios_ticks()))
+            f.write(struct.pack("<I", raw_ticks()))
             img = raw_image()
             f.write(struct.pack("<I", len(img)) + img)
             v = snapshot_vram()

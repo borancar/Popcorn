@@ -61,6 +61,13 @@ def bios_ticks(m):
     return (lo + hi) & 0xFFFF
 
 
+def raw_ticks(m):
+    """The BIOS counter itself, not the sixteen-bit fold the PRNG makes of it.
+    Storing the fold restores a different counter, and everything seeded from
+    it then walks a different sequence."""
+    return struct.unpack("<I", m.uc.mem_read(0x46C, 4))[0]
+
+
 def write(m, path, level=None, frame=0, extra=None):
     base = m.load_seg * 16
     if level is None:
@@ -71,7 +78,7 @@ def write(m, path, level=None, frame=0, extra=None):
         f.write(SNAP_MAGIC + struct.pack("<II", level, frame))
         f.write(struct.pack(f"<{SNAP_REGS}H",
                             *[m.uc.reg_read(r) & 0xFFFF for r in _regs(m.uc)]))
-        f.write(struct.pack("<I", bios_ticks(m)))
+        f.write(struct.pack("<I", raw_ticks(m)))
         f.write(struct.pack("<I", len(img)) + img)
         f.write(struct.pack("<I", len(vram)) + vram)
         # Optional and trailing, so a snapshot written before this existed
