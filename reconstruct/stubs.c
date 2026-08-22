@@ -47,7 +47,6 @@ static void note(const char *name, unsigned off)
 /* --- the screens behind the function keys ---------------------------- */
 STUB(screen_define_keys,  0x1581, "F5: read three scan codes into 0x2d4f")
 STUB(screen_high_scores,  0x4e1a, "F6: the hall of fame")
-STUB(employee_enter,      0x4ae0, "F10, the `touche speciale pour employes`")
 
 /* --- getting into a game -------------------------------------------- */
 STUB(level_load_file,     0x08c8, "reads a .PPC level set named on the command line")

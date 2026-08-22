@@ -4040,7 +4040,7 @@ void level_between(void)
         for (int col = 0; col < 0x0c; col++, di_cell++, x += 0x10) {
             unsigned cell = g_image[di_cell];
             if (cell == 0x0c) {
-                cell_special(row, di_cell);
+                cell_hole_draw(x, y);
                 continue;
             }
             if (cell == 4)
@@ -5083,6 +5083,97 @@ void brick_11_after(unsigned x, unsigned y)
         g_vram[(di + 2) & (CGA_SIZE - 1)] ^= g_image[si + 2];
         g_vram[(di + 3) & (CGA_SIZE - 1)] ^= g_image[si + 3];
         si += 0x2c + 4;
+        di = cga_next_row(di);
+    }
+}
+
+/* ========================================================================
+ * More screens.
+ * ===================================================================== */
+
+/* 1ac2:4cc1  cell_hole_draw
+ *
+ * The same picture brick_11_after XORs, drawn rather than XORed: eight rows of
+ * four bytes from 0xc46:0x28f0 at row * 0x30 + (x >> 2) - 2, stepping 0x30
+ * bytes a row. level_between uses it for a cell of 0x0c.
+ */
+void cell_hole_draw(unsigned x, unsigned y)
+{
+    unsigned row = (y - 6) & 0xff;
+    unsigned si = SEG_C46 + 0x28f0 + row * 0x30 + (((x >> 2) & 0xff) - 2);
+    unsigned di = cga_at(x, y);
+    for (int r = 0; r < 8; r++) {
+        for (int b = 0; b < 4; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
+        si += 0x30;
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:4c13  screen_unstash - the saved playfield back onto the screen, and
+ * the speaker on again */
+void screen_unstash(void)
+{
+    unsigned si = 0x1aef;
+    unsigned di = 0x1900;
+    for (int half = 0; half < 2; half++) {
+        for (int r = 0; r < 0x14; r++) {
+            for (int b = 0; b < 0x32; b++)
+                g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
+            si += 0x32;
+            di += 0x32 + 0x1e;
+        }
+        di = 0x3900;
+    }
+    speaker_on();
+}
+
+/* 1ac2:4ae0  employee_enter
+ *
+ * F10, the "touche spéciale pour employés". It puts the whole screen aside,
+ * switches the CGA to **text mode** by writing 9 to the mode register, and
+ * prints the message at 0x2298 as character/attribute pairs: 0x5b switches to
+ * inverse video, 0x9c switches back, and 0x24 pads eight blanks.
+ *
+ * The port has no text renderer, so what it does here is the mode change and
+ * the stash - the message itself is not drawn. It is the one screen in the
+ * game that is not graphics, and giving it a renderer is a separate job from
+ * transcribing it.
+ */
+void employee_enter(void)
+{
+    speaker_off();
+    memcpy(g_image + 0x1aef, g_vram, 0x7d0 * 2);
+    io_cga_mode(9);
+    for (int i = 0; i < 0x0c; i++)
+        (void)g_image[0x4b91 + i];      /* the palette table for that mode */
+    /* The text at 0x2298 goes here, once there is something to draw it with. */
+}
+
+/* 1ac2:4f73  border_setup - the frame the hall of fame sits in, and the
+ * fourteen markers started at the top-left corner seven steps apart */
+void border_setup(void)
+{
+    border_row(0);
+    border_row(0x1e00);
+    border_block(0x140);
+    border_block(0x172);
+
+    unsigned di = 0;
+    for (int i = 0; i < 0x0e; i++) {
+        img_setw(BORDER_POS + i * 2, di);
+        border_erase(di);
+        for (int k = 0; k < 7; k++)
+            di = border_step(di);
+    }
+}
+
+/* 1ac2:538d  tall_sprite - fifteen rows of four bytes, drawn not XORed */
+void tall_sprite(unsigned si, unsigned di)
+{
+    for (int r = 0; r < 0x0f; r++) {
+        for (int b = 0; b < 4; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + r * 4 + b];
         di = cga_next_row(di);
     }
 }
