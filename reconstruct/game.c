@@ -5309,3 +5309,120 @@ void ending_column(void)
         di += 4;
     }
 }
+
+/* ========================================================================
+ * 1ac2:0473  screen_game_over
+ *
+ * The paddle comes apart. First the row under it is wiped, then - if the
+ * paddle is not the plain one - it is shrunk back through its six frames, and
+ * then the sequence at 0x9bb0 plays over it, one frame per retrace. When the
+ * last life is gone it hands over to 0x51b6, the end-of-game screen.
+ * ===================================================================== */
+void screen_game_over(void)
+{
+    memcpy(g_image + PADDLE_PIX_CUR, g_image + 0xa346, 0x27 * 2);
+
+    unsigned di = 0x1cc2;
+    for (int r = 0; r < 8; r++) {
+        for (int i = 0; i < 0x18; i++)
+            img_vram_setw(di + i * 2, 0);
+        di = cga_next_row(di);
+    }
+    g_image[PADDLE_SUPPRESS] = 1;
+
+    unsigned kind = g_image[PADDLE_KIND];
+    if (kind) {
+        unsigned si = img_w(PADDLE_GROW + kind * 2);
+        for (int f = 0; f < 6; f++, si += 2) {
+            io_wait_retrace();
+            draw_paddle_shifted(img_w(si));
+            for (int i = 0; i < 0x96; i++)
+                game_delay();
+            io_present();
+            if (!io_pump())
+                return;
+        }
+        blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
+    }
+
+    for (unsigned si = 0x9bb0; img_w(si); si += 2) {
+        io_wait_retrace();
+        draw_paddle_raw(img_w(si));
+        for (int i = 0; i < 0x96; i++)
+            game_delay();
+        io_present();
+        if (!io_pump())
+            return;
+    }
+
+    if (g_image[LIVES] == 0)
+        screen_end_of_game();           /* 1ac2:51b6 */
+}
+
+/* ========================================================================
+ * The ending's own kernels. Same sixteen-byte records and same parabola as
+ * the menu's, but launched lower and drawn with a four-word sprite rather
+ * than single pixels.
+ * ===================================================================== */
+
+/* 1ac2:5add  ending_plot
+ *
+ * A 2x2 arrangement of words at (cx, dx), and the address is built out of the
+ * two coordinates' low bits rather than by the usual formula: bit 0 of the row
+ * picks the half of the interlace, bits 0 and 1 of the column pick one of four
+ * pre-shifted sprites in the table at 0x1acf.
+ */
+void ending_plot(unsigned x, unsigned y)
+{
+    unsigned di = (y & 1) ? CGA_PLANE : 0;
+    unsigned row = y >> 1;
+    di += row * 0x50;
+    unsigned phase = ((x & 1) ? 1 : 0) + ((x & 2) ? 2 : 0);
+    unsigned si = 0x1acf + phase * 8;
+    di += x >> 2;
+
+    unsigned d = di;
+    for (int i = 0; i < 4; i++) {
+        g_vram[d & (CGA_SIZE - 1)] ^= (unsigned char)img_w(si + i * 2);
+        g_vram[(d + 1) & (CGA_SIZE - 1)] ^= (unsigned char)(img_w(si + i * 2) >> 8);
+        d = (i & 1) ? (d - 0x1fb0) & 0xffff : (d + CGA_PLANE) & 0xffff;
+    }
+}
+
+/* 1ac2:5a43  ending_particles_init - every record launched from the lower
+ * starting point */
+void ending_particles_init(void)
+{
+    unsigned n = img_w(PARTICLE_COUNT);
+    unsigned ax = 0;
+    for (unsigned i = 0; i < n; i++)
+        ax = ending_particle_init(PARTICLES + i * 0x10, ax);
+}
+
+/* 1ac2:5a56  ending_particles_tick - menu_particles_tick with ending_plot in
+ * place of the BIOS pixel call and ending_particle_init to re-launch */
+void ending_particles_tick(void)
+{
+    unsigned si = PARTICLES;
+    unsigned n = img_w(PARTICLE_COUNT);
+    for (unsigned k = 0; k < n; k++, si += 0x10) {
+        unsigned x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
+        unsigned y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
+        if (x <= 0x13f && y <= 0xc7)
+            ending_plot(x, y);
+
+        img_setw(si + 6, (img_w(si + 6) + img_w(si + 0x0c)) & 0xffff);
+        short t = (short)img_w(si + 6), v = (short)img_w(si + 0x0e);
+        short first = (short)(v * t);
+        int prod = (int)first * (int)t;
+        img_setw(si + 8, (short)(prod / 100) & 0xffff);
+
+        y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
+        x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
+        if (y <= 0xc7 && x <= 0x13f)
+            ending_plot(x, y);
+        if (y > 0xc7)
+            ending_particle_init(si, y);
+        game_delay();
+    }
+}
