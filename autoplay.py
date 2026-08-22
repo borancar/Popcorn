@@ -155,9 +155,10 @@ PADDLE_WIDTH = 0x2D3A      # the live width, which the paddle morphs change
 # What each kind gives, read off the letter drawn on the capsule and matched
 # against the effect table at 0x33bc. The letters are French: F is *filet*,
 # the safety net, and V is *vie*, an extra life.
-CAPSULE_LETTER = {0: "B", 1: "C", 2: "E", 3: "L", 4: "T", 5: "F",
+CAPSULE_LETTER = {0: "R", 1: "C", 2: "E", 3: "L", 4: "T", 5: "F",
                   6: "I", 7: "V", 8: "+", 9: "S", 10: "M"}
-CAPSULE_EFFECT = {0: "100 points", 1: "catch", 2: "wider paddle",
+CAPSULE_EFFECT = {0: "100 points, but it cancels the net",
+                  1: "catch", 2: "wider paddle",
                   3: "laser", 4: "multiball", 5: "net", 6: "reverse",
                   7: "extra life", 8: "end level", 9: "slower ball",
                   10: "stops the monsters"}
@@ -165,7 +166,12 @@ CAPSULE_EFFECT = {0: "100 points", 1: "catch", 2: "wider paddle",
 #
 # L is top: the laser clears bricks on its own, and it is the only capsule
 # that survives collecting another one. Then + for the level, F for the net,
-# then V and E, which buy survival. S is refused.
+# then V and E, which buy survival.
+#
+# R and S are refused. R is the trap of the set: it pays a hundred points and
+# then **cancels the safety net** and the stopped-monsters state - 0x2daa
+# clears [SAFETY_NET] and [EXTRA_ON] and wipes both indicator bars. Taking it
+# undoes an F, which is the one capsule that gets a parachuted ball back.
 #
 # The paddle kind only goes back to 0 at a level start or a lost life
 # (0x2d39 is written in play_prepare, play_teardown and the morph), so once
@@ -176,8 +182,8 @@ CAPSULE_EFFECT = {0: "100 points", 1: "catch", 2: "wider paddle",
 # down to 2: the ball then moves on one frame in two instead of two in three.
 # The comment here used to say "speed up", which had it exactly backwards.
 CAPSULE_WANT = {3: 5, 8: 4, 5: 3, 7: 2, 2: 2,
-                10: 1, 0: 1, 1: 1, 4: 1, 6: 0,
-                9: -1}
+                10: 1, 1: 1, 4: 1, 6: 0,
+                0: -1, 9: -1}
 # How much slack to keep between catching a capsule and being back under the
 # ball. The mouse route is absolute - the paddle is wherever the pointer says
 # on the very next frame - so this is margin against the prediction being

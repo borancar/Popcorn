@@ -480,7 +480,7 @@ like:
 
 | kind | letter | what it does |
 | --- | --- | --- |
-| 0 | B | a hundred points, and it cancels the net |
+| 0 | R | a hundred points, and it **cancels the net** and the stopped-monsters state. The trap of the set: it undoes an F |
 | 1 | C | the paddle catches the ball |
 | 2 | E | **the wider paddle** - 39 pixels against 27. The effect routine at `0x3231` is empty; the widening is the morph, through `0x2d2d` |
 | 3 | L | the laser |
