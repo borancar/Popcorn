@@ -67,7 +67,6 @@ void entity_unknown(unsigned bx)
     g_image[ENTITY_REMOVE] = 1;
 }
 
-STUB(bonus_end_level,     0x2da0, "kind 8: throws the stack away into 0x4210")
 
 int bonus_script(unsigned bx, unsigned *px, unsigned *py)
 {
