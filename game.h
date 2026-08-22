@@ -207,6 +207,14 @@ void arrow_head(unsigned di);     /* 1ac2:492f */
 void arrow_tail(unsigned di);     /* 1ac2:4957 */
 void screen_define_keys(void);    /* 1ac2:1581 */
 void screen_high_scores(void);    /* 1ac2:4e1a */
+void hsc_sort(void);              /* 1ac2:4d37 */
+void hsc_save(const char *dir);   /* 1ac2:4dbb */
+void border_draw(unsigned di);    /* 1ac2:4ff1 */
+void border_erase(unsigned di);   /* 1ac2:4fd3 */
+unsigned border_step(unsigned di);/* 1ac2:4fa7 */
+void border_animate(void);        /* 1ac2:4f58 */
+void border_row(unsigned di);     /* 1ac2:5019 */
+void border_block(unsigned di);   /* 1ac2:5045 */
 void palette_cycle(void);         /* 1ac2:5196 */
 void flush_keys(void);            /* 1ac2:0106 */
 void install_int09(void);         /* 1ac2:03b0 */
@@ -384,6 +392,14 @@ void arrow_head(unsigned di);     /* 1ac2:492f */
 void arrow_tail(unsigned di);     /* 1ac2:4957 */
 void screen_define_keys(void);    /* 1ac2:1581 */
 void screen_high_scores(void);    /* 1ac2:4e1a */
+void hsc_sort(void);              /* 1ac2:4d37 */
+void hsc_save(const char *dir);   /* 1ac2:4dbb */
+void border_draw(unsigned di);    /* 1ac2:4ff1 */
+void border_erase(unsigned di);   /* 1ac2:4fd3 */
+unsigned border_step(unsigned di);/* 1ac2:4fa7 */
+void border_animate(void);        /* 1ac2:4f58 */
+void border_row(unsigned di);     /* 1ac2:5019 */
+void border_block(unsigned di);   /* 1ac2:5045 */
 void palette_cycle(void);         /* 1ac2:5196 */
 void flush_keys(void);            /* 1ac2:0106 */
 void install_int09(void);         /* 1ac2:03b0 */
