@@ -112,6 +112,10 @@ def main():
     ap.add_argument("--keyboard", action="store_true",
                     help="play through the keyboard input routine rather than "
                          "the mouse, which is the only way 1ac2:16d2 runs")
+    ap.add_argument("--resume", metavar="FILE",
+                    help="start from a sidebyside.py snapshot instead of "
+                         "walking the menu, so routines that only run deep "
+                         "in a game can be sampled")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -338,6 +342,35 @@ def main():
                   f"[{checked[off]}]")
 
     m.uc.hook_add(unicorn.UC_HOOK_CODE, on_code, None, code, code + 0x10000)
+
+    if args.resume:
+        # sidebyside.py's snapshot, restored whole: image, video memory, all
+        # fourteen registers and the BIOS tick the PRNG seeds from. The
+        # alternative is playing to the level the routine appears on, which for
+        # the animated bricks is ten minutes of emulation for three samples.
+        d = open(args.resume, "rb").read()
+        if d[:4] != b"PSNP":
+            raise SystemExit(f"{args.resume}: not a snapshot")
+        lv, fr = struct.unpack_from("<II", d, 4)
+        o = 12
+        regs = struct.unpack_from("<14H", d, o); o += 28
+        ticks, = struct.unpack_from("<I", d, o); o += 4
+        ilen, = struct.unpack_from("<I", d, o); o += 4
+        img = d[o:o + ilen]; o += ilen
+        vlen, = struct.unpack_from("<I", d, o); o += 4
+        m.uc.mem_write(base, img)
+        m.uc.mem_write(0xB8000, d[o:o + vlen])
+        for reg, val in zip((UC_X86_REG_AX, UC_X86_REG_BX, UC_X86_REG_CX,
+                             UC_X86_REG_DX, UC_X86_REG_SI, UC_X86_REG_DI,
+                             UC_X86_REG_BP, UC_X86_REG_ES, UC_X86_REG_DS,
+                             UC_X86_REG_EFLAGS, UC_X86_REG_SP, UC_X86_REG_SS,
+                             UC_X86_REG_CS, UC_X86_REG_IP), regs):
+            m.uc.reg_write(reg, val)
+        m.uc.mem_write(0x46C, struct.pack("<I", ticks))
+        pending.clear()
+        started[0] = True
+        print(f"resumed {os.path.basename(args.resume)}: "
+              f"level {lv}, frame {fr}")
 
     addr = m._reg(UC_X86_REG_CS) * 16 + m._reg(UC_X86_REG_IP)
     while m._elapsed() < args.seconds:
