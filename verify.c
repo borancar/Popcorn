@@ -70,6 +70,9 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x3b64:                        /* xor_sprite_16x7(cl, al, si) */
         xor_sprite_16x7(r[R_CX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
         return 1;
+    case 0x1fc1:                        /* field_backdrop(al = y) */
+        field_backdrop(r[R_AX] & 0xff);
+        return 1;
     case 0x0c64:                        /* draw_char(al, di) */
         draw_char((unsigned char)(r[R_AX] & 0xff), r[R_DI]);
         return 1;
