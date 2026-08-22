@@ -77,6 +77,7 @@ ROUTINES = {
     0x2E1E: "ball_on_paddle",
     0x2EE3: "laser_fire",
     0x3273: "entity_capsule",
+    0x3386: "entity_paddle_fx",
     0x3561: "entity_popup",
     0x3717: "entity_multiball",
     0x306B: "shot_xor",

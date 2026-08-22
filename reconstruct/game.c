@@ -3834,3 +3834,159 @@ void entity_multiball(unsigned bx)
     }
     g_image[ENTITY_REMOVE] = 1;
 }
+
+/* ========================================================================
+ * 1ac2:3386  entity_paddle_fx
+ *
+ * The paddle changing shape when a capsule is collected. It shrinks the paddle
+ * it has through six frames, swaps in the new one, grows that, and finally
+ * applies the bonus effect and unlinks itself.
+ *
+ * It owns [0x2d3b] while it runs: that byte suppresses the ordinary paddle
+ * draw, and it is set to 0xff and then counted down, with the animation
+ * stepping only when the count is a multiple of 0x23 (a `div cl` and a test of
+ * the remainder). [0x2d3c] holds which entity owns it, so a second capsule
+ * collected mid-morph does not fight the first.
+ *
+ * [0x2d38] is how much the paddle's width changes per frame: the width at
+ * [0x2d3a] goes up by it and the right-hand limit at [0x2d3f] down by the
+ * same, which keeps the paddle inside the playfield as it grows.
+ * ===================================================================== */
+#define PADDLE_STEP  0x2d38
+#define MORPH_OWNER  0x2d3c
+#define PADDLE_WIDE  0x2d25             /* sprites for the growing paddle */
+
+static void morph_finish(unsigned bx)
+{
+    bonus_effect(g_image[bx + 0x0a]);
+    g_image[ENTITY_REMOVE] = 1;
+}
+
+void entity_paddle_fx(unsigned bx)
+{
+    if (g_image[PADDLE_SUPPRESS] == 0) {
+        /* Nothing is morphing. If the paddle is already the kind this capsule
+         * gives, there is nothing to animate - just apply the effect. */
+        if (g_image[PADDLE_KIND] == g_image[bx + 7]) {
+            morph_finish(bx);
+            return;
+        }
+        g_image[bx + 6] = g_image[PADDLE_KIND];
+        g_image[PADDLE_SUPPRESS] = 0xff;
+        img_setw(MORPH_OWNER, bx);
+
+        if (g_image[bx + 7] != 2) {
+            /* Losing the laser: take any shot in flight off the screen. */
+            if (g_image[LASER_ON] == 2)
+                shot_xor(g_image[SHOT_X], (g_image[SHOT_Y] + 2) & 0xff);
+            g_image[LASER_ON] = 0;
+        }
+        if (g_image[bx + 7] != 3) {
+            /* Losing the catch: release anything held. */
+            g_image[CAUGHT] = 0;
+            img_setw(HOLD_TIMER, 0x460);
+            for (int i = 0; i < 3; i++) {
+                unsigned ball = BALLS + i * BALL_STRIDE;
+                unsigned char *b = g_image + ball;
+                if (b[B_STATE] != 2)
+                    continue;
+                ball_after(ball);
+                b[B_DIR_Y] = 1;
+                b[B_Y] = 0xb4;
+                b[B_ANCHOR_X] = b[B_X];
+                b[B_ANCHOR_Y] = b[B_Y];
+                b[B_ACC_X] = b[B_ACC_Y] = 0;
+                b[B_STATE] = 1;
+                b[B_BOUNCES] = 0;
+                ball_redraw(ball);
+            }
+        }
+    } else if (img_w(MORPH_OWNER) != bx) {
+        return;                         /* somebody else's morph */
+    }
+
+    if (--g_image[PADDLE_SUPPRESS] % 0x23 != 0) {
+        /* Between animation steps: redraw the current frame if the paddle has
+         * moved, so it still follows the player. */
+        if (g_image[PADDLE_X] == g_image[PADDLE_PREV_X])
+            return;
+        if (g_image[bx + 3] == 6) {
+            draw_paddle(img_w(PADDLE_SPRITES + g_image[PADDLE_KIND] * 4));
+            return;
+        }
+        unsigned si = img_w(bx + 4) + g_image[bx + 3] * 2;
+        draw_paddle_shifted(img_w(si));
+        return;
+    }
+
+    if (g_image[bx + 3] != 6) {
+        morph_step(bx);
+        return;
+    }
+
+    /* A frame boundary with [bx+3] == 6: pick the sprite list for this stage.
+     * [bx+2] is 1 while shrinking the old paddle and 0 while growing the new. */
+    unsigned si, kind;
+    if (g_image[bx + 2] != 0) {
+        si = PADDLE_WIDE;
+        g_image[PADDLE_STEP] = 0;
+        kind = g_image[bx + 6];
+        if (kind == 1)
+            g_image[PADDLE_STEP] = 0xfe;    /* -2: this one shrinks */
+        if (kind != 0) {
+            morph_begin(bx, si, kind);
+            return;
+        }
+        g_image[bx + 2] = 0;
+    }
+    si = PADDLE_SPRITES;
+    g_image[PADDLE_STEP] = 0;
+    kind = g_image[bx + 7];
+    if (kind == 1)
+        g_image[PADDLE_STEP] = 2;
+    if (kind != 0) {
+        morph_begin(bx, si, kind);
+        return;
+    }
+    /* Both ends are the plain paddle: nothing to animate. */
+    g_image[PADDLE_KIND] = 0;
+    g_image[PADDLE_WIDTH] = 0x1b;
+    g_image[PADDLE_SUPPRESS] = 0;
+    morph_finish(bx);
+}
+
+/* 1ac2:34c5  morph_begin - start a stage: remember its sprite list and run
+ * the first frame. */
+void morph_begin(unsigned bx, unsigned table, unsigned kind)
+{
+    img_setw(bx + 4, img_w(table + kind * 2));
+    g_image[bx + 3] = 6;
+    g_image[PADDLE_SUPPRESS] = 0xff;
+    morph_step(bx);
+}
+
+/* 1ac2:34d7  morph_step - one frame of the shrink or grow */
+void morph_step(unsigned bx)
+{
+    g_image[bx + 3]--;
+    unsigned si = img_w(bx + 4) + g_image[bx + 3] * 2;
+    draw_paddle_shifted(img_w(si));
+
+    g_image[PADDLE_WIDTH] += g_image[PADDLE_STEP];
+    g_image[PADDLE_MAX] -= g_image[PADDLE_STEP];
+
+    if (g_image[bx + 3] != 0)
+        return;
+    g_image[bx + 3] = 6;
+    if (g_image[bx + 2] == 1) {         /* done shrinking; grow next */
+        g_image[bx + 2] = 0;
+        g_image[PADDLE_KIND] = 0;
+        return;
+    }
+    /* Done growing: install the new paddle and apply the effect. */
+    unsigned kind = g_image[bx + 7];
+    g_image[PADDLE_KIND] = (unsigned char)kind;
+    g_image[PADDLE_WIDTH] = g_image[PADDLE_SPRITES + kind * 4 + 2];
+    g_image[PADDLE_SUPPRESS] = 0;
+    morph_finish(bx);
+}

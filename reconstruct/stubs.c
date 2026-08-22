@@ -83,7 +83,6 @@ STUB(screen_all_levels_done, 0x5940, "finishing all fifty")
 
 void brick_11(unsigned slot, unsigned ball) { note("brick_11", 0x2d68); (void)slot; (void)ball; }
 
-STUB2(entity_paddle_fx, 0x3386)
 
 /* An entity whose handler has not been transcribed. Doing nothing leaves it in
  * the list for ever, so it is unlinked - the animation is lost but the list
