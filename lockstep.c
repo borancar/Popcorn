@@ -53,6 +53,26 @@ void io_log_random(uint32_t dl)
     if (active && draw_n < DRAWS_MAX)
         draws[draw_n++] = (uint16_t)dl;
 }
+/* A second, opt-in sync point.
+ *
+ * io_frame_sync is only reached at the frame close in play_loop, so a screen
+ * with a loop of its own - the end-level bonus, the game over, the ending -
+ * is one indivisible step to the driver: it can say the two sides differ
+ * *afterwards* and nothing about where. Enabling this makes screen_scroll_up
+ * a comparison point too, which is once per scrolled row, and that is enough
+ * to name which row a difference starts on. The driver has to be told to
+ * expect the same point or the two go out of step immediately.
+ */
+static int32_t extra_sync;
+
+void io_lockstep_extra_sync(int32_t on) { extra_sync = on ? 1 : 0; }
+
+void io_frame_sync_extra(void)
+{
+    if (extra_sync)
+        io_frame_sync();
+}
+
 static uint32_t ls_frame;
 static uint32_t ls_mouse_x, ls_mouse_btn;
 
