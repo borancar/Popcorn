@@ -58,7 +58,6 @@ STUB(demo_input_step,     0x1a6f, "advances the recorded-input cursor")
 
 /* --- called from play_session, which is transcribed ------------------- */
 STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
-STUB(screen_all_levels_done, 0x5940, "finishing all fifty")
 
 
 

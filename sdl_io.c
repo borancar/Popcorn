@@ -398,12 +398,9 @@ int io_pump(void)
             int sc = scancode_of(ev.key.scancode);
             if (!sc)
                 break;
-            /* Exactly what the INT 09h handler at 1ac2:03e3 does with a scan
-             * code: compare it against the three configured keys and record
-             * whether it is held. */
-            if (sc == g_image[KEY_SCAN_L]) g_image[KEY_LEFT] = (unsigned char)down;
-            if (sc == g_image[KEY_SCAN_R]) g_image[KEY_RIGHT] = (unsigned char)down;
-            if (sc == g_image[KEY_SCAN_A]) g_image[KEY_ACTION] = (unsigned char)down;
+            /* Hand it to the game's own INT 09h handler rather than
+             * decoding it here a second time. */
+            int09_handler(down ? (unsigned)sc : (unsigned)sc | 0x80);
             /* ... and separately, what the BIOS would have put in its buffer
              * for the menus to read through INT 16h. Only on the make: a
              * break code never reached that buffer. */

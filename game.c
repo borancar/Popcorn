@@ -81,7 +81,6 @@ void ball_step(unsigned ball)
  */
 #define REPEAT_COUNT  0x2d40
 #define REPEAT_DIV    0x2d4b
-#define LAST_DIR      0x2d4a            /* 0 = left, 1 = right */
 #define REPEAT_RESET  5
 
 void input_keyboard(void)
@@ -815,6 +814,7 @@ void game_main(const char *dir, unsigned speed)
     intro_logo();
     intro_reveal();
     intro_scroll();
+    intro_paddle();
     save_screen();
 
     for (;;) {
@@ -5424,5 +5424,177 @@ void ending_particles_tick(void)
         if (y > 0xc7)
             ending_particle_init(si, y);
         game_delay();
+    }
+}
+
+/* ========================================================================
+ * 1ac2:5bb5  ending_walk
+ *
+ * Move the ending's blob to a target: `bl * 8` gives the column it is heading
+ * for and `bh * 8 + 8` the row, and it steps four pixels at a time towards
+ * each in turn, XOR-ing itself off and on again at every step. [0x2823] holds
+ * the target while it works, which is why it is a variable and not a register.
+ * ===================================================================== */
+void ending_walk(unsigned bl, unsigned bh)
+{
+    unsigned dx = img_w(0x2821);        /* the blob's packed position */
+
+    unsigned target = (0x50 - ((bl << 3) & 0xff)) & 0xff;
+    g_image[0x2823] = (unsigned char)target;
+    while (((dx >> 8) & 0xff) != target) {
+        unsigned next = (dx - 0x400) & 0xffff;   /* `sub ah,4` */
+        for (int i = 0; i < 0x0f; i++)
+            game_delay();
+        io_wait_retrace();
+        ending_blob(next);
+        ending_blob(dx);
+        dx = next;
+    }
+
+    target = (((bh << 3) + 8) & 0xff);
+    g_image[0x2823] = (unsigned char)target;
+    while ((dx & 0xff) != target) {
+        unsigned next = (dx - 4) & 0xffff;       /* `sub al,4` */
+        for (int i = 0; i < 0x0f; i++)
+            game_delay();
+        io_wait_retrace();
+        ending_blob(next);
+        ending_blob(dx);
+        dx = next;
+    }
+    img_setw(0x2821, dx);
+}
+
+/* ========================================================================
+ * 1ac2:5940  screen_all_levels_done
+ *
+ * Finishing all fifty. The cells are wiped, the level intro runs on an empty
+ * field, and then the picture at 0xc46:0x7c70 is drawn in a widening band -
+ * `bh` counts from 1 to 0x5c and is both the number of rows copied and the
+ * offset the band starts at, so it grows from a line into the whole screen.
+ * ===================================================================== */
+void screen_all_levels_done(void)
+{
+    for (int n = 0x32; n > 0; n--)
+        for (int i = 0; i < 0xc8; i++)
+            game_delay();
+
+    memset(g_image + LEVEL_CELLS + 8, 0, 0x54 * 2);
+    level_intro();
+
+    unsigned bp = 0x3ef2;
+    for (unsigned bh = 1; bh != 0x5c; bh++) {
+        unsigned di = bp, si = SEG_C46 + 0x7c70;
+        io_wait_retrace();
+        for (unsigned r = 0; r < bh; r++) {
+            for (int b = 0; b < 0x1a; b++)
+                g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
+            si += 0x1a;
+            di = cga_next_row((di - 0x1a) & 0xffff);
+        }
+        bp = cga_prev_row(bp);
+        for (int i = 0; i < 5; i++)
+            game_delay();
+        io_present();
+        if (!io_pump())
+            return;
+    }
+    /* Then the blobs walk a 0x18 by `bl` grid, and the kernels run until a
+     * key is pressed. */
+    for (unsigned bh = 0; bh != 0x18; bh++)
+        for (unsigned bl = 0x1a; bl > 0; bl--) {
+            ending_blobs();
+            ending_walk(bl, bh);
+        }
+    ending_particles_init();
+    while (!io_key_ready()) {
+        ending_particles_tick();
+        io_present();
+        if (!io_pump())
+            return;
+    }
+    io_get_key();
+}
+
+/* ========================================================================
+ * 1ac2:03e3  the INT 09h handler
+ *
+ * The game's whole keyboard interface. It replaces the BIOS one while a level
+ * is running, which is why the INT 16h buffer stops filling then, and it is
+ * taken out again for the menus.
+ *
+ * The platform layer calls this with the scan code SDL gives it, so the
+ * decoding below is the original's rather than a second copy of it. What the
+ * platform cannot supply is the acknowledgement to port 0x61 and the end-of-
+ * interrupt to port 0x20, and it does not need to.
+ *
+ * The `repne scasb` leaves CX at 2, 1 or 0 for a match on left, right or
+ * action, and `[0x2d4c + cx]` turns that into 0x2d4e, 0x2d4d or 0x2d4c - so
+ * the three state bytes run backwards against the three scan codes.
+ */
+void int09_handler(unsigned scan)
+{
+    unsigned make = scan <= 0x7f;
+
+    if ((scan & 0xff) == g_image[KEY_SCAN_L])
+        g_image[LAST_DIR] = 0;
+    if ((scan & 0xff) == g_image[KEY_SCAN_R])
+        g_image[LAST_DIR] = 1;
+    if (scan == 0xc3)                   /* F9 released */
+        g_image[SOUND_ON] ^= 1;
+    if (make)
+        g_image[0x2d49] = (unsigned char)scan;
+
+    unsigned code = scan & 0x7f;
+    for (int i = 0; i < 3; i++)
+        if (code == g_image[KEY_SCAN_L + i]) {
+            g_image[KEY_ACTION + (2 - i)] = (unsigned char)make;
+            return;
+        }
+}
+
+/* ========================================================================
+ * 1ac2:4dea and 1ac2:4e04  drive_check / drive_writable
+ *
+ * Before touching popcorn.hsc the game resets the drive with INT 13h AH=00,
+ * asks DOS for the current disk with AH=0Dh, and reads sector 0 with INT 25h;
+ * the second one then writes it back with INT 26h to prove the disk is not
+ * write-protected. On a floppy in 1988 that was the difference between saving
+ * a high score and hanging on a critical-error prompt.
+ *
+ * There is no disk here and the port opens the file directly, so both report
+ * success. They are the two INT 13h/INT 25h calls the emulator sees at
+ * startup, and this is what they were for.
+ */
+int drive_check(void) { return 1; }
+int drive_writable(void) { return 1; }
+
+/* ========================================================================
+ * 1ac2:49bc  intro_paddle
+ *
+ * The paddle assembling itself at the end of the opening: four sprite sets,
+ * each drawn `bh` bytes wide and growing, seven rows at a time from 0x1900
+ * with a retrace wait per pass.
+ * ===================================================================== */
+void intro_paddle(void)
+{
+    unsigned bp = 0x490a;
+    for (unsigned bh = 1; bh <= 0x1a; bh++, bp--) {
+        unsigned si = bp;
+        for (int bl = 4; bl > 0; bl--, si += PADDLE_IMAGE) {
+            io_wait_retrace();
+            unsigned di = 0x1900, s = si;
+            for (int dl = 7; dl > 0; dl--) {
+                for (unsigned b = 0; b < bh; b++)
+                    g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[s + b];
+                s += 0x0b;
+                di = cga_next_row(di);
+            }
+            for (int i = 0; i < 0x19; i++)
+                game_delay();
+            io_present();
+            if (!io_pump())
+                return;
+        }
     }
 }
