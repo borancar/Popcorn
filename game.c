@@ -4242,10 +4242,19 @@ int name_field(unsigned di, unsigned char *abort)
             *abort = 0xff;
             return 0;
         }
-        if (c == 8) {                   /* Backspace */
+        if (c == 8) {                   /* Backspace, 1ac2:1380 */
             if (len == 0)
                 continue;
-            draw_char(len == 0x0c ? ' ' : '-', di - 4);
+            /* What gets painted over is the **cursor's** cell, at the
+             * current di - not the character being removed. A full field
+             * has its cursor one past the twelfth cell, where the right
+             * thing is a space; anywhere else it sits on an empty cell of
+             * the field, where the right thing is the dash placeholder.
+             *
+             * The character itself goes when the cursor moves back onto it:
+             * di drops two cells, draw_cursor puts glyph 0xff one past that,
+             * which is exactly where the deleted character was. */
+            draw_char(len == 0x0c ? ' ' : '-', di);
             di -= 4;
             len--;
             draw_cursor(di);
