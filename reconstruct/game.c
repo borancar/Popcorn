@@ -5487,7 +5487,32 @@ void employee_enter(void)
     memcpy(g_image + 0x1aef, g_vram, 0x7d0 * 2);
     io_cga_mode(9);
     set_palette_registers(0x4b91);
-    /* The text at 0x2298 goes here, once there is something to draw it with. */
+
+    /* The message is written **into video memory** - text mode's buffer is
+     * the same 0xb800 - as character/attribute pairs, so the port reproduces
+     * it exactly whether or not it can yet *draw* it. Skipping the writes
+     * because there is no renderer left the buffer empty where the original
+     * had filled it, which is a difference in the transcription and not in
+     * the presentation. 0x5b switches to inverse video, 0x9c back, and 0x24
+     * pads eight blanks in whatever attribute is in force. */
+    uint32_t si = SEG_C46 + 0x2298, di = 0;
+    uint8_t attr = 7;
+    for (;;) {
+        uint8_t c = g_image[si++];
+        if (c == 0)
+            break;
+        if (c == 0x5b) { attr = 0x70; continue; }
+        if (c == 0x9c) { attr = 0x07; continue; }
+        if (c == 0x24) {                /* eight blanks */
+            for (int32_t i = 0; i < 8; i++) {
+                g_vram[di++ & (CGA_SIZE - 1)] = 0x20;
+                g_vram[di++ & (CGA_SIZE - 1)] = attr;
+            }
+            continue;
+        }
+        g_vram[di++ & (CGA_SIZE - 1)] = c;
+        g_vram[di++ & (CGA_SIZE - 1)] = attr;
+    }
 }
 
 /* 1ac2:4f73  border_setup - the frame the hall of fame sits in, and the

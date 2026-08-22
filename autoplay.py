@@ -660,6 +660,7 @@ def run_port(args):
     clock = pygame.time.Clock()
 
     frames = 0
+    prev_level = [0]
     start = time.time()
     # The port reads a command **before** it runs a frame, so the first one
     # has to go out before anything is read back. Reading first deadlocks the
@@ -688,6 +689,18 @@ def run_port(args):
             clock.tick(60)
 
         note = bot.step()
+        # Level 49 cleared takes [0x13cc] to 0x32, which play_session resets
+        # to 0 before running screen_all_levels_done - so the level number
+        # falling back to 0 from a high one is the whole game finished, and
+        # it is worth saying out loud rather than scrolling past.
+        lv = view.img[0x13cc]
+        if lv < prev_level[0] and prev_level[0] >= 0x30:
+            print(f"  [port] *** the last level is finished, at frame "
+                  f"{frames} ***", flush=True)
+        if lv != prev_level[0]:
+            print(f"  [port] level {prev_level[0]} -> {lv} at frame {frames}",
+                  flush=True)
+            prev_level[0] = lv
         if args.status_every and frames % (args.status_every * 40) == 0:
             print(f"  [port] {frames:6d} frames  level "
                   f"{view.img[0x13cc]:2d}  lives {view.img[0x13c9]:2d}  "
