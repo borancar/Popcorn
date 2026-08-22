@@ -2969,6 +2969,7 @@ void entity_call(unsigned node)
     case 0x390D: entity_hatch(node); break;
     case 0x39FA: entity_bonus(node); break;
     case 0x3AEE: entity_sparkle(node); break;
+    case 0x3717: entity_multiball(node); break;
     case 0x3B2A: entity_crumble(node); break;
     default:     entity_unknown(node); break;
     }
@@ -3596,12 +3597,17 @@ void laser_fire(void)
 #define CAPSULE_FRAMES 0x3385           /* by kind: a table of frame tables */
 #define PADDLE_NEXT    0x2d2d           /* kind -> the paddle kind it gives */
 
-void entity_capsule(unsigned bx)
+/* 1ac2:3561  entity_popup is the same routine with a different set of frames -
+ * table 0x339b rather than 0x3385 - so the two share a body. */
+void entity_popup(unsigned bx) { entity_capsule_frames(bx, 0x339b); }
+void entity_capsule(unsigned bx) { entity_capsule_frames(bx, CAPSULE_FRAMES); }
+
+void entity_capsule_frames(unsigned bx, unsigned table)
 {
     if ((--g_image[bx + 5] & 7) != 0)
         return;                         /* not this tick */
 
-    unsigned base = img_w(CAPSULE_FRAMES + g_image[bx + 4] * 2);
+    unsigned base = img_w(table + g_image[bx + 4] * 2);
     unsigned di = base + g_image[bx + 6] * 4;
     unsigned src = img_w(di), rows = img_w(di + 2);
 
@@ -3764,4 +3770,67 @@ void bonus_effect(unsigned kind)
     case 9: bonus_speed(); break;
     default: break;
     }
+}
+
+/* ========================================================================
+ * 1ac2:3717  entity_multiball
+ *
+ * Fill every idle ball slot with a copy of one that is in play, each with its
+ * vertical component two larger so they diverge instead of travelling as one.
+ * Sets [0x2e73] to 3 - three balls alive - and unlinks itself; it exists only
+ * to run once.
+ * ===================================================================== */
+void entity_multiball(unsigned bx)
+{
+    if (g_image[BALL_ALIVE] == 3) {
+        g_image[ENTITY_REMOVE] = 1;
+        return;
+    }
+
+    /* Find one that is in play to copy. */
+    unsigned src = 0;
+    for (int i = 0; i < 3; i++) {
+        unsigned b = BALLS + i * BALL_STRIDE;
+        if (g_image[b + B_STATE] != 0) {
+            src = b;
+            break;
+        }
+    }
+    if (!src)
+        return;                         /* none: nothing to multiply */
+
+    g_image[BALL_ALIVE] = 3;
+    unsigned dy = g_image[src + B_DY], dx = g_image[src + B_DX];
+    unsigned x = g_image[src + B_X], y = g_image[src + B_Y];
+
+    for (int i = 0; i < 3; i++) {
+        unsigned si = BALLS + i * BALL_STRIDE;
+        if (g_image[si + B_STATE] != 0)
+            continue;
+        unsigned char *b = g_image + si;
+        b[B_X] = b[B_PREV_X] = b[B_ANCHOR_X] = (unsigned char)x;
+        b[B_Y] = b[B_PREV_Y] = b[B_ANCHOR_Y] = (unsigned char)y;
+        dx = (dx + 2) & 0xff;           /* each copy a little steeper */
+        b[B_DY] = (unsigned char)dy;
+        b[B_DX] = (unsigned char)dx;
+        b[B_DIR_X] = g_image[src + B_DIR_X];
+        b[B_DIR_Y] = g_image[src + B_DIR_Y];
+        b[B_ACC_X] = b[B_ACC_Y] = 1;
+        b[B_STATE] = 1;
+        b[B_BOUNCES] = 0;
+
+        memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
+        unsigned shift = (b[B_X] & 3) * 2;
+        if (shift) {
+            for (int r = 0; r < 4; r++) {
+                unsigned w = b[B_SPRITE + r * 2] |
+                             (b[B_SPRITE + r * 2 + 1] << 8);
+                w = ((w >> shift) | (w << (16 - shift))) & 0xffff;
+                b[B_SPRITE + r * 2] = (unsigned char)w;
+                b[B_SPRITE + r * 2 + 1] = (unsigned char)(w >> 8);
+            }
+        }
+        ball_draw(si + B_SPRITE, b[B_X], b[B_Y]);
+    }
+    g_image[ENTITY_REMOVE] = 1;
 }

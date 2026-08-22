@@ -266,6 +266,7 @@ void entity_call(unsigned node);  /* the call at 1ac2:1b5e */
 void entity_capsule(unsigned bx);   /* 1ac2:3273 */
 void entity_paddle_fx(unsigned bx); /* 1ac2:3386 */
 void entity_popup(unsigned bx);     /* 1ac2:3561 */
+void entity_capsule_frames(unsigned bx, unsigned table);
 void entity_ball_hold(unsigned bx); /* 1ac2:37e0 */
 void ball_place(unsigned ball, unsigned x, unsigned y);
 void bonus_update(unsigned bx, unsigned nx, unsigned ny); /* 1ac2:3df1 */
@@ -274,6 +275,7 @@ void shot_xor(unsigned x, unsigned y);             /* 1ac2:306b */
 void bonus_hits_ball(unsigned bx, unsigned ball);  /* 1ac2:3f20 */
 void entity_bonus(unsigned bx);     /* 1ac2:39fa */
 void entity_unknown(unsigned bx);
+void entity_multiball(unsigned bx);  /* 1ac2:3717 */
 void entity_unlink(unsigned node);/* 1ac2:3257 */
 unsigned entity_alloc(void);      /* 1ac2:3232 */
 void draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
@@ -410,6 +412,7 @@ void entity_call(unsigned node);  /* the call at 1ac2:1b5e */
 void entity_capsule(unsigned bx);   /* 1ac2:3273 */
 void entity_paddle_fx(unsigned bx); /* 1ac2:3386 */
 void entity_popup(unsigned bx);     /* 1ac2:3561 */
+void entity_capsule_frames(unsigned bx, unsigned table);
 void entity_ball_hold(unsigned bx); /* 1ac2:37e0 */
 void ball_place(unsigned ball, unsigned x, unsigned y);
 void bonus_update(unsigned bx, unsigned nx, unsigned ny); /* 1ac2:3df1 */
@@ -418,6 +421,7 @@ void shot_xor(unsigned x, unsigned y);             /* 1ac2:306b */
 void bonus_hits_ball(unsigned bx, unsigned ball);  /* 1ac2:3f20 */
 void entity_bonus(unsigned bx);     /* 1ac2:39fa */
 void entity_unknown(unsigned bx);
+void entity_multiball(unsigned bx);  /* 1ac2:3717 */
 void entity_unlink(unsigned node);/* 1ac2:3257 */
 unsigned entity_alloc(void);      /* 1ac2:3232 */
 void draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
