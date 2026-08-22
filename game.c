@@ -1155,7 +1155,7 @@ int play_loop(void)
             img_setw(SHOT_LIFE, img_w(SHOT_LIFE) - 1);
             if (img_w(SHOT_LIFE) == 0) {
                 g_image[SHOT_ON] = 0;
-                entity_spawn(0x1554);
+                flash_bar(0x1554);
             }
         }
         if (g_image[EXTRA_ON]) {
@@ -2166,4 +2166,436 @@ void panel_draw(void)
         if (!io_pump())
             return;
     }
+}
+
+/* ========================================================================
+ * Small routines, in address order.
+ * ===================================================================== */
+
+/* 1ac2:044b  level_colours
+ *
+ * Pick up the level's animation script. Each level has four bytes at the start
+ * of the block reached as segment 0x14a1: a word that is a pointer into the
+ * script, and a byte that is both the rate and the countdown to the next step.
+ * The play loop walks it with the same `0xffff means restart` idiom the entity
+ * list uses.
+ */
+#define ANIM_PTR    0x3136
+#define ANIM_COUNT  0x3134
+#define ANIM_RATE   0x3135
+
+void level_colours(void)
+{
+    unsigned si = SEG_14A1 + g_image[LEVEL_NUMBER] * 4;
+    img_setw(ANIM_PTR, img_w(si));
+    g_image[ANIM_RATE] = g_image[si + 2];
+    g_image[ANIM_COUNT] = g_image[si + 2];
+}
+
+/* 1ac2:10c5  draw_run - the same character `count` times */
+void draw_run(unsigned char c, unsigned count, unsigned di)
+{
+    for (unsigned i = 0; i < count; i++, di += 2)
+        draw_char(c, di);
+}
+
+/* 1ac2:10d1  draw_text - `count` characters from `src` */
+void draw_text(unsigned src, unsigned count, unsigned di)
+{
+    for (unsigned i = 0; i < count; i++, di += 2)
+        draw_char(g_image[src + i], di);
+}
+
+/* 1ac2:14a7  draw_cursor
+ *
+ * Glyph 0xff, the text-entry cursor, one cell to the right of `di` - and `di`
+ * is left where it was, because the caller is still pointing at the character
+ * being typed.
+ */
+void draw_cursor(unsigned di)
+{
+    draw_char(0xff, di + 2);
+}
+
+/* 1ac2:1642  copy_string_spaced
+ *
+ * Copy a zero-terminated string, leaving a gap byte after each character:
+ * `stosb` then `inc di` steps the destination by two. Used by the
+ * key-definition screen to lay text out in a buffer whose cells are two bytes
+ * wide.
+ */
+void copy_string_spaced(unsigned src, unsigned dst)
+{
+    while (g_image[src]) {
+        g_image[dst] = g_image[src++];
+        dst += 2;
+    }
+}
+
+/* 1ac2:3146  flash_bar
+ *
+ * XOR a pattern across 24 words at 0x3ef2 - the bar along the bottom of the
+ * playfield. Called with the pattern in DX, so the same routine both draws it
+ * and rubs it out.
+ */
+void flash_bar(unsigned pattern)
+{
+    unsigned di = 0x3ef2;
+    for (int i = 0; i < 0x18; i++, di += 2) {
+        g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)pattern;
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= (unsigned char)(pattern >> 8);
+    }
+}
+
+/* 1ac2:3232  entity_alloc
+ *
+ * Two lists share one header block: `[0x3138]` is the head of the **free**
+ * list and `[0x3144]` - which is `0x3138 + 0x0c`, the header's own link field
+ * - is the head of the **active** one. That is why walking from 0x3138 by
+ * `+0x0c` lands on the active list: the header is a node whose link is the
+ * active head.
+ *
+ * So this pops the first free node and appends it to the end of the active
+ * list. Appending rather than pushing keeps entities in the order they were
+ * created, which is the order they are drawn in.
+ */
+#define ENTITY_FREE  0x3138
+
+unsigned entity_alloc(void)
+{
+    unsigned si = img_w(ENTITY_FREE);
+    img_setw(ENTITY_FREE, img_w(si + E_NEXT));
+
+    unsigned bx = ENTITY_FREE;
+    while (img_w(bx + E_NEXT) != 0xffff)
+        bx = img_w(bx + E_NEXT);
+    img_setw(si + E_NEXT, 0xffff);
+    img_setw(bx + E_NEXT, si);
+    return si;
+}
+
+/* 1ac2:3257  entity_unlink
+ *
+ * Take a node out of the active list and push it back on the free one.
+ * [0x3142] is the node before it, which the play loop keeps up to date as it
+ * walks - a singly linked list cannot find it otherwise.
+ */
+void entity_unlink(unsigned node)
+{
+    img_setw(img_w(ENTITY_PREV) + E_NEXT, img_w(node + E_NEXT));
+    img_setw(node + E_NEXT, img_w(ENTITY_FREE));
+    img_setw(ENTITY_FREE, node);
+    g_image[ENTITY_REMOVE] = 0;
+}
+
+/* 1ac2:3668  cell_set_three - the cell an entity is sitting on becomes a 3 */
+void cell_set_three(unsigned node)
+{
+    g_image[img_w(node + 2)] = 3;
+}
+
+/* 1ac2:36fb  cells_restore
+ *
+ * Put back the [0x2f11] cells listed at 0x2f12, as value 9, and ask to be
+ * unlinked. This is how a bonus that hid part of the field gives it back.
+ */
+void cells_restore(void)
+{
+    unsigned n = g_image[LEVEL_CELLS + 1];
+    for (unsigned i = 0; i < n; i++)
+        g_image[LEVEL_CELLS + 8 + g_image[LEVEL_CELLS + 2 + i]] = 9;
+    g_image[ENTITY_REMOVE] = 1;
+}
+
+/* ========================================================================
+ * Entities: the things that are not the ball or the paddle.
+ *
+ * Every node in the list is the same fourteen bytes, and a handler reads them
+ * however it likes, but the shape is consistent enough to name:
+ *
+ *   +0x00  the handler, rewritten in place to change state
+ *   +0x02  a pointer, usually to the cell or ball the entity belongs to
+ *   +0x04  x, +0x05  y
+ *   +0x06  a cursor into a list of frame pointers, 0xffff at the end
+ *   +0x08  ticks until the next frame, +0x09  what to reload it with
+ *   +0x0a  a second frame cursor, for handlers that run two animations
+ *   +0x0c  the next node
+ * ===================================================================== */
+
+/* 1ac2:406a  xor_sprite_20x16 - sixteen rows of five bytes, XORed in */
+void xor_sprite_20x16(unsigned x, unsigned y, unsigned src)
+{
+    unsigned di = cga_at(x, y);
+    for (int r = 0; r < 0x10; r++) {
+        for (int b = 0; b < 5; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[src + r * 5 + b];
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:3f4f  sprite_shift_draw
+ *
+ * The same sprite at any pixel x. The 80 bytes are copied to a work buffer and
+ * shifted right `(x & 3) * 2` bits, one pixel at a time, in groups of five -
+ * one row - so a pixel leaving one byte enters the next through the carry and
+ * nothing crosses a row boundary. The original unrolls all sixteen rows; the
+ * loop here is the same operation.
+ */
+#define SPRITE_WORK 0x33f7
+
+void sprite_shift_draw(unsigned x, unsigned y, unsigned src)
+{
+    memcpy(g_image + SPRITE_WORK, g_image + src, 0x50);
+    for (unsigned n = (x & 3) * 2; n > 0; n--) {
+        for (int r = 0; r < 0x10; r++) {
+            unsigned p = SPRITE_WORK + r * 5, carry = 0;
+            for (int b = 0; b < 5; b++) {
+                unsigned v = g_image[p + b];
+                g_image[p + b] = (unsigned char)((v >> 1) | (carry << 7));
+                carry = v & 1;
+            }
+        }
+    }
+    xor_sprite_20x16(x, y, SPRITE_WORK);
+}
+
+/* Step a two-frame XOR animation: erase the frame before this one, draw this
+ * one, advance. Shared by the handlers below, which differ only in which
+ * drawing routine they use and what they do when the list ends. */
+static int entity_anim(unsigned bx, void (*draw)(unsigned, unsigned, unsigned))
+{
+    if (--g_image[bx + 8] != 0)
+        return 0;                       /* not time for the next frame yet */
+    g_image[bx + 8] = g_image[bx + 9];
+
+    unsigned cur = img_w(bx + 6);
+    unsigned x = g_image[bx + 4], y = g_image[bx + 5];
+    draw(x, y, img_w(img_w(cur - 2)));   /* the previous frame, to erase */
+    unsigned next = img_w(cur);
+    if (next == 0xffff)
+        return -1;                      /* the animation is over */
+    draw(x, y, img_w(cur));
+    img_setw(bx + 6, cur + 2);
+    return 1;
+}
+
+/* 1ac2:3aee  entity_sparkle
+ *
+ * The flash left where something was hit. When its frames run out it takes one
+ * off [0x33d5] - the count of how many are on screen, which caps them - and
+ * asks to be unlinked.
+ */
+void entity_sparkle(unsigned bx)
+{
+    if (entity_anim(bx, sprite_shift_draw) < 0) {
+        g_image[0x33d5]--;
+        g_image[ENTITY_REMOVE] = 1;
+    }
+}
+
+/* 1ac2:3b2a  entity_crumble
+ *
+ * A brick coming apart. Same animation, drawn with the 16x7 XOR that bricks
+ * use, and it checks for the end of the list *after* advancing rather than
+ * before - so it plays its last frame and then goes, where the sparkle stops
+ * one frame earlier.
+ */
+void entity_crumble(unsigned bx)
+{
+    if (--g_image[bx + 8] != 0)
+        return;
+    g_image[bx + 8] = g_image[bx + 9];
+
+    unsigned cur = img_w(bx + 6);
+    unsigned x = g_image[bx + 4], y = g_image[bx + 5];
+    xor_sprite_16x7(x, y, img_w(img_w(cur - 2)));
+    xor_sprite_16x7(x, y, img_w(cur));
+    img_setw(bx + 6, cur + 2);
+    if (img_w(img_w(bx + 6)) == 0xffff)
+        g_image[ENTITY_REMOVE] = 1;
+}
+
+/* 1ac2:39a1  bonus_release
+ *
+ * Let a capsule go from the hatch: allocate an entity running 0x39fa, give it
+ * a random fall speed (`random(0x3c) + 9`) and one of eight kinds from the
+ * table at 0xac60, and put it where the hatch is. A kind of 0 means it starts
+ * eight pixels left and is marked type 2.
+ */
+#define BONUS_KINDS 0xac60
+#define BONUS_LIVE  0x33d6
+
+void bonus_release(unsigned bx)
+{
+    g_image[BONUS_LIVE]++;
+    unsigned si = entity_alloc();
+    img_setw(si + 0, 0x39fa);
+    g_image[si + 2] = 0;
+    g_image[si + 3] = (unsigned char)(game_random(io_ticks(), 0x3c) + 9);
+
+    unsigned k = game_random(io_ticks(), 8);
+    unsigned di = BONUS_KINDS + k * 4;
+    img_setw(si + 6, img_w(di));
+    img_setw(si + 8, img_w(di + 2));
+
+    unsigned al = g_image[bx + 4];
+    if (al) {
+        al = (al - 8) & 0xff;
+        g_image[si + 2] = 2;
+    }
+    g_image[si + 4] = (unsigned char)al;
+    g_image[si + 5] = g_image[bx + 5];
+    xor_sprite_20x16(g_image[si + 4], g_image[si + 5],
+                     img_w(img_w(si + 6)));
+}
+
+/* 1ac2:390d  entity_hatch
+ *
+ * The hatch at the top that lets capsules out. It only runs while no extra
+ * ball is in play, waits out [bx+6], and then steps its animation every 0x23
+ * ticks - `div cl` and a test of the remainder, which is a modulo written the
+ * only way an 8086 has. Frame 0x635c is the one where the capsule appears, and
+ * that is where it calls bonus_release.
+ */
+void entity_hatch(unsigned bx)
+{
+    if (g_image[EXTRA_ON] != 0) {
+        img_setw(bx + 6, img_w(bx + 6) - 1);
+        return;
+    }
+    if (img_w(bx + 6) != 0) {
+        img_setw(bx + 6, img_w(bx + 6) - 1);
+        return;
+    }
+    img_setw(bx + 8, img_w(bx + 8) - 1);
+    if (img_w(bx + 8) % 0x23 != 0)
+        return;
+
+    unsigned si = img_w(img_w(bx + 0x0a));
+    unsigned di = cga_at(g_image[bx + 4], (g_image[bx + 5] - 0x0a) & 0xff);
+    for (int r = 0; r < 0x25; r++) {
+        g_vram[di & (CGA_SIZE - 1)] = g_image[si + r * 2];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[si + r * 2 + 1];
+        di = cga_next_row(di);
+    }
+    if (si == 0x635c) {
+        img_setw(bx + 6, 0x12c);
+        bonus_release(bx);
+    }
+    img_setw(bx + 0x0a, img_w(bx + 0x0a) + 2);
+    if (img_w(img_w(bx + 0x0a)) == 0xffff) {
+        g_image[img_w(bx + 2) + 3] = 0;
+        g_image[ENTITY_REMOVE] = 1;
+    }
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:3c66, 3cf3, 3caf, 3d3c  bonus_move_*
+ *
+ * A falling capsule tries to step one pixel; each direction has its own
+ * routine and the table at 0x3447 picks one by [bx+2]. They all do the same
+ * thing: work out which cell the capsule would move into, refuse if anything
+ * is there, and otherwise take the step. Returning "blocked" is the original's
+ * carry, and bonus_steer picks a new direction when it comes back set.
+ *
+ * The cell index is the same arithmetic as everywhere else - `(y >> 3) * 12 +
+ * (x >> 4)` - written as `(al & 0xf8) + ((al & 0xf8) >> 1)`, and the extra
+ * cells each one checks (`+0x0c` one row down, `+1` one column right) are the
+ * rest of the capsule's footprint.
+ */
+static unsigned cell_index(unsigned y, unsigned x)
+{
+    unsigned row = y & 0xf8;
+    return LEVEL_CELLS + 8 + row + (row >> 1) + ((x >> 4) & 0x0f);
+}
+
+int bonus_move_right(unsigned char *b)
+{
+    unsigned y = b[5], x = b[4];
+    if (x >= 0xb8)
+        return 0;
+    unsigned di = cell_index((y - 6) & 0xff, (x + 8) & 0xff);
+    if (g_image[di] || g_image[di + 0x0c])
+        return 0;
+    if ((((y - 6) & 7) != 0) && g_image[di + 0x18])
+        return 0;
+    b[4]++;
+    return 1;
+}
+
+int bonus_move_left(unsigned char *b)
+{
+    unsigned y = b[5], x = b[4];
+    if (x <= 8)
+        return 0;
+    unsigned di = cell_index((y - 6) & 0xff, (x - 9) & 0xff);
+    if (g_image[di] || g_image[di + 0x0c])
+        return 0;
+    if ((((y - 6) & 7) != 0) && g_image[di + 0x18])
+        return 0;
+    b[4]--;
+    return 1;
+}
+
+int bonus_move_up(unsigned char *b)
+{
+    unsigned y = b[5], x = b[4];
+    if (y <= 6)
+        return 0;
+    unsigned di = cell_index((y - 7) & 0xff, (x - 8) & 0xff);
+    if (g_image[di])
+        return 0;
+    if ((((x - 8) & 0x0f) != 0) && g_image[di + 1])
+        return 0;
+    b[5]--;
+    return 1;
+}
+
+int bonus_move_down(unsigned char *b)
+{
+    unsigned y = b[5], x = b[4];
+    unsigned di = cell_index((y + 2) & 0xff, (x - 8) & 0xff);
+    if (g_image[di])
+        return 0;
+    if ((((x - 8) & 0x0f) != 0) && g_image[di + 1])
+        return 0;
+    b[5]++;
+    return 1;
+}
+
+/* 1ac2:3bf7  bonus_steer
+ *
+ * Keep going the way it was going until it is blocked or its timer runs out,
+ * then pick a new direction with `random(4)` and a new duration with
+ * `random(0x3d)`. Direction 1 gets 0xff instead - it runs until something
+ * stops it. Direction 4 is not random at all: it follows a script of steps at
+ * [bx+0x0a], which is how a capsule homes in.
+ */
+#define BONUS_MOVES 0x3447
+
+int bonus_steer(unsigned bx)
+{
+    unsigned char *b = g_image + bx;
+    if (b[2] == 4)
+        return bonus_script(bx);
+
+    if (--b[3] != 0) {
+        int moved;
+        switch (b[2]) {
+        case 0:  moved = bonus_move_right(b); break;
+        case 1:  moved = bonus_move_down(b);  break;
+        case 2:  moved = bonus_move_left(b);  break;
+        case 3:  moved = bonus_move_up(b);    break;
+        default: moved = 0;                   break;
+        }
+        if (moved)
+            return 1;
+    }
+    b[2] = (unsigned char)game_random(io_ticks(), 4);
+    if (b[2] == 1) {
+        b[3] = 0xff;
+        return 1;
+    }
+    b[3] = (unsigned char)game_random(io_ticks(), 0x3d);
+    return 1;
 }

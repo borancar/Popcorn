@@ -71,24 +71,17 @@ void cell_special(unsigned row, unsigned di)
     (void)row; (void)di;
 }
 
-void draw_text(unsigned src, unsigned count, unsigned di)
-{
-    note("draw_text", 0x10d1);
-    (void)src; (void)count; (void)di;
-}
-
 int ball_on_paddle(unsigned ball) { note("ball_on_paddle", 0x2e1e); (void)ball; return 1; }
 void entity_call(unsigned node) { note("entity_call", 0x1b5e); (void)node; }
-void entity_unlink(unsigned node) { note("entity_unlink", 0x3257); (void)node; }
-void entity_spawn(unsigned what) { note("entity_spawn", 0x3146); (void)what; }
 
 /* --- called from play_session, which is transcribed ------------------- */
-STUB(level_colours,         0x044b, "picks the level's colour scheme")
 STUB(life_lost,             0x0735, "the losing-a-ball sequence")
 STUB(screen_game_over,      0x0473, "GAME OVER")
 STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
 STUB(screen_level_done,     0x0521, "the between-levels sequence")
 STUB(screen_all_levels_done, 0x5940, "finishing all fifty")
+
+int bonus_script(unsigned bx) { note("bonus_script", 0x3c35); (void)bx; return 1; }
 
 /* The player-name boxes return 0xff for "abort", anything else to go on. With
  * no implementation there is nobody to abort, so it reports a start. */
