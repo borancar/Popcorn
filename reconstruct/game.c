@@ -5060,8 +5060,7 @@ void screen_stash(void)
 void screen_restore(void)
 {
     io_cga_mode(0x0e);
-    for (int i = 0; i < 0x0c; i++)
-        (void)g_image[0x4b9d + i];      /* the EGA-style palette write */
+    set_palette_registers(0x4b9d);
     memcpy(g_vram, g_image + 0x1aef, 0x7d0 * 2);
     speaker_on();
 }
@@ -5145,8 +5144,7 @@ void employee_enter(void)
     speaker_off();
     memcpy(g_image + 0x1aef, g_vram, 0x7d0 * 2);
     io_cga_mode(9);
-    for (int i = 0; i < 0x0c; i++)
-        (void)g_image[0x4b91 + i];      /* the palette table for that mode */
+    set_palette_registers(0x4b91);
     /* The text at 0x2298 goes here, once there is something to draw it with. */
 }
 
@@ -5596,5 +5594,107 @@ void intro_paddle(void)
             if (!io_pump())
                 return;
         }
+    }
+}
+
+/* ========================================================================
+ * 1ac2:08c8  level_load_file
+ *
+ * `POPCORN POPTAB` loads POPTAB.PPC over the built-in table: 0x21b6 bytes
+ * straight into the block reached as segment 0xc46, six bytes in. The six
+ * bytes it skips are a signature, and the check is a `repne cmpsb` of them
+ * against the first six of what was just read - so a file is valid when its
+ * own header repeats. Either failure prints a line and exits to DOS:
+ *
+ *   "****** Fichier des Tableaux non trouve ******"
+ *   "****** Ce fichier n'est pas un fichier de Tableaux ******"
+ *
+ * Returns 0 if the file could not be used, and the caller ends the program.
+ * ===================================================================== */
+int level_load_file(const char *dir)
+{
+    char path[512];
+    snprintf(path, sizeof path, "%s%s", dir ? dir : "",
+             (const char *)(g_image + 0x1428));
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        fputs("****** Fichier des Tableaux non trouve ******\n", stderr);
+        return 0;
+    }
+    fread(g_image + SEG_C46 + 6, 1, 0x21b6, f);
+    fclose(f);
+    if (memcmp(g_image + SEG_C46, g_image + SEG_C46 + 6, 6) != 0) {
+        fputs("****** Ce fichier n'est pas un fichier de Tableaux ******\n",
+              stderr);
+        return 0;
+    }
+    return 1;
+}
+
+/* 1ac2:4b7a  set_palette_registers
+ *
+ * Twelve values out to ports 0x3d0 through 0x3db, alternating index and data.
+ * That is an EGA-style palette write on what is meant to be a CGA, and it does
+ * nothing on real CGA hardware - the two screens that use it (F10 and its
+ * exit) look the same without it. Recorded because it runs.
+ */
+void set_palette_registers(unsigned table)
+{
+    for (int i = 0; i < 0x0c; i++)
+        (void)g_image[table + i];
+}
+
+/* ========================================================================
+ * 1ac2:4e1a  screen_high_scores
+ *
+ * F6. The border, a bar, the words HIGH SCORE spelled out a glyph at a time -
+ * the original really does have eleven separate `mov al` and `call 0xc64`
+ * pairs for it - and then the ten entries from the table at 0x3e42, each a
+ * twelve-character name and a six-digit score.
+ *
+ * It then runs the border animation until a key, 0x181 delays a step, giving
+ * up after 0xff steps.
+ * ===================================================================== */
+void screen_high_scores(void)
+{
+    border_setup();
+
+    for (int i = 0; i < 0x18; i++)
+        img_vram_setw(0x142 + i * 2, 0xaaaa);
+
+    unsigned di = 0x2142;
+    draw_run(' ', 7, di);
+    di += 7 * 2;
+    for (const char *p = "HIGH SCORE"; *p; p++, di += 2)
+        draw_char((unsigned char)*p, di);
+
+    /* The ten entries, each 0x12 bytes: twelve of name then six of score. */
+    unsigned si = HSC_TABLE;
+    di = 0x3e02;
+    for (int row = 0; row < HSC_COUNT; row++, si += HSC_ENTRY) {
+        draw_text(si, 12, di);
+        draw_text(si + 12, 6, di + 12 * 2 + 4);
+        di = cga_next_row((di - 0x30) & 0xffff);
+    }
+
+    /* Fill the rest of the panel with the bar pattern, then animate. */
+    while (di != 0x1e02) {
+        for (int i = 0; i < 0x18; i++)
+            img_vram_setw(di + i * 2, 0xaaaa);
+        di = cga_next_row((di - 0x30) & 0xffff);
+    }
+
+    for (int dl = 0xff; dl > 0; dl--) {
+        for (int n = 0x181; n > 0; n--) {
+            if (io_key_ready()) {
+                io_get_key();
+                return;
+            }
+            game_delay();
+        }
+        border_animate();
+        io_present();
+        if (!io_pump())
+            return;
     }
 }
