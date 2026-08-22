@@ -40,6 +40,9 @@ static SDL_Window *win;
 static SDL_Renderer *ren;
 static SDL_Texture *tex;
 static SDL_AudioStream *audio;
+static int win_scale = 3;
+static int quit_requested;
+static uint64_t next_present_ns;
 static uint64_t next_retrace_ns;
 static unsigned tone_divisor;
 
@@ -65,6 +68,7 @@ int io_init(int scale)
     }
     if (scale < 1)
         scale = 1;
+    win_scale = scale;
     if (!SDL_CreateWindowAndRenderer("Popcorn", CGA_W * scale, CGA_H * scale,
                                      0, &win, &ren)) {
         fprintf(stderr, "popcorn: SDL_CreateWindowAndRenderer: %s\n",
@@ -124,6 +128,22 @@ void io_present(void)
     SDL_RenderPresent(ren);
 }
 
+/* Show what has been drawn and answer the window manager, at most sixty times
+ * a second. Called from the busy-wait as well as the retrace wait, because the
+ * game spends the whole opening sequence inside the busy-wait and nothing else
+ * would run: on the original the screen was simply always live, and a port
+ * that only presents from its frame loop leaves the window blank and
+ * unresponsive for the first half-minute. */
+static void keep_alive(void)
+{
+    uint64_t now = SDL_GetTicksNS();
+    if (now < next_present_ns)
+        return;
+    next_present_ns = now + SDL_NS_PER_SECOND / 60;
+    io_present();
+    io_pump();
+}
+
 void io_delay_cycles(unsigned cycles)
 {
     delay_owed_ns += cycles * (1e9 / 8000000.0);   /* an 8 MHz 8086 */
@@ -132,20 +152,35 @@ void io_delay_cycles(unsigned cycles)
         delay_owed_ns -= ns;
         SDL_DelayNS(ns);
     }
+    keep_alive();
 }
 
-/* INT 33h AX=0004: put the pointer somewhere. The game does this at the start
- * of a level so the paddle starts centred rather than wherever the pointer
- * happened to be. */
-static unsigned mouse_x = 320, mouse_y = 100;
+/* The pointer, in the 640-wide virtual screen INT 33h reports - the game does
+ * `shr cx,1` on it to get a 320-pixel x. Tracked from motion events rather
+ * than polled, so it is right even when the pointer leaves the window.
+ *
+ * The renderer is letterboxing a 320x200 logical size into whatever the window
+ * is, so window pixels have to go through SDL_RenderCoordinatesFromWindow
+ * before they mean anything - scaling by the window size alone is wrong the
+ * moment the window is not exactly 8:5.
+ */
+static float mouse_x = 320, mouse_y = 100;
 
 void io_mouse_warp(unsigned x, unsigned y)
 {
-    mouse_x = x;
-    mouse_y = y;
+    mouse_x = (float)x;
+    mouse_y = (float)y;
+    /* Put the real pointer where the game thinks it is, or the next motion
+     * event snaps the paddle back to wherever it actually was. */
+    if (win)
+        SDL_WarpMouseInWindow(win, x * 0.5f * (float)win_scale,
+                              y * (float)win_scale);
 }
 
-unsigned io_mouse_x(void) { return mouse_x; }
+unsigned io_mouse_x(void)
+{
+    return (unsigned)(mouse_x < 0 ? 0 : mouse_x > 639 ? 639 : mouse_x);
+}
 unsigned io_mouse_buttons(void)
 {
     float fx, fy;
@@ -287,6 +322,7 @@ void io_wait_retrace(void)
 {
     script_pump();
     check_deadline();
+    keep_alive();
     uint64_t now = SDL_GetTicksNS();
     if (next_retrace_ns > now)
         SDL_DelayNS(next_retrace_ns - now);
@@ -328,7 +364,20 @@ int io_pump(void)
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
         case SDL_EVENT_QUIT:
-            return 0;
+            /* Closing the window has to work from inside the opening
+             * animations too, and those are twenty seconds of busy-wait with
+             * no loop that checks a return value. */
+            quit_requested = 1;
+            io_shutdown();
+            exit(0);
+        case SDL_EVENT_MOUSE_MOTION: {
+            float lx, ly;
+            SDL_RenderCoordinatesFromWindow(ren, ev.motion.x, ev.motion.y,
+                                            &lx, &ly);
+            mouse_x = lx * 2.0f;         /* the game's screen is 640 wide */
+            mouse_y = ly;
+            break;
+        }
         case SDL_EVENT_KEY_DOWN:
         case SDL_EVENT_KEY_UP: {
             int down = ev.type == SDL_EVENT_KEY_DOWN;
@@ -362,7 +411,7 @@ int io_pump(void)
             break;
         }
     }
-    return 1;
+    return !quit_requested;
 }
 
 void io_sound(unsigned divisor)

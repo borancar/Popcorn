@@ -1362,10 +1362,22 @@ void level_intro(void)
      * on screen is right; the way it arrives is not, and this is the first
      * thing to put back when 0x2109 lands.
      */
+    /* Phase one, upwards: nothing but the backdrop, which is what wipes the
+     * previous screen. The original paces it on kernel zero's timer; here it
+     * is stepped directly, for the same reason as phase two below. */
+    for (unsigned p = 0xb3; p != 0x0c; p--) {
+        field_backdrop((p - 7) & 0xff);
+        for (int i = 0; i < 0xa; i++)
+            game_delay();
+        io_present();
+        if (!io_pump())
+            return;
+    }
+
     for (unsigned p = 0x0c; p != 0xb3; p++) {
         unsigned y = (p - 6) & 0xff;
         draw_brick_row(y);
-        field_edges((y + 1) & 0xff);
+        field_backdrop((y + 1) & 0xff);
         for (int i = 0; i < 0xa; i++)
             game_delay();
         io_present();
@@ -1877,4 +1889,40 @@ void score_add(void)
     di = 0x15d2;
     for (int i = 0; i < 6; i++, si++, di += 2)
         draw_char(g_image[si], di);
+}
+
+/* ------------------------------------------------------------------------
+ * 1ac2:1fc1  field_backdrop
+ *
+ * One band of the playfield's background: 48 bytes - the full 192-pixel width
+ * - by eight scan lines, at `y`. The pattern comes from a table of eight at
+ * 0x6d95 chosen by `[0x2efb] >> 3`, and that counter advances every call and
+ * wraps at 0x27, so the backdrop drifts while a level is being revealed.
+ *
+ * This is what clears the previous screen. The level sweep calls it one line
+ * ahead of the brick row it is drawing, so the backdrop arrives just before
+ * the bricks land on it - which is why skipping it left the menu showing
+ * through the playfield.
+ */
+#define BACKDROP_TABLE 0x6d95
+#define BACKDROP_PHASE 0x2efb
+#define BACKDROP_BYTES     48
+
+void field_backdrop(unsigned y)
+{
+    unsigned di = cga_at(0, y) + BRICK_LEFT;
+    unsigned si = img_w(BACKDROP_TABLE + ((g_image[BACKDROP_PHASE] >> 3) & 7) * 2);
+    for (int r = 0; r < 8; r++) {
+        for (int b = 0; b < BACKDROP_BYTES; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
+        si += BACKDROP_BYTES;
+        di = cga_next_row(di);
+    }
+    /* `shr al,1` three times looking for a set bit, then `cmp al,4`: the
+     * counter resets only when its low three bits are clear and it has
+     * reached the last of the eight patterns. */
+    unsigned p = g_image[BACKDROP_PHASE];
+    if ((p & 7) == 0 && (p >> 3) == 4)
+        p = 0xff;
+    g_image[BACKDROP_PHASE] = (unsigned char)(p + 1);
 }

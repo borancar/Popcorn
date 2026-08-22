@@ -64,11 +64,7 @@ STUB(laser_fire,          0x2ee3, "the paddle's laser")
 STUB(play_teardown,       0x41d4, "tidies up when a level ends")
 STUB(bonus_spawn,         0x3d95, "drops a bonus capsule")
 STUB(demo_input_step,     0x1a6f, "advances the recorded-input cursor")
-void field_edges(unsigned y)
-{
-    note("field_edges", 0x1fc1);
-    (void)y;
-}
+
 
 void cell_special(unsigned row, unsigned di)
 {
