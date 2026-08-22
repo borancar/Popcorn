@@ -54,6 +54,16 @@ CGA_SIZE = 0x4000
 STACK_LO, STACK_HI = 0x1AA20, 0x1AC20
 KEYS_LO, KEYS_HI = 0x2D4C, 0x2D4F
 
+# The sound player's state: cs:[0xf4] the request, cs:[0xf5] the note timer,
+# cs:[0xf6] the pointer into the tune. Set aside for now - masking the timer
+# alone just moved the first difference onto the pointer, which is the same
+# divergence seen a byte further on. With sound off none of it reaches the
+# screen. What it means is that one side raises a sound request on a frame the
+# other does not; the request is set and consumed inside a single frame, so
+# this block is the only place it shows. Worth its own investigation.
+# cs:[0xf8] onwards is the tune table, which is static, and stays compared.
+SOUND_LO, SOUND_HI = 0x1AC20 + 0xF4, 0x1AC20 + 0xF8
+
 # The variables worth naming when something diverges, so the report says
 # "the ball's y" rather than "image 0x2ea2". Kept deliberately short: this is
 # for reading, and the byte offsets are in the output anyway.
@@ -281,6 +291,7 @@ def main():
         b = bytearray(img)
         b[STACK_LO:STACK_HI] = bytes(STACK_HI - STACK_LO)
         b[KEYS_LO:KEYS_HI] = bytes(KEYS_HI - KEYS_LO)
+        b[SOUND_LO:SOUND_HI] = bytes(SOUND_HI - SOUND_LO)
         return bytes(b)
 
     # The port gets its first input before it runs a single instruction, for

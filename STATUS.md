@@ -137,6 +137,38 @@ looked like:
 
 ## Open
 
+### A thousand frames of a real game come out byte for byte
+
+`sidebyside.py` plays the emulator and the port together on the same driven
+input and compares the whole image and the whole screen after every frame.
+With sound set aside it runs **a thousand frames identical throughout** - not
+a byte of the 133,296-byte image or the 16,384-byte screen differs.
+
+The instruction counts say those frames are real rather than empty: the sound
+tick, the ball's step gate and the entity walk each run exactly a thousand
+times, the frame's closing jump 1,999 (a thousand frames plus the 999
+resumes), and the ball steps on **667** of them - two in three, exactly what
+the `[0x1486] = 3` gate predicts, sustained over the whole run.
+
+Getting there took two fixes to the harness rather than the port, and both are
+worth remembering because both made it *look* like the port was wrong:
+
+- **1ac2:1a62 is not once a frame.** It is the top of the frame, but the serve
+  wait reaches it too, at 0x1a58, whenever the action button is held - and a
+  bot holds it permanently. The sync point is 1ac2:1c3f, the `jmp` that closes
+  the frame, which is the one instruction both paths converge on.
+- **`emu_stop()` leaves IP on the instruction it stopped at**, so the next
+  `emu_start` ran it again and the hook fired a second time with no work in
+  between. Four "frames" over one real one, comparing the port's frame N+1
+  against the emulator's frame N.
+
+What is still set aside is the sound player's state at cs:[0xf4]-[0xf7] - the
+request, the note timer and the tune pointer. One side raises a sound request
+on a frame the other does not; because the request is both set and consumed
+inside a single frame, that block is the only place it shows, and with sound
+off none of it reaches the screen. Masking the timer alone simply moved the
+first difference onto the pointer, which is the same divergence a byte later.
+
 ### Verification coverage is bounded by what a run reaches
 
 Three routes - the mouse play route, the keyboard one, and sitting in the menu
