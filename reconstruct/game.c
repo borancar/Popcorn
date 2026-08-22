@@ -410,8 +410,12 @@ void sound_tick(void)
         return;                         /* still holding the current note */
     }
 
+    /* The tune pointers are offsets **into the code segment** - 0xa, 0x14,
+     * 0x1e and so on - because that is where the note data sits and DS is set
+     * to the code segment at the top of the routine. Reading them as plain
+     * image offsets lands in the sprite data and plays whatever is there. */
     unsigned si = img_w(SOUND_PTR);
-    unsigned note = img_w(si);
+    unsigned note = img_w(CS_BASE + si);
     if (note == 0) {                    /* end of tune */
         speaker_off();
         return;
@@ -3234,6 +3238,9 @@ void bonus_hits_ball(unsigned bx, unsigned ball)
 #define SHOT_X   0x2e80
 #define HIT_KIND 0x33d4
 
+/* Which ball the collision found - the original's DI across 3df1/3f20. */
+static unsigned g_hit_ball = BALLS;
+
 void bonus_update(unsigned bx, unsigned nx, unsigned ny)
 {
     g_image[HIT_KIND] = 0;
@@ -3293,50 +3300,62 @@ void bonus_update(unsigned bx, unsigned nx, unsigned ny)
         }
     }
 
-    /* Any ball in play. */
+    /* Any ball in play. Which one matched matters: the original leaves it in
+     * DI and entity_bonus bounces *that* ball, not the first one it can find
+     * afterwards. */
     for (int i = 0; i < 3; i++) {
         unsigned ball = BALLS + i * BALL_STRIDE;
         if (g_image[ball + B_STATE] != 1)
             continue;
         bonus_hits_ball(bx, ball);
-        if (g_image[HIT_KIND] == 2)
+        if (g_image[HIT_KIND] == 2) {
+            g_hit_ball = ball;
             return;
+        }
     }
 }
 
 /* ------------------------------------------------------------------------
  * 1ac2:39fa  entity_bonus
  *
- * A capsule on its way down. Steer it, see what it hit, and react: a ball
- * bounces off it, the paddle or the laser consumes it - seven hundred and
- * three points and it turns into a sparkle - and reaching the bottom loses it
- * unless the safety net is up, in which case it is consumed too.
+ * A capsule on its way down. Steer it, see what it hit, and react.
+ *
+ * The control flow is the part to get right, and three things about it are
+ * easy to get wrong:
+ *
+ *   - `cmp ah,0xff / je 0x3a52` on a steer that did not move jumps to the
+ *     **draw**, not past the collision test. It skips bonus_update, so the
+ *     [0x33d4] tested afterwards is whatever the last call left there.
+ *   - the ball that bounces is the one bonus_update found, which the original
+ *     carries in DI. Picking the first ball in play instead bounces the wrong
+ *     one whenever more than one is out.
+ *   - bouncing a ball does **not** end the routine. It falls through the draw
+ *     into 0x3a60, where [0x33d4] is 2 and so not zero, and the capsule is
+ *     consumed exactly as if the paddle had caught it: sound, sparkle, score.
+ *
+ * That last one is why the sound request diverged. cs:[0xf4] = 6 is raised
+ * here, and a port that returned early after the bounce never raised it.
  */
 void entity_bonus(unsigned bx)
 {
     unsigned x = g_image[bx + 4], y = g_image[bx + 5];
-    int skip = 0;
+    int draw = 1;
+
     if (g_image[EXTRA_ON] != 1 && (g_image[bx + 8] & 0x0f) == 1) {
         if (!bonus_steer(bx, &x, &y))
-            skip = 1;                   /* `cmp ah,0xff / je`: no move */
+            goto sprite;                /* 1ac2:3a52, the draw */
     }
-    if (!skip)
-        bonus_update(bx, x, y);
+    bonus_update(bx, x, y);             /* 1ac2:3df1 */
 
     if (g_image[HIT_KIND] == 0)
-        return;
+        return;                         /* 1ac2:3a24 */
+    if (g_image[HIT_KIND] != 2) {
+        draw = 0;                       /* 1ac2:3a60, no draw on the way */
+        goto settle;
+    }
 
-    if (g_image[HIT_KIND] == 2) {
-        /* A ball: send it back the way it came with a fresh slope. */
-        unsigned ball = BALLS;           /* bonus_hits_ball leaves it in DI */
-        for (int i = 0; i < 3; i++) {
-            unsigned b = BALLS + i * BALL_STRIDE;
-            if (g_image[b + B_STATE] == 1) {
-                ball = b;
-                break;
-            }
-        }
-        unsigned char *b = g_image + ball;
+    {   /* A ball: fresh slope, re-anchor, and reverse both ways. */
+        unsigned char *b = g_image + g_hit_ball;
         b[B_DY] = (unsigned char)(game_random(io_ticks(), 7) + 1);
         b[B_DX] = (unsigned char)(game_random(io_ticks(), 7) + 1);
         b[B_ANCHOR_X] = b[B_X];
@@ -3344,26 +3363,32 @@ void entity_bonus(unsigned bx)
         b[B_ACC_X] = b[B_ACC_Y] = 0;
         b[B_DIR_X] ^= 1;
         b[B_DIR_Y] ^= 1;
-        sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
-                          img_w(img_w(bx + 6)));
-        return;
     }
 
-    /* Consumed, or lost at the bottom. */
-    if (g_image[HIT_KIND] == 0 && g_image[SAFETY_NET] != 1) {
-        g_image[ENTITY_REMOVE] = 1;
-        g_image[0x33d5]--;
-        g_image[BONUS_LIVE]--;
-        return;
+sprite:
+    if (draw)
+        sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
+                          img_w(img_w(bx + 6)));
+
+settle:
+    if (g_image[HIT_KIND] == 0) {       /* 1ac2:3aaa - it reached the bottom */
+        if (g_image[SAFETY_NET] != 1) {
+            g_image[ENTITY_REMOVE] = 1;
+            g_image[0x33d5]--;
+            g_image[BONUS_LIVE]--;
+            return;
+        }
+        /* the net catches it, so it counts as collected */
     }
-    g_image[SOUND_REQUEST] = 6;
-    img_setw(bx + 0, 0x3aee);            /* becomes a sparkle */
+
+    g_image[SOUND_REQUEST] = 6;         /* 1ac2:3a67 */
+    img_setw(bx + 0, 0x3aee);           /* it becomes a sparkle */
     img_setw(bx + 6, 0xb7a4);
     g_image[bx + 8] = g_image[bx + 9] = 0x0f;
-    brick_score(0, 0, 0x0703);
     g_image[BONUS_LIVE]--;
     sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
                       img_w(img_w(bx + 6) - 2));
+    brick_score(0, 0, 0x0703);
 }
 
 /* ========================================================================
