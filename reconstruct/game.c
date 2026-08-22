@@ -3225,12 +3225,12 @@ void entity_ball_hold(uint32_t bx)
 
     /* Hit: let the ball go, and score for it unless the hit was type 1. */
     g_image[ENTITY_REMOVE] = 1;
-    uint32_t ny = g_image[bx + 5];
+    uint32_t ry = g_image[bx + 5];      /* 1ac2:3897 reloads it */
     if (g_image[0x33d4] != 1) {
         brick_score(0, 0, 0x0303);
-        ny = (ny + 4) & 0xff;
+        ry = (ry + 4) & 0xff;
     }
-    ball_place(img_w(bx + 2), (g_image[bx + 4] + 8) & 0xff, (ny + 0x0c) & 0xff);
+    ball_place(img_w(bx + 2), (g_image[bx + 4] + 8) & 0xff, (ry + 0x0c) & 0xff);
     if (g_image[0x33d4] != 3)
         brick_score(0, 0, 5);
 }
