@@ -2077,7 +2077,9 @@ void extra_life(void)
     for (int r = 0; r < 5; r++) {
         for (int b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + r * 4 + b];
-        di = cga_prev_row((di - 4) & 0xffff);
+        /* `sub di, 4` only puts back what `rep movsw` advanced, and what
+         * follows is the ordinary step to the next scan line. */
+        di = cga_next_row(di);
     }
     g_image[LIVES]++;
 }

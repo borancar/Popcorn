@@ -155,6 +155,10 @@ def main():
                          "have actually changed something - counting calls "
                          "made instead lets an early-return path fill the "
                          "quota with agreements that prove nothing")
+    ap.add_argument("--menu", action="store_true",
+                    help="stay in the menu instead of playing - the "
+                         "attract demo and the menu animations are "
+                         "not reachable from a route that starts a game")
     ap.add_argument("--keyboard", action="store_true",
                     help="play through the keyboard input routine rather than "
                          "the mouse, which is the only way 1ac2:16d2 runs")
@@ -192,7 +196,8 @@ def main():
     bot = Bot(m, keyboard=args.keyboard)
 
     pending = {}
-    route = ROUTE_PLAY_KEYS if args.keyboard else ROUTE_PLAY
+    route = [] if args.menu else (ROUTE_PLAY_KEYS if args.keyboard
+                                  else ROUTE_PLAY)
     for off, key, _ in parse_route(route):
         pending.setdefault(off, collections.deque()).append(key)
     started = [False]
@@ -204,6 +209,7 @@ def main():
     # "never called", one level down, and worth reporting separately.
     did_work = collections.Counter()
     mismatched = collections.Counter()
+    interrupted = collections.Counter()   # samples dropped: an IRQ landed inside
     first_bad = {}
     # Set while the original body is running, so the entry hook does not
     # re-enter for a nested call to the same routine.
@@ -217,6 +223,17 @@ def main():
     # Comparing it reports every routine that pushes anything as a mismatch,
     # which is noise - the first run flagged draw_char on exactly this.
     STACK_LO, STACK_HI = 0x1AA20, 0x1AC20
+    # The three key-state bytes the INT 09h handler maintains - left, right and
+    # action - are asynchronous input, not a function of any routine. The
+    # original takes interrupts while a sampled call is running and the C takes
+    # none, so a difference here measures when a key arrived, not whether the
+    # transcription is right: draw_paddle_shifted, which never mentions the
+    # bytes, differed on one call in eleven because a key went down inside it.
+    # The same argument as the stack. Blanked at comparison time only - the
+    # routine still gets the real bytes, because laser_fire reads 0x2d4c to
+    # decide whether to fire. What this gives up is the check on 0x195a,
+    # inside play_loop, the one place game code clears them.
+    KEYS_LO, KEYS_HI = 0x2D4C, 0x2D4F
 
     def bios_ticks():
         """What the PRNG at 0x40c0 starts from.
@@ -257,6 +274,17 @@ def main():
             # stack where the CALL left it, and reaching it means the body is
             # done. Compare, then release.
             if address == inside[0][1]:
+                # A keyboard interrupt delivered while the original was inside
+                # the routine writes the key-state bytes at 0x2d4c-0x2d4e from
+                # outside it. The C takes no interrupts, so those bytes would
+                # differ for a reason that is not the transcription - the same
+                # argument as excluding the stack. Drop the sample rather than
+                # exclude the bytes, so the routines that legitimately write
+                # them are still checked on the calls where nothing interrupted.
+                if m.guest_dispatch[9] != inside[0][3]:
+                    interrupted[inside[0][0]] += 1
+                    inside[0] = None
+                    return
                 want_img, want_vram = snapshot()
                 ax = uc.reg_read(UC_X86_REG_AX) & 0xFFFF
                 compare(inside[0][0], inside[0][2], want_img, want_vram, ax)
@@ -277,7 +305,8 @@ def main():
             ss = uc.reg_read(UC_X86_REG_SS)
             ret = struct.unpack("<H", uc.mem_read(ss * 16 + sp, 2))[0]
             inside[0] = (off, uc.reg_read(UC_X86_REG_CS) * 16 + ret,
-                         (regs_now(), snapshot(), bios_ticks()))
+                         (regs_now(), snapshot(), bios_ticks()),
+                         m.guest_dispatch[9])
 
     def compare(off, before, want_img, want_vram, want_ax):
         regs, (img, vram), ticks = before
@@ -304,6 +333,10 @@ def main():
         got = got[:len(img) + 0x4000]
         got_img = bytearray(got[:len(img)])
         got_img[STACK_LO:STACK_HI] = bytes(STACK_HI - STACK_LO)
+        got_img[KEYS_LO:KEYS_HI] = bytes(KEYS_HI - KEYS_LO)
+        want_img = bytearray(want_img)
+        want_img[KEYS_LO:KEYS_HI] = bytes(KEYS_HI - KEYS_LO)
+        want_img = bytes(want_img)
         got_img, got_vram = bytes(got_img), got[len(img):]
         checked[off] += 1
         def diffs(a, b, label, width):
@@ -387,6 +420,9 @@ def main():
                     f"{n} calls, identical - but only {w} changed anything")
             if w == 0:
                 note += " (every one was an early return: unproven)"
+            if interrupted[off]:
+                note += (f", {interrupted[off]} dropped for a keyboard "
+                         f"interrupt inside the call)")
             print(f"  ok   {name} ({off:#06x}): {note}")
     if never:
         print(f"  NOT REACHED, so unproven: {', '.join(never)}")

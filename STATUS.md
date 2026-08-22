@@ -139,23 +139,40 @@ looked like:
 
 ### Verification coverage is bounded by what a run reaches
 
-A ninety-second run reaches 46 routines and finds nothing wrong with any of
-them. The rest need game states a short run does not get to: the endings, the
-hall of fame, the level tally, game over, the attract-mode demo. Longer runs
-reach more, but the honest limit is that **a routine no run reaches is
-unproven**, and `verify.py` prints that list rather than quietly omitting it.
+Three routes - the mouse play route, the keyboard one, and sitting in the menu
+- verify **71 routines byte-identical with nothing failing**, 70 of them on a
+call that actually changed something. `verify.py --menu` and `--keyboard` exist
+because the attract demo and the keyboard input path are not reachable from a
+route that starts a game with the mouse.
 
-What would fix this properly is **snapshots** — saving and restoring the whole
-machine — so a check can *start* at a screen instead of playing to it. Input is
-currently scripted by code offset (`@13d2:return` fires the first time
-execution reaches `0x13d2`), which is reproducible where a timed script tuned
-on one run missed on the next, but it still has to play the game to get there.
+Fourteen dispatched routines are reached by none of the three: `draw_run`,
+`demo_start`, `draw_paddle_raw`, `brick_11`, six entity handlers around
+`0x365e`-`0x37e0`, `cells_restore`, and the menu arrow's two halves. They need
+game states a bot does not play into.
+
+The honest limit is that **a routine no run reaches is unproven**, and
+`verify.py` prints that list rather than quietly omitting it. What would fix it
+properly is **snapshots** - saving and restoring the whole machine - so a check
+can *start* at a screen instead of playing to it. Input is currently scripted by
+code offset (`@13d2:return` fires the first time execution reaches `0x13d2`),
+which is reproducible where a timed script tuned on one run missed on the next,
+but it still has to play the game to get there.
 
 A few routines cannot be checked this way at all and are excluded on purpose:
 the ones that never return normally (`play_session` leaves by longjmp), the
 ones that are DOS or hardware I/O (`hsc_save`, `drive_check`,
 `read_speed_setting`), and `screen_define_keys`, which switches to text mode
-01h — the port has no text renderer.
+01h - the port has no text renderer.
+
+Two kinds of byte are excluded from the comparison, both because they are not a
+function of the routine being checked: the **stack** below SP, and the three
+**key-state bytes** at `0x2d4c`-`0x2d4e` that the INT 09h handler maintains.
+The original takes interrupts while a sampled call runs and the C takes none,
+so `draw_paddle_shifted` - which never mentions those bytes - differed on one
+call in eleven because a key went down inside it. They are blanked at
+comparison time only: `laser_fire` reads `0x2d4c` to decide whether to fire, and
+blanking it in the state handed to the C made the port hold its fire and the
+original shoot.
 
 ### Not yet modelled
 
