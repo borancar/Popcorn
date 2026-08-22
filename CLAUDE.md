@@ -371,6 +371,23 @@ both direction flags, and picks a fresh slope with two `random(7) + 1` into
 replaces its own handler with `0x3aee`. `[0x33d4]` carries the collision result
 the step produced.
 
+## A slip in the original, at `1ac2:267d`
+
+`ball_bricks` decides how a ball leaves a brick from which of its four corners
+were inside one. The slots are four words at `0x2e89`, `0x2e8d`, `0x2e91`,
+`0x2e95`, and the direction table follows at `0x2e99`.
+
+With two corners hit and the **first** one clear, the tree at `0x2676` asks
+whether the second is set and then tests **`[0x2e99]`** - one slot too far,
+which is `HIT_DIRS[0]`, and that word is a constant zero. So the both-axes
+bounce is unreachable from that branch and the ball always takes the x-only
+one at `0x26b3`. The three neighbouring tests all read real slots, so this
+looks like an offset written four too high.
+
+It has to be reproduced. Reading slot 3 there instead sends a ball that clips
+two corners in the wrong direction, and it took eleven thousand frames of a
+level 6 game for the two to disagree about anything.
+
 ## The ball structure
 
 Four entries of `0x1e` bytes at `0x2ea1`, stepped by `ball_step` at `0x27d7`.

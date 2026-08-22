@@ -123,11 +123,12 @@ def main():
                     help="0 runs until a comparison fails or you "
                          "stop it")
     ap.add_argument("--snap-at", type=int, default=0, metavar="FRAME",
-                    help="write a snapshot when this frame is reached, and "
-                         "stop. A divergence is found at a frame; verifying "
-                         "the routines that caused it wants the state a few "
-                         "frames *before* it, which no level-start snapshot "
-                         "is close enough to give")
+                    help="write a snapshot at this frame and stop. The number "
+                         "is the one the difference report prints, which on a "
+                         "resumed run counts from zero. A divergence is found "
+                         "*at* a frame; verifying the routines behind it wants "
+                         "the state a few frames before, and no level-start "
+                         "snapshot is close enough")
     ap.add_argument("--snap-at-file", default="at.snap", metavar="FILE")
     ap.add_argument("--snapshots", metavar="DIR",
                     help="write a resumable snapshot at the start of every "
@@ -268,6 +269,10 @@ def main():
     frames_done = [0]
     want_snap = [False]
     stop_now = [False]
+    # A resumed run counts frames from zero - that is what the difference
+    # report prints and so what --snap-at has to mean - but a snapshot's name
+    # should carry on from where the one it resumed left off.
+    base_frame = [0]
     hits = collections.Counter()
 
     def on_code(uc, address, size, user):
@@ -284,7 +289,8 @@ def main():
         if (args.snap_at and off == FRAME_END and captured
                 and not resuming[0] and frames_done[0] + 1 >= args.snap_at):
             lv = m.uc.mem_read(base + LEVEL_NUMBER, 1)[0]
-            write_snapshot(args.snap_at_file, lv, frames_done[0])
+            write_snapshot(args.snap_at_file, lv,
+                           base_frame[0] + frames_done[0])
             print(f"  snapshot at frame {frames_done[0]} -> "
                   f"{args.snap_at_file}", flush=True)
             stop_now[0] = True
@@ -294,8 +300,9 @@ def main():
             want_snap[0] = False
             lv = m.uc.mem_read(base + LEVEL_NUMBER, 1)[0]
             path = os.path.join(args.snapshots,
-                                f"level{lv:02d}_f{frames_done[0]:06d}.snap")
-            write_snapshot(path, lv, frames_done[0])
+                                f"level{lv:02d}_f"
+                                f"{base_frame[0] + frames_done[0]:06d}.snap")
+            write_snapshot(path, lv, base_frame[0] + frames_done[0])
             print(f"  snapshot: level {lv} at frame {frames_done[0]} "
                   f"-> {os.path.basename(path)}", flush=True)
         if captured and off in (0x0097, 0x1AD8, 0x1AF5, 0x1B04, 0x1B4D, 0x1C3F):
@@ -375,7 +382,7 @@ def main():
         # once with no work done - the port's frame 1 against the emulator's
         # frame 0. Same reason the normal path skips a hit after emu_stop.
         resuming[0] = True
-        frames_done[0] = fr
+        base_frame[0] = fr
         print(f"resumed {os.path.basename(args.resume)}: level {lv}, "
               f"originally frame {fr}")
 
