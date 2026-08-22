@@ -304,6 +304,27 @@ void io_script_key(unsigned scan, unsigned ms)
     }
 }
 
+/* What the BIOS would have put in its buffer beside the scan code. Real key
+ * events get this from SDL; a scripted one had nothing, so --keys could press
+ * F1 but could not type a player's name - name_field reads the ASCII byte and
+ * saw zero every time. Set 1 scan codes, the printable half of the keyboard. */
+static unsigned ascii_of_scan(unsigned sc)
+{
+    static const char t[0x3a] = {
+        [0x02] = '1', [0x03] = '2', [0x04] = '3', [0x05] = '4', [0x06] = '5',
+        [0x07] = '6', [0x08] = '7', [0x09] = '8', [0x0a] = '9', [0x0b] = '0',
+        [0x0c] = '-', [0x0e] = 0x08, [0x01] = 0x1b, [0x1c] = 0x0d,
+        [0x39] = ' ',
+        [0x10] = 'Q', [0x11] = 'W', [0x12] = 'E', [0x13] = 'R', [0x14] = 'T',
+        [0x15] = 'Y', [0x16] = 'U', [0x17] = 'I', [0x18] = 'O', [0x19] = 'P',
+        [0x1e] = 'A', [0x1f] = 'S', [0x20] = 'D', [0x21] = 'F', [0x22] = 'G',
+        [0x23] = 'H', [0x24] = 'J', [0x25] = 'K', [0x26] = 'L',
+        [0x2c] = 'Z', [0x2d] = 'X', [0x2e] = 'C', [0x2f] = 'V', [0x30] = 'B',
+        [0x31] = 'N', [0x32] = 'M',
+    };
+    return sc < sizeof t ? (unsigned char)t[sc] : 0;
+}
+
 static void script_pump(void)
 {
     if (!script_n)
@@ -314,7 +335,7 @@ static void script_pump(void)
             continue;
         script[i].done = 1;
         unsigned sc = script[i].scan;
-        key_push(sc, 0);
+        key_push(sc, ascii_of_scan(sc));
         if (sc == g_image[KEY_SCAN_L]) g_image[KEY_LEFT] = 1;
         if (sc == g_image[KEY_SCAN_R]) g_image[KEY_RIGHT] = 1;
         if (sc == g_image[KEY_SCAN_A]) g_image[KEY_ACTION] = 1;
@@ -410,13 +431,23 @@ void io_wait_retrace(void)
 static int scancode_of(SDL_Scancode sc)
 {
     switch (sc) {
-    case SDL_SCANCODE_ESCAPE: return 0x01;
-    case SDL_SCANCODE_RETURN: return 0x1c;
-    case SDL_SCANCODE_SPACE:  return 0x39;
-    case SDL_SCANCODE_LEFT:   return 0x4b;
-    case SDL_SCANCODE_RIGHT:  return 0x4d;
+    case SDL_SCANCODE_ESCAPE:    return 0x01;
+    case SDL_SCANCODE_RETURN:    return 0x1c;
+    case SDL_SCANCODE_SPACE:     return 0x39;
+    case SDL_SCANCODE_LEFT:      return 0x4b;
+    case SDL_SCANCODE_RIGHT:     return 0x4d;
+    /* A key that is not here is dropped before it reaches the queue, which is
+     * how backspace came to do nothing in the name box: the ASCII for it was
+     * being worked out a few lines further on, in code this `return 0` made
+     * unreachable. The digits and the dash were missing for the same reason,
+     * and the game takes both in a player's name. */
+    case SDL_SCANCODE_BACKSPACE: return 0x0e;
+    case SDL_SCANCODE_MINUS:     return 0x0c;
+    case SDL_SCANCODE_0:         return 0x0b;
     default: break;
     }
+    if (sc >= SDL_SCANCODE_1 && sc <= SDL_SCANCODE_9)
+        return 0x02 + (sc - SDL_SCANCODE_1);
     if (sc >= SDL_SCANCODE_A && sc <= SDL_SCANCODE_Z) {
         static const unsigned char az[26] = {
             0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22, 0x23, 0x17, 0x24,
