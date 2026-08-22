@@ -1036,12 +1036,15 @@ int play_loop(void)
 
     level_draw();                       /* 1ac2:1c4f */
 
-    /* Wipe the header bar again, upwards. */
+    /* And wipe it off again - fourteen scan lines of nothing over the bar
+     * and the level name. The `sub di, 0x18` in the original only puts back
+     * what `rep stosw` advanced; taking it literally walks the wipe left a
+     * band a row and leaves the banner on screen under everything else. */
     di = 0x177e;
     for (int dl = 0xe; dl > 0; dl--) {
         for (int i = 0; i < 24; i++)
             g_vram[(di + i) & (CGA_SIZE - 1)] = 0;
-        di = cga_next_row((di - 0x18) & 0xffff);
+        di = cga_next_row(di);
     }
 
     g_image[PADDLE_X] = g_image[PADDLE_PREV_X] = 0x64;
@@ -1377,58 +1380,123 @@ void draw_sprite_20x6(unsigned x, unsigned y, unsigned src)
     }
 }
 
-/* 1ac2:1eb9  level_intro, second phase (from 0x1f57)
+/* ========================================================================
+ * 1ac2:1eb9  level_intro
  *
- * Paints the brick field one scan line at a time from the top, sweeping four
- * kernels along ahead of it. The first phase, which sweeps them the other way
- * to clear the previous level, is not transcribed yet.
- */
+ * The level arriving. Three parts, and the port used to have an invention in
+ * place of the first and third.
+ *
+ * First the panel scrolls up and a new one feeds in underneath: eight rows of
+ * 0x30 bytes from 0x6d9f, then nineteen of five from 0x6d36, each preceded by
+ * one call to scroll_up_band. The source pointer walks on across the calls -
+ * the `push si` / `pop si` are there so the call cannot disturb it, and the
+ * `rep movsw` that follows is what advances it.
+ *
+ * Then the brick field, swept by **four popcorn kernels**. The loop has no
+ * counter of its own: [0x2f0c] *is* kernel zero's y, and it moves only when
+ * that kernel's timer at [0x2efc] runs out, so the kernels pace the reveal.
+ * Phase one counts it down from 0xb3 to 0x0c laying the backdrop over the
+ * previous level; phase two counts it back up to 0xb3 drawing the bricks. The
+ * four records at 0x2efc are (timer, period, sprite pointer).
+ *
+ * Finally the panel scrolls back down 0x1b times.
+ *
+ * Driving the reveal directly, with no kernels, is what the port did while
+ * 0x2109 was still a stub. It left the right picture on screen by the end and
+ * the wrong one at every frame before it - which is what put a TABLEAU banner
+ * in the port that the emulator had already cleared.
+ * ===================================================================== */
 #define SWEEP_Y     0x2f0c              /* four kernel positions */
-#define SWEEP_STATE 0x2efc              /* four records of four bytes */
+#define SWEEP_STATE 0x2efc              /* four of (timer, period, sprite) */
+#define SWEEP_X     0x60
+
+static void intro_pause(int n)
+{
+    for (int i = 0; i < n; i++)
+        game_delay();                   /* 1ac2:164c */
+}
 
 void level_intro(void)
 {
+    /* The panel scrolls up, a fresh row feeding in at the bottom. */
+    unsigned si = 0x6d9f;
+    for (int bl = 8; bl > 0; bl--) {
+        scroll_up_band();               /* 1ac2:2109 */
+        for (int i = 0; i < 0x18 * 2; i++)
+            g_vram[(0x3ef2 + i) & (CGA_SIZE - 1)] = g_image[si + i];
+        si += 0x18 * 2;
+        io_delay_cycles(0x7d0 * CYCLES_PER_LOOP);
+        io_present();
+        if (!io_pump())
+            return;
+    }
+    si = 0x6d36;
+    for (int bl = 0x13; bl > 0; bl--) {
+        scroll_up_band();
+        for (int i = 0; i < 5; i++)
+            g_vram[(0x3f08 + i) & (CGA_SIZE - 1)] = g_image[si + i];
+        si += 5;
+        io_delay_cycles(0x8fc * CYCLES_PER_LOOP);
+        io_present();
+        if (!io_pump())
+            return;
+    }
+
     g_image[SWEEP_Y + 3] = 0xc2;
     g_image[SWEEP_Y + 2] = 0xbd;
     g_image[SWEEP_Y + 1] = 0xb8;
     g_image[SWEEP_Y + 0] = 0xb3;
 
-    /* The original runs this as two sweeps of four popcorn kernels: phase one
-     * counts [0x2f0c] down from 0xb3 to 0x0c clearing the previous level,
-     * phase two counts it back up painting the new one. The loop is not driven
-     * by a counter of its own - [0x2f0c] *is* kernel zero's position, and it
-     * advances only when that kernel's timer at [0x2efc] runs out, which is
-     * what paces the reveal.
-     *
-     * Those timer records are set up by 0x2109, which is not transcribed yet,
-     * so the reveal is driven directly here instead: the field is painted a
-     * scan line at a time, in order, with no kernels. The picture that leaves
-     * on screen is right; the way it arrives is not, and this is the first
-     * thing to put back when 0x2109 lands.
-     */
-    /* Phase one, upwards: nothing but the backdrop, which is what wipes the
-     * previous screen. The original paces it on kernel zero's timer; here it
-     * is stepped directly, for the same reason as phase two below. */
-    for (unsigned p = 0xb3; p != 0x0c; p--) {
-        field_backdrop((p - 7) & 0xff);
-        for (int i = 0; i < 0xa; i++)
-            game_delay();
+    /* Up the screen, laying the backdrop over what was there. */
+    while (g_image[SWEEP_Y] != 0x0c) {
+        field_backdrop((g_image[SWEEP_Y] - 7) & 0xff);
+        for (unsigned k = 0; k < 4; k++) {
+            unsigned st = SWEEP_STATE + k * 4;
+            g_image[st]++;
+            if (g_image[st + 1] != g_image[st])
+                continue;
+            g_image[st] = 0;
+            g_image[SWEEP_Y + k]--;
+            draw_sprite_20x6(SWEEP_X, g_image[SWEEP_Y + k],
+                             img_w(st + 2));
+        }
+        intro_pause(0xa);
         io_present();
         if (!io_pump())
             return;
     }
 
-    for (unsigned p = 0x0c; p != 0xb3; p++) {
-        unsigned y = (p - 6) & 0xff;
-        draw_brick_row(y);
-        field_backdrop((y + 1) & 0xff);
-        for (int i = 0; i < 0xa; i++)
-            game_delay();
+    /* And back down, drawing the bricks. The kernels are walked backwards
+     * here - `mov cx,3` and down to -1 - which is not the same order as the
+     * sweep up, and shows: they trail the reveal instead of leading it. */
+    while (g_image[SWEEP_Y] != 0xb3) {
+        unsigned y = (g_image[SWEEP_Y] - 6) & 0xff;
+        draw_brick_row(y);              /* 1ac2:2034 */
+        field_backdrop((y + 1) & 0xff); /* 1ac2:1fc1 */
+        for (int k = 3; k >= 0; k--) {
+            unsigned st = SWEEP_STATE + k * 4;
+            if (g_image[st] == 0) {
+                g_image[st] = g_image[st + 1];
+                g_image[SWEEP_Y + k]++;
+                draw_sprite_20x6(SWEEP_X, g_image[SWEEP_Y + k],
+                                 img_w(st + 2));
+            }
+            g_image[st]--;              /* both ways round, after the draw */
+        }
+        intro_pause(0xa);
         io_present();
         if (!io_pump())
             return;
     }
-    g_image[SWEEP_Y] = 0xb3;
+
+    /* The panel back down. */
+    for (int n = 0x1b; n > 0; n--) {
+        scroll_down_band();             /* 1ac2:2148 */
+        intro_pause(0xc);
+        io_present();
+        if (!io_pump())
+            return;
+    }
 }
 
 /* ------------------------------------------------------------------------
@@ -2253,13 +2321,16 @@ void level_draw(void)
             game_delay();
     }
 
-    /* Rub out one life marker: the lives are four to a row, 0xf0 apart. */
+    /* Rub out one life marker: the lives are four to a row, 0xf0 apart -
+     * the same layout extra_life draws them in, and the same trap. The
+     * `sub di, 4` only puts back what `rep stosw` advanced, and the step
+     * that follows is forwards. */
     unsigned n = (g_image[LIVES] - 1) & 0xff;
     unsigned di = LIVES_MARK + (n & 0xfc) + (n & 3) * 0xf0;
     for (int r = 0; r < 5; r++) {
         for (int b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = 0;
-        di = cga_prev_row((di - 4) & 0xffff);
+        di = cga_next_row(di);
     }
 
     img_setw(WALKER_ANIM, 0x7525);
@@ -5594,7 +5665,7 @@ void screen_all_levels_done(void)
             for (int b = 0; b < 0x1a; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
             si += 0x1a;
-            di = cga_next_row((di - 0x1a) & 0xffff);
+            di = cga_next_row(di);      /* the `sub` undoes `rep movsb` */
         }
         bp = cga_prev_row(bp);
         for (int i = 0; i < 5; i++)
