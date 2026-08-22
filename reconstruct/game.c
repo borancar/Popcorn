@@ -1278,8 +1278,20 @@ frames:
 
 jmp_buf g_back_to_menu;
 
+/* Set with g_resume_at_frame_top when the lockstep harness resumes from a
+ * snapshot: everything above the retry loop has happened already in the state
+ * being restored, and the first play_loop resumes mid-frame. Without this a
+ * resumed run cannot follow a lost life into life_lost and level_intro, so
+ * any divergence that lives there is unreachable from a snapshot. */
+int32_t g_resume_in_session;
+
 void play_session(void)
 {
+    if (g_resume_in_session) {
+        g_resume_in_session = 0;
+        goto retry;
+    }
+
     memcpy(g_image + PLAYER_NAME, g_image + 0x344f, 12);
     img_setw(SCORE_TEXT + 0, 0x3030);
     img_setw(SCORE_TEXT + 2, 0x3030);
@@ -1304,6 +1316,7 @@ void play_session(void)
 
         for (;;) {                              /* one level, retried on death */
             level_intro();                      /* 1ac2:1eb9 */
+retry:
             for (;;) {
                 int32_t lost = play_loop();
                 speaker_off();
@@ -1316,7 +1329,8 @@ void play_session(void)
                     break;
             }
             screen_game_over();                 /* 1ac2:0473 */
-            next_player(g_dir);                 /* 1ac2:0d2e */
+            if (next_player(g_dir))             /* 1ac2:0d2e */
+                goto retry;                     /* 0d7a: jmp 0x34f, no intro */
         }
 
     level_done:
@@ -2240,6 +2254,7 @@ void extra_life(void)
 
 void field_backdrop(uint32_t y)
 {
+    io_log_random(0x1fc1);              /* tagged, for sidebyside's per-frame list */
     uint32_t di = cga_at(0, y) + BRICK_LEFT;
     uint32_t si = img_w(BACKDROP_TABLE + ((g_image[BACKDROP_PHASE] >> 3) & 7) * 2);
     for (int32_t r = 0; r < 8; r++) {
@@ -6501,7 +6516,16 @@ void bonus_end_level(void)
 #define REC_STATE   0xc6
 #define REC_ENTS    0xd2
 
-void next_player(const char *dir)
+/* Returns 1 when the original threw its own return address away and jumped
+ * straight back to play_loop at 1ac2:034f - a single player who still has
+ * lives carries on in the same level, and **no level intro runs**. Returning
+ * normally instead falls through to `jmp 0x34c`, which is the intro, and the
+ * port replayed the whole sweep every time a ball was lost.
+ *
+ * The other `pop ax` - everybody out at 0d45 - discards it too, so the ret at
+ * the end of that path returns from play_session rather than from here. That
+ * is the longjmp below. */
+int32_t next_player(const char *dir)
 {
     g_image[GAME_OVER] = 0;
     if (g_image[LIVES] == 0) {
@@ -6510,11 +6534,11 @@ void next_player(const char *dir)
             /* Everybody is out: keep this player's final score and finish. */
             uint32_t di = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
             memcpy(g_image + di + REC_SCORE, g_image + SCORE_TEXT, 6);
-            screen_results(dir);
-            return;
+            screen_results(dir);        /* 1ac2:0d68 jmp 0xea3 */
+            longjmp(g_back_to_menu, 1); /* and its ret leaves play_session */
         }
     } else if (g_image[LIVE_COUNT] == 1 && g_image[GAME_OVER] != 1) {
-        return;                         /* one player: just carry on */
+        return 1;                       /* 1ac2:0d79 - carry on, no intro */
     }
 
     /* Save this player. */
@@ -6572,6 +6596,7 @@ void next_player(const char *dir)
         ah = 0;
     }
     img_setw(0x13d3, ((al + 0x30) << 8) | (ah + 0x30));
+    return 0;
 }
 
 /* 1ac2:0ea3  screen_results

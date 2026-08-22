@@ -249,6 +249,13 @@ def main():
                   f"-> {os.path.basename(path)}", flush=True)
         if captured and off in (0x0097, 0x1AD8, 0x1AF5, 0x1B04, 0x1B4D, 0x1C3F):
             hits[off] += 1
+        if captured and off == 0x1FC1:          # field_backdrop
+            draws.append((0x1fc1, 0x1fc1))
+        # play_session's decision points, so the trace can say what the
+        # emulator did on a lost life rather than what it did not do.
+        if captured and off in (0x0352, 0x036E, 0x034C, 0x0376,
+                                0x1EB9, 0x0D2E, 0x0473, 0x0374):
+            draws.append((off, 0))
         if captured and off == 0x40C0:          # game_random: who asked?
             sp = m._reg(UC_X86_REG_SP)
             ss = m._reg(UC_X86_REG_SS)
@@ -481,8 +488,16 @@ def main():
         if args.trace_from >= 0 and n >= args.trace_from:
             nd = args.trace_node
             ee, pp = frame_hit["img"], pimg
-            print("  f%-5d node %s | %s   prng %02x%02x | %02x%02x" % (
-                n,
+            ebd = sum(1 for a, _ in draws if a == 0x1fc1)
+            marks = "".join(
+                n for o, n in ((0x0352, "R"), (0x036E, "G"),
+                               (0x0473, "o"), (0x0D2E, "p"),
+                               (0x0374, "j"), (0x034C, "I"),
+                               (0x1EB9, "L"), (0x0376, "D"))
+                if any(a == o for a, _ in draws))
+            pbd = sum(1 for d in pdraws if d == 0x1fc1)
+            print("  f%-5d %-4s bkdrop %3d|%-3d  node %s | %s   prng %02x%02x | %02x%02x" % (
+                n, marks or '-', ebd, pbd,
                 " ".join(f"{ee[nd + k]:02x}" for k in range(14)),
                 " ".join(f"{pp[nd + k]:02x}" for k in range(14)),
                 ee[0x33D3], ee[0x33D2], pp[0x33D3], pp[0x33D2]), flush=True)
@@ -519,7 +534,7 @@ def main():
                     print(f"    ... and {len(img_bad) - 20} more image bytes")
                     break
             if draws or pdraws:
-                print("    random() this frame - emulator: " +
+                print("    draws this frame - emulator: " +
                       (", ".join(f"{a:#06x}/{dl}" for a, dl in draws)
                        or "none"))
                 print("                          port: " +

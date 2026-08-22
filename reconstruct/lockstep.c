@@ -45,6 +45,9 @@ static uint16_t draws[DRAWS_MAX];
 static uint32_t draw_n;
 static uint32_t lockstep_from;
 
+/* Also takes 0x1fc1 as a tag for field_backdrop, which no modulus can be -
+ * they are all a byte. Anything the two sides might call a different number
+ * of times in a frame can be tagged the same way. */
 void io_log_random(uint32_t dl)
 {
     if (active && draw_n < DRAWS_MAX)
@@ -154,9 +157,14 @@ int32_t lockstep_main(const char *state_path)
      * left by the same stack-throwing jump the original uses, so it needs a
      * landing place. play_loop is one level and returns normally. */
     if (lockstep_from == 0x1c3f) {
-        /* A snapshot taken at the frame's close: go straight to the frames. */
+        /* A snapshot taken at the frame's close. The first play_loop resumes
+         * mid-frame; play_session is rejoined at its retry loop so a lost
+         * life still goes through life_lost and level_intro, which is where
+         * some divergences live. */
         g_resume_at_frame_top = 1;
-        play_loop();
+        g_resume_in_session = 1;
+        if (setjmp(g_back_to_menu) == 0)
+            play_session();
     } else if (lockstep_from == 0x02f5) {
         if (setjmp(g_back_to_menu) == 0)
             play_session();             /* 1ac2:02f5 */
