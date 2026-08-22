@@ -6663,7 +6663,13 @@ int32_t bonus_script(uint32_t bx, uint32_t *px, uint32_t *py)
 
     *px = cl;
     *py = (0x79 + ah) & 0xff;
-    return 1;
+
+    /* The script word's high byte comes back in AH, and entity_bonus tests
+     * `cmp ah, 0xff` to decide whether to commit the move at all - 0xff means
+     * "stay where you are". Always answering "moved" put the capsule at
+     * 0x79 + 0xff = 0x78, which is what diverged 21,332 frames into level 2:
+     * the port walked it to y 0x78 while the original left it alone. */
+    return ah != 0xff;
 }
 
 /* 1ac2:3200  bonus 10 - the game slows down
