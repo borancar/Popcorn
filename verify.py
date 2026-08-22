@@ -138,6 +138,17 @@ def main():
     # which is noise - the first run flagged draw_char on exactly this.
     STACK_LO, STACK_HI = 0x1AA20, 0x1AC20
 
+    def bios_ticks():
+        """What the PRNG at 0x40c0 starts from.
+
+        It is not the tick count: the routine reads the counter's two words at
+        0040:006c and 0040:006e and **adds** them, then keeps working in 16
+        bits. Handing over the 32-bit count instead leaves the low word right
+        and the seed wrong.
+        """
+        lo, hi = struct.unpack("<HH", m.uc.mem_read(0x46C, 4))
+        return (lo + hi) & 0xFFFF
+
     def snapshot():
         img = bytearray(m.uc.mem_read(base, 0x208B0))
         img[STACK_LO:STACK_HI] = bytes(STACK_HI - STACK_LO)
@@ -180,16 +191,17 @@ def main():
             ss = uc.reg_read(UC_X86_REG_SS)
             ret = struct.unpack("<H", uc.mem_read(ss * 16 + sp, 2))[0]
             inside[0] = (off, uc.reg_read(UC_X86_REG_CS) * 16 + ret,
-                         (regs_now(), snapshot()))
+                         (regs_now(), snapshot(), bios_ticks()))
 
     def compare(off, before, want_img, want_vram):
-        regs, (img, vram) = before
+        regs, (img, vram), ticks = before
         with tempfile.TemporaryDirectory() as d:
             si = os.path.join(d, "in.pvs")
             so = os.path.join(d, "out.bin")
             with open(si, "wb") as f:
-                f.write(b"PVS1" + struct.pack("<I", off))
+                f.write(b"PVS2" + struct.pack("<I", off))
                 f.write(struct.pack("<10H", *regs))
+                f.write(struct.pack("<I", ticks))
                 f.write(struct.pack("<I", len(img)) + img)
                 f.write(struct.pack("<I", len(vram)) + vram)
             r = subprocess.run([PORT, "--verify", si, so],

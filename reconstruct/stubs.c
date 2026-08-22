@@ -81,6 +81,10 @@ STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
 STUB(screen_level_done,     0x0521, "the between-levels sequence")
 STUB(screen_all_levels_done, 0x5940, "finishing all fifty")
 
+void brick_9(unsigned slot, unsigned ball)  { note("brick_9", 0x2b9d);  (void)slot; (void)ball; }
+void brick_10(unsigned slot, unsigned ball) { note("brick_10", 0x2c59); (void)slot; (void)ball; }
+void brick_11(unsigned slot, unsigned ball) { note("brick_11", 0x2d68); (void)slot; (void)ball; }
+
 int bonus_script(unsigned bx) { note("bonus_script", 0x3c35); (void)bx; return 1; }
 
 /* The player-name boxes return 0xff for "abort", anything else to go on. With

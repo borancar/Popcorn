@@ -187,9 +187,23 @@ unsigned io_mouse_buttons(void)
     return SDL_GetMouseState(&fx, &fy) & 3;
 }
 
-/* The BIOS tick counter at 0040:006c, which the PRNG stirs in. */
+/* The BIOS tick counter at 0040:006c, which the PRNG stirs in. Overridable so
+ * that a verification run can be handed the value the original saw - otherwise
+ * every routine that consults random() diverges for a reason that is not a
+ * bug. */
+static unsigned forced_ticks;
+static int ticks_forced;
+
+void io_set_ticks(unsigned t)
+{
+    forced_ticks = t;
+    ticks_forced = 1;
+}
+
 unsigned io_ticks(void)
 {
+    if (ticks_forced)
+        return forced_ticks;
     return (unsigned)(SDL_GetTicks() * 182 / 10000);   /* 18.2 Hz */
 }
 
