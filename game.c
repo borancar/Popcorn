@@ -6489,9 +6489,18 @@ static void banner_blank(void)
     screen_scroll_up();
 }
 
+/* 1ac2:2da0 is the entry the bonus effect calls: play_teardown, four words
+ * thrown off the stack, then a jump into 1ac2:4210. Splitting them matters
+ * for verification - the harness enters at 0x4210, and a version that also
+ * tears the play loop down is not the same routine. */
 void bonus_end_level(void)
 {
-    play_teardown();
+    play_teardown();                    /* 1ac2:2da0 */
+    bonus_end_level_body();             /* 1ac2:4210 */
+}
+
+void bonus_end_level_body(void)
+{
     speaker_off();
     life_lost();
     io_wait_retrace();
@@ -6561,6 +6570,55 @@ void bonus_end_level(void)
         banner_row(SEG_C46 + si);
         banner_row(SEG_C46 + si);
         banner_blank();
+    }
+
+    /* Seven more fixed rows, 0x34 apart like the first two - 0x2ba1 through
+     * 0x2cd9, at 1ac2:43ef to 1ac2:447f. The transcription went straight from
+     * the level's cells to the fresh ball and had none of what follows. */
+    for (int32_t r = 0; r < 7; r++) {
+        uint32_t src = 0x2ba1 + r * 0x34;
+        for (int32_t i = 0; i < 0x1a; i++)
+            img_vram_setw(BANNER_ROW_VRAM + i * 2, img_w(src + i * 2));
+        screen_scroll_up();
+    }
+
+    /* 1ac2:4482  The funnel: 0x30 rows, each two marks four bytes apart with
+     * blank either side. Every fourth row is marked 0xd1 rather than 0xd5,
+     * which is what gives the walls their rungs. */
+    for (int32_t dl = 0x30; dl > 0; dl--) {
+        uint32_t di = BANNER_ROW_VRAM;
+        for (int32_t i = 0; i < 0x17; i++)
+            g_vram[di++ & (CGA_SIZE - 1)] = 0;
+        uint8_t mark = (dl & 3) ? 0xd5 : 0xd1;
+        g_vram[di++ & (CGA_SIZE - 1)] = mark;
+        for (int32_t i = 0; i < 4; i++)
+            g_vram[di++ & (CGA_SIZE - 1)] = 0;
+        g_vram[di++ & (CGA_SIZE - 1)] = mark;
+        for (int32_t i = 0; i < 0x17; i++)
+            g_vram[di++ & (CGA_SIZE - 1)] = 0;
+        screen_scroll_up();
+    }
+
+    /* 1ac2:44bd  The mouth opening: eight passes over a four-byte, four-row
+     * window at 0x1198, each masking two more pixels away from each side. BX
+     * and CX are the masks and shift two bits a pass. The halves go on
+     * **crossed** - `and ah, bl` then `and al, bh` - because the word was
+     * loaded little-endian and the mask is written the other way round. */
+    uint32_t mask_l = 0xffff, mask_r = 0xffff;
+    for (int32_t pass = 8; pass > 0; pass--) {
+        mask_l = (mask_l << 2) & 0xffff;
+        mask_r = (mask_r >> 2) & 0xffff;
+        uint32_t di = 0x1198;
+        for (int32_t row = 4; row > 0; row--) {
+            g_vram[di & (CGA_SIZE - 1)] &= (uint8_t)(mask_l >> 8);
+            g_vram[(di + 1) & (CGA_SIZE - 1)] &= (uint8_t)mask_l;
+            g_vram[(di + 2) & (CGA_SIZE - 1)] &= (uint8_t)(mask_r >> 8);
+            g_vram[(di + 3) & (CGA_SIZE - 1)] &= (uint8_t)mask_r;
+            di = cga_next_row(di);
+        }
+        input_and_draw_paddle();
+        for (int32_t i = 0; i < 0x28; i++)
+            game_delay();
     }
 
     /* And a fresh ball, played until ball_after_endgame says the level is

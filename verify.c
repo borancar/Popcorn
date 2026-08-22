@@ -242,9 +242,8 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x41d4:
         play_teardown();
         return 1;
-    case 0x4210:
-        bonus_end_level();
-        return 1;
+    case 0x2da0: bonus_end_level(); return 1;
+    case 0x4210: bonus_end_level_body(); return 1;
     case 0x4878:
         screen_scroll_up();
         return 1;
