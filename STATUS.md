@@ -137,15 +137,23 @@ looked like:
 
 ## Open
 
-### A hundred and thirty thousand frames come out byte for byte
+### Two hundred thousand frames come out byte for byte
 
 `sidebyside.py` plays the emulator and the port together on the same driven
 input and compares the whole image and the whole screen after every frame.
 With `--from-session` it follows a whole game rather than one level, and runs
-**131,852 frames** before a single byte differs - not a byte of the
+**197,555 frames** before a single byte differs - not a byte of the
 133,296-byte image or the 16,384-byte screen, sound player included, nothing
-masked but the stack and the three key-state bytes. That is around
-thirty-seven minutes of continuous play, through five levels.
+masked but the stack and the three key-state bytes. That is about fifty-five
+minutes of continuous play, through eight levels.
+
+The open lead is level 7, frame 6,159 from that level's snapshot. The port
+dispatches a brick hit for a cell holding 20 and the emulator dispatches
+nothing; the emulator's cell changes from 0x14 to 0x1c with no brick handler
+running at all, so something else rewrote it - one of the routines behind the
+multi-cell animation those cells belong to. Cell 20's low nibble is 4, and
+both 4 and 12 dispatch to 0x3221, the entry that only plays a sound and bumps
+the ball's [+0x1d], which is the other byte that differs.
 
 `--snapshots DIR` writes a resumable state at the start of every level, so a
 divergence half an hour in is reached in a couple of minutes rather than
