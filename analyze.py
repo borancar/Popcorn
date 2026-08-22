@@ -90,6 +90,7 @@ EXTRA_ENTRIES = {
     0x2DA0: "bonus effect 8",
     0x31E8: "bonus effect 9",
     0x3231: "bonus effect 2 - does nothing",
+    0x3200: "bonus effect 10 - the game slows down",
     0x3C66: "bonus movement 0",
     0x3D3C: "bonus movement 1",
     0x3CF3: "bonus movement 2",
@@ -222,6 +223,8 @@ def main():
     ap.add_argument("--exe", default=UNPACKED)
     ap.add_argument("--func", type=lambda s: int(s, 0))
     ap.add_argument("--gaps", action="store_true")
+    ap.add_argument("--tables", action="store_true",
+                    help="check every dispatch table's targets are in the map")
     ap.add_argument("--listing", action="store_true",
                     help="dump every reachable routine, in address order")
     ap.add_argument("--xref", type=lambda s: int(s, 0))
@@ -235,6 +238,30 @@ def main():
 
     cm = CodeMap(img)
     cm.build([entry_ip] + list(EXTRA_ENTRIES))
+
+    if a.tables:
+        # The map is seeded by hand from tables the code dispatches through,
+        # and a hand-written list can be short. It was: the bonus effect table
+        # has twelve entries and only ten had been read, so the routine that
+        # slows the game down was never mapped, never transcribed, and the
+        # port silently did nothing when a player collected it. Walk each
+        # table out of the image and say so if a target is not in the map.
+        bad = 0
+        for name, base, count in (
+                ("brick behaviour", 0x3044, 14),
+                ("bonus effect", 0x33BC, 14),
+                ("bonus movement", 0x3447, 6)):
+            for i in range(count):
+                v = struct.unpack_from("<H", img, base + i * 2)[0]
+                if v == 0 or not (0 < v < len(img)):
+                    continue
+                if v in cm.insns:
+                    continue
+                print(f"  {name}[{i}] -> {v:#06x} is NOT in the map")
+                bad += 1
+        print("every dispatch target is mapped" if not bad
+              else f"{bad} dispatch targets are missing")
+        return
 
     if a.func is not None:
         body = cm.funcs.get(a.func) or cm.walk(a.func)

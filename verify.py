@@ -147,6 +147,9 @@ def main():
     ap.add_argument("--cmdline", default="")
     ap.add_argument("--only", default="",
                     help="comma-separated routine offsets to check")
+    ap.add_argument("--max-checked", type=int, default=60,
+                    help="stop sampling a routine after this many "
+                         "checks even if none of them did work")
     ap.add_argument("--max-per-routine", type=int, default=10,
                     help="stop checking a routine once this many of its calls "
                          "have actually changed something - counting calls "
@@ -264,7 +267,12 @@ def main():
         # whose common path is an early return would otherwise fill its quota
         # with agreements that prove nothing, and stop being sampled long
         # before its real path ever ran.
-        if off in wanted and did_work[off] < args.max_per_routine:
+        # A routine whose common path is an early return never reaches the
+        # did_work cap, and each sample costs a subprocess. Stop sampling it
+        # once enough calls have agreed that more would only cost time - the
+        # report already says the sample was all early returns.
+        if (off in wanted and did_work[off] < args.max_per_routine
+                and checked[off] < args.max_checked):
             sp = uc.reg_read(UC_X86_REG_SP)
             ss = uc.reg_read(UC_X86_REG_SS)
             ret = struct.unpack("<H", uc.mem_read(ss * 16 + sp, 2))[0]
