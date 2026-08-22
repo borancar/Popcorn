@@ -3576,3 +3576,74 @@ void laser_fire(void)
     shot_xor(g_image[SHOT_X], (g_image[SHOT_Y] + 2) & 0xff);
     g_image[SHOT_Y] = 0xb3;
 }
+
+/* ========================================================================
+ * 1ac2:3273  entity_capsule
+ *
+ * A bonus capsule falling towards the paddle. This one keeps its position in
+ * [bx+2] and [bx+3] rather than [bx+4] and [bx+5] - [bx+4] is its **kind**,
+ * which indexes the frame tables at 0x3385, and [bx+6]/[bx+7] hold the
+ * paddle kind it will install and the frame it is showing.
+ *
+ * It steps once every eighth tick: three `shr dl,1 / jb` in a row is a test
+ * that the low three bits of the counter are clear, written the way an 8086
+ * writes it.
+ *
+ * Caught, it turns into the paddle-morph animation at 0x3386 and scores 23;
+ * missed, it is simply dropped. Either way [0x3384] - how many capsules are
+ * out - comes back down.
+ * ===================================================================== */
+#define CAPSULE_FRAMES 0x3385           /* by kind: a table of frame tables */
+#define PADDLE_NEXT    0x2d2d           /* kind -> the paddle kind it gives */
+
+void entity_capsule(unsigned bx)
+{
+    if ((--g_image[bx + 5] & 7) != 0)
+        return;                         /* not this tick */
+
+    unsigned base = img_w(CAPSULE_FRAMES + g_image[bx + 4] * 2);
+    unsigned di = base + g_image[bx + 6] * 4;
+    unsigned src = img_w(di), rows = img_w(di + 2);
+
+    unsigned y = g_image[bx + 3];
+    g_image[bx + 3]++;
+    xor_sprite_16xn(g_image[bx + 2], y, src, rows & 0xff);
+
+    y = g_image[bx + 3];
+    if (y == 0xc5) {                    /* fallen past the paddle */
+        g_image[BONUS_CAP]--;
+        g_image[ENTITY_REMOVE] = 1;
+        return;
+    }
+
+    if (y >= 0xb6 && y <= 0xbe) {
+        /* Level with the paddle: does it overlap? The comparison is done in
+         * sixteen bits with an `adc ch,0`, so a paddle at the right-hand edge
+         * does not wrap. */
+        unsigned right = (g_image[bx + 2] + 0x0e) & 0xffff;
+        unsigned px = g_image[PADDLE_X];
+        if (right >= px &&
+            (right - 0x0f) <= (px + g_image[PADDLE_WIDTH])) {
+            g_image[bx + 6] = g_image[PADDLE_KIND];
+            g_image[bx + 7] = g_image[PADDLE_NEXT + g_image[bx + 4]];
+            g_image[bx + 0x0a] = g_image[bx + 4];
+            g_image[bx + 2] = 1;
+            g_image[bx + 3] = 6;
+            img_setw(bx + 0, 0x3386);   /* becomes the paddle morph */
+            g_image[BONUS_CAP]--;
+            brick_score(0, 0, 0x0302);
+            return;
+        }
+    }
+
+    /* Still falling: step the animation. Kind 2 cycles its frame 0..0x0f. */
+    g_image[bx + 6] = g_image[bx + 7];
+    if ((y & 3) == 2) {
+        if (g_image[bx + 7] == 0x0f)
+            g_image[bx + 7] = 0;
+        else
+            g_image[bx + 7]++;
+    }
+    di = base + g_image[bx + 6] * 4;
+    xor_sprite_16xn(g_image[bx + 2], y, img_w(di), img_w(di + 2) & 0xff);
+}

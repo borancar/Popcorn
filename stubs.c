@@ -83,7 +83,6 @@ STUB(screen_all_levels_done, 0x5940, "finishing all fifty")
 
 void brick_11(unsigned slot, unsigned ball) { note("brick_11", 0x2d68); (void)slot; (void)ball; }
 
-STUB2(entity_capsule,   0x3273)
 STUB2(entity_paddle_fx, 0x3386)
 STUB2(entity_popup,     0x3561)
 

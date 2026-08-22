@@ -99,6 +99,7 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x2ee3: laser_fire(); return 1;
     case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, r[R_SI]);
                  return 1;
+    case 0x3273: entity_capsule(r[R_BX]); return 1;
     case 0x2034:                        /* draw_brick_row(al = screen row) */
         draw_brick_row(r[R_AX] & 0xff);
         return 1;
