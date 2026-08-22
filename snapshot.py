@@ -26,6 +26,7 @@ means "here". Both are segment-relative, the convention everything else here
 uses.
 """
 import argparse
+import json
 import os
 import struct
 import sys
@@ -60,7 +61,7 @@ def bios_ticks(m):
     return (lo + hi) & 0xFFFF
 
 
-def write(m, path, level=None, frame=0):
+def write(m, path, level=None, frame=0, extra=None):
     base = m.load_seg * 16
     if level is None:
         level = m.uc.mem_read(base + LEVEL_NUMBER, 1)[0]
@@ -73,11 +74,17 @@ def write(m, path, level=None, frame=0):
         f.write(struct.pack("<I", bios_ticks(m)))
         f.write(struct.pack("<I", len(img)) + img)
         f.write(struct.pack("<I", len(vram)) + vram)
+        # Optional and trailing, so a snapshot written before this existed
+        # still reads: whatever the driver needs to carry across a resume,
+        # which for sidebyside.py is the bot's wander generator.
+        if extra is not None:
+            blob = json.dumps(extra).encode()
+            f.write(struct.pack("<I", len(blob)) + blob)
     return path
 
 
 def read(path):
-    """-> (level, frame, regs, ticks, image, vram)"""
+    """-> (level, frame, regs, ticks, image, vram, extra)"""
     d = open(path, "rb").read()
     if d[:4] != SNAP_MAGIC:
         raise SystemExit(f"{path}: not a snapshot")
@@ -88,18 +95,24 @@ def read(path):
     ilen, = struct.unpack_from("<I", d, o); o += 4
     img = d[o:o + ilen]; o += ilen
     vlen, = struct.unpack_from("<I", d, o); o += 4
-    return level, frame, regs, ticks, img, d[o:o + vlen]
+    vram = d[o:o + vlen]; o += vlen
+    extra = None
+    if o + 4 <= len(d):
+        elen, = struct.unpack_from("<I", d, o); o += 4
+        if elen and o + elen <= len(d):
+            extra = json.loads(d[o:o + elen])
+    return level, frame, regs, ticks, img, vram, extra
 
 
 def restore(m, path):
-    """Put one back, registers and all. -> (level, frame)"""
-    level, frame, regs, ticks, img, vram = read(path)
+    """Put one back, registers and all. -> (level, frame, extra)"""
+    level, frame, regs, ticks, img, vram, extra = read(path)
     m.uc.mem_write(m.load_seg * 16, img)
     m.uc.mem_write(0xB8000, vram)
     for r, v in zip(_regs(m.uc), regs):
         m.uc.reg_write(r, v)
     m.uc.mem_write(0x46C, struct.pack("<I", ticks))
-    return level, frame
+    return level, frame, extra
 
 
 def main():
@@ -147,7 +160,7 @@ def main():
     code = m.load_seg * 16 + GAME_CODE
     bot = Bot(m)
     if args.resume:
-        lv, fr = restore(m, args.resume)
+        lv, fr, _ = restore(m, args.resume)
         print(f"from {os.path.basename(args.resume)}: level {lv}, frame {fr}")
 
     import collections

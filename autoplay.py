@@ -226,6 +226,27 @@ class Bot:
         # pixel per repeat tick and the bot plays much worse.
         self.keyboard = keyboard
 
+    def getstate(self):
+        """Everything about the bot that a resume has to reproduce.
+
+        Without this a snapshot does not replay: the bot starts fresh, makes a
+        different decision on the very first frame, and the game goes another
+        way - so a divergence found in a long run cannot be reached again from
+        the snapshot written next to it. The wander is the whole of it, but
+        the whole of it has to go.
+        """
+        return {"rng": self.rng.getstate(), "wander": self.wander,
+                "held": self.held, "idle": self.idle}
+
+    def setstate(self, st):
+        if not st:
+            return
+        # JSON turns the generator's tuples into lists on the way back.
+        v, keys, gauss = st["rng"]
+        self.rng.setstate((v, tuple(keys), gauss))
+        self.wander, self.held, self.idle = (st["wander"], st["held"],
+                                             st["idle"])
+
     def wr(self, off, value):
         self.m.uc.mem_write(self.base + off, bytes([value & 0xFF]))
 

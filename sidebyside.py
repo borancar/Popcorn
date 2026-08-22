@@ -30,6 +30,7 @@ bot holds it permanently.
 """
 import argparse
 import collections
+import json
 import os
 import struct
 import subprocess
@@ -209,6 +210,12 @@ def main():
             f.write(struct.pack("<I", len(img)) + img)
             v = snapshot_vram()
             f.write(struct.pack("<I", len(v)) + v)
+            # The bot is state too. Without it a resume plays differently from
+            # the first frame, and a divergence found in a long run cannot be
+            # reached again from the snapshot written beside it - which is
+            # exactly what happened to the one at frame 33,166.
+            blob = json.dumps(bot.getstate()).encode()
+            f.write(struct.pack("<I", len(blob)) + blob)
 
     def read_snapshot(path):
         d = open(path, "rb").read()
@@ -221,7 +228,13 @@ def main():
         ilen, = struct.unpack_from("<I", d, o); o += 4
         img = d[o:o + ilen]; o += ilen
         vlen, = struct.unpack_from("<I", d, o); o += 4
-        return level, frame, regs, ticks, img, d[o:o + vlen]
+        vram = d[o:o + vlen]; o += vlen
+        extra = None
+        if o + 4 <= len(d):
+            elen, = struct.unpack_from("<I", d, o); o += 4
+            if elen and o + elen <= len(d):
+                extra = json.loads(d[o:o + elen])
+        return level, frame, regs, ticks, img, vram, extra
 
     pending = {}
     for off, key, _ in parse_route(ROUTE_PLAY):
@@ -318,7 +331,8 @@ def main():
         m.service_keyboard()
 
     if args.resume:
-        lv, fr, regs, ticks, img, vram = read_snapshot(args.resume)
+        lv, fr, regs, ticks, img, vram, extra = read_snapshot(args.resume)
+        bot.setstate(extra)
         m.uc.mem_write(base, img)
         m.uc.mem_write(0xB8000, vram)
         for reg, val in zip(REGS_ALL, regs):
