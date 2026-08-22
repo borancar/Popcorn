@@ -1965,12 +1965,17 @@ static void brick_common(uint32_t ball, uint32_t sound,
 
 /* Attach a fresh entity to the brick that was just hit. `slot` is the hit
  * record: its word is the cell address, the two bytes after it the centre. */
+/* The node a broken brick leaves behind. `[si+2]` is deliberately **not**
+ * written here: every handler but brick 8 stores the slot pointer there with
+ * its own `mov word ptr [si+2], bx`, and brick 8 stores a byte 4 in [si+2]
+ * and leaves [si+3] holding whatever the recycled slot had. Writing the word
+ * for it put the slot pointer's high byte, 0x2f, where the original had the
+ * previous occupant's value - one byte, 62,536 frames in. */
 static uint32_t brick_entity(uint32_t slot, uint32_t handler,
                              uint32_t frames, uint32_t rate)
 {
     uint32_t si = entity_alloc();
     img_setw(si + 0, handler);
-    img_setw(si + 2, img_w(slot));
     img_setw(si + 4, img_w(slot + 2));
     img_setw(si + 6, frames);
     g_image[si + 8] = (uint8_t)rate;
@@ -2012,7 +2017,9 @@ static void brick_1_or_2(uint32_t slot, uint32_t ball, int32_t is_two)
     brick_common(ball, SOUND_BRICK, 0, 0, 2);
 
     if (g_image[BONUS_CAP] >= 3 || game_random(io_ticks(), 3) != 0) {
-        brick_entity(slot, 0x3b2a, is_two ? 0x6508 : 0x65fe, 7);
+        img_setw(brick_entity(slot, 0x3b2a,
+                              is_two ? 0x6508 : 0x65fe, 7) + 2,
+                 img_w(slot));
         g_image[img_w(slot)] = 0;
         g_image[LEVEL_CELLS]--;
         return;
@@ -2050,7 +2057,7 @@ void brick_3(uint32_t slot, uint32_t ball)
     g_image[SOUND_REQUEST] = 4;
     if (ball)
         g_image[ball + B_BOUNCES]++;
-    brick_entity(slot, 0x365e, 0x66f4, 8);
+    img_setw(brick_entity(slot, 0x365e, 0x66f4, 8) + 2, img_w(slot));
     g_image[img_w(slot)] = 4;
 }
 
@@ -3070,7 +3077,7 @@ void brick_9(uint32_t slot, uint32_t ball)
     b[B_BOUNCES] = 0;
     ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
 
-    brick_entity(slot, 0x3696, 0x6abe, 0x32);
+    img_setw(brick_entity(slot, 0x3696, 0x6abe, 0x32) + 2, img_w(slot));
 
     /* A cell that is not this one. */
     uint32_t cell, idx;
