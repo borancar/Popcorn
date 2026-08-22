@@ -48,7 +48,6 @@ static void note(const char *name, unsigned off)
 STUB(screen_define_keys,  0x1581, "F5: read three scan codes into 0x2d4f")
 STUB(screen_high_scores,  0x4e1a, "F6: the hall of fame")
 STUB(employee_enter,      0x4ae0, "F10, the `touche speciale pour employes`")
-STUB(employee_leave,      0x4b4f, "and its exit")
 
 /* --- getting into a game -------------------------------------------- */
 STUB(level_load_file,     0x08c8, "reads a .PPC level set named on the command line")
@@ -60,7 +59,6 @@ STUB(demo_input_step,     0x1a6f, "advances the recorded-input cursor")
 
 /* --- called from play_session, which is transcribed ------------------- */
 void field_marks_wide(unsigned di) { note("field_marks_wide", 0x0a1d); (void)di; }
-void brick_11_after(unsigned x, unsigned y) { note("brick_11_after", 0x4c4b); (void)x; (void)y; }
 STUB(screen_game_over,      0x0473, "GAME OVER")
 STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
 STUB(screen_all_levels_done, 0x5940, "finishing all fifty")

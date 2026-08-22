@@ -857,7 +857,7 @@ void game_main(const char *dir, unsigned speed)
                 employee_enter();
                 while (io_key_ready() && (io_get_key() >> 8) == 0x44)
                     ;
-                employee_leave();
+                screen_restore();
                 break;
             case 0x3d:                                  /* F3: mouse */
                 if (img_w(INPUT_SELECTED) != INPUT_MOUSE) {
@@ -4977,4 +4977,112 @@ void border_block(unsigned di)
             img_vram_setw(di, img_w(BORDER_SPR + i * 2));
             di = cga_next_row(di);
         }
+}
+
+/* ========================================================================
+ * The end of a level, and the two screens that borrow the framebuffer.
+ * ===================================================================== */
+
+/* 1ac2:4878  screen_scroll_up
+ *
+ * Roll the whole screen up 0x6f times, seven words to a row, keeping the
+ * paddle drawn as it goes. What the level-ending bonus leaves behind.
+ */
+void screen_scroll_up(void)
+{
+    for (int n = 0x6f; n > 0; n--) {
+        unsigned di = 0x13;
+        for (int r = 0; r < 7; r++) {
+            unsigned si = cga_next_row(di);
+            for (int b = 0; b < 14; b++)
+                g_vram[(di + b) & (CGA_SIZE - 1)] =
+                    g_vram[(si + b) & (CGA_SIZE - 1)];
+            di = si;
+        }
+        game_delay();
+        input_and_draw_paddle();
+    }
+}
+
+/* 1ac2:48ce  level_tally
+ *
+ * Score every brick still standing when a level is cut short: each of the
+ * 0xa8 cells looks its value up in the table at 0x30bc, which holds the
+ * four-byte figure to add, and then a flat thousand goes on top.
+ */
+void level_tally(void)
+{
+    for (int i = 0; i < 0xa8; i++) {
+        unsigned si = 0x30bc + g_image[LEVEL_CELLS + 8 + i] * 4;
+        img_setw(SCORE_ADD + 0, 0);
+        img_setw(SCORE_ADD + 2, img_w(si));
+        img_setw(SCORE_ADD + 4, img_w(si + 2));
+        score_add();
+    }
+    brick_score(0, 1, 0);
+}
+
+/* 1ac2:4ba9  screen_stash
+ *
+ * Put the playing screen aside in the buffer at 0x1aef and paint the overlay
+ * at 0x93e0 over it - 0x26 rows of 0x32 bytes. Used by the pause screen and
+ * by F10.
+ */
+void screen_stash(void)
+{
+    speaker_off();
+    unsigned di = 0x1aef;
+    unsigned si = 0x1900;
+    for (int half = 0; half < 2; half++) {
+        for (int r = 0; r < 0x14; r++) {
+            for (int b = 0; b < 0x32; b++)
+                g_image[di + b] = g_vram[(si + b) & (CGA_SIZE - 1)];
+            di += 0x32;
+            si += 0x32 + 0x1e;
+        }
+        si = 0x3900;
+    }
+    di = 0x1900;
+    si = 0x93e0;
+    for (int r = 0; r < 0x26; r++) {
+        for (int b = 0; b < 0x32; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
+        si += 0x32;
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:4b4f  screen_restore
+ *
+ * Put it back: the mode register to 0x0e, the palette registers from the
+ * table at 0x4b9d, the 0x7d0 words of screen, and the speaker on again.
+ */
+void screen_restore(void)
+{
+    io_cga_mode(0x0e);
+    for (int i = 0; i < 0x0c; i++)
+        (void)g_image[0x4b9d + i];      /* the EGA-style palette write */
+    memcpy(g_vram, g_image + 0x1aef, 0x7d0 * 2);
+    speaker_on();
+}
+
+/* 1ac2:4c4b  brick_11_after
+ *
+ * XOR the hole brick 11 leaves: eight rows of four bytes from the block at
+ * 0xc46:0x28f0, indexed the same way cell_special indexes it but with the
+ * column taken from `(x >> 2) - 2` rather than from the cell address.
+ */
+void brick_11_after(unsigned x, unsigned y)
+{
+    unsigned row = (y - 6) & 0xff;
+    unsigned si = SEG_C46 + 0x28f0 + row * 0x30 + (((x >> 2) & 0xff) - 2);
+    unsigned di = cga_at(x, y);
+    for (int r = 0; r < 8; r++) {
+        g_vram[di & (CGA_SIZE - 1)] ^= g_image[si];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[si + 1];
+        g_vram[(di + 2) & (CGA_SIZE - 1)] ^= g_image[si + 2];
+        g_vram[(di + 3) & (CGA_SIZE - 1)] ^= g_image[si + 3];
+        si += 0x2c + 4;
+        di = cga_next_row(di);
+    }
 }

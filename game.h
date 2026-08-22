@@ -225,7 +225,10 @@ void io_cga_mode(unsigned v);
 void io_cga_colour(unsigned v);
 void menu_extra(void);            /* 1ac2:5171 */
 void employee_enter(void);        /* 1ac2:4ae0 */
-void employee_leave(void);        /* 1ac2:4b4f */
+void screen_scroll_up(void);      /* 1ac2:4878 */
+void level_tally(void);           /* 1ac2:48ce */
+void screen_stash(void);          /* 1ac2:4ba9 */
+void screen_restore(void);        /* 1ac2:4b4f */
 void demo_start(void);            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
 
@@ -410,7 +413,10 @@ void io_cga_mode(unsigned v);
 void io_cga_colour(unsigned v);
 void menu_extra(void);            /* 1ac2:5171 */
 void employee_enter(void);        /* 1ac2:4ae0 */
-void employee_leave(void);        /* 1ac2:4b4f */
+void screen_scroll_up(void);      /* 1ac2:4878 */
+void level_tally(void);           /* 1ac2:48ce */
+void screen_stash(void);          /* 1ac2:4ba9 */
+void screen_restore(void);        /* 1ac2:4b4f */
 void demo_start(void);            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
 
