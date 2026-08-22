@@ -112,6 +112,10 @@ def main():
     ap.add_argument("--keyboard", action="store_true",
                     help="play through the keyboard input routine rather than "
                          "the mouse, which is the only way 1ac2:16d2 runs")
+    ap.add_argument("--keys", default="",
+                    help="extra @offset:key triggers, comma separated, on top "
+                         "of the route - the way to reach a screen that is one "
+                         "key press from a snapshot")
     ap.add_argument("--resume", metavar="FILE",
                     help="start from a sidebyside.py snapshot instead of "
                          "walking the menu, so routines that only run deep "
@@ -157,6 +161,7 @@ def main():
                                   else ROUTE_PLAY)
     for off, key, _ in parse_route(route):
         pending.setdefault(off, collections.deque()).append(key)
+    extra_keys = parse_route([k for k in args.keys.split(",") if k.strip()])
     started = [False]
 
     checked = collections.Counter()
@@ -374,6 +379,11 @@ def main():
         started[0] = True
         print(f"resumed {os.path.basename(args.resume)}: "
               f"level {lv}, frame {fr}")
+
+    # After the resume, so a snapshot's own route is cleared but these are not:
+    # the point of --keys is to press something *from* the snapshot.
+    for off, key, _ in extra_keys:
+        pending.setdefault(off, collections.deque()).append(key)
 
     addr = m._reg(UC_X86_REG_CS) * 16 + m._reg(UC_X86_REG_IP)
     while m._elapsed() < args.seconds:

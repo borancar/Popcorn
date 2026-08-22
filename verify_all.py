@@ -31,9 +31,12 @@ def main():
     ap.add_argument("--seconds", type=float, default=120.0,
                     help="how long each route plays")
     ap.add_argument("--snapshot", action="append", default=[],
-                    metavar="FILE",
-                    help="also run from this sidebyside.py snapshot; repeat "
-                         "for as many as you have")
+                    metavar="FILE[=KEYS]",
+                    help="also run from this snapshot; repeat for as many as "
+                         "you have. FILE=@0206:f6 presses a key from it, "
+                         "which is how a screen one key away gets checked")
+    ap.add_argument("--dir", metavar="DIR",
+                    help="run from every .snap in this directory as well")
     ap.add_argument("--skip-base", action="store_true",
                     help="only run the snapshots")
     ap.add_argument("--keep", metavar="DIR",
@@ -44,14 +47,23 @@ def main():
     if not args.skip_base:
         routes = [("play", []), ("menu", ["--menu"]),
                   ("keyboard", ["--keyboard"])]
-    routes += [(os.path.basename(s), ["--resume", s]) for s in args.snapshot]
+    snaps = list(args.snapshot)
+    if args.dir:
+        snaps += sorted(os.path.join(args.dir, f)
+                        for f in os.listdir(args.dir) if f.endswith(".snap"))
+    for spec in snaps:
+        f, _, keys = spec.partition("=")
+        name = os.path.basename(f) + (f" +{keys}" if keys else "")
+        routes.append((name.replace("/", "_"),
+                       ["--resume", f] + (["--keys", keys] if keys else [])))
 
     out = args.keep or tempfile.mkdtemp(prefix="verifyall")
     os.makedirs(out, exist_ok=True)
 
     runs = []
     for name, extra in routes:
-        j = os.path.join(out, f"{name}.json")
+        j = os.path.join(out, name.replace(" ", "_")
+                          .replace(":", "-") + ".json")
         print(f"--- {name} ({args.seconds:.0f}s)", flush=True)
         r = subprocess.run(
             [PY, os.path.join(HERE, "verify.py"),
