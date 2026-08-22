@@ -79,6 +79,17 @@ EXTRA_ENTRIES = {
     0x36A1: "entity handler (from brick 9)",
     0x36F6: "entity handler (from brick 9)",
     0x37E0: "entity handler (from brick 10)",
+    # What a bonus actually does, from the table at 0x33bc indexed by the
+    # capsule's kind. 0x318b (an extra life) and 0x3231 are already reached.
+    0x2DAA: "bonus effect 0",
+    0x2DEF: "bonus effect 1",
+    0x2E03: "bonus effect 3",
+    0x2E16: "bonus effect 4",
+    0x3119: "bonus effect 5",
+    0x315B: "bonus effect 6",
+    0x2DA0: "bonus effect 8",
+    0x31E8: "bonus effect 9",
+    0x3231: "bonus effect 2 - does nothing",
     0x3C66: "bonus movement 0",
     0x3D3C: "bonus movement 1",
     0x3CF3: "bonus movement 2",

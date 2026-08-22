@@ -67,6 +67,7 @@ ROUTINES = {
     0x2755: "probe_cell",
     0x2E1E: "ball_on_paddle",
     0x2EE3: "laser_fire",
+    0x3273: "entity_capsule",
     0x306B: "shot_xor",
     0x30DD: "pixel_xor",
     0x3146: "flash_bar",
