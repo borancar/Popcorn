@@ -5358,14 +5358,35 @@ void border_setup(void)
     }
 }
 
-/* 1ac2:538d  tall_sprite - fifteen rows of four bytes, drawn not XORed */
-void tall_sprite(unsigned si, unsigned di)
+/* 1ac2:538d  tall_sprite - fifteen rows of four bytes, drawn not XORed.
+ *
+ * Two things the caller depends on and the port used to drop. `lodsw` carries
+ * SI forward, so a second call draws the *next* sixty bytes - that is how the
+ * ending flashes rather than standing still. And the routine ends by polling
+ * the keyboard 0x4b0 times, returning carry if a key came: on an 8086 those
+ * BIOS calls are what paces the frame, and they are also the only way out of
+ * the ending. */
+#define TALL_SPRITE_BYTES  (0x0f * 4)
+#define KBD_POLL_CYCLES    150          /* what one INT 16h AH=01 cost */
+
+int tall_sprite(unsigned *si, unsigned di)
 {
     for (int r = 0; r < 0x0f; r++) {
         for (int b = 0; b < 4; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + r * 4 + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[*si + r * 4 + b];
         di = cga_next_row(di);
     }
+    *si += TALL_SPRITE_BYTES;
+
+    for (int n = 0x4b0; n > 0; n--) {
+        if (io_key_ready()) {
+            io_get_key();
+            return 1;
+        }
+        io_delay_cycles(KBD_POLL_CYCLES);
+    }
+    io_present();
+    return 0;
 }
 
 /* ========================================================================
@@ -6014,38 +6035,56 @@ void screen_define_keys(void)
 /* ========================================================================
  * 1ac2:51b6  screen_end_of_game
  *
- * The picture that comes up when the last life is gone. It scrolls the screen
- * up 0x96 rows, then builds the image at 0xa6d0 into it 0x87 bands at a time,
- * one band of 0x21 bytes per pass.
+ * What plays when the last life is gone, before the hall of fame.
  *
- * The merge is the interesting part. Each byte holds four pixels, and a pixel
- * from the new image is taken **only where the old one is transparent** -
- * where its two bits are zero. That is what the four `and al,mask / jne / and
- * ah,mask / add bh,ah` groups do, one per pixel, testing the destination and
- * adding the source's bits only when there is room. So the picture appears
- * through the gaps in what is already there rather than over it.
+ * The segment registers are the whole story of the first part and the port
+ * had it backwards. `mov ax,ds / mov es,ax` then `mov ds,0xb800` makes the
+ * copy run **screen to image**: the top 0x96 scan lines, 0x21 bytes wide, are
+ * saved into the image at offset 0, DI running on continuously while SI walks
+ * the screen a scan line at a time.
+ *
+ * Then 0x87 passes build the picture at 0xa6d0 into that saved copy, a band
+ * at a time, and put each band back on screen. The merge is per pixel: a byte
+ * holds four, and the new image's bits are taken **only where the old pixel
+ * is zero**, so the picture comes through the gaps in what was there rather
+ * than over it. [0x13c0] is where on screen the next band goes and [0x13c2]
+ * is how far into the saved copy the build has got.
+ *
+ * Then a key, or 0x1c20 ticks, and then the ending itself: seven groups from
+ * the table at 0xa8bf, each a tall sprite drawn twice, blanked from 0xabab,
+ * and drawn twice more. Any key stops it; if none came, ending_column runs.
  * ===================================================================== */
+#define EOG_SAVED     0x0000            /* the screen, copied into the image */
+#define EOG_BAND      0x1aef            /* the band being merged */
+#define EOG_PICTURE   0xa6d0
+#define EOG_SCREEN_AT 0x13c0
+#define EOG_BUILD_AT  0x13c2
+#define EOG_WIDTH     0x21
+#define EOG_BAND_LEN  0x1ef
+#define EOG_GROUPS    0xa8bf
+#define EOG_BLANK     0xabab
+
 void screen_end_of_game(void)
 {
-    /* Scroll the whole screen up 0x96 rows, 0x21 bytes wide. */
-    unsigned si = 8, di = 0;
+    /* The screen into the image - not screen to screen, and DI does not go
+     * back to where it started each row. */
+    unsigned si = 8, di = EOG_SAVED;
     for (int n = 0x96; n > 0; n--) {
-        for (int b = 0; b < 0x21; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] =
-                g_vram[(si + b) & (CGA_SIZE - 1)];
+        for (int b = 0; b < EOG_WIDTH; b++)
+            g_image[di + b] = g_vram[(si + b) & (CGA_SIZE - 1)];
+        di += EOG_WIDTH;
         si = cga_next_row(si);
     }
 
-    img_setw(0x13c0, 8);
-    img_setw(0x13c2, 0x21);
+    img_setw(EOG_SCREEN_AT, 8);
+    img_setw(EOG_BUILD_AT, EOG_WIDTH);
 
     for (int pass = 0x87; pass > 0; pass--) {
-        /* Take the band that is there now, and let the new picture through
-         * wherever a pixel is still zero. */
-        memcpy(g_image + 0x1aef, g_vram + (img_w(0x13c2) & (CGA_SIZE - 1)),
-               0x1ef);
-        unsigned src = 0xa6d0, dst = 0x1aef;
-        for (int i = 0; i < 0x1ef; i++, src++, dst++) {
+        /* The band as it stands, from the saved screen - not from vram. */
+        memcpy(g_image + EOG_BAND, g_image + img_w(EOG_BUILD_AT), EOG_BAND_LEN);
+
+        unsigned src = EOG_PICTURE, dst = EOG_BAND;
+        for (int i = 0; i < EOG_BAND_LEN; i++, src++, dst++) {
             unsigned old = g_image[dst], add = g_image[src], out = old;
             for (int shift = 6; shift >= 0; shift -= 2) {
                 unsigned mask = 3u << shift;
@@ -6055,27 +6094,59 @@ void screen_end_of_game(void)
             g_image[dst] = (unsigned char)out;
         }
 
-        /* Put one band on screen, then the merged block under it. */
-        di = img_w(0x13c0);
-        unsigned s = (img_w(0x13c2) - 0x21) & 0xffff;
-        for (int b = 0; b < 0x21; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] =
-                g_vram[(s + b) & (CGA_SIZE - 1)];
+        /* One band on screen from the saved copy, then the merged block. */
+        di = img_w(EOG_SCREEN_AT);
+        unsigned from = (img_w(EOG_BUILD_AT) - EOG_WIDTH) & 0xffff;
+        for (int b = 0; b < EOG_WIDTH; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[from + b];
         di = cga_next_row(di);
-        img_setw(0x13c0, di);
+        img_setw(EOG_SCREEN_AT, di);
 
-        unsigned m = 0x1aef;
+        unsigned m = EOG_BAND;
         for (int r = 0x0f; r > 0; r--) {
-            for (int b = 0; b < 0x21; b++)
+            for (int b = 0; b < EOG_WIDTH; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[m + b];
+            m += EOG_WIDTH;             /* `rep movsb` carries SI forward */
             di = cga_next_row(di);
         }
-        img_setw(0x13c2, img_w(0x13c2) + 0x21);
+        img_setw(EOG_BUILD_AT, img_w(EOG_BUILD_AT) + EOG_WIDTH);
 
         io_present();
         if (!io_pump())
             return;
     }
+
+    /* A key, or 0x1c20 ticks of waiting for one. */
+    for (int n = 0x1c20; n > 0; n--) {
+        if (io_key_ready()) {
+            io_get_key();
+            return;                     /* 1ac2:5314 - straight out */
+        }
+        game_delay();
+        if (!io_pump())
+            return;
+    }
+
+    /* The ending. Seven groups, each drawn twice, blanked, and drawn twice
+     * more - SI carries forward inside tall_sprite, so every call is the next
+     * frame rather than the same one again. */
+    unsigned bx = EOG_GROUPS;
+    int keyed = 0;
+    for (int dh = 7; dh > 0 && !keyed; dh--) {
+        unsigned at = (0x34f0 + img_w(bx)) & 0xffff;
+        bx += 2;
+        unsigned sprite = img_w(bx);
+        bx += 2;
+
+        if (tall_sprite(&sprite, at)) { keyed = 1; break; }
+        tall_sprite(&sprite, at);       /* no test after the second */
+        unsigned blank = EOG_BLANK;
+        if (tall_sprite(&blank, at)) { keyed = 1; break; }
+        if (tall_sprite(&blank, at)) { keyed = 1; break; }
+        if (tall_sprite(&blank, at)) { keyed = 1; break; }
+    }
+    if (!keyed)
+        ending_column();                /* 1ac2:5317 */
 }
 
 /* ========================================================================
