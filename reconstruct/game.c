@@ -3195,7 +3195,14 @@ void entity_ball_hold(uint32_t bx)
 {
     uint32_t y = g_image[bx + 5], x = g_image[bx + 4];
 
-    if ((g_image[bx + 8] & 0x0f) == 1 && ((y + 1) & 0xff) == 0xb8) {
+    /* `inc al` is inside the kind-1 branch, and the fall-through at 0x37f7
+     * carries whatever AL holds - so a carrier of any other kind is updated
+     * at the y it already had, not one lower. */
+    uint32_t ny = y;
+    if ((g_image[bx + 8] & 0x0f) == 1)
+        ny = (y + 1) & 0xff;
+
+    if ((g_image[bx + 8] & 0x0f) == 1 && ny == 0xb8) {
         /* It has arrived at the bottom. */
         sprite_shift_draw(x, y, img_w(img_w(bx + 6)));
         if (g_image[SAFETY_NET] == 1) {
@@ -3209,7 +3216,7 @@ void entity_ball_hold(uint32_t bx)
         return;
     }
 
-    bonus_update(bx, x, (y + 1) & 0xff);   /* 1ac2:3df1 */
+    bonus_update(bx, x, ny);            /* 1ac2:3df1 */
     if (g_image[0x33d4] == 0)
         return;
     if (g_image[0x33d4] == 2)
