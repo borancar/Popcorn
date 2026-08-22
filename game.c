@@ -4299,3 +4299,100 @@ void play_frame(void)
             game_delay();
     panel_finish();                     /* 1ac2:09c5 */
 }
+
+/* ========================================================================
+ * 1ac2:0911  panel_reveal
+ *
+ * The rails down both sides of the playfield and the pieces that cap them.
+ * `0x500d` and `0x100d` are two-byte patterns written as words at a fixed
+ * stride - 0x50 down the even half, 0xa0 down the odd - so the two rails are
+ * laid in one pass each rather than a loop per column.
+ * ===================================================================== */
+void panel_reveal(void)
+{
+    unsigned di = 0;
+    for (int i = 0; i < 0x64; i++, di += 0x50) {
+        img_vram_setw(di, 0x500d);
+        img_vram_setw(di + 0x32, 0x500d);
+    }
+    di = CGA_PLANE;
+    for (int i = 0; i < 0x32; i++, di += 0xa0) {
+        img_vram_setw(di, 0x500d);
+        img_vram_setw(di + 0x32, 0x500d);
+        img_vram_setw(di + 0x50, 0x100d);
+        img_vram_setw(di + 0x82, 0x100d);
+    }
+
+    /* The top edge: a solid row, then a lighter one under it. */
+    for (int i = 0; i < 0x19; i++)
+        img_vram_setw(i * 2, 0xffff);
+    for (int i = 0; i < 0x19; i++)
+        img_vram_setw(0x50 + i * 2, 0x1515);
+    for (int i = 0; i < 0x32; i++) {
+        g_vram[(CGA_PLANE + i) & (CGA_SIZE - 1)] = 0x55;
+        g_vram[(CGA_PLANE + 0x50 + i) & (CGA_SIZE - 1)] = 0x55;
+    }
+
+    /* And the corner pieces down each side. */
+    di = 0;
+    for (int r = 0; r < 7; r++) {
+        for (int i = 0; i < 3; i++)
+            g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[0x48d2 + i];
+        di = cga_next_row(di);
+    }
+    di = 0x31;
+    for (int r = 0; r < 7; r++) {
+        for (int i = 0; i < 3; i++)
+            g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[0x48bd + i];
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:0598  field_marks
+ *
+ * The eight marks along the playfield from the table at 0x33d7, each 0x1f rows
+ * of one word from 0x6078. level_between draws the first four of the same
+ * table 0x25 rows tall; this draws all eight, shorter.
+ */
+void field_marks(void)
+{
+    unsigned si = FIELD_MARKS;
+    for (int i = 0; i < 8; i++, si += 4) {
+        unsigned x = g_image[si], y = (g_image[si + 1] - 0x0a) & 0xff;
+        g_image[si + 3] = 0;
+        unsigned di = cga_at(x, y);
+        for (int r = 0; r < 0x1f; r++) {
+            g_vram[di & (CGA_SIZE - 1)] = g_image[0x6078 + r * 2];
+            g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[0x6078 + r * 2 + 1];
+            di = cga_next_row(di);
+        }
+    }
+}
+
+/* 1ac2:09c5  panel_finish
+ *
+ * Six passes of four bands, each band 0x7d0 or so above the last, and then the
+ * marks. The offsets are subtracted rather than stepped because the bands are
+ * not evenly spaced.
+ */
+void panel_finish(void)
+{
+    unsigned di = 0x1cc0;
+    for (int pass = 0; pass < 6; pass++) {
+        unsigned d = di;
+        field_marks_wide(d);
+        d = (d - 0x7d0) & 0xffff;
+        field_marks_wide(d);
+        d = (d - 0x820) & 0xffff;
+        field_marks_wide(d);
+        d = (d - 0x780) & 0xffff;
+        field_marks_wide(d);
+        di = di > CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
+        for (int i = 0; i < 0x147; i++)
+            game_delay();
+        io_present();
+        if (!io_pump())
+            return;
+    }
+    field_marks();
+}
