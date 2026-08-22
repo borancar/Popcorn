@@ -307,6 +307,28 @@ level that is one brick in a mixed field; on level 49 it is every brick. The
 two sides disagreed on the level's 189th frame and ran fifty-one thousand
 frames together once it was fixed.
 
+### What is still open on the end-level bonus
+
+`bonus_end_level` is the last routine that differs, and the two that differ
+with it - `entity_paddle_fx` and `screen_game_over` - only do so because they
+call it. Five transcription errors have come out of it and it still differs.
+
+`--sync-scroll` was built to get further: `io_frame_sync` is only reached at
+the frame close in `play_loop`, so a screen with a loop of its own is one
+indivisible step to the driver, which can then say the two sides differ
+*afterwards* and nothing about where. Taking `screen_scroll_up` as a second
+comparison point turns the bonus into fifty steps instead of one, and the
+difference it reports drops from 2,889 screen bytes to 284.
+
+But the 284 are not evidence yet. The first byte of them is the lives count,
+and every control byte around it - `[0x3f1b]`, the level, `[0x13ca]`, the ball
+count - is **identical**, while the emulator has already reached
+`play_session`'s `dec [0x13c9]` and the port has not. That is the two sides
+caught a fraction of a frame apart, which means the second sync point is not
+landing on the same call on both. Until it does, the number is smaller and no
+more trustworthy, and saying otherwise would be reading a smaller number as a
+better one.
+
 ### Coverage, as last measured
 
 `verify_all.py --summary FILE` writes this; it is a number that was measured

@@ -43,9 +43,12 @@ int32_t main(int32_t argc, char **argv)
     const char *vram = NULL;
     const char *keys = NULL;
     const char *lockstep = NULL;
+    int32_t extra_sync = 0;
     for (int32_t i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--lockstep") && i + 1 < argc)
             lockstep = argv[++i];
+        else if (!strcmp(argv[i], "--lockstep-sync-scroll"))
+            extra_sync = 1;
         else if (!strcmp(argv[i], "--verify") && i + 2 < argc)
             return verify_main(argv[i + 1], argv[i + 2]);
         else if (!strcmp(argv[i], "--dump-image") && i + 1 < argc)
@@ -72,8 +75,10 @@ int32_t main(int32_t argc, char **argv)
 
     /* Lockstep brings its own image, in the state the emulator handed over,
      * and must put nothing but frames on stdout. */
-    if (lockstep)
+    if (lockstep) {
+        io_lockstep_extra_sync(extra_sync);
         return lockstep_main(lockstep);
+    }
 
     const char *path = find_exe();
     if (!path) {

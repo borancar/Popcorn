@@ -211,6 +211,8 @@ void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
 void sound_tick(void);                                  /* 1ac2:0097 */
 void io_set_grab(int32_t on);
+void io_frame_sync_extra(void);
+void io_lockstep_extra_sync(int32_t on);
 int32_t io_grabbed(void);
 void game_delay(void);                                  /* 1ac2:164c */
 void read_speed_setting(uint32_t speed);                /* 1ac2:5680 */
@@ -434,6 +436,8 @@ void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
 void sound_tick(void);                                  /* 1ac2:0097 */
 void io_set_grab(int32_t on);
+void io_frame_sync_extra(void);
+void io_lockstep_extra_sync(int32_t on);
 int32_t io_grabbed(void);
 void game_delay(void);                                  /* 1ac2:164c */
 void read_speed_setting(uint32_t speed);                /* 1ac2:5680 */

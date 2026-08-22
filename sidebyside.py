@@ -44,6 +44,11 @@ CODE = 0x1AC20
 PLAY_LOOP = 0x1873                      # one level
 PLAY_SESSION = 0x02F5                   # a whole game, with --from-session
 FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
+# The opt-in second sync point, --sync-scroll. screen_scroll_up is called once
+# per scrolled row by every screen that has a loop of its own, so taking it as
+# a comparison point turns the end-level bonus from one indivisible step into
+# fifty, and a difference gets a row number instead of a shrug.
+SCROLL_UP = 0x4878
 #  - and NOT 0x1a62, its top: the serve wait jumps there too, at 0x1a58,
 #    whenever the action button is held, so the top is hit more than once
 #    a frame and the two sides end up compared at different points.
@@ -123,6 +128,12 @@ def main():
     ap.add_argument("--frames", type=int, default=200,
                     help="0 runs until a comparison fails or you "
                          "stop it")
+    ap.add_argument("--sync-scroll", action="store_true",
+                    help="also compare at every screen_scroll_up, so a screen "
+                         "with a loop of its own - the end-level bonus, the "
+                         "game over, the ending - stops being one indivisible "
+                         "step. Without it the driver can say the two sides "
+                         "differ afterwards and nothing about where")
     ap.add_argument("--snap-at", type=int, default=0, metavar="FRAME",
                     help="write a snapshot at this frame and stop. The number "
                          "is the one the difference report prints, which on a "
@@ -335,7 +346,8 @@ def main():
             captured["vram"] = snapshot_vram()
             captured["ticks"] = bios_ticks()
             uc.emu_stop()
-        elif captured and off == FRAME_END:
+        elif captured and (off == FRAME_END
+                           or (args.sync_scroll and off == SCROLL_UP)):
             # emu_stop() leaves IP *at* this instruction, so the next
             # emu_start runs it again and the hook fires a second time with
             # no work done in between. Counting those as frames compares the
@@ -427,7 +439,9 @@ def main():
     # BufferedReader the bytes can be sitting in Python's own buffer while the
     # file descriptor looks idle, and the watchdog fires on a port that has
     # already answered.
-    port = subprocess.Popen([PORT, "--lockstep", state],
+    port = subprocess.Popen([PORT, "--lockstep", state]
+                            + (["--lockstep-sync-scroll"]
+                               if args.sync_scroll else []),
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             bufsize=0)
 
