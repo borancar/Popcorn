@@ -403,6 +403,7 @@ void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(uint32_t x, uint32_t y);
 uint32_t io_ticks(void);
 void io_set_ticks(uint32_t t);
+void io_pin_mouse(uint32_t x, uint32_t buttons);
 uint32_t io_mouse_x(void);
 uint32_t io_mouse_buttons(void);
 
@@ -611,6 +612,7 @@ void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(uint32_t x, uint32_t y);
 uint32_t io_ticks(void);
 void io_set_ticks(uint32_t t);
+void io_pin_mouse(uint32_t x, uint32_t buttons);
 uint32_t io_mouse_x(void);
 uint32_t io_mouse_buttons(void);
 

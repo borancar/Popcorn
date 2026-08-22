@@ -5328,18 +5328,22 @@ void border_block(uint32_t di)
  */
 void screen_scroll_up(void)
 {
+    /* One loop, not two. `mov cx, 7` is the **word count** for the `rep
+     * movsw` - seven words, fourteen bytes, one row - and `ax = 0x6f` is the
+     * **row count**. Reading the seven as rows and the 0x6f as passes scrolled
+     * seven rows a hundred and eleven times and drew the paddle a hundred and
+     * eleven times, where the original scrolls a hundred and eleven rows once
+     * and draws it at the end. */
+    uint32_t di = 0x13;
     for (int32_t n = 0x6f; n > 0; n--) {
-        uint32_t di = 0x13;
-        for (int32_t r = 0; r < 7; r++) {
-            uint32_t si = cga_next_row(di);
-            for (int32_t b = 0; b < 14; b++)
-                g_vram[(di + b) & (CGA_SIZE - 1)] =
-                    g_vram[(si + b) & (CGA_SIZE - 1)];
-            di = si;
-        }
-        game_delay();
-        input_and_draw_paddle();
+        uint32_t si = cga_next_row(di);
+        for (int32_t b = 0; b < 14; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] =
+                g_vram[(si + b) & (CGA_SIZE - 1)];
+        di = si;                        /* 1ac2:48a1 restores the row start */
     }
+    game_delay();
+    input_and_draw_paddle();
 }
 
 /* 1ac2:48ce  level_tally
