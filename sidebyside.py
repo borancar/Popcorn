@@ -46,6 +46,9 @@ FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
 #    a frame and the two sides end up compared at different points.
 IMAGE_LEN = 0x208B0
 CGA_SIZE = 0x4000
+CGA_W, CGA_H = 320, 200
+CGA_PLANE = 0x2000
+CGA_STRIDE = 80
 PADDLE_X = 0x2E54
 
 # Excluded from the comparison for the same reasons verify.py excludes them:
@@ -110,7 +113,11 @@ def main():
                     help="flip one byte of the port's image at frame N, to "
                          "prove the comparison can fail")
     ap.add_argument("--watch", action="store_true",
-                    help="show the port's screen while it runs")
+                    help="show the port's screen in a window (needs a display)")
+    ap.add_argument("--snap", metavar="FILE",
+                    help="write the port's screen to FILE as a PNG every "
+                         "--snap-every frames, for watching from elsewhere")
+    ap.add_argument("--snap-every", type=int, default=250)
     ap.add_argument("--scale", type=int, default=3)
     ap.add_argument("--cmdline", default="")
     ap.add_argument("--no-sound", action="store_true",
@@ -271,13 +278,16 @@ def main():
 
     def watch_open():
         import numpy as np
+        if not args.watch:              # snapshots need no display at all
+            os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
         import pygame
         pygame.init()
-        pygame.display.set_caption("Popcorn - the port, in lockstep")
         view["np"] = np
         view["pygame"] = pygame
-        view["screen"] = pygame.display.set_mode(
-            (CGA_W * args.scale, CGA_H * args.scale))
+        if args.watch:
+            pygame.display.set_caption("Popcorn - the port, in lockstep")
+            view["screen"] = pygame.display.set_mode(
+                (CGA_W * args.scale, CGA_H * args.scale))
         view["surf"] = pygame.Surface((CGA_W, CGA_H))
         # CGA's interlace, precomputed: which vram byte feeds each cell.
         view["idx"] = np.array(
@@ -294,6 +304,12 @@ def main():
                       axis=-1).reshape(CGA_H, CGA_W)
         rgb = view["pal"][px]
         pygame.surfarray.blit_array(view["surf"], rgb.transpose(1, 0, 2))
+        if args.snap and n % args.snap_every == 0:
+            big = pygame.transform.scale(
+                view["surf"], (CGA_W * args.scale, CGA_H * args.scale))
+            pygame.image.save(big, args.snap)
+        if not args.watch:
+            return 1
         pygame.transform.scale(view["surf"], view["screen"].get_size(),
                                view["screen"])
         pygame.display.flip()
@@ -343,7 +359,7 @@ def main():
     bot.step()
     port_go(first_mouse(), getattr(m, "mouse_btn", 0), bios_ticks())
 
-    if args.watch:
+    if args.watch or args.snap:
         watch_open()
 
     differing, compared = 0, 0
@@ -423,7 +439,7 @@ def main():
                 port.wait(timeout=5)
                 return 1
 
-        if args.watch and not watch_draw(pvram, n):
+        if (args.watch or args.snap) and not watch_draw(pvram, n):
             print(f"\nwindow closed at frame {n}")
             break
         if n and n % 250 == 0:
