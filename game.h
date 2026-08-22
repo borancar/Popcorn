@@ -192,16 +192,19 @@ void game_main(const char *dir, unsigned speed);
 /* --------------------------------------------------------- not yet done ---
  * Implemented as no-ops in stubs.c; see the note at the top of that file.
  */
-void menu_particles_init(void);   /* 1ac2:5476 */
+void menu_particles_init(unsigned ax_in);   /* 1ac2:5476 */
 void plot_pixel(unsigned x, unsigned y, unsigned colour);
+void plot_pixel_xor(unsigned x, unsigned y, unsigned colour);
 void menu_particles_tick(void);   /* 1ac2:53c2 */
 void menu_banner_tick(void);      /* 1ac2:50df */
 void banner_shift(void);          /* 1ac2:5140 */
 void brick_11_after(unsigned x, unsigned y);  /* 1ac2:4c4b */
-unsigned particle_random(unsigned ticks, unsigned limit); /* 1ac2:5448 */
-void particle_init(unsigned si);  /* 1ac2:548a */
+unsigned particle_random(unsigned ax, unsigned ticks, unsigned limit); /* 1ac2:5448 */
+unsigned particle_init(unsigned si, unsigned ax_in);  /* 1ac2:548a */
 #define PARTICLES 0x148d
 void menu_arrow(void);            /* 1ac2:490d */
+void arrow_head(unsigned di);     /* 1ac2:492f */
+void arrow_tail(unsigned di);     /* 1ac2:4957 */
 void screen_define_keys(void);    /* 1ac2:1581 */
 void screen_high_scores(void);    /* 1ac2:4e1a */
 void palette_cycle(void);         /* 1ac2:5196 */
@@ -301,7 +304,7 @@ void entity_unlink(unsigned node);/* 1ac2:3257 */
 unsigned entity_alloc(void);      /* 1ac2:3232 */
 void draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
 void draw_cursor(unsigned di);    /* 1ac2:14a7 */
-void copy_string_spaced(unsigned src, unsigned dst);         /* 1ac2:1642 */
+void copy_string_text(unsigned src, unsigned dst);            /* 1ac2:1642 */
 void flash_bar(unsigned pattern); /* 1ac2:3146 */
 void cell_set_three(unsigned node);/* 1ac2:3668 */
 void cells_restore(void);         /* 1ac2:36fb */
@@ -359,16 +362,19 @@ void game_main(const char *dir, unsigned speed);
 /* --------------------------------------------------------- not yet done ---
  * Implemented as no-ops in stubs.c; see the note at the top of that file.
  */
-void menu_particles_init(void);   /* 1ac2:5476 */
+void menu_particles_init(unsigned ax_in);   /* 1ac2:5476 */
 void plot_pixel(unsigned x, unsigned y, unsigned colour);
+void plot_pixel_xor(unsigned x, unsigned y, unsigned colour);
 void menu_particles_tick(void);   /* 1ac2:53c2 */
 void menu_banner_tick(void);      /* 1ac2:50df */
 void banner_shift(void);          /* 1ac2:5140 */
 void brick_11_after(unsigned x, unsigned y);  /* 1ac2:4c4b */
-unsigned particle_random(unsigned ticks, unsigned limit); /* 1ac2:5448 */
-void particle_init(unsigned si);  /* 1ac2:548a */
+unsigned particle_random(unsigned ax, unsigned ticks, unsigned limit); /* 1ac2:5448 */
+unsigned particle_init(unsigned si, unsigned ax_in);  /* 1ac2:548a */
 #define PARTICLES 0x148d
 void menu_arrow(void);            /* 1ac2:490d */
+void arrow_head(unsigned di);     /* 1ac2:492f */
+void arrow_tail(unsigned di);     /* 1ac2:4957 */
 void screen_define_keys(void);    /* 1ac2:1581 */
 void screen_high_scores(void);    /* 1ac2:4e1a */
 void palette_cycle(void);         /* 1ac2:5196 */
@@ -462,7 +468,7 @@ void entity_unlink(unsigned node);/* 1ac2:3257 */
 unsigned entity_alloc(void);      /* 1ac2:3232 */
 void draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
 void draw_cursor(unsigned di);    /* 1ac2:14a7 */
-void copy_string_spaced(unsigned src, unsigned dst);         /* 1ac2:1642 */
+void copy_string_text(unsigned src, unsigned dst);            /* 1ac2:1642 */
 void flash_bar(unsigned pattern); /* 1ac2:3146 */
 void cell_set_three(unsigned node);/* 1ac2:3668 */
 void cells_restore(void);         /* 1ac2:36fb */

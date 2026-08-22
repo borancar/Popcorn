@@ -43,7 +43,6 @@ static void note(const char *name, unsigned off)
     void name(unsigned bx) { note(#name, off); (void)bx; }
 
 /* --- the menu's live decoration ------------------------------------- */
-STUB(menu_arrow,          0x490d, "moves the arrow between Souris and Clavier")
 
 /* --- the screens behind the function keys ---------------------------- */
 STUB(screen_define_keys,  0x1581, "F5: read three scan codes into 0x2d4f")
