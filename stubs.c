@@ -38,6 +38,10 @@ static void note(const char *name, unsigned off)
 #define STUB(name, off, what) \
     void name(void) { note(#name, off); }
 
+/* The same, for a handler that takes its node. */
+#define STUB2(name, off) \
+    void name(unsigned bx) { note(#name, off); (void)bx; }
+
 /* --- the menu's live decoration ------------------------------------- */
 STUB(menu_particles_init, 0x5476, "80 objects of 16 bytes at 0x148d")
 STUB(menu_particles_tick, 0x53c2, "steps them; called once per menu frame")
@@ -72,7 +76,6 @@ void cell_special(unsigned row, unsigned di)
 }
 
 int ball_on_paddle(unsigned ball) { note("ball_on_paddle", 0x2e1e); (void)ball; return 1; }
-void entity_call(unsigned node) { note("entity_call", 0x1b5e); (void)node; }
 
 /* --- called from play_session, which is transcribed ------------------- */
 STUB(life_lost,             0x0735, "the losing-a-ball sequence")
@@ -81,9 +84,23 @@ STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
 STUB(screen_level_done,     0x0521, "the between-levels sequence")
 STUB(screen_all_levels_done, 0x5940, "finishing all fifty")
 
-void brick_9(unsigned slot, unsigned ball)  { note("brick_9", 0x2b9d);  (void)slot; (void)ball; }
-void brick_10(unsigned slot, unsigned ball) { note("brick_10", 0x2c59); (void)slot; (void)ball; }
 void brick_11(unsigned slot, unsigned ball) { note("brick_11", 0x2d68); (void)slot; (void)ball; }
+
+STUB2(entity_capsule,   0x3273)
+STUB2(entity_paddle_fx, 0x3386)
+STUB2(entity_popup,     0x3561)
+STUB2(entity_ball_hold, 0x37e0)
+STUB2(entity_bonus,     0x39fa)
+
+/* An entity whose handler has not been transcribed. Doing nothing leaves it in
+ * the list for ever, so it is unlinked - the animation is lost but the list
+ * does not fill up and stall the game. */
+void entity_unknown(unsigned bx)
+{
+    note("entity_unknown", 0x1b5e);
+    (void)bx;
+    g_image[ENTITY_REMOVE] = 1;
+}
 
 int bonus_script(unsigned bx) { note("bonus_script", 0x3c35); (void)bx; return 1; }
 

@@ -125,6 +125,9 @@ extern const uint32_t g_palette[4];
 #define ENTITY_STRIDE 0x0e
 #define E_HANDLER     0x00
 #define E_NEXT        0x0c
+#define ENTITY_REMOVE 0x313a            /* a handler sets this to be unlinked */
+#define ENTITY_PREV   0x3142            /* the node before the current one */
+#define ENTITY_FREE   0x3138            /* head of the free list */
 
 /* --------------------------------------------------------- the backend ---
  *
@@ -228,6 +231,11 @@ void brick_6(unsigned slot, unsigned ball);     /* 1ac2:2ab4 */
 void brick_7(unsigned slot, unsigned ball);     /* 1ac2:2af5 */
 void brick_8(unsigned slot, unsigned ball);     /* 1ac2:2b36 */
 void brick_9(unsigned slot, unsigned ball);     /* 1ac2:2b9d */
+void entity_soften(unsigned bx);      /* 1ac2:365e */
+void entity_repeat(unsigned bx);      /* 1ac2:366f */
+void entity_plain(unsigned bx);       /* 1ac2:3696 */
+void entity_ball_arrive(unsigned bx); /* 1ac2:36a1 */
+void entity_cells_timer(unsigned bx); /* 1ac2:36f6 */
 void brick_10(unsigned slot, unsigned ball);    /* 1ac2:2c59 */
 void brick_11(unsigned slot, unsigned ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(unsigned x, unsigned y, unsigned src); /* 1ac2:3b64 */
@@ -235,7 +243,13 @@ void score_add(void);             /* 1ac2:413d */
 void ball_paddle(unsigned ball);  /* 1ac2:2316 */
 void laser_fire(void);            /* 1ac2:2ee3 */
 void play_teardown(void);         /* 1ac2:41d4 */
-void entity_call(unsigned node);  /* through node+0 */
+void entity_call(unsigned node);  /* the call at 1ac2:1b5e */
+void entity_capsule(unsigned bx);   /* 1ac2:3273 */
+void entity_paddle_fx(unsigned bx); /* 1ac2:3386 */
+void entity_popup(unsigned bx);     /* 1ac2:3561 */
+void entity_ball_hold(unsigned bx); /* 1ac2:37e0 */
+void entity_bonus(unsigned bx);     /* 1ac2:39fa */
+void entity_unknown(unsigned bx);
 void entity_unlink(unsigned node);/* 1ac2:3257 */
 unsigned entity_alloc(void);      /* 1ac2:3232 */
 void draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
@@ -335,6 +349,11 @@ void brick_6(unsigned slot, unsigned ball);     /* 1ac2:2ab4 */
 void brick_7(unsigned slot, unsigned ball);     /* 1ac2:2af5 */
 void brick_8(unsigned slot, unsigned ball);     /* 1ac2:2b36 */
 void brick_9(unsigned slot, unsigned ball);     /* 1ac2:2b9d */
+void entity_soften(unsigned bx);      /* 1ac2:365e */
+void entity_repeat(unsigned bx);      /* 1ac2:366f */
+void entity_plain(unsigned bx);       /* 1ac2:3696 */
+void entity_ball_arrive(unsigned bx); /* 1ac2:36a1 */
+void entity_cells_timer(unsigned bx); /* 1ac2:36f6 */
 void brick_10(unsigned slot, unsigned ball);    /* 1ac2:2c59 */
 void brick_11(unsigned slot, unsigned ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(unsigned x, unsigned y, unsigned src); /* 1ac2:3b64 */
@@ -342,7 +361,13 @@ void score_add(void);             /* 1ac2:413d */
 void ball_paddle(unsigned ball);  /* 1ac2:2316 */
 void laser_fire(void);            /* 1ac2:2ee3 */
 void play_teardown(void);         /* 1ac2:41d4 */
-void entity_call(unsigned node);  /* through node+0 */
+void entity_call(unsigned node);  /* the call at 1ac2:1b5e */
+void entity_capsule(unsigned bx);   /* 1ac2:3273 */
+void entity_paddle_fx(unsigned bx); /* 1ac2:3386 */
+void entity_popup(unsigned bx);     /* 1ac2:3561 */
+void entity_ball_hold(unsigned bx); /* 1ac2:37e0 */
+void entity_bonus(unsigned bx);     /* 1ac2:39fa */
+void entity_unknown(unsigned bx);
 void entity_unlink(unsigned node);/* 1ac2:3257 */
 unsigned entity_alloc(void);      /* 1ac2:3232 */
 void draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
