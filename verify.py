@@ -116,6 +116,9 @@ def main():
                     help="start from a sidebyside.py snapshot instead of "
                          "walking the menu, so routines that only run deep "
                          "in a game can be sampled")
+    ap.add_argument("--json", metavar="FILE",
+                    help="write one record per routine, so several runs over "
+                         "different routes can be unioned")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -409,6 +412,20 @@ def main():
             print(f"  ok   {name} ({off:#06x}): {note}")
     if never:
         print(f"  NOT REACHED, so unproven: {', '.join(never)}")
+    if args.json:
+        import json
+        with open(args.json, "w") as f:
+            json.dump({"route": (args.resume or
+                                 ("menu" if args.menu else
+                                  "keyboard" if args.keyboard else "play")),
+                       "seconds": m._elapsed(),
+                       "routines": {f"{off:#06x}": {
+                           "name": ROUTINES[off],
+                           "checked": checked[off],
+                           "did_work": did_work[off],
+                           "mismatched": mismatched[off],
+                           "why": first_bad.get(off, "")}
+                           for off in sorted(wanted)}}, f, indent=1)
     return 1 if fails or never else 0
 
 
