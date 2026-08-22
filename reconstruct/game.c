@@ -4854,3 +4854,127 @@ void palette_cycle(void)
     }
     io_cga_colour(g_image[0x13c8]);
 }
+
+/* ========================================================================
+ * The hall of fame: its table, its file, and the border that runs round it.
+ * ===================================================================== */
+#define HSC_ENTRY   0x12                /* twelve of name and six of score */
+#define HSC_COUNT     10
+#define BORDER_SPR (CS_BASE + 0x506d)   /* eight words, in the code segment */
+#define BORDER_POS (CS_BASE + 0x507d)   /* fourteen positions, likewise */
+
+/* 1ac2:4d5d  hsc_bubble - one pass of the sort, from the bottom up.
+ * `scasb` compares a name's six score digits against the entry above it and
+ * swaps the whole nine-word record when the lower one is bigger. */
+static void hsc_bubble(unsigned si, unsigned di)
+{
+    si += 0x0c;
+    di += 0x0c;
+    for (int n = 0x0a; n > 0; n--) {
+        int higher = 0;
+        for (int i = 0; i < 6; i++) {
+            if (g_image[si + i] != g_image[di - 0x12 + i]) {
+                higher = g_image[si + i] > g_image[di - 0x12 + i];
+                break;
+            }
+        }
+        if (!higher)
+            return;
+        memmove(g_image + di - 0x0c, g_image + di - 0x1e, 0x12);
+        di -= 0x18;
+    }
+}
+
+/* 1ac2:4d37  hsc_sort - the whole table, once per player who just finished */
+void hsc_sort(void)
+{
+    unsigned di = 0x3ef6, si = 0x1aef;
+    for (unsigned n = g_image[PLAYER_COUNT]; n > 0; n--) {
+        hsc_bubble(si, di);
+        memcpy(g_image + di, g_image + si, 0x12);
+        si += 0x12;
+    }
+}
+
+/* 1ac2:4dbb  hsc_save - write the table back to popcorn.hsc, 0xb4 bytes from
+ * 0x3e42. The drive check at 0x4e04 comes first, and a failure is silent. */
+void hsc_save(const char *dir)
+{
+    char path[512];
+    snprintf(path, sizeof path, "%s%s", dir ? dir : "",
+             (const char *)(g_image + HSC_NAME));
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return;
+    fwrite(g_image + HSC_TABLE, 1, HSC_LEN, f);
+    fclose(f);
+}
+
+/* 1ac2:4ff1  border_draw - eight words from cs:0x506d down a column */
+void border_draw(unsigned di)
+{
+    for (int i = 0; i < 8; i++) {
+        img_vram_setw(di, img_w(BORDER_SPR + i * 2));
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:4fd3  border_erase - the same eight rows, blanked */
+void border_erase(unsigned di)
+{
+    for (int i = 0; i < 8; i++) {
+        img_vram_setw(di, 0);
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:4fa7  border_step
+ *
+ * Move one marker round the edge of the screen. `di / 0x50` splits the offset
+ * into a row and a column, and the four cases are the four sides: column 0
+ * going up, column 0x32 going down, row 0 going right and row 0x60 going
+ * left. `0x140` is four scan lines, which is the vertical step.
+ */
+unsigned border_step(unsigned di)
+{
+    unsigned row = di / 0x50, col = di % 0x50;
+    if (row == 0)
+        return (col == 0x32) ? di + 0x140 : di + 2;
+    if (row == 0x60)
+        return (col == 0) ? di - 0x140 : di - 2;
+    return (col == 0x32) ? di + 0x140 : di - 0x140;
+}
+
+/* 1ac2:4f58  border_animate - fourteen markers, each erased, stepped and
+ * redrawn, with their positions kept in the code segment at 0x507d */
+void border_animate(void)
+{
+    for (int i = 0; i < 0x0e; i++) {
+        unsigned di = img_w(BORDER_POS + i * 2);
+        border_draw(di);
+        di = border_step(di);
+        border_erase(di);
+        img_setw(BORDER_POS + i * 2, di);
+    }
+}
+
+/* 1ac2:5019 and 1ac2:5045  border_row / border_block
+ *
+ * The top and bottom edges: 0x1a columns of the eight-word sprite side by
+ * side, and 0x17 rows of it stacked. Between them they lay the frame the
+ * markers then run around.
+ */
+void border_row(unsigned di)
+{
+    for (int n = 0x1a; n > 0; n--, di += 2)
+        border_draw(di);
+}
+
+void border_block(unsigned di)
+{
+    for (int n = 0x17; n > 0; n--)
+        for (int i = 0; i < 8; i++) {
+            img_vram_setw(di, img_w(BORDER_SPR + i * 2));
+            di = cga_next_row(di);
+        }
+}
