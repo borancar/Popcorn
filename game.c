@@ -4611,3 +4611,59 @@ void banner_shift(void)
         di = cga_next_row(di);
     }
 }
+
+/* ========================================================================
+ * 1ac2:0cc5  play_prepare  and  1ac2:1509  demo_start
+ *
+ * Each player gets a 0x11b-byte record at 0x344f: name, then lives, the offset
+ * of the level they are on, the score as ASCII digits, a private copy of the
+ * level's 176 cells, and six 0xffff terminators.
+ *
+ * A record carries its own copy of the cells because with more than one player
+ * the game switches between them, and each has to come back to the level as
+ * they left it.
+ * ===================================================================== */
+#define REC_LIVES    0x0c
+#define REC_LEVEL    0x0d
+#define REC_NUMBER   0x0f
+#define REC_SCORE    0x10
+#define REC_CELLS    0x16
+#define REC_END      0xc6
+
+static void player_record_init(unsigned di)
+{
+    g_image[di + REC_LIVES] = 5;
+    img_setw(di + REC_LEVEL, LEVEL_TABLE);
+    g_image[di + REC_NUMBER] = 0;
+    img_setw(di + REC_SCORE + 0, 0x3030);
+    img_setw(di + REC_SCORE + 2, 0x3030);
+    img_setw(di + REC_SCORE + 4, 0x3030);
+    memcpy(g_image + di + REC_CELLS, g_image + SEG_C46 + LEVEL_TABLE,
+           LEVEL_BYTES);
+    for (int i = 0; i < 6; i++)
+        img_setw(di + REC_END + i * 2, 0xffff);
+}
+
+void play_prepare(void)
+{
+    unsigned di = NAME_TABLE;
+    for (unsigned n = g_image[PLAYER_COUNT]; n > 0; n--, di += NAME_STRIDE) {
+        player_record_init(di);
+        g_image[di + 0xd2] = 0;
+    }
+}
+
+/* The demo plays itself: [0x2d45] points at 0x1785, a third input routine that
+ * reads a recorded script instead of a keyboard or a mouse, and cs:[0x1784] is
+ * set to 0xff to say it is running. One player, with the name at 0x13f9. */
+#define INPUT_DEMO   0x1785
+
+void demo_start(void)
+{
+    img_setw(INPUT_ACTIVE, INPUT_DEMO);
+    g_image[CS_BASE + 0x1784] = 0xff;
+    memcpy(g_image + NAME_TABLE, g_image + 0x13f9, 12);
+    player_record_init(NAME_TABLE);
+    g_image[NAME_TABLE + 0xd3] = 0;
+    g_image[PLAYER_COUNT] = 1;
+}

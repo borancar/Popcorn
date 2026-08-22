@@ -54,8 +54,6 @@ STUB(employee_enter,      0x4ae0, "F10, the `touche speciale pour employes`")
 STUB(employee_leave,      0x4b4f, "and its exit")
 
 /* --- getting into a game -------------------------------------------- */
-STUB(demo_start,          0x1509, "and starts it")
-STUB(play_prepare,        0xcc5,  "after the names are entered")
 STUB(level_load_file,     0x08c8, "reads a .PPC level set named on the command line")
 
 /* --- called from the play loop, which is transcribed ------------------ */
