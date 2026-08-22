@@ -211,6 +211,15 @@ int  name_field(unsigned di, unsigned char *abort); /* 1ac2:13b8 */
 void play_frame(void);            /* 1ac2:1212 */
 unsigned frame_band(unsigned di, unsigned fill);  /* 1ac2:1354 */
 void panel_reveal(void);          /* 1ac2:0911 */
+void field_marks(void);           /* 1ac2:0598 */
+void field_marks_wide(unsigned di);  /* 1ac2:0a1d */
+
+/* A word into the framebuffer, wrapping like the 16-bit offset it is. */
+static inline void img_vram_setw(unsigned di, unsigned v)
+{
+    g_vram[di & (CGA_SIZE - 1)] = (unsigned char)v;
+    g_vram[(di + 1) & (CGA_SIZE - 1)] = (unsigned char)(v >> 8);
+}
 void panel_finish(void);          /* 1ac2:09c5 */
 
 /* Called by play_loop; the ones still empty live in stubs.c too. */
@@ -363,6 +372,9 @@ int  name_field(unsigned di, unsigned char *abort); /* 1ac2:13b8 */
 void play_frame(void);            /* 1ac2:1212 */
 unsigned frame_band(unsigned di, unsigned fill);  /* 1ac2:1354 */
 void panel_reveal(void);          /* 1ac2:0911 */
+void field_marks(void);           /* 1ac2:0598 */
+void field_marks_wide(unsigned di);  /* 1ac2:0a1d */
+
 void panel_finish(void);          /* 1ac2:09c5 */
 
 /* Called by play_loop; the ones still empty live in stubs.c too. */

@@ -75,8 +75,7 @@ void cell_special(unsigned row, unsigned di)
 
 
 /* --- called from play_session, which is transcribed ------------------- */
-STUB(panel_reveal,          0x0911, "brings the side panel in")
-STUB(panel_finish,          0x09c5, "finishes it off")
+void field_marks_wide(unsigned di) { note("field_marks_wide", 0x0a1d); (void)di; }
 STUB(screen_game_over,      0x0473, "GAME OVER")
 STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
 STUB(screen_all_levels_done, 0x5940, "finishing all fifty")
