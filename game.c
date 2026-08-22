@@ -3647,3 +3647,121 @@ void entity_capsule(unsigned bx)
     di = base + g_image[bx + 6] * 4;
     xor_sprite_16xn(g_image[bx + 2], y, img_w(di), img_w(di + 2) & 0xff);
 }
+
+/* ========================================================================
+ * What the bonuses do: the table at 0x33bc, indexed by a capsule's kind.
+ * ===================================================================== */
+
+/* 1ac2:41b1  fill_column - 0x19 words down one column, stepping the interlace.
+ * `stosw` then `dec di` twice leaves the offset where it started, so the
+ * column stays put while the rows advance. */
+void fill_column(unsigned di, unsigned value)
+{
+    for (int i = 0; i < 0x19; i++) {
+        g_vram[di & (CGA_SIZE - 1)] = (unsigned char)value;
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = (unsigned char)(value >> 8);
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:2daa  bonus 0 - a hundred points, and it cancels the net and the
+ * extra ball if either is running */
+void bonus_points(void)
+{
+    brick_score(0, 0x100, 0);
+    if (g_image[SAFETY_NET] == 1) {
+        flash_bar(0x1554);
+        g_image[SAFETY_NET] = 0;
+        fill_column(0x1a77, 0);
+    }
+    if (g_image[EXTRA_ON] != 1)
+        return;
+    g_image[EXTRA_ON] = 0;
+    fill_column(0x1a8b, 0);
+}
+
+/* 1ac2:2def  bonus 1 - the paddle catches the ball */
+void bonus_catch(void)
+{
+    if (g_image[CAUGHT] != 0)
+        return;
+    g_image[CAUGHT] = 1;
+    img_setw(HOLD_TIMER, HOLD_RESET);
+}
+
+/* 1ac2:2e03  bonus 3 - the laser */
+void bonus_laser(void)
+{
+    if (g_image[LASER_ON] != 0)
+        return;
+    g_image[LASER_ON] = 1;
+    g_image[SHOT_Y] = 0xb3;
+}
+
+/* 1ac2:2e16  bonus 4 - more balls, run by an entity of its own */
+void bonus_multiball(void)
+{
+    img_setw(entity_alloc(), 0x3717);
+}
+
+/* 1ac2:3231  bonus 2 - nothing at all */
+void bonus_nothing(void) { }
+
+/* 1ac2:3119  bonus 5 - the safety net across the bottom */
+void bonus_net(void)
+{
+    if (g_image[SAFETY_NET] != 1) {
+        g_image[SAFETY_NET] = 1;
+        flash_bar(0x1554);
+    }
+    img_setw(SHOT_LIFE, 0x1388);
+    g_image[SHOT_TIMER] = 0xc8;
+    fill_column(0x1a77, 0xaaaa);
+    img_setw(SHOT_POS, 0x1a77);
+}
+
+/* 1ac2:315b  bonus 6 - every ball in play reverses vertically and re-anchors
+ * where it is */
+void bonus_reverse(void)
+{
+    for (int i = 0; i < 3; i++) {
+        unsigned char *b = g_image + BALLS + i * BALL_STRIDE;
+        if (b[B_STATE] == 0)
+            continue;
+        b[B_DIR_Y] = (unsigned char)(b[B_DIR_Y] == 1 ? 0 : 1);
+        b[B_ANCHOR_X] = b[B_X];
+        b[B_ANCHOR_Y] = b[B_Y];
+        b[B_ACC_X] = b[B_ACC_Y] = 0;
+    }
+}
+
+/* 1ac2:31e8  bonus 9 - the ball moves more often, down to every other frame,
+ * and the timer that would have sped it up anyway is reset */
+void bonus_speed(void)
+{
+    if (g_image[SPEED_LIMIT] != 2) {
+        g_image[SPEED_LIMIT]--;
+        g_image[SPEED_STEP] = g_image[SPEED_LIMIT];
+    }
+    img_setw(SPEED_TIMER, 0x4e20);
+}
+
+/* The dispatch at 1ac2:337d. Kind 8 ends the level and is not here: it throws
+ * four words off the stack and jumps into 0x4210, which no C call can do, so
+ * it is handled where the morph animation calls this. */
+void bonus_effect(unsigned kind)
+{
+    switch (kind) {
+    case 0: bonus_points(); break;
+    case 1: bonus_catch(); break;
+    case 2: bonus_nothing(); break;
+    case 3: bonus_laser(); break;
+    case 4: bonus_multiball(); break;
+    case 5: bonus_net(); break;
+    case 6: bonus_reverse(); break;
+    case 7: extra_life(); break;
+    case 8: bonus_end_level(); break;
+    case 9: bonus_speed(); break;
+    default: break;
+    }
+}
