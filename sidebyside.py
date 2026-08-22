@@ -51,6 +51,16 @@ CGA_W, CGA_H = 320, 200
 CGA_PLANE = 0x2000
 CGA_STRIDE = 80
 PADDLE_X = 0x2E54
+LEVEL_NUMBER = 0x13CC                   # 0-0x31, for naming snapshots
+
+# A snapshot is everything needed to start a level again: the unmasked image
+# (the stack included, or the `ret` from play_loop goes nowhere), the screen,
+# the registers with SP/SS/CS/IP, and the tick the PRNG is seeded from. One is
+# written every time the emulator enters play_loop, which is once a level and
+# again after a lost life - so a divergence twenty minutes in can be reached
+# in seconds instead of replayed.
+SNAP_MAGIC = b"PSNP"
+SNAP_REGS = 14                          # ax bx cx dx si di bp es ds fl sp ss cs ip
 
 # Excluded from the comparison for the same reasons verify.py excludes them:
 # the stack below SP is not a function of anything, and the three key-state
@@ -105,6 +115,11 @@ def main():
     ap.add_argument("--frames", type=int, default=200,
                     help="0 runs until a comparison fails or you "
                          "stop it")
+    ap.add_argument("--snapshots", metavar="DIR",
+                    help="write a resumable snapshot at the start of every "
+                         "level into DIR")
+    ap.add_argument("--resume", metavar="FILE",
+                    help="start from a snapshot instead of walking the menu")
     ap.add_argument("--from-session", action="store_true",
                     help="capture at play_session rather than play_loop, so "
                          "the comparison follows level transitions and lost "
@@ -163,11 +178,40 @@ def main():
         lo, hi = struct.unpack("<HH", m.uc.mem_read(0x46C, 4))
         return (lo + hi) & 0xFFFF
 
-    def regs_now():
-        return [m.uc.reg_read(x) & 0xFFFF for x in (
-            UC_X86_REG_AX, UC_X86_REG_BX, UC_X86_REG_CX, UC_X86_REG_DX,
-            UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP, UC_X86_REG_ES,
-            UC_X86_REG_DS, UC_X86_REG_EFLAGS)]
+    REGS_10 = (UC_X86_REG_AX, UC_X86_REG_BX, UC_X86_REG_CX, UC_X86_REG_DX,
+               UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP, UC_X86_REG_ES,
+               UC_X86_REG_DS, UC_X86_REG_EFLAGS)
+    REGS_ALL = REGS_10 + (UC_X86_REG_SP, UC_X86_REG_SS,
+                          UC_X86_REG_CS, UC_X86_REG_IP)
+
+    def regs_now(which=REGS_10):
+        return [m.uc.reg_read(x) & 0xFFFF for x in which]
+
+    def raw_image():
+        return bytes(m.uc.mem_read(base, IMAGE_LEN))   # stack and all
+
+    def write_snapshot(path, level, frame):
+        with open(path, "wb") as f:
+            f.write(SNAP_MAGIC + struct.pack("<II", level, frame))
+            f.write(struct.pack(f"<{SNAP_REGS}H", *regs_now(REGS_ALL)))
+            f.write(struct.pack("<I", bios_ticks()))
+            img = raw_image()
+            f.write(struct.pack("<I", len(img)) + img)
+            v = snapshot_vram()
+            f.write(struct.pack("<I", len(v)) + v)
+
+    def read_snapshot(path):
+        d = open(path, "rb").read()
+        if d[:4] != SNAP_MAGIC:
+            raise SystemExit(f"{path}: not a snapshot")
+        level, frame = struct.unpack_from("<II", d, 4)
+        o = 12
+        regs = struct.unpack_from(f"<{SNAP_REGS}H", d, o); o += SNAP_REGS * 2
+        ticks, = struct.unpack_from("<I", d, o); o += 4
+        ilen, = struct.unpack_from("<I", d, o); o += 4
+        img = d[o:o + ilen]; o += ilen
+        vlen, = struct.unpack_from("<I", d, o); o += 4
+        return level, frame, regs, ticks, img, d[o:o + vlen]
 
     pending = {}
     for off, key, _ in parse_route(ROUTE_PLAY):
@@ -179,6 +223,7 @@ def main():
     reentries = [0]
     resuming = [False]
     draws = []
+    frames_done = [0]
     hits = collections.Counter()
 
     def on_code(uc, address, size, user):
@@ -190,6 +235,13 @@ def main():
             m.press_key(sc, asc, False)
         if off == start_at and captured:
             reentries[0] += 1
+        if args.snapshots and off == PLAY_LOOP and captured:
+            lv = m.uc.mem_read(base + LEVEL_NUMBER, 1)[0]
+            path = os.path.join(args.snapshots,
+                                f"level{lv:02d}_f{frames_done[0]:06d}.snap")
+            write_snapshot(path, lv, frames_done[0])
+            print(f"  snapshot: level {lv} at frame {frames_done[0]} "
+                  f"-> {os.path.basename(path)}", flush=True)
         if captured and off in (0x0097, 0x1AD8, 0x1AF5, 0x1B04, 0x1B4D, 0x1C3F):
             hits[off] += 1
         if captured and off == 0x40C0:          # game_random: who asked?
@@ -225,7 +277,23 @@ def main():
         m.uc.emu_start(addr, 0, count=20000)
         m.service_keyboard()
 
-    print("walking the menu...")
+    if args.resume:
+        lv, fr, regs, ticks, img, vram = read_snapshot(args.resume)
+        m.uc.mem_write(base, img)
+        m.uc.mem_write(0xB8000, vram)
+        for reg, val in zip(REGS_ALL, regs):
+            m.uc.reg_write(reg, val)
+        m.uc.mem_write(0x46C, struct.pack("<I", ticks))
+        captured["regs"] = list(regs[:10])
+        captured["img"] = img
+        captured["vram"] = vram
+        captured["ticks"] = ticks
+        start_at = PLAY_LOOP            # a snapshot is always a play_loop entry
+        frames_done[0] = fr
+        print(f"resumed {os.path.basename(args.resume)}: level {lv}, "
+              f"originally frame {fr}")
+
+    print("walking the menu...") if not args.resume else None
     while not captured and m._elapsed() < args.enter_seconds:
         run_a_bit()
         if m.finished:
@@ -426,7 +494,8 @@ def main():
 
         if img_bad or vram_bad:
             differing += 1
-            print(f"\nframe {n}: {len(img_bad)} image bytes, "
+            lv = frame_hit["img"][LEVEL_NUMBER]
+            print(f"\nframe {n}, level {lv}: {len(img_bad)} image bytes, "
                   f"{len(vram_bad)} screen bytes differ")
             seen = set()
             for off in img_bad:
@@ -473,8 +542,10 @@ def main():
         if (args.watch or args.snap) and not watch_draw(pvram, n):
             print(f"\nwindow closed at frame {n}")
             break
+        frames_done[0] = n
         if n and n % 250 == 0:
-            print(f"  {n} frames, still identical", flush=True)
+            print(f"  {n} frames, still identical "
+                  f"(level {frame_hit['img'][LEVEL_NUMBER]})", flush=True)
 
         # The bot reads the emulator - the reference - and both are told the
         # same thing.
