@@ -159,6 +159,8 @@ unsigned long io_ms(void)
 
 void io_present(void)
 {
+    if (io_lockstep())
+        return;
     uint64_t now = SDL_GetTicksNS();
     if (now < next_present_ns)
         return;
@@ -174,6 +176,8 @@ void io_present(void)
  * half-minute. Shares io_present's budget, so the two cannot double up. */
 static void keep_alive(void)
 {
+    if (io_lockstep())
+        return;
     uint64_t now = SDL_GetTicksNS();
     if (now < next_present_ns)
         return;
@@ -184,6 +188,8 @@ static void keep_alive(void)
 
 void io_delay_cycles(unsigned cycles)
 {
+    if (io_lockstep())
+        return;
     delay_owed_ns += cycles * (1e9 / 8000000.0);   /* an 8 MHz 8086 */
     if (delay_owed_ns >= 1e6) {                    /* a millisecond or more */
         uint64_t ns = (uint64_t)delay_owed_ns;
@@ -206,6 +212,14 @@ static float mouse_x = 320, mouse_y = 100;
 
 void io_mouse_warp(unsigned x, unsigned y)
 {
+    /* A warp is what the next read returns, in lockstep as much as here: the
+     * play loop centres the pointer at 1ac2:1925 before the serve, and a port
+     * that kept the driver's last value would start the paddle somewhere the
+     * emulator never put it. */
+    if (io_lockstep()) {
+        io_lockstep_warp(x);
+        return;
+    }
     mouse_x = (float)x;
     mouse_y = (float)y;
     /* Put the real pointer where the game thinks it is, or the next motion
@@ -217,10 +231,14 @@ void io_mouse_warp(unsigned x, unsigned y)
 
 unsigned io_mouse_x(void)
 {
+    if (io_lockstep())
+        return io_lockstep_mouse_x();
     return (unsigned)(mouse_x < 0 ? 0 : mouse_x > 639 ? 639 : mouse_x);
 }
 unsigned io_mouse_buttons(void)
 {
+    if (io_lockstep())
+        return io_lockstep_buttons();
     float fx, fy;
     return SDL_GetMouseState(&fx, &fy) & 3;
 }
@@ -247,6 +265,8 @@ unsigned io_ticks(void)
 
 int io_key_ready(void)
 {
+    if (io_lockstep())
+        return 0;
     return key_head != key_tail;
 }
 
@@ -372,6 +392,8 @@ static void check_deadline(void)
 
 void io_wait_retrace(void)
 {
+    if (io_lockstep())
+        return;
     script_pump();
     check_deadline();
     keep_alive();
@@ -410,6 +432,8 @@ static int scancode_of(SDL_Scancode sc)
 
 int io_pump(void)
 {
+    if (io_lockstep())
+        return 1;
     script_pump();
     check_deadline();
     SDL_Event ev;

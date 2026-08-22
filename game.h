@@ -157,6 +157,15 @@ extern uint32_t g_palette[4];
 int  io_init(int scale);
 void io_shutdown(void);
 void io_present(void);                 /* g_vram to the screen */
+
+/* Lockstep, for sidebyside.py: the port runs a frame and hands the whole
+ * machine over, and the driver hands back the input for the next one. */
+int  io_lockstep(void);
+unsigned io_lockstep_mouse_x(void);
+unsigned io_lockstep_buttons(void);
+void io_lockstep_warp(unsigned x);
+void io_frame_sync(void);              /* at 1ac2:1a62, the frame's top */
+int  lockstep_main(const char *state_path);
 unsigned long io_ms(void);             /* wall clock, for measurement only */
 int  io_pump(void);                    /* poll input; 0 means quit */
 void io_wait_retrace(void);            /* what `in al,0x3da` / test 8 did */

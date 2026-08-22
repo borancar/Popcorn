@@ -362,6 +362,18 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x5c36:                        /* ending_blob(ax) */
         ending_blob(r[R_AX]);
         return 1;
+    case 0x1c4f:                        /* level_draw */
+        level_draw();
+        return 1;
+    case 0x1e23:                        /* walker_step(cl = x) */
+        walker_step(r[R_CX] & 0xff);
+        return 1;
+    case 0x1785:                        /* input_demo */
+        input_demo();
+        return 1;
+    case 0x58b3:                        /* cheat_sequence(al) */
+        g_result = cheat_sequence((unsigned char)(r[R_AX] & 0xff));
+        return 1;
     default:
         return 0;
     }
