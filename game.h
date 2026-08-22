@@ -241,7 +241,8 @@ void screen_restore(void);        /* 1ac2:4b4f */
 void demo_start(void);            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
 
-void level_load_file(void);       /* 1ac2:08c8 */
+int  level_load_file(const char *dir);  /* 1ac2:08c8 */
+void set_palette_registers(unsigned table);  /* 1ac2:4b7a */
 unsigned char screen_player_names(void);  /* 1ac2:10de */
 int  name_field(unsigned di, unsigned char *abort); /* 1ac2:13b8 */
 void play_frame(void);            /* 1ac2:1212 */
@@ -446,7 +447,8 @@ void screen_restore(void);        /* 1ac2:4b4f */
 void demo_start(void);            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
 
-void level_load_file(void);       /* 1ac2:08c8 */
+int  level_load_file(const char *dir);  /* 1ac2:08c8 */
+void set_palette_registers(unsigned table);  /* 1ac2:4b7a */
 unsigned char screen_player_names(void);  /* 1ac2:10de */
 int  name_field(unsigned di, unsigned char *abort); /* 1ac2:13b8 */
 void play_frame(void);            /* 1ac2:1212 */
