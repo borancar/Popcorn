@@ -41,8 +41,11 @@ int main(int argc, char **argv)
     const char *shot = NULL;
     const char *vram = NULL;
     const char *keys = NULL;
+    const char *lockstep = NULL;
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--verify") && i + 2 < argc)
+        if (!strcmp(argv[i], "--lockstep") && i + 1 < argc)
+            lockstep = argv[++i];
+        else if (!strcmp(argv[i], "--verify") && i + 2 < argc)
             return verify_main(argv[i + 1], argv[i + 2]);
         else if (!strcmp(argv[i], "--dump-image") && i + 1 < argc)
             dump = argv[++i];
@@ -65,6 +68,11 @@ int main(int argc, char **argv)
             return 2;
         }
     }
+
+    /* Lockstep brings its own image, in the state the emulator handed over,
+     * and must put nothing but frames on stdout. */
+    if (lockstep)
+        return lockstep_main(lockstep);
 
     const char *path = find_exe();
     if (!path) {

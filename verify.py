@@ -56,9 +56,18 @@ def _routines():
     # Two routines can share one header: "1ac2:5099 / 1ac2:50bc  save_screen /
     # restore_screen". Take those pairwise first.
     for a, b, na, nb in re.findall(
-            r"1ac2:([0-9a-f]{4}) / 1ac2:([0-9a-f]{4})\s+(\w+) / (\w+)", src):
+            r"^\s*(?:/\*|\*)\s*1ac2:([0-9a-f]{4}) / 1ac2:([0-9a-f]{4})"
+            r"\s+(\w+) / (\w+)", src, re.M):
         names.setdefault(int(a, 16), na)
         names.setdefault(int(b, 16), nb)
+    # Only a header counts - `1ac2:xxxx name` at the start of a comment line.
+    # Matching anywhere picks up prose: "1ac2:1c4f drives it, 1ac2:1e23 steps
+    # it" named two routines "drives" and "steps".
+    for off, name in re.findall(
+            r"^\s*(?:/\*|\*)\s*1ac2:([0-9a-f]{4})\s+(\w+)", src, re.M):
+        names.setdefault(int(off, 16), name)
+    # A loose pass for the headers that do not fit either shape, so a routine
+    # gets a name rather than routine_xxxx. Strict wins where both match.
     for off, name in re.findall(r"1ac2:([0-9a-f]{4})\s+(\w+)", src):
         names.setdefault(int(off, 16), name)
     return {off: names.get(off, f"routine_{off:04x}") for off in sorted(cases)}

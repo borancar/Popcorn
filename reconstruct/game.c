@@ -1046,7 +1046,11 @@ int play_loop(void)
 
     g_image[PADDLE_X] = g_image[PADDLE_PREV_X] = 0x64;
     g_image[PADDLE_KIND] = 0;
-    g_image[0x2d3a] = g_image[PADDLE_SPRITES + 3];
+    /* `mov ax, [di+2] / ... / mov [0x2d3a], al` - the width is the **low**
+     * byte of the word at 0x2d0f, not the high one at 0x2d10. With the high
+     * byte the width came out zero, and a zero-width paddle clamps to the
+     * left wall the moment the mouse is read. */
+    g_image[0x2d3a] = g_image[PADDLE_SPRITES + 2];
     g_image[PADDLE_MAX] = 0xac;
     g_image[PADDLE_MIN] = 0x08;
     g_image[REPEAT_COUNT] = 5;
@@ -1112,6 +1116,7 @@ int play_loop(void)
     }
 
     for (;;) {                          /* one iteration is one frame */
+        io_frame_sync();        /* 1ac2:1a62 - the frame's top */
         img_setw(FRAME_DELAY, img_w(FRAME_DELAY_SET));
         demo_input_step();
 
