@@ -26,6 +26,7 @@ Usage:
 """
 import argparse
 import collections
+import re
 import os
 import struct
 import subprocess
@@ -37,93 +38,33 @@ PORT = os.path.join(HERE, "reconstruct", "popcorn")
 
 # Every routine the C side implements, with what it is and how far into a
 # session it is first reached. Keep in step with dispatch() in verify.c.
-ROUTINES = {
-    0x27D7: "ball_step",
-    0x22DE: "paddle_row_offsets",
-    0x2281: "blit_xor",
-    0x221A: "draw_paddle",
-    0x0C64: "draw_char",
-    0x1712: "input_keyboard",
-    0x0598: "field_marks",
-    0x0911: "panel_reveal",
-    0x0CC5: "play_prepare",
-    0x1354: "frame_band",
-    0x1509: "demo_start",
-    0x2D68: "brick_11",
-    0x3D95: "bonus_spawn",
-    0x490D: "menu_arrow",
-    0x492F: "arrow_head",
-    0x4957: "arrow_tail",
-    0x50DF: "menu_banner_tick",
-    0x5140: "banner_shift",
-    0x53C2: "menu_particles_tick",
-    0x5448: "particle_random",
-    0x5476: "menu_particles_init",
-    0x548A: "particle_init",
-    0x044B: "level_colours",
-    0x05F8: "level_between",
-    0x10C5: "draw_run",
-    0x10D1: "draw_text",
-    0x14A7: "draw_cursor",
-    0x1E50: "walker_draw",
-    0x1FC1: "field_backdrop",
-    0x2034: "draw_brick_row",
-    0x2109: "scroll_up_band",
-    0x2148: "scroll_down_band",
-    0x2187: "draw_paddle_shifted",
-    0x22A9: "draw_paddle_raw",
-    0x318B: "extra_life",
-    0x20B9: "draw_sprite_20x6",
-    0x2316: "ball_paddle",
-    0x254D: "ball_bricks",
-    0x247F: "ball_after",
-    0x2827: "ball_redraw",
-    0x2881: "ball_draw",
-    0x3B64: "xor_sprite_16x7",
-    0x413D: "score_add",
-    0x2755: "probe_cell",
-    0x2DAA: "bonus_points",
-    0x2DEF: "bonus_catch",
-    0x2E03: "bonus_laser",
-    0x2E16: "bonus_multiball",
-    0x3119: "bonus_net",
-    0x315B: "bonus_reverse",
-    0x31E8: "bonus_speed",
-    0x3231: "bonus_nothing",
-    0x41B1: "fill_column",
-    0x2E1E: "ball_on_paddle",
-    0x2EE3: "laser_fire",
-    0x3273: "entity_capsule",
-    0x3386: "entity_paddle_fx",
-    0x3561: "entity_popup",
-    0x3717: "entity_multiball",
-    0x306B: "shot_xor",
-    0x30DD: "pixel_xor",
-    0x3146: "flash_bar",
-    0x3232: "entity_alloc",
-    0x3257: "entity_unlink",
-    0x365E: "entity_soften",
-    0x366F: "entity_repeat",
-    0x3696: "entity_plain",
-    0x36A1: "entity_ball_arrive",
-    0x36F6: "entity_cells_timer",
-    0x36FB: "cells_restore",
-    0x3668: "cell_set_three",
-    0x37E0: "entity_ball_hold",
-    0x390D: "entity_hatch",
-    0x39A1: "bonus_release",
-    0x39FA: "entity_bonus",
-    0x3AEE: "entity_sparkle",
-    0x3B2A: "entity_crumble",
-    0x3DF1: "bonus_update",
-    0x3F20: "bonus_hits_ball",
-    0x3F4F: "sprite_shift_draw",
-    0x406A: "xor_sprite_20x16",
-    0x40C0: "game_random",
-    0x40F2: "xor_sprite_16xn",
-    0x5099: "save_screen",
-    0x50BC: "restore_screen",
-}
+def _routines():
+    """Every routine `reconstruct/verify.c` can dispatch, named from game.c.
+
+    Kept out of a hand-written list on purpose. There used to be one here, it
+    fell behind the dispatch table by fifty-seven routines, and the runs that
+    said "nothing failing" had quietly not checked any of them - the same trap
+    as analyze.py's short seed list, one layer up. Both sides are read from
+    the source, so they cannot drift.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    cases = set(int(m, 16) for m in re.findall(
+        r"case 0x([0-9a-f]{4}):",
+        open(os.path.join(here, "reconstruct", "verify.c")).read()))
+    src = open(os.path.join(here, "reconstruct", "game.c")).read()
+    names = {}
+    # Two routines can share one header: "1ac2:5099 / 1ac2:50bc  save_screen /
+    # restore_screen". Take those pairwise first.
+    for a, b, na, nb in re.findall(
+            r"1ac2:([0-9a-f]{4}) / 1ac2:([0-9a-f]{4})\s+(\w+) / (\w+)", src):
+        names.setdefault(int(a, 16), na)
+        names.setdefault(int(b, 16), nb)
+    for off, name in re.findall(r"1ac2:([0-9a-f]{4})\s+(\w+)", src):
+        names.setdefault(int(off, 16), name)
+    return {off: names.get(off, f"routine_{off:04x}") for off in sorted(cases)}
+
+
+ROUTINES = _routines()
 
 REGS = "ax bx cx dx si di bp es ds fl".split()
 

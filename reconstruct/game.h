@@ -138,6 +138,7 @@ extern uint32_t g_palette[4];
 int  io_init(int scale);
 void io_shutdown(void);
 void io_present(void);                 /* g_vram to the screen */
+unsigned long io_ms(void);             /* wall clock, for measurement only */
 int  io_pump(void);                    /* poll input; 0 means quit */
 void io_wait_retrace(void);            /* what `in al,0x3da` / test 8 did */
 void io_sound(unsigned divisor);       /* PIT channel 2; 0 silences */
@@ -266,7 +267,7 @@ void panel_finish(void);          /* 1ac2:09c5 */
 
 /* Called by play_loop; the ones still empty live in stubs.c too. */
 int  play_loop(void);             /* 1ac2:1873 - transcribed */
-void draw_text(unsigned src, unsigned count, unsigned di);  /* 1ac2:10d1 */
+unsigned draw_text(unsigned src, unsigned count, unsigned di);  /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
 void walker_draw(unsigned x);     /* 1ac2:1e50 */
 void walker_step(unsigned x);     /* 1ac2:1e23 */
@@ -337,7 +338,7 @@ void entity_unknown(unsigned bx);
 void entity_multiball(unsigned bx);  /* 1ac2:3717 */
 void entity_unlink(unsigned node);/* 1ac2:3257 */
 unsigned entity_alloc(void);      /* 1ac2:3232 */
-void draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
+unsigned draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
 void draw_cursor(unsigned di);    /* 1ac2:14a7 */
 void copy_string_text(unsigned src, unsigned dst);            /* 1ac2:1642 */
 void flash_bar(unsigned pattern); /* 1ac2:3146 */
@@ -472,7 +473,7 @@ void panel_finish(void);          /* 1ac2:09c5 */
 
 /* Called by play_loop; the ones still empty live in stubs.c too. */
 int  play_loop(void);             /* 1ac2:1873 - transcribed */
-void draw_text(unsigned src, unsigned count, unsigned di);  /* 1ac2:10d1 */
+unsigned draw_text(unsigned src, unsigned count, unsigned di);  /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
 void walker_draw(unsigned x);     /* 1ac2:1e50 */
 void walker_step(unsigned x);     /* 1ac2:1e23 */
@@ -543,7 +544,7 @@ void entity_unknown(unsigned bx);
 void entity_multiball(unsigned bx);  /* 1ac2:3717 */
 void entity_unlink(unsigned node);/* 1ac2:3257 */
 unsigned entity_alloc(void);      /* 1ac2:3232 */
-void draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
+unsigned draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
 void draw_cursor(unsigned di);    /* 1ac2:14a7 */
 void copy_string_text(unsigned src, unsigned dst);            /* 1ac2:1642 */
 void flash_bar(unsigned pattern); /* 1ac2:3146 */

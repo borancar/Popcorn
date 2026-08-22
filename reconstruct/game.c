@@ -2385,18 +2385,28 @@ void level_colours(void)
     g_image[ANIM_COUNT] = g_image[si + 2];
 }
 
-/* 1ac2:10c5  draw_run - the same character `count` times */
-void draw_run(unsigned char c, unsigned count, unsigned di)
+/* 1ac2:10c5  draw_run - the same character `count` times.
+ *
+ * Returns where DI ended up. The original leaves it there for the caller and
+ * the screens rely on it: the high-score table spells its heading out as a
+ * run of spaces, ten separate `call 0xc64`, and another run, each picking up
+ * exactly where the last left off. */
+unsigned draw_run(unsigned char c, unsigned count, unsigned di)
 {
-    for (unsigned i = 0; i < count; i++, di += 2)
+    for (unsigned i = 0; i < count; i++, di = (di + 2) & 0xffff)
         draw_char(c, di);
+    return di;
 }
 
-/* 1ac2:10d1  draw_text - `count` characters from `src` */
-void draw_text(unsigned src, unsigned count, unsigned di)
+/* 1ac2:10d1  draw_text - `count` characters from `src`, DI handed back for
+ * the same reason as draw_run. `lodsb` advances SI too, so a caller that
+ * wants it preserved pushes it - which is what the high-score table does
+ * around every run of spaces between its columns. */
+unsigned draw_text(unsigned src, unsigned count, unsigned di)
 {
-    for (unsigned i = 0; i < count; i++, di += 2)
+    for (unsigned i = 0; i < count; i++, di = (di + 2) & 0xffff)
         draw_char(g_image[src + i], di);
+    return di;
 }
 
 /* 1ac2:14a7  draw_cursor
@@ -5589,14 +5599,27 @@ int drive_writable(void) { return 1; }
 /* ========================================================================
  * 1ac2:49bc  intro_paddle
  *
- * The paddle assembling itself at the end of the opening: four sprite sets,
- * each drawn `bh` bytes wide and growing, seven rows at a time from 0x1900
- * with a retrace wait per pass.
+ * The paddle arriving at the end of the opening, in two phases.
+ *
+ * First it **emerges from the left wall**: eight passes at a fixed 0x1900,
+ * each one byte wider than the last, with `bp` walking *back* through the
+ * sprite so the part on screen is always the paddle's right-hand end. Eight
+ * passes, not more - `bp` counts down from 0x490a and the loop ends when it
+ * reaches 0x4902.
+ *
+ * Then it **travels right**: `bh` from 0 to 0x15 puts the whole eight bytes
+ * at 0x1900 + bh, and each row writes a **zero byte first** - the `stosb`
+ * before the `rep movsb` - which rubs out the column the paddle has just
+ * left. That is why nothing else has to erase it.
+ *
+ * Each pass cycles all four pre-shifted phases, seven rows of eleven bytes
+ * apiece, with a retrace wait and 0x19 delays between them.
  * ===================================================================== */
 void intro_paddle(void)
 {
+    /* Out of the wall. */
     unsigned bp = 0x490a;
-    for (unsigned bh = 1; bh <= 0x1a; bh++, bp--) {
+    for (unsigned bh = 1; bh <= 8; bh++, bp--) {
         unsigned si = bp;
         for (int bl = 4; bl > 0; bl--, si += PADDLE_IMAGE) {
             io_wait_retrace();
@@ -5604,6 +5627,27 @@ void intro_paddle(void)
             for (int dl = 7; dl > 0; dl--) {
                 for (unsigned b = 0; b < bh; b++)
                     g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[s + b];
+                s += 0x0b;
+                di = cga_next_row(di);
+            }
+            for (int i = 0; i < 0x19; i++)
+                game_delay();
+            io_present();
+            if (!io_pump())
+                return;
+        }
+    }
+
+    /* And across. */
+    for (unsigned bh = 0; bh < 0x16; bh++) {
+        unsigned si = 0x4903;
+        for (int bl = 4; bl > 0; bl--, si += PADDLE_IMAGE) {
+            io_wait_retrace();
+            unsigned di = (0x1900 + bh) & 0xffff, s = si;
+            for (int dl = 7; dl > 0; dl--) {
+                g_vram[di & (CGA_SIZE - 1)] = 0;
+                for (int b = 0; b < 8; b++)
+                    g_vram[(di + 1 + b) & (CGA_SIZE - 1)] = g_image[s + b];
                 s += 0x0b;
                 di = cga_next_row(di);
             }
@@ -5666,43 +5710,73 @@ void set_palette_registers(unsigned table)
 /* ========================================================================
  * 1ac2:4e1a  screen_high_scores
  *
- * F6. The border, a bar, the words HIGH SCORE spelled out a glyph at a time -
- * the original really does have eleven separate `mov al` and `call 0xc64`
- * pairs for it - and then the ten entries from the table at 0x3e42, each a
- * twelve-character name and a six-digit score.
+ * F6. Everything on this screen is 24 characters wide and stepped by hand.
  *
- * It then runs the border animation until a key, 0x181 delays a step, giving
- * up after 0xff steps.
+ * A line of text is 12 scan lines tall, which in one interlace half is six
+ * rows of 0x50 - 0x1e0. The caller has already walked DI forward 0x30 drawing
+ * its 24 characters, so the step between lines is written as `add di, 0x1b0`.
+ * That is the whole layout: heading, a rule of dashes, a blank, then ten
+ * entries, each followed by two scan lines of 0xaaaa as a separator, and
+ * whatever is left of the screen filled with the same bar until DI comes
+ * round to 0x1e02.
+ *
+ * The bar is glyph 0 - what a space maps to - which is a solid block of
+ * colour 2. Get the stepping wrong and the fill has nothing to stop against,
+ * and the screen is a red rectangle with the table hidden under it.
  * ===================================================================== */
+#define HSC_LINE   0x1b0                /* between lines, DI already +0x30 */
+#define HSC_WIDTH  0x18                 /* characters, and words of bar */
+
+static unsigned hsc_bar(unsigned di)
+{
+    for (int i = 0; i < HSC_WIDTH; i++)
+        img_vram_setw((di + i * 2) & 0xffff, 0xaaaa);
+    return cga_next_row(di);
+}
+
 void screen_high_scores(void)
 {
     border_setup();
 
-    for (int i = 0; i < 0x18; i++)
+    for (int i = 0; i < HSC_WIDTH; i++)
         img_vram_setw(0x142 + i * 2, 0xaaaa);
 
+    /* HIGH SCORE, a glyph at a time - the original really does have ten
+     * separate `mov al` / `call 0xc64` pairs for it. */
     unsigned di = 0x2142;
-    draw_run(' ', 7, di);
-    di += 7 * 2;
-    for (const char *p = "HIGH SCORE"; *p; p++, di += 2)
+    di = draw_run(' ', 7, di);
+    for (const char *p = "HIGH SCORE"; *p; p++, di = (di + 2) & 0xffff)
         draw_char((unsigned char)*p, di);
+    di = draw_run(' ', 7, di);
 
-    /* The ten entries, each 0x12 bytes: twelve of name then six of score. */
+    di = (di + HSC_LINE) & 0xffff;              /* the rule */
+    di = draw_run(' ', 5, di);
+    di = draw_run('-', 0x0e, di);
+    di = draw_run(' ', 5, di);
+
+    di = (di + HSC_LINE) & 0xffff;              /* a blank line */
+    di = draw_run(' ', HSC_WIDTH, di);
+
+    di = (di + HSC_LINE) & 0xffff;
+
     unsigned si = HSC_TABLE;
-    di = 0x3e02;
-    for (int row = 0; row < HSC_COUNT; row++, si += HSC_ENTRY) {
-        draw_text(si, 12, di);
-        draw_text(si + 12, 6, di + 12 * 2 + 4);
-        di = cga_next_row((di - 0x30) & 0xffff);
+    for (int row = 0; row < HSC_COUNT; row++) {
+        di = draw_run(' ', 2, di);
+        di = draw_text(si, 12, di);
+        di = draw_run(' ', 2, di);
+        di = draw_text(si + 12, 6, di);
+        di = draw_run(' ', 2, di);
+        si += HSC_ENTRY;
+
+        di = (di + HSC_LINE) & 0xffff;
+        di = hsc_bar(di);                       /* two scan lines between */
+        di = hsc_bar(di);
     }
 
-    /* Fill the rest of the panel with the bar pattern, then animate. */
-    while (di != 0x1e02) {
-        for (int i = 0; i < 0x18; i++)
-            img_vram_setw(di + i * 2, 0xaaaa);
-        di = cga_next_row((di - 0x30) & 0xffff);
-    }
+    while (di != 0x1e02)
+        di = hsc_bar(di);
 
+    /* The border animates until a key, 0x181 delays a step, 0xff steps. */
     for (int dl = 0xff; dl > 0; dl--) {
         for (int n = 0x181; n > 0; n--) {
             if (io_key_ready()) {
