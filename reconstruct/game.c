@@ -2797,10 +2797,12 @@ void bonus_release(uint32_t bx)
  */
 void entity_hatch(uint32_t bx)
 {
-    if (g_image[EXTRA_ON] != 0) {
-        img_setw(bx + 6, img_w(bx + 6) - 1);
+    /* `jne 0x390c` is the **ret**, not the `dec word [bx+6]` at 0x3909 that
+     * sits just above it: while an extra ball is in play the hatch does
+     * nothing at all. Decrementing here walks a counter that is already 0
+     * round to 0xffff, which is what diverged 5,872 frames into level 4. */
+    if (g_image[EXTRA_ON] != 0)
         return;
-    }
     if (img_w(bx + 6) != 0) {
         img_setw(bx + 6, img_w(bx + 6) - 1);
         return;
