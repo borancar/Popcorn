@@ -130,6 +130,7 @@ def main():
     sys.path.insert(0, HERE)
     import unicorn
     from unicorn.x86_const import (
+        UC_X86_REG_SP, UC_X86_REG_SS,
         UC_X86_REG_AX, UC_X86_REG_BX, UC_X86_REG_CX, UC_X86_REG_DX,
         UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP, UC_X86_REG_ES,
         UC_X86_REG_DS, UC_X86_REG_EFLAGS, UC_X86_REG_CS, UC_X86_REG_IP)
@@ -166,6 +167,7 @@ def main():
     frame_hit = {}
     reentries = [0]
     resuming = [False]
+    draws = []
     hits = collections.Counter()
 
     def on_code(uc, address, size, user):
@@ -179,6 +181,11 @@ def main():
             reentries[0] += 1
         if captured and off in (0x0097, 0x1AD8, 0x1AF5, 0x1B04, 0x1B4D, 0x1C3F):
             hits[off] += 1
+        if captured and off == 0x40C0:          # game_random: who asked?
+            sp = m._reg(UC_X86_REG_SP)
+            ss = m._reg(UC_X86_REG_SS)
+            ret, = struct.unpack("<H", m.uc.mem_read(ss * 16 + sp, 2))
+            draws.append(ret)
         if off == PLAY_LOOP and not captured:
             captured["regs"] = regs_now()
             captured["img"] = snapshot_image()
@@ -367,6 +374,7 @@ def main():
         pimg, pvram = pf
 
         frame_hit.clear()
+        del draws[:]
         guard = 0
         while not frame_hit and guard < 4000 and not m.finished:
             run_a_bit()
@@ -409,6 +417,10 @@ def main():
                 if len(seen) >= 20:
                     print(f"    ... and {len(img_bad) - 20} more image bytes")
                     break
+            if draws:
+                print("    the emulator's random() calls this frame, by "
+                      "return address: " +
+                      ", ".join(f"{d:#06x}" for d in draws))
             if vram_bad:
                 rows = collections.Counter()
                 xs = []
