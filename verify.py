@@ -92,7 +92,11 @@ RETURNS = {
     # returning the sense play_loop tests: `if (!ball_redraw(...))` takes the
     # loss, and the original takes it on carry set, so C == !CF.
     0x2827: "ncf",                      # ball_redraw: clear means keep going
-    0x2E1E: "ncf",                       # ball_on_paddle
+    # play_loop skips the ball on `jae` after this one - CF clear - and the C
+    # skips when it returns 0, so here the C matches the carry rather than its
+    # inverse. Labelling it "ncf" like ball_redraw reported every call wrong,
+    # which is at least the failure mode a wrong check should have.
+    0x2E1E: "cf",                       # ball_on_paddle
 }
 
 

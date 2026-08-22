@@ -238,6 +238,50 @@ inside a single frame, that block is the only place it shows, and with sound
 off none of it reaches the screen. Masking the timer alone simply moved the
 first difference onto the pointer, which is the same divergence a byte later.
 
+### The screens a bot never reached were the ones with the bugs in
+
+Nothing had ever run the `+` capsule's end-of-level screen. `verify_all`
+listed `bonus_end_level` unreached, and the frame comparison only got there
+once the bot started collecting capsules deliberately. It had **five**
+transcription errors in it, and the routines it calls had two more:
+
+- The wall closing in copied its rows the wrong way and never advanced:
+  `rep movsw` at `1ac2:4282` has SI on the band's row and DI one row below,
+  and the C's `di = cga_prev_row(cga_next_row(di))` is the identity.
+- The banner has two fixed rows before the level's cells, not one.
+- Each level row is three banner rows - the cells twice, then a blank - and
+  `si` walks **up** the level, not down.
+- Three whole blocks were missing after the cells: seven more fixed rows, the
+  funnel, and the mouth opening at `1ac2:44bd` whose two masks go on
+  **crossed**, because the word is loaded little-endian and the mask written
+  the other way round.
+- `screen_scroll_up` read `mov cx, 7` - the `rep movsw` **word count** - as a
+  row count and the `0x6f` row count as a pass count, so it scrolled seven
+  rows a hundred and eleven times and drew the paddle a hundred and eleven
+  times, where the original scrolls a hundred and eleven rows once.
+- `ball_after_endgame`'s chamber test was inverted: `1ac2:45da` bounces the
+  ball when x is **outside** `0x60..0x6b`, and the C bounced it when it was
+  inside - in the gap, which is where it is supposed to go down and on. So
+  the ball bounced off the opening and fell through the funnel wall.
+
+Three of those were only findable after the harness stopped agreeing for
+reasons that were not evidence, which is the recurring lesson here:
+
+- **Return values were compared for three routines and none by flag.** Every
+  routine that answers in the **carry** - `ball_redraw`, `ball_on_paddle`, and
+  `play_loop` reads `jae` after each - could return the opposite decision and
+  still be reported identical.
+- **The pointer was never carried across.** `game_input` reads the mouse, and
+  every between-level screen calls it through `input_and_draw_paddle`, so the
+  C put the paddle wherever the checking process's pointer happened to be.
+  `input_and_draw_paddle` differed on exactly half its calls and
+  `screen_scroll_up` inherited it. The state file carries the emulator's
+  pointer now, the same way it already carried the BIOS tick count.
+- **`bonus_end_level` has two entry points**, `1ac2:2da0` and `1ac2:4210`, and
+  the C merged them - so the harness, which enters at the second, was
+  comparing a version that also tears the play loop down against one that
+  does not.
+
 ### Verification coverage is bounded by what a run reaches
 
 A ten-minute play route verifies **82 routines byte-identical with nothing
