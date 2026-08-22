@@ -225,8 +225,27 @@ void laser_fire(void);            /* 1ac2:2ee3 */
 void play_teardown(void);         /* 1ac2:41d4 */
 void entity_call(unsigned node);  /* through node+0 */
 void entity_unlink(unsigned node);/* 1ac2:3257 */
-void entity_spawn(unsigned what); /* 1ac2:3146 */
+unsigned entity_alloc(void);      /* 1ac2:3232 */
+void draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
+void draw_cursor(unsigned di);    /* 1ac2:14a7 */
+void copy_string_spaced(unsigned src, unsigned dst);         /* 1ac2:1642 */
+void flash_bar(unsigned pattern); /* 1ac2:3146 */
+void cell_set_three(unsigned node);/* 1ac2:3668 */
+void cells_restore(void);         /* 1ac2:36fb */
+
 void bonus_spawn(void);           /* 1ac2:3d95 */
+void xor_sprite_20x16(unsigned x, unsigned y, unsigned src); /* 1ac2:406a */
+void sprite_shift_draw(unsigned x, unsigned y, unsigned src);/* 1ac2:3f4f */
+void entity_sparkle(unsigned bx); /* 1ac2:3aee */
+void entity_crumble(unsigned bx); /* 1ac2:3b2a */
+void entity_hatch(unsigned bx);   /* 1ac2:390d */
+void bonus_release(unsigned bx);  /* 1ac2:39a1 */
+int  bonus_move_right(unsigned char *b);  /* 1ac2:3c66 */
+int  bonus_move_left(unsigned char *b);   /* 1ac2:3cf3 */
+int  bonus_move_up(unsigned char *b);     /* 1ac2:3caf */
+int  bonus_move_down(unsigned char *b);   /* 1ac2:3d3c */
+int  bonus_steer(unsigned bx);            /* 1ac2:3bf7 */
+int  bonus_script(unsigned bx);           /* 1ac2:3c35, inside 3bf7 */
 void demo_input_step(void);       /* the recorded-input cursor at 0x3134 */
 void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(unsigned x, unsigned y);
@@ -300,8 +319,27 @@ void laser_fire(void);            /* 1ac2:2ee3 */
 void play_teardown(void);         /* 1ac2:41d4 */
 void entity_call(unsigned node);  /* through node+0 */
 void entity_unlink(unsigned node);/* 1ac2:3257 */
-void entity_spawn(unsigned what); /* 1ac2:3146 */
+unsigned entity_alloc(void);      /* 1ac2:3232 */
+void draw_run(unsigned char c, unsigned count, unsigned di); /* 1ac2:10c5 */
+void draw_cursor(unsigned di);    /* 1ac2:14a7 */
+void copy_string_spaced(unsigned src, unsigned dst);         /* 1ac2:1642 */
+void flash_bar(unsigned pattern); /* 1ac2:3146 */
+void cell_set_three(unsigned node);/* 1ac2:3668 */
+void cells_restore(void);         /* 1ac2:36fb */
+
 void bonus_spawn(void);           /* 1ac2:3d95 */
+void xor_sprite_20x16(unsigned x, unsigned y, unsigned src); /* 1ac2:406a */
+void sprite_shift_draw(unsigned x, unsigned y, unsigned src);/* 1ac2:3f4f */
+void entity_sparkle(unsigned bx); /* 1ac2:3aee */
+void entity_crumble(unsigned bx); /* 1ac2:3b2a */
+void entity_hatch(unsigned bx);   /* 1ac2:390d */
+void bonus_release(unsigned bx);  /* 1ac2:39a1 */
+int  bonus_move_right(unsigned char *b);  /* 1ac2:3c66 */
+int  bonus_move_left(unsigned char *b);   /* 1ac2:3cf3 */
+int  bonus_move_up(unsigned char *b);     /* 1ac2:3caf */
+int  bonus_move_down(unsigned char *b);   /* 1ac2:3d3c */
+int  bonus_steer(unsigned bx);            /* 1ac2:3bf7 */
+int  bonus_script(unsigned bx);           /* 1ac2:3c35, inside 3bf7 */
 void demo_input_step(void);       /* the recorded-input cursor at 0x3134 */
 void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(unsigned x, unsigned y);

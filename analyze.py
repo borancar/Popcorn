@@ -55,6 +55,25 @@ EXTRA_ENTRIES = {
     0x39FA: "entity handler",
     0x3AEE: "entity handler",
     0x3B2A: "entity handler",
+    # Brick behaviour, from the table at 0x3044 indexed by cell value. Read out
+    # of the image rather than followed, because the call is `call word ptr
+    # [bx]` with bx computed from the cell.
+    0x28CB: "brick: ordinary (cell 1)",
+    0x2985: "brick: cell 2",
+    0x2A3F: "brick: cell 3",
+    0x3221: "brick: cells 4 and 12 - does nothing",
+    0x2A73: "brick: cell 5",
+    0x2AB4: "brick: cell 6",
+    0x2AF5: "brick: cell 7",
+    0x2B36: "brick: cell 8",
+    0x2B9D: "brick: cell 9",
+    0x2C59: "brick: cell 10",
+    0x2D68: "brick: cell 11",
+    # How a falling bonus moves, from the table at 0x3447 indexed by [bx+2].
+    0x3C66: "bonus movement 0",
+    0x3D3C: "bonus movement 1",
+    0x3CF3: "bonus movement 2",
+    0x3CAF: "bonus movement 3",
 }
 
 # Data locations worth naming as they show up in an operand.
