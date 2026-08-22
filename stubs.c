@@ -78,10 +78,9 @@ void cell_special(unsigned row, unsigned di)
 int ball_on_paddle(unsigned ball) { note("ball_on_paddle", 0x2e1e); (void)ball; return 1; }
 
 /* --- called from play_session, which is transcribed ------------------- */
-STUB(life_lost,             0x0735, "the losing-a-ball sequence")
 STUB(screen_game_over,      0x0473, "GAME OVER")
+STUB(level_between,         0x05f8, "the between-levels sequence")
 STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
-STUB(screen_level_done,     0x0521, "the between-levels sequence")
 STUB(screen_all_levels_done, 0x5940, "finishing all fifty")
 
 void brick_11(unsigned slot, unsigned ball) { note("brick_11", 0x2d68); (void)slot; (void)ball; }

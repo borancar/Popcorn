@@ -372,7 +372,7 @@ unsigned game_random(unsigned ticks, unsigned limit)
 
 static int g_speaker_on;
 
-/* 1ac2:0085 / 1ac2:0090  speaker_on / speaker_off
+/* 1ac2:0085 and 1ac2:0090  speaker_on / speaker_off
  *
  * `mov al,0xb6 / out 0x43` puts PIT channel 2 in square-wave mode; port 0x61
  * bits 0 and 1 gate the counter and connect it to the speaker. The port has
@@ -1936,7 +1936,8 @@ void brick_solid(unsigned slot, unsigned ball)
         g_image[ball + B_BOUNCES]++;
 }
 
-/* 1ac2:2a73, 2ab4, 2af5  bricks 5, 6, 7 - a step down the chain each hit */
+/* 1ac2:2a73, 1ac2:2ab4, 1ac2:2af5  bricks 5, 6, 7 - one step down the
+ * chain per hit */
 void brick_5(unsigned slot, unsigned ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 2);
@@ -2034,6 +2035,42 @@ void score_add(void)
     di = 0x15d2;
     for (int i = 0; i < 6; i++, si++, di += 2)
         draw_char(g_image[si], di);
+
+    /* An extra life every time the score passes the threshold at [0x13d3],
+     * which then advances by two. Both are ASCII, so `inc ax` twice can carry
+     * out of '9' and the fix-up puts it back to '0' and carries by hand. The
+     * comparison is byte-swapped because the score's top two digits are stored
+     * the other way round from the threshold. */
+    unsigned thresh = img_w(0x13d3);
+    unsigned top = img_w(0x13cd);
+    top = ((top & 0xff) << 8) | (top >> 8);          /* `xchg bl,bh` */
+    if (top >= thresh) {
+        thresh += 2;
+        if ((thresh & 0xff) >= 0x3a)
+            thresh = (thresh & 0xff00) + 0x100 + 0x30;
+        img_setw(0x13d3, thresh);
+        extra_life();
+    }
+}
+
+/* 1ac2:318b  extra_life
+ *
+ * One more life, up to twelve, and its marker drawn on the panel. The markers
+ * are four to a row: `al & 0xfc` steps along and `(al & 3) * 0xf0` steps down.
+ */
+void extra_life(void)
+{
+    if (g_image[LIVES] == 0x0c)
+        return;
+    unsigned n = (g_image[LIVES] - 1) & 0xff;
+    unsigned di = 0x3a7c + (n & 0xfc) + (n & 3) * 0xf0;
+    unsigned si = 0x48e7;
+    for (int r = 0; r < 5; r++) {
+        for (int b = 0; b < 4; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + r * 4 + b];
+        di = cga_prev_row((di - 4) & 0xffff);
+    }
+    g_image[LIVES]++;
 }
 
 /* ------------------------------------------------------------------------
@@ -2637,7 +2674,7 @@ void entity_hatch(unsigned bx)
 }
 
 /* ------------------------------------------------------------------------
- * 1ac2:3c66, 3cf3, 3caf, 3d3c  bonus_move_*
+ * 1ac2:3c66, 1ac2:3cf3, 1ac2:3caf, 1ac2:3d3c  bonus_move_*
  *
  * A falling capsule tries to step one pixel; each direction has its own
  * routine and the table at 0x3447 picks one by [bx+2]. They all do the same
@@ -3185,4 +3222,163 @@ void entity_bonus(unsigned bx)
     g_image[BONUS_LIVE]--;
     sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
                       img_w(img_w(bx + 6) - 2));
+}
+
+/* ========================================================================
+ * Scrolling and the paddle's other draw path.
+ * ===================================================================== */
+
+/* 1ac2:2109  scroll_up_band and 1ac2:2148  scroll_down_band
+ *
+ * Move a 48-byte by 27-row band one scan line, in place. Used by the level
+ * intro to slide the field about. Scrolling up reads from the row below and
+ * writes upwards; scrolling down does the reverse, and both walk the interlace
+ * rather than a linear buffer.
+ */
+void scroll_up_band(void)
+{
+    unsigned di = 0x1ae2;
+    for (int r = 0x1b; r > 0; r--) {
+        unsigned si = cga_next_row(di);
+        for (int b = 0; b < 48; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] =
+                g_vram[(si + b) & (CGA_SIZE - 1)];
+        di = si;
+    }
+}
+
+void scroll_down_band(void)
+{
+    unsigned si = 0x1ef2;
+    for (int r = 0x1b; r > 0; r--) {
+        unsigned di = cga_next_row(si);
+        for (int b = 0; b < 48; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] =
+                g_vram[(si + b) & (CGA_SIZE - 1)];
+        si = cga_prev_row(si);
+    }
+}
+
+/* 1ac2:22a9  draw_paddle_raw
+ *
+ * Sixteen rows of seven bytes straight onto the paddle row, no XOR and no
+ * shift - it overwrites. The game-over sequence uses it to put the paddle's
+ * remains down.
+ */
+void draw_paddle_raw(unsigned src)
+{
+    unsigned di = (g_image[PADDLE_X] >> 2) + PADDLE_ROW_BASE;
+    for (int r = 0; r < 0x10; r++) {
+        for (int b = 0; b < 7; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + r * 7 + b];
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:2187  draw_paddle_shifted
+ *
+ * draw_paddle for a sprite that has no pre-shifted copies: the bytes are
+ * shifted here instead, `(x & 3) * 2` bits across each row of eleven. Same
+ * erase-then-draw and the same early-out, but it charges the frame delay
+ * 0x1f3 rather than 0x1e0 - a shift costs more than picking a copy.
+ */
+void draw_paddle_shifted(unsigned sprite)
+{
+    if (!g_image[PADDLE_FORCE_DRAW] &&
+        g_image[PADDLE_X] == g_image[PADDLE_PREV_X])
+        return;
+    img_setw(FRAME_DELAY, (img_w(FRAME_DELAY) - 0x1f3) & 0xffff);
+
+    memcpy(g_image + PADDLE_ROWS_PREV, g_image + PADDLE_ROWS_CUR,
+           PADDLE_ROWS * 2);
+    memcpy(g_image + PADDLE_PIX_PREV, g_image + PADDLE_PIX_CUR,
+           PADDLE_IMAGE + 1);
+
+    unsigned x = g_image[PADDLE_X];
+    g_image[PADDLE_PREV_X] = (unsigned char)x;
+    paddle_row_offsets(x, PADDLE_ROWS_CUR);
+    memcpy(g_image + PADDLE_PIX_CUR, g_image + sprite, PADDLE_IMAGE + 1);
+
+    for (unsigned n = (x & 3) * 2; n > 0; n--) {
+        for (int r = 0; r < PADDLE_ROWS; r++) {
+            unsigned p = PADDLE_PIX_CUR + r * PADDLE_BYTES, carry = 0;
+            for (int b = 0; b < PADDLE_BYTES; b++) {
+                unsigned v = g_image[p + b];
+                g_image[p + b] = (unsigned char)((v >> 1) | (carry << 7));
+                carry = v & 1;
+            }
+        }
+    }
+
+    blit_xor(PADDLE_PIX_PREV, PADDLE_ROWS_PREV);
+    blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
+}
+
+/* ========================================================================
+ * Clearing the entity list, at the end of a level or a life.
+ *
+ * Two entities have to be told before they go: 0x36f6 puts the cells it hid
+ * back, and 0x365e softens the brick it hardened. Everything else is simply
+ * moved to the free list.
+ * ===================================================================== */
+
+/* Tell a node that is about to be discarded, if it is one of the two that
+ * care. Shared by all three purges below. */
+static void entity_farewell(unsigned bx)
+{
+    unsigned handler = img_w(bx);
+    if (handler == 0x36f6)
+        cells_restore();
+    else if (handler == 0x365e)
+        cell_set_three(bx);
+}
+
+/* 1ac2:055e  entities_clear - empty the active list onto the free one */
+void entities_clear(void)
+{
+    unsigned bx = img_w(ENTITY_HEAD);
+    while (bx != 0xffff) {
+        entity_farewell(bx);
+        unsigned next = img_w(bx + E_NEXT);
+        img_setw(bx + E_NEXT, img_w(ENTITY_FREE));
+        img_setw(ENTITY_FREE, bx);
+        bx = next;
+    }
+    img_setw(ENTITY_HEAD, 0xffff);
+}
+
+/* 1ac2:0521  screen_level_done - the same, and then the between-levels
+ * sequence at 0x5f8 */
+void screen_level_done(void)
+{
+    entities_clear();
+    level_between();                    /* 1ac2:05f8 */
+}
+
+/* 1ac2:0735  life_lost
+ *
+ * Reload the level's animation script and clear the list - but **keep** any
+ * entity running 0x3abf, which is why this one tracks the previous node in
+ * [0x3142] where the other two do not: skipping a node means unlinking around
+ * it.
+ */
+void life_lost(void)
+{
+    level_colours();
+    img_setw(ENTITY_PREV, ENTITY_FREE);
+    unsigned bx = img_w(ENTITY_HEAD);
+    while (bx != 0xffff) {
+        if (img_w(bx) == 0x3abf) {      /* this one stays */
+            img_setw(ENTITY_PREV, bx);
+            bx = img_w(bx + E_NEXT);
+            continue;
+        }
+        entity_farewell(bx);
+        unsigned next = img_w(bx + E_NEXT);
+        img_setw(bx + E_NEXT, img_w(ENTITY_FREE));
+        img_setw(ENTITY_FREE, bx);
+        img_setw(img_w(ENTITY_PREV) + E_NEXT, next);
+        bx = next;
+    }
+    level_between();
 }
