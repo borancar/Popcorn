@@ -341,11 +341,11 @@ void bonus_points(void);          /* 1ac2:2daa */
 void bonus_catch(void);           /* 1ac2:2def */
 void bonus_laser(void);           /* 1ac2:2e03 */
 void bonus_multiball(void);       /* 1ac2:2e16 */
-void bonus_nothing(void);         /* 1ac2:3231 */
+void bonus_wider_paddle(void);         /* 1ac2:3231 */
 void bonus_net(void);             /* 1ac2:3119 */
 void bonus_reverse(void);         /* 1ac2:315b */
-void bonus_speed(void);
-void bonus_slow(void);            /* 1ac2:3200 */           /* 1ac2:31e8 */
+void bonus_slower_ball(void);     /* 1ac2:31e8 */
+void bonus_stop_monsters(void);   /* 1ac2:3200 */
 void bonus_end_level(void);       /* 1ac2:2da0 */
 void bonus_effect(uint32_t kind);
 void scroll_up_band(void);        /* 1ac2:2109 */
@@ -549,11 +549,11 @@ void bonus_points(void);          /* 1ac2:2daa */
 void bonus_catch(void);           /* 1ac2:2def */
 void bonus_laser(void);           /* 1ac2:2e03 */
 void bonus_multiball(void);       /* 1ac2:2e16 */
-void bonus_nothing(void);         /* 1ac2:3231 */
+void bonus_wider_paddle(void);         /* 1ac2:3231 */
 void bonus_net(void);             /* 1ac2:3119 */
 void bonus_reverse(void);         /* 1ac2:315b */
-void bonus_speed(void);
-void bonus_slow(void);            /* 1ac2:3200 */           /* 1ac2:31e8 */
+void bonus_slower_ball(void);     /* 1ac2:31e8 */
+void bonus_stop_monsters(void);   /* 1ac2:3200 */
 void bonus_end_level(void);       /* 1ac2:2da0 */
 void bonus_effect(uint32_t kind);
 void scroll_up_band(void);        /* 1ac2:2109 */

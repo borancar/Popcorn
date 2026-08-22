@@ -3968,8 +3968,14 @@ void bonus_multiball(void)
     img_setw(entity_alloc(), 0x3717);
 }
 
-/* 1ac2:3231  bonus 2 - nothing at all */
-void bonus_nothing(void) { }
+/* 1ac2:3231  bonus 2, the E capsule - the wider paddle.
+ *
+ * The routine really is empty, and that is not the whole story: the widening
+ * is done by the morph, not by the effect. The table at 0x2d2d maps a
+ * capsule's kind to a paddle kind, and E maps to paddle 1, which is 39 pixels
+ * wide against the default 27 - the pairs are at 0x2d0d. So the capsule that
+ * looks like it does nothing is one of the more useful ones. */
+void bonus_wider_paddle(void) { }
 
 /* 1ac2:3119  bonus 5 - the safety net across the bottom */
 void bonus_net(void)
@@ -3999,9 +4005,13 @@ void bonus_reverse(void)
     }
 }
 
-/* 1ac2:31e8  bonus 9 - the ball moves more often, down to every other frame,
- * and the timer that would have sped it up anyway is reset */
-void bonus_speed(void)
+/* 1ac2:31e8  bonus 9, the S capsule - the ball moves **less** often.
+ *
+ * [0x1486] is the gate's limit and it counts *down* to two, so the ball goes
+ * from stepping on two frames in three to stepping on one in two. This
+ * comment said "more often" and had it backwards: a smaller limit is a slower
+ * ball, which is what the letter means. */
+void bonus_slower_ball(void)
 {
     if (g_image[SPEED_LIMIT] != 2) {
         g_image[SPEED_LIMIT]--;
@@ -4018,15 +4028,15 @@ void bonus_effect(uint32_t kind)
     switch (kind) {
     case 0: bonus_points(); break;
     case 1: bonus_catch(); break;
-    case 2: bonus_nothing(); break;
+    case 2: bonus_wider_paddle(); break;
     case 3: bonus_laser(); break;
     case 4: bonus_multiball(); break;
     case 5: bonus_net(); break;
     case 6: bonus_reverse(); break;
     case 7: extra_life(); break;
     case 8: bonus_end_level(); break;
-    case 9: bonus_speed(); break;
-    case 10: bonus_slow(); break;
+    case 9: bonus_slower_ball(); break;
+    case 10: bonus_stop_monsters(); break;
     /* The table has a twelfth word, 0x2e55, but it points into the middle of
      * ball_on_paddle and no capsule reaches it: the kind comes from [bx+4],
      * which also indexes the eleven-byte paddle table at 0x2d2d. */
@@ -6741,14 +6751,16 @@ int32_t bonus_script(uint32_t bx, uint32_t *px, uint32_t *py)
     return ah != 0xff;
 }
 
-/* 1ac2:3200  bonus 10 - the game slows down
+/* 1ac2:3200  bonus 10, the M capsule - the monsters stop coming
  *
  * It arms the timer at [0x2e7a] for ten thousand frames and lights a bar down
  * the panel at vram 0x1a8b, which `play_frame` drains one cell at a time -
  * [0x2e87] walks it - so the player can see how long is left. While it runs,
- * `play_frame` takes the branch at 0x1c19 and skips spawning new capsules.
+ * `play_frame` takes the branch at 0x1c19 and does not open a hatch, so
+ * nothing new comes out of the top. That is the whole effect - the game does
+ * not slow down, which is what this comment used to claim.
  */
-void bonus_slow(void)
+void bonus_stop_monsters(void)
 {
     g_image[EXTRA_ON] = 1;
     img_setw(SERVE_TIMEOUT, 0x2710);
