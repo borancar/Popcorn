@@ -243,7 +243,11 @@ void play_frame(void);            /* 1ac2:1212 */
 unsigned frame_band(unsigned di, unsigned fill);  /* 1ac2:1354 */
 void panel_reveal(void);          /* 1ac2:0911 */
 void field_marks(void);           /* 1ac2:0598 */
-void field_marks_wide(unsigned di);  /* 1ac2:0a1d */
+void field_marks_wide(unsigned di, unsigned rows);  /* 1ac2:0a1d */
+unsigned ending_particle_init(unsigned si, unsigned ax_in); /* 1ac2:59f7 */
+void ending_blob(unsigned pos);   /* 1ac2:5c36 */
+void ending_blobs(void);          /* 1ac2:5b80 */
+void ending_column(void);         /* 1ac2:5317 */
 
 /* A word into the framebuffer, wrapping like the 16-bit offset it is. */
 static inline void img_vram_setw(unsigned di, unsigned v)
@@ -435,7 +439,11 @@ void play_frame(void);            /* 1ac2:1212 */
 unsigned frame_band(unsigned di, unsigned fill);  /* 1ac2:1354 */
 void panel_reveal(void);          /* 1ac2:0911 */
 void field_marks(void);           /* 1ac2:0598 */
-void field_marks_wide(unsigned di);  /* 1ac2:0a1d */
+void field_marks_wide(unsigned di, unsigned rows);  /* 1ac2:0a1d */
+unsigned ending_particle_init(unsigned si, unsigned ax_in); /* 1ac2:59f7 */
+void ending_blob(unsigned pos);   /* 1ac2:5c36 */
+void ending_blobs(void);          /* 1ac2:5b80 */
+void ending_column(void);         /* 1ac2:5317 */
 
 void panel_finish(void);          /* 1ac2:09c5 */
 
