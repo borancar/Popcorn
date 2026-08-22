@@ -2131,9 +2131,21 @@ void brick_8(uint32_t slot, uint32_t ball)
 }
 
 /* The dispatch ball_bricks does through the table at 0x3044. */
+/* The table at 0x3044 is thirty words long but names only twelve distinct
+ * handlers, and sidebyside.py tags the emulator's dispatch by the routine it
+ * reaches. So several cell values have to come out as the one value that
+ * names their routine, or the two sides disagree over a brick they both got
+ * right - which is exactly what frame 206,783 was. */
+static uint32_t brick_tag(uint32_t v)
+{
+    if (v == 12 || (v >= 24 && v <= 29)) return 4;    /* all 0x3221 */
+    if (v >= 17 && v <= 21) return 16;                /* all 0x2ccd */
+    return v;
+}
+
 void brick_hit(uint32_t slot, uint32_t cell, uint32_t ball)
 {
-    io_log_random(0x8000 | g_image[cell]);  /* tagged for sidebyside */
+    io_log_random(0x8000 | brick_tag(g_image[cell]));  /* for sidebyside */
     switch (g_image[cell]) {
     case 1:  brick_1(slot, ball); break;
     case 2:  brick_2(slot, ball); break;
@@ -2150,7 +2162,13 @@ void brick_hit(uint32_t slot, uint32_t cell, uint32_t ball)
     case 16: case 17: case 18:
     case 19: case 20: case 21:
         brick_animated(slot, ball); break;   /* 1ac2:2ccd */
-    default: break;                     /* 0, 13, 14, 15 have no handler */
+    /* An animated brick that has already been hit carries its cell value
+     * plus eight, and the table sends all six of those back to the solid
+     * handler: it bounces the ball and nothing more. */
+    case 24: case 25: case 26:
+    case 27: case 28: case 29:
+        brick_solid(slot, ball); break;      /* 1ac2:3221 */
+    default: break;                     /* 0, 13-15 and 22-23 have none */
     }
 }
 

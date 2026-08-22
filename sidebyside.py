@@ -55,7 +55,8 @@ PADDLE_X = 0x2E54
 # The brick behaviour table at 0x3044, by cell value - so a report can say
 # which brick was hit rather than only that one was.
 BRICKS = {0x28CB: 1, 0x2985: 2, 0x2A3F: 3, 0x3221: 4, 0x2A73: 5, 0x2AB4: 6,
-          0x2AF5: 7, 0x2B36: 8, 0x2B9D: 9, 0x2C59: 10, 0x2D68: 11}
+          0x2AF5: 7, 0x2B36: 8, 0x2B9D: 9, 0x2C59: 10, 0x2D68: 11,
+          0x2CCD: 16}
 LEVEL_NUMBER = 0x13CC                   # 0-0x31, for naming snapshots
 
 # A snapshot is everything needed to start a level again: the unmasked image

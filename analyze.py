@@ -272,7 +272,7 @@ def main():
         # not - and past the end there is only data, so entries are also
         # required to point inside the code segment.
         for name, base, count in (
-                ("brick behaviour", 0x3044, 22),
+                ("brick behaviour", 0x3044, 30),
                 ("bonus effect", 0x33BC, 12),
                 ("bonus movement", 0x3447, 4)):
             for i in range(count):
