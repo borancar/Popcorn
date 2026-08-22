@@ -14,6 +14,7 @@
  */
 #include <setjmp.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "game.h"
@@ -2406,7 +2407,12 @@ void level_draw(void)
 #define PANEL_LIVES   0x8cc0            /* row 62, byte 8 */
 #define LIFE_SPRITE   0x48e7
 #define PANEL_ON_SCREEN 0x3f24          /* bottom-right, and it grows upwards */
-#define PANEL_ROWS     0x5d
+/* `cmp bx, 0x5e` - the reveal runs for bx = 1..0x5d, ninety-three passes.
+ * Ninety-two leaves the whole panel one scan line lower than it belongs, and
+ * the only place that shows is the life markers: level_draw clears five rows
+ * at the absolute address 0x3a7c, the marker is sitting one row below it, and
+ * its bottom row of caps survives every clear. */
+#define PANEL_ROWS     0x5e
 
 static void panel_char(unsigned char c, unsigned di)
 {
