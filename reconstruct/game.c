@@ -6461,7 +6461,7 @@ int32_t ball_after_endgame(uint32_t ball)
 }
 
 /* ========================================================================
- * 1ac2:2da0 and 1ac2:4210  bonus_end_level
+ * 1ac2:2da0  bonus_end_level, and 1ac2:4210  bonus_end_level_body
  *
  * The bonus that finishes a level. In the original it does not return: it
  * throws four words off the stack and jumps into 0x4210, abandoning the play
