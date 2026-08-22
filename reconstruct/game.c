@@ -1023,8 +1023,19 @@ static void erase_shot(uint32_t pos_var, uint32_t reload, uint32_t timer)
     g_image[timer] = (uint8_t)reload;
 }
 
+/* Set by the lockstep harness when it is resuming from a snapshot taken at a
+ * frame boundary rather than at this routine's entry. Everything above the
+ * frame loop - the panel, the level draw, the serve wait - has already
+ * happened in the state being restored, so running it again would replay half
+ * a second of a level that is already under way. */
+int32_t g_resume_at_frame_top;
+
 int32_t play_loop(void)
 {
+    if (g_resume_at_frame_top) {
+        g_resume_at_frame_top = 0;
+        goto frames;
+    }
     /* The level number, drawn into the header bar as two digits. */
     uint32_t n = (g_image[LEVEL_NUMBER] + 1) & 0xff;
     img_setw(LEVEL_NUM_TEXT, ((n % 10) << 8 | (n / 10)) + 0x3030);
@@ -1125,6 +1136,7 @@ int32_t play_loop(void)
         }
     }
 
+frames:
     for (;;) {                          /* one iteration is one frame */
         img_setw(FRAME_DELAY, img_w(FRAME_DELAY_SET));
         demo_input_step();

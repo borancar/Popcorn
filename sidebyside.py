@@ -224,6 +224,7 @@ def main():
     resuming = [False]
     draws = []
     frames_done = [0]
+    want_snap = [False]
     hits = collections.Counter()
 
     def on_code(uc, address, size, user):
@@ -236,6 +237,10 @@ def main():
         if off == start_at and captured:
             reentries[0] += 1
         if args.snapshots and off == PLAY_LOOP and captured:
+            want_snap[0] = True         # at the next frame close, not here
+        if (args.snapshots and want_snap[0] and off == FRAME_END
+                and not resuming[0]):
+            want_snap[0] = False
             lv = m.uc.mem_read(base + LEVEL_NUMBER, 1)[0]
             path = os.path.join(args.snapshots,
                                 f"level{lv:02d}_f{frames_done[0]:06d}.snap")
@@ -288,7 +293,11 @@ def main():
         captured["img"] = img
         captured["vram"] = vram
         captured["ticks"] = ticks
-        start_at = PLAY_LOOP            # a snapshot is always a play_loop entry
+        start_at = FRAME_END            # snapshots are frame boundaries now
+        # CS:IP is restored *on* the sync instruction, so the hook would fire
+        # once with no work done - the port's frame 1 against the emulator's
+        # frame 0. Same reason the normal path skips a hit after emu_stop.
+        resuming[0] = True
         frames_done[0] = fr
         print(f"resumed {os.path.basename(args.resume)}: level {lv}, "
               f"originally frame {fr}")
