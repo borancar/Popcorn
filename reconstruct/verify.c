@@ -90,6 +90,11 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x36a1: entity_ball_arrive(r[R_BX]); return 1;
     case 0x36f6: entity_cells_timer(r[R_BX]); return 1;
     case 0x37e0: entity_ball_hold(r[R_BX]); return 1;
+    case 0x318b: extra_life(); return 1;
+    case 0x2109: scroll_up_band(); return 1;
+    case 0x2148: scroll_down_band(); return 1;
+    case 0x22a9: draw_paddle_raw(r[R_SI]); return 1;
+    case 0x2187: draw_paddle_shifted(r[R_SI]); return 1;
     case 0x2034:                        /* draw_brick_row(al = screen row) */
         draw_brick_row(r[R_AX] & 0xff);
         return 1;

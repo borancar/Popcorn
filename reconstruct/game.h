@@ -240,6 +240,11 @@ void brick_10(unsigned slot, unsigned ball);    /* 1ac2:2c59 */
 void brick_11(unsigned slot, unsigned ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(unsigned x, unsigned y, unsigned src); /* 1ac2:3b64 */
 void score_add(void);             /* 1ac2:413d */
+void extra_life(void);            /* 1ac2:318b */
+void scroll_up_band(void);        /* 1ac2:2109 */
+void scroll_down_band(void);      /* 1ac2:2148 */
+void draw_paddle_raw(unsigned src);      /* 1ac2:22a9 */
+void draw_paddle_shifted(unsigned src);  /* 1ac2:2187 */
 void ball_paddle(unsigned ball);  /* 1ac2:2316 */
 void laser_fire(void);            /* 1ac2:2ee3 */
 void play_teardown(void);         /* 1ac2:41d4 */
@@ -295,6 +300,8 @@ void draw_sprite_20x6(unsigned x, unsigned y, unsigned src); /* 1ac2:20b9 */
 void cell_special(unsigned row, unsigned di);   /* 1ac2:41e5 */
 void field_backdrop(unsigned y);  /* 1ac2:1fc1 */
 void life_lost(void);             /* 1ac2:0735 */
+void entities_clear(void);        /* 1ac2:055e */
+void level_between(void);         /* 1ac2:05f8 */
 void screen_game_over(void);      /* 1ac2:0473 */
 void screen_end_of_game(void);    /* 1ac2:0d2e */
 void screen_level_done(void);     /* 1ac2:0521 */
@@ -363,6 +370,11 @@ void brick_10(unsigned slot, unsigned ball);    /* 1ac2:2c59 */
 void brick_11(unsigned slot, unsigned ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(unsigned x, unsigned y, unsigned src); /* 1ac2:3b64 */
 void score_add(void);             /* 1ac2:413d */
+void extra_life(void);            /* 1ac2:318b */
+void scroll_up_band(void);        /* 1ac2:2109 */
+void scroll_down_band(void);      /* 1ac2:2148 */
+void draw_paddle_raw(unsigned src);      /* 1ac2:22a9 */
+void draw_paddle_shifted(unsigned src);  /* 1ac2:2187 */
 void ball_paddle(unsigned ball);  /* 1ac2:2316 */
 void laser_fire(void);            /* 1ac2:2ee3 */
 void play_teardown(void);         /* 1ac2:41d4 */
@@ -418,6 +430,8 @@ void draw_sprite_20x6(unsigned x, unsigned y, unsigned src); /* 1ac2:20b9 */
 void cell_special(unsigned row, unsigned di);   /* 1ac2:41e5 */
 void field_backdrop(unsigned y);  /* 1ac2:1fc1 */
 void life_lost(void);             /* 1ac2:0735 */
+void entities_clear(void);        /* 1ac2:055e */
+void level_between(void);         /* 1ac2:05f8 */
 void screen_game_over(void);      /* 1ac2:0473 */
 void screen_end_of_game(void);    /* 1ac2:0d2e */
 void screen_level_done(void);     /* 1ac2:0521 */
