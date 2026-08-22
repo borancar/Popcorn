@@ -1142,11 +1142,13 @@ frames:
         demo_input_step();
 
         if (g_image[BALL_ALIVE] == 0) {
+            io_log_random(0x9000);      /* tagged for sidebyside */
             play_teardown();
             g_image[GAME_OVER] = 1;
             return 1;                   /* the original's `stc` */
         }
         if (g_image[LEVEL_CELLS] == 0) {
+            io_log_random(0x9001);
             play_teardown();
             return 0;                   /* `clc`: the bricks are gone */
         }
@@ -1177,11 +1179,13 @@ frames:
                     continue;
                 ball_step(ball);
                 if (!ball_redraw(ball)) {
+                    io_log_random(0x9002);
                     play_teardown();
                     g_image[GAME_OVER] = 1;
                     return 1;
                 }
                 if (g_image[LEVEL_CELLS] == 0) {
+                    io_log_random(0x9003);
                     play_teardown();
                     return 0;
                 }
@@ -6464,6 +6468,23 @@ static void banner_row(uint32_t si)
     screen_scroll_up();
 }
 
+/* The same row with nothing in it: 1ac2:430f and again at 1ac2:43bf. One
+ * separates the two fixed rows from the level's own, and one follows every
+ * level row. */
+static void banner_blank(void)
+{
+    uint32_t di = BANNER_ROW_VRAM;
+    for (int32_t i = 0; i < 0x13; i++)
+        g_vram[di++ & (CGA_SIZE - 1)] = 0;
+    g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
+    for (int32_t i = 0; i < 0x0c; i++)
+        g_vram[di++ & (CGA_SIZE - 1)] = 0;
+    g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
+    for (int32_t i = 0; i < 0x13; i++)
+        g_vram[di++ & (CGA_SIZE - 1)] = 0;
+    screen_scroll_up();
+}
+
 void bonus_end_level(void)
 {
     play_teardown();
@@ -6484,15 +6505,21 @@ void bonus_end_level(void)
     g_image[PADDLE_SUPPRESS] = 0xff;
     for (int32_t dh = 0x70; dh > 0; dh--) {
         io_wait_retrace();
-        uint32_t di = bp;
+        /* `rep movsw` at 1ac2:4282 has SI on the band's row and DI one row
+         * **below** it, so each pass copies a row *down*; SI then steps *up*
+         * with cga_prev_row. Reading it the other way round - the row below
+         * into the row above, and stepping DI by prev_row(next_row(di)),
+         * which is the identity - copied the same two rows six times and
+         * never moved. */
+        uint32_t si = bp;
         for (int32_t dl = 6; dl > 0; dl--) {
-            uint32_t s = cga_next_row(di);
+            uint32_t d = cga_next_row(si);
             for (int32_t b = 0; b < 0x1a * 2; b++)
-                g_vram[(di + b) & (CGA_SIZE - 1)] =
-                    g_vram[(s + b) & (CGA_SIZE - 1)];
-            di = cga_prev_row(s);
+                g_vram[(d + b) & (CGA_SIZE - 1)] =
+                    g_vram[(si + b) & (CGA_SIZE - 1)];
+            si = cga_prev_row(si);
         }
-        di = cga_next_row(di);
+        uint32_t di = cga_next_row(si);
         if (dh == 0x70)
             di = 0;
         for (int32_t i = 0; i < 0x1a; i++)
@@ -6501,20 +6528,36 @@ void bonus_end_level(void)
             input_and_draw_paddle();
             g_image[PADDLE_SUPPRESS] = 0;
         }
-        bp = cga_prev_row(bp);
+        /* 1ac2:42cc: the band's top walks **down** a row a pass - next_row,
+         * not prev_row. That is the wall closing in. */
+        bp = cga_next_row(bp);
         io_present();
         if (!io_pump())
             return;
     }
 
-    /* The banner: a fixed row, a blank one, then the level's own cells. */
+    /* The banner. **Two** fixed rows, 0x2b39 then 0x2b6d, each scrolled in
+     * (1ac2:42e5 and 1ac2:42fa), then a blank one - the transcription had
+     * only the second of the three. */
+    for (int32_t i = 0; i < 0x1a; i++)
+        img_vram_setw(BANNER_ROW_VRAM + i * 2, img_w(0x2b39 + i * 2));
+    screen_scroll_up();
     for (int32_t i = 0; i < 0x1a; i++)
         img_vram_setw(BANNER_ROW_VRAM + i * 2, img_w(0x2b6d + i * 2));
     screen_scroll_up();
+    banner_blank();
 
+    /* Then the level's own cells, and each level row is **three** banner
+     * rows: the cells twice - the `sub si, 0xc` at 1ac2:4380 undoes the first
+     * row's lodsb so the second reads the same twelve - and a blank. And si
+     * walks **up** the level by 0x0c a time, not down: the loop's `pop si` at
+     * 1ac2:43e7 takes the value after the second row's lodsb. */
     uint32_t si = (img_w(LEVEL_SRC) + 0xb8) & 0xffff;
-    for (int32_t n = 0x0e; n > 0; n--, si -= 0x0c)
+    for (int32_t n = 0x0e; n > 0; n--, si = (si + 0x0c) & 0xffff) {
         banner_row(SEG_C46 + si);
+        banner_row(SEG_C46 + si);
+        banner_blank();
+    }
 
     /* And a fresh ball, played until ball_after_endgame says the level is
      * over. */

@@ -74,8 +74,12 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x2881:                        /* ball_draw(si = sprite, bl, al) */
         ball_draw(r[R_SI], r[R_BX] & 0xff, r[R_AX] & 0xff);
         return 1;
+    /* These answer in the **carry flag**, not in memory: play_loop reads
+     * `jae` after each of them. A routine can leave the image byte-identical
+     * and still say the opposite thing, and until this was reported the
+     * harness called that agreement. */
     case 0x2827:                        /* ball_redraw(si = the ball) */
-        ball_redraw(r[R_SI]);
+        g_result = ball_redraw(r[R_SI]);
         return 1;
     case 0x044b: level_colours(); return 1;
     case 0x10c5: draw_run((uint8_t)(r[R_AX] & 0xff), r[R_DX] & 0xff,
@@ -127,7 +131,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x2148: scroll_down_band(); return 1;
     case 0x22a9: draw_paddle_raw(r[R_SI]); return 1;
     case 0x2187: draw_paddle_shifted(r[R_SI]); return 1;
-    case 0x2e1e: ball_on_paddle(r[R_SI]); return 1;
+    case 0x2e1e: g_result = ball_on_paddle(r[R_SI]); return 1;
     case 0x2ee3: laser_fire(); return 1;
     case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, r[R_SI]);
                  return 1;

@@ -626,15 +626,17 @@ def main():
                     # reported the spawn gate at 0x1c2c as "brick44".
                     if a == 0x1fc1:
                         return "backdrop"
+                    if a >= 0x9000:
+                        return ("exit:no-balls", "exit:no-bricks",
+                                "exit:ball-lost",
+                                "exit:last-brick")[a & 3]
                     if a >= 0x8000:
                         return f"brick{a & 0xff}"
                     return f"{a:#06x}/{dl}"
                 print("    draws this frame - emulator: " +
                       (", ".join(tag(a, dl) for a, dl in draws) or "none"))
                 print("                          port: " +
-                      (", ".join("backdrop" if d == 0x1fc1
-                                 else f"brick{d & 0xff}" if d >= 0x8000
-                                 else str(d) for d in pdraws) or "none"))
+                      (", ".join(tag(d, "") for d in pdraws) or "none"))
             if vram_bad:
                 rows = collections.Counter()
                 xs = []

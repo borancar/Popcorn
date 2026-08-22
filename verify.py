@@ -86,6 +86,13 @@ RETURNS = {
     0x40C0: "ah",
     0x5448: "ax",
     0x548A: "ax",
+    # Routines that answer in the **carry flag**. play_loop reads `jae` after
+    # each of these, so the flag *is* the decision - and comparing memory
+    # alone passes a routine that returns the opposite one. "ncf" is for the C
+    # returning the sense play_loop tests: `if (!ball_redraw(...))` takes the
+    # loss, and the original takes it on carry set, so C == !CF.
+    0x2827: "ncf",                      # ball_redraw: clear means keep going
+    0x2E1E: "ncf",                       # ball_on_paddle
 }
 
 
@@ -249,7 +256,11 @@ def main():
                     return
                 want_img, want_vram = snapshot()
                 ax = uc.reg_read(UC_X86_REG_AX) & 0xFFFF
-                compare(inside[0][0], inside[0][2], want_img, want_vram, ax)
+                # The flags at the `ret`, because for several routines the
+                # answer is the carry rather than anything in memory.
+                cf = uc.reg_read(UC_X86_REG_EFLAGS) & 1
+                compare(inside[0][0], inside[0][2], want_img, want_vram,
+                        ax, cf)
                 inside[0] = None
             return
 
@@ -270,7 +281,7 @@ def main():
                          (regs_now(), snapshot(), bios_ticks()),
                          m.guest_dispatch[9])
 
-    def compare(off, before, want_img, want_vram, want_ax):
+    def compare(off, before, want_img, want_vram, want_ax, want_cf=0):
         regs, (img, vram), ticks = before
         with tempfile.TemporaryDirectory() as d:
             si = os.path.join(d, "in.pvs")
@@ -325,7 +336,9 @@ def main():
             # shifting both turned every non-zero remainder into zero and made
             # this look like a mismatch when it was the comparison that was
             # wrong.
-            want_val = (want_ax >> 8) if which == "ah" else want_ax
+            want_val = ((want_ax >> 8) if which == "ah" else
+                        want_cf if which == "cf" else
+                        (want_cf ^ 1) if which == "ncf" else want_ax)
             if want_val != got_val:
                 bad.append(f"returned {which}: orig {want_val:#06x} "
                            f"C {got_val:#06x}")
