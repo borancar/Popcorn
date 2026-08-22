@@ -39,7 +39,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PORT = os.path.join(HERE, "reconstruct", "popcorn")
 
 CODE = 0x1AC20
-PLAY_LOOP = 0x1873                      # where the capture is taken
+PLAY_LOOP = 0x1873                      # one level
+PLAY_SESSION = 0x02F5                   # a whole game, with --from-session
 FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
 #  - and NOT 0x1a62, its top: the serve wait jumps there too, at 0x1a58,
 #    whenever the action button is held, so the top is hit more than once
@@ -104,6 +105,10 @@ def main():
     ap.add_argument("--frames", type=int, default=200,
                     help="0 runs until a comparison fails or you "
                          "stop it")
+    ap.add_argument("--from-session", action="store_true",
+                    help="capture at play_session rather than play_loop, so "
+                         "the comparison follows level transitions and lost "
+                         "lives instead of ending with the level")
     ap.add_argument("--trace-from", type=int, default=-1, metavar="N",
                     help="from frame N, print one entity node and the PRNG on "
                          "both sides every frame")
@@ -168,6 +173,7 @@ def main():
     for off, key, _ in parse_route(ROUTE_PLAY):
         pending.setdefault(off, collections.deque()).append(key)
 
+    start_at = PLAY_SESSION if args.from_session else PLAY_LOOP
     captured = {}
     frame_hit = {}
     reentries = [0]
@@ -182,7 +188,7 @@ def main():
             sc, asc = KEYMAP[q.popleft()]
             m.press_key(sc, asc, True)
             m.press_key(sc, asc, False)
-        if off == PLAY_LOOP and captured:
+        if off == start_at and captured:
             reentries[0] += 1
         if captured and off in (0x0097, 0x1AD8, 0x1AF5, 0x1B04, 0x1B4D, 0x1C3F):
             hits[off] += 1
@@ -191,7 +197,7 @@ def main():
             ss = m._reg(UC_X86_REG_SS)
             ret, = struct.unpack("<H", m.uc.mem_read(ss * 16 + sp, 2))
             draws.append((ret, m._reg(UC_X86_REG_DX) & 0xff))
-        if off == PLAY_LOOP and not captured:
+        if off == start_at and not captured:
             captured["regs"] = regs_now()
             captured["img"] = snapshot_image()
             captured["vram"] = snapshot_vram()
@@ -244,7 +250,7 @@ def main():
     state = os.path.join(os.environ.get("TMPDIR", "/tmp"),
                          "popcorn_lockstep.pvs")
     with open(state, "wb") as f:
-        f.write(b"PVS2" + struct.pack("<I", PLAY_LOOP))
+        f.write(b"PVS2" + struct.pack("<I", start_at))
         f.write(struct.pack("<10H", *captured["regs"]))
         f.write(struct.pack("<I", captured["ticks"]))
         f.write(struct.pack("<I", len(captured["img"])) + captured["img"])
@@ -480,7 +486,7 @@ def main():
         port.wait(timeout=5)
     except Exception:
         port.kill()
-    print(f"the emulator re-entered play_loop {reentries[0]} times")
+    print(f"the emulator re-entered {start_at:#06x} {reentries[0]} times")
     print("   " + ", ".join(f"{k:#06x}x{v}" for k, v in sorted(hits.items())))
     if differing:
         print(f"\n{compared} frames compared, {differing} differed")

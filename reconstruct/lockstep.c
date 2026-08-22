@@ -26,6 +26,7 @@
  * started, and every io_ call that would have waited or presented returns at
  * once, so a frame costs what the C costs and nothing else.
  */
+#include <setjmp.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,6 +43,7 @@ static int32_t active;
 #define DRAWS_MAX 256
 static uint16_t draws[DRAWS_MAX];
 static uint32_t draw_n;
+static uint32_t lockstep_from;
 
 void io_log_random(uint32_t dl)
 {
@@ -133,6 +135,7 @@ int32_t lockstep_main(const char *state_path)
     io_set_ticks(ticks);
 
     active = 1;
+    lockstep_from = routine;
     /* One command before anything runs. The serve wait at 1ac2:1a41 reads the
      * action button, so a port that has not been told what the player is
      * doing waits out the whole timeout while the emulator serves at once -
@@ -146,6 +149,15 @@ int32_t lockstep_main(const char *state_path)
         io_set_ticks(cmd[4] | cmd[5] << 8 | cmd[6] << 16 |
                      (uint32_t)cmd[7] << 24);
     }
-    play_loop();                        /* 1ac2:1873 */
+    /* Whichever the driver captured. play_session covers a whole game -
+     * level intros, lost lives, the transitions between levels - and it is
+     * left by the same stack-throwing jump the original uses, so it needs a
+     * landing place. play_loop is one level and returns normally. */
+    if (lockstep_from == 0x02f5) {
+        if (setjmp(g_back_to_menu) == 0)
+            play_session();             /* 1ac2:02f5 */
+    } else {
+        play_loop();                    /* 1ac2:1873 */
+    }
     return 0;
 }
