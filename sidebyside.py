@@ -204,7 +204,9 @@ def main():
         img = bytearray(captured["img"])
         img[off] = 0
         captured["img"] = bytes(img)
-        print("   sound off on both sides")
+        print("   sound off on both sides: emulator cs:[0x84]=%d, "
+              "port copy=%d" % (m.uc.mem_read(base + off, 1)[0],
+                               captured["img"][off]))
 
     state = os.path.join(os.environ.get("TMPDIR", "/tmp"),
                          "popcorn_lockstep.pvs")
