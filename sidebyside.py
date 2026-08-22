@@ -122,6 +122,13 @@ def main():
     ap.add_argument("--frames", type=int, default=200,
                     help="0 runs until a comparison fails or you "
                          "stop it")
+    ap.add_argument("--snap-at", type=int, default=0, metavar="FRAME",
+                    help="write a snapshot when this frame is reached, and "
+                         "stop. A divergence is found at a frame; verifying "
+                         "the routines that caused it wants the state a few "
+                         "frames *before* it, which no level-start snapshot "
+                         "is close enough to give")
+    ap.add_argument("--snap-at-file", default="at.snap", metavar="FILE")
     ap.add_argument("--snapshots", metavar="DIR",
                     help="write a resumable snapshot at the start of every "
                          "level into DIR")
@@ -248,6 +255,7 @@ def main():
     draws = []
     frames_done = [0]
     want_snap = [False]
+    stop_now = [False]
     hits = collections.Counter()
 
     def on_code(uc, address, size, user):
@@ -261,6 +269,14 @@ def main():
             reentries[0] += 1
         if args.snapshots and off == PLAY_LOOP and captured:
             want_snap[0] = True         # at the next frame close, not here
+        if (args.snap_at and off == FRAME_END and captured
+                and not resuming[0] and frames_done[0] + 1 >= args.snap_at):
+            lv = m.uc.mem_read(base + LEVEL_NUMBER, 1)[0]
+            write_snapshot(args.snap_at_file, lv, frames_done[0])
+            print(f"  snapshot at frame {frames_done[0]} -> "
+                  f"{args.snap_at_file}", flush=True)
+            stop_now[0] = True
+            m.uc.emu_stop()
         if (args.snapshots and want_snap[0] and off == FRAME_END
                 and not resuming[0]):
             want_snap[0] = False
@@ -506,6 +522,9 @@ def main():
     differing, compared = 0, 0
     n = -1
     while args.frames == 0 or n + 1 < args.frames:
+        if stop_now[0]:
+            print("stopped at the requested frame")
+            return 0
         n += 1
         pf = port_frame()
         if pf is None:

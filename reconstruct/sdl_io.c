@@ -39,6 +39,8 @@ uint32_t g_palette[4] = {
 
 static SDL_Window *win;
 static int32_t grabbed;
+static uint32_t presented;      /* so a speed change can be measured */
+static uint32_t retraces;
 static SDL_Renderer *ren;
 static SDL_Texture *tex;
 static SDL_AudioStream *audio;
@@ -172,6 +174,7 @@ void io_present(void)
 {
     if (io_lockstep())
         return;
+    presented++;
     uint64_t now = SDL_GetTicksNS();
     if (now < next_present_ns)
         return;
@@ -418,6 +421,16 @@ static void check_deadline(void)
             fclose(f);
         }
     }
+    /* How many frames the run actually got through, so a change to the speed
+     * setting can be measured rather than felt. [0x148b] counts down once per
+     * play-loop frame. */
+    /* What the run actually got through, so a speed setting can be measured
+     * rather than felt. The delay POPSPEED sets is called **once** per
+     * play-loop frame (1ac2:1c3c) but 0x96 times per frame of an animation,
+     * so it weighs on the two completely differently - which is worth being
+     * able to show rather than argue about. */
+    fprintf(stderr, "popcorn: %u frames presented, %u retrace waits\n",
+            presented, retraces);
     io_shutdown();
     exit(0);
 }
@@ -426,6 +439,7 @@ void io_wait_retrace(void)
 {
     if (io_lockstep())
         return;
+    retraces++;
     script_pump();
     check_deadline();
     keep_alive();
