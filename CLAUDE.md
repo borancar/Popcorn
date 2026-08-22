@@ -463,6 +463,25 @@ Glyph 0, what a space maps to, is **not blank**: it is a solid block of colour
 obvious at a glance and invisible in a hex dump. This is the score-panel font;
 the menu uses a second, larger one that has not been located yet.
 
+## Level 10, and why a surviving bot is not a winning one
+
+Level 10 is worth reading as a piece of design, because it is where an
+autoplayer stops. Row 8 is **twelve cells of value 3**, and `brick_3` hardens a
+3 into a 4 that nothing breaks - so the moment the ball touches that row the
+top of the field is walled off for good, and 41 of the level's 77 bricks are
+behind it.
+
+The ball is served below the wall, so the top is unreachable by playing. Nor
+does a `+` capsule save it: `bonus_release` picks one of **eight** kinds from
+the table at `0xac60`, and `+` and V are not among them - a hatch never drops
+either. What is left is the **9 at row 12, column 8**, reachable through the
+one gap at row 11 column 8: brick 9 takes the ball away and puts it back
+somewhere else, which is how a player gets above the wall.
+
+The port is not wrong here. Every brick handler the level uses - 1, 2, 3, 4,
+9, 10 - verifies identical on it. It is the bot that cannot aim at a
+one-cell gap, and that is a different problem from transcription.
+
 ## The parachute
 
 **Brick 10** - cell value 10, the red block with the white grid - does not

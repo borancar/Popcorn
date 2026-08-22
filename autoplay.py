@@ -452,7 +452,16 @@ class Bot:
             # maps to some paddle through 0x2d2d, and only L maps back to the
             # laser. So while it is held the bot collects nothing else - not
             # even + or V.
-            if laser:
+            # ... but only while the laser can still do something. Level 10
+            # is the case that proves it: a whole row of cell 3, which
+            # brick_3 hardens into an unbreakable 4, walls the top of the
+            # field off for good. Once every column ends in one, the laser
+            # has nothing left to shoot and the only way out of the level is
+            # a + capsule - so a bot that holds the laser and refuses
+            # everything survives there for ever without clearing it, which
+            # is what it did for three hundred and eighty thousand frames.
+            shootable = self.laser_columns() if laser else []
+            if laser and shootable:
                 wanted = [c for c in wanted if c[1] == LASER_CAPSULE]
             if wanted:
                 # Best first, and among equals the one that lands soonest.
@@ -466,7 +475,7 @@ class Bot:
                 # column that still has something breakable at the bottom of
                 # it. The action button is held permanently, so standing in
                 # the right place *is* firing.
-                cols = self.laser_columns()
+                cols = shootable
                 if cols:
                     near = min(cols, key=lambda c: abs(c - px))
                     # Either end of the paddle can do it; use whichever is
