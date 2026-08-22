@@ -36,6 +36,8 @@ CODE_BASE = CODE_SEG * 16
 # Entry points control flow cannot reach from `main`: interrupt handlers the
 # program installs, and routines only ever called through a pointer variable.
 # Each is justified where it is used; an unjustified one hides a gap.
+CODE_LEN = 0x5E90               # the code segment; past it is data
+
 EXTRA_ENTRIES = {
     0x03E3: "int09_handler (installed by the DOS set-vector at startup)",
     # The two input routines, selected into [0x2d45]/[0x2d47] by F3/F4 and
@@ -46,6 +48,9 @@ EXTRA_ENTRIES = {
     # 0x1654 or 0x16d2, and the play loop calls whatever is there - so
     # nothing that follows control flow reaches it either.
     0x1785: "input_demo (chases the ball, and any key ends the demo)",
+    # Cells 16-21 of the brick table all come here - the special
+    # bricks that belong to a larger animation.
+    0x2CCD: "brick: cells 16-21, the animated ones",
     # Entity handlers. The play loop at 0x1873 walks a linked list from the
     # head link at 0x3144 and calls each node's `+0x00` - so none of these is
     # reachable by following control flow, and all of them are the game.
@@ -252,13 +257,25 @@ def main():
         # port silently did nothing when a player collected it. Walk each
         # table out of the image and say so if a target is not in the map.
         bad = 0
+        # The counts are deliberately generous. A hand-written one was wrong
+        # once already: the brick table was audited as fourteen entries and
+        # has twenty-two, so cells 16 to 21 - which all dispatch to 0x2ccd -
+        # were never mapped, never transcribed, and did nothing in the port.
+        # A zero entry does not end a table either; 13, 14 and 15 are zero and
+        # 16 is not.
+        # Lengths established from the data, not guessed. The brick table
+        # really is twenty-two: cells 16 to 21 all dispatch to 0x2ccd, which
+        # is deliberate and was missed when this was audited as fourteen.
+        # A zero entry does not end a table - 13, 14 and 15 are zero and 16 is
+        # not - and past the end there is only data, so entries are also
+        # required to point inside the code segment.
         for name, base, count in (
-                ("brick behaviour", 0x3044, 14),
-                ("bonus effect", 0x33BC, 14),
-                ("bonus movement", 0x3447, 6)):
+                ("brick behaviour", 0x3044, 22),
+                ("bonus effect", 0x33BC, 12),
+                ("bonus movement", 0x3447, 4)):
             for i in range(count):
                 v = struct.unpack_from("<H", img, base + i * 2)[0]
-                if v == 0 or not (0 < v < len(img)):
+                if v == 0 or not (0 < v < CODE_LEN):
                     continue
                 if v in cm.insns:
                     continue

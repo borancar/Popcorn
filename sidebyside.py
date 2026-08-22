@@ -129,6 +129,10 @@ def main():
                     help="capture at play_session rather than play_loop, so "
                          "the comparison follows level transitions and lost "
                          "lives instead of ending with the level")
+    ap.add_argument("--watch-write", type=lambda v: int(v, 0), default=-1,
+                    metavar="ADDR",
+                    help="report every write the emulator makes to this image "
+                         "address, with the instruction that made it")
     ap.add_argument("--trace-from", type=int, default=-1, metavar="N",
                     help="from frame N, print one entity node and the PRNG on "
                          "both sides every frame")
@@ -290,6 +294,20 @@ def main():
             uc.emu_stop()
 
     m.uc.hook_add(unicorn.UC_HOOK_CODE, on_code, None, code, code + 0x10000)
+
+    if args.watch_write >= 0:
+        # Which instruction touches a byte is a question the disassembly
+        # answers badly - a cell is reached through a computed DI, so grepping
+        # for its address finds nothing. Ask the machine instead.
+        def on_write(uc, access, address, size, value, user):
+            if not captured:
+                return
+            ip = uc.reg_read(UC_X86_REG_CS) * 16 + uc.reg_read(UC_X86_REG_IP)
+            print(f"  write {address - base:#07x} = {value:#04x} "
+                  f"by 1ac2:{ip - code:04x} at frame {frames_done[0]}",
+                  flush=True)
+        at = base + args.watch_write
+        m.uc.hook_add(unicorn.UC_HOOK_MEM_WRITE, on_write, None, at, at)
 
     def run_a_bit():
         """Let the guest run until a hook stops it, or a chunk goes by."""
