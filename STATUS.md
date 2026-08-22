@@ -320,14 +320,20 @@ indivisible step to the driver, which can then say the two sides differ
 comparison point turns the bonus into fifty steps instead of one, and the
 difference it reports drops from 2,889 screen bytes to 284.
 
-But the 284 are not evidence yet. The first byte of them is the lives count,
-and every control byte around it - `[0x3f1b]`, the level, `[0x13ca]`, the ball
-count - is **identical**, while the emulator has already reached
-`play_session`'s `dec [0x13c9]` and the port has not. That is the two sides
-caught a fraction of a frame apart, which means the second sync point is not
-landing on the same call on both. Until it does, the number is smaller and no
-more trustworthy, and saying otherwise would be reading a smaller number as a
-better one.
+Those 284 **are** a real difference, and it took two fixes to be able to say
+so. The `resuming` flag that skips the hook's re-fire after `emu_stop`
+remembered only *that* the emulator had stopped, not *where*, so with a second
+sync point a genuine stop at the other address was swallowed as if it were the
+re-fire. And the first desync check written for this compared the port's sync
+count against the driver's window count - which always agree, because every
+window consumes exactly one port frame. It looked like a safeguard and could
+not fail, which is the trap this file keeps recording.
+
+What can fail is comparing the *kind* of point each side stopped at, which the
+tag now carries. It reports no disagreement at the frame the two differ on, so
+the two sides really are standing in the same place: the emulator's `play_loop`
+has returned and made its spawn-gate `game_random` call, the port's has not,
+and the port is one level transition behind with a life still in hand.
 
 ### Coverage, as last measured
 

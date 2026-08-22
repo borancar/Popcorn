@@ -276,7 +276,7 @@ def main():
     captured = {}
     frame_hit = {}
     reentries = [0]
-    resuming = [False]
+    resuming = [None]
     draws = []
     frames_done = [0]
     want_snap = [False]
@@ -352,12 +352,24 @@ def main():
             # emu_start runs it again and the hook fires a second time with
             # no work done in between. Counting those as frames compares the
             # port's frame N+1 against the emulator's frame N.
-            if resuming[0]:
-                resuming[0] = False
+            #
+            # It has to remember **which** instruction, not just that it
+            # stopped: with a second sync point a real stop at the other
+            # address arrives next and was being swallowed as if it were the
+            # re-fire. That is what made --sync-scroll compare the emulator a
+            # whole play-loop frame ahead of the port while both counted the
+            # same number of sync points.
+            if resuming[0] == off:
+                resuming[0] = None
                 return
+            if off == SCROLL_UP:
+                # Tagged here rather than where the offset is first seen: the
+                # skip above runs before it, so tagging earlier reported a
+                # scroll in the window *after* the one that stopped at it.
+                draws.append((0x9100, 0))       # matches the port's tag
             frame_hit["img"] = snapshot_image()
             frame_hit["vram"] = snapshot_vram()
-            resuming[0] = True
+            resuming[0] = off
             uc.emu_stop()
 
     m.uc.hook_add(unicorn.UC_HOOK_CODE, on_code, None, code, code + 0x10000)
@@ -399,7 +411,7 @@ def main():
         # CS:IP is restored *on* the sync instruction, so the hook would fire
         # once with no work done - the port's frame 1 against the emulator's
         # frame 0. Same reason the normal path skips a hit after emu_stop.
-        resuming[0] = True
+        resuming[0] = start_at
         base_frame[0] = fr
         print(f"resumed {os.path.basename(args.resume)}: level {lv}, "
               f"originally frame {fr}")
@@ -478,8 +490,10 @@ def main():
         head = read_exact(4)
         if head != b"PFRM":
             return None
-        if u32() is None:
+        pn = u32()
+        if pn is None:
             return None
+        port_count[0] = pn
         n = u32()
         if n is None:
             return None
@@ -506,6 +520,8 @@ def main():
             port.stdin.flush()
         except BrokenPipeError:
             pass
+
+    port_count = [0]
 
     view = {}
 
@@ -644,6 +660,23 @@ def main():
             pimg = bytes(pimg)
             print(f"  injected a one-bit change at frame {n}")
 
+        # Are the two sides standing in the same *kind* of place? Comparing
+        # the counts cannot answer that - every window consumes exactly one
+        # port frame, so those always agree, which made the check look like a
+        # safeguard while being unable to fail. The tag says which sync point
+        # each side stopped at, and that can disagree.
+        if args.sync_scroll:
+            emu_scroll = any(t == 0x9100 for t, _ in draws)
+            port_scroll = 0x9100 in pdraws
+            if emu_scroll != port_scroll:
+                print(f"\n*** out of step at comparison {n}: the emulator "
+                      f"stopped at {'a scroll' if emu_scroll else 'a frame '
+                      'close'} and the port at "
+                      f"{'a scroll' if port_scroll else 'a frame close'}. "
+                      f"Everything compared from here is two different "
+                      f"moments, not two different results.")
+                return 2
+
         a, b = mask(frame_hit["img"]), mask(pimg)
         ev = frame_hit["vram"]
         if a == b and ev == pvram:
@@ -677,6 +710,8 @@ def main():
                     # reported the spawn gate at 0x1c2c as "brick44".
                     if a == 0x1fc1:
                         return "backdrop"
+                    if a == 0x9100:
+                        return "sync:scroll"
                     if a >= 0x9000:
                         return ("exit:no-balls", "exit:no-bricks",
                                 "exit:ball-lost",

@@ -69,8 +69,14 @@ void io_lockstep_extra_sync(int32_t on) { extra_sync = on ? 1 : 0; }
 
 void io_frame_sync_extra(void)
 {
-    if (extra_sync)
-        io_frame_sync();
+    if (!extra_sync)
+        return;
+    /* Tagged, so the driver can tell *which* sync point each side stopped at.
+     * Matching counts are not enough: the port can be at its Nth scroll while
+     * the emulator is at its Nth frame close, and then the two are compared
+     * standing in different places with nothing to say so. */
+    io_log_random(0x9100);
+    io_frame_sync();
 }
 
 static uint32_t ls_frame;
