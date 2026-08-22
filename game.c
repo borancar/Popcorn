@@ -1806,42 +1806,189 @@ void ball_bricks(unsigned ball)
     }
 }
 
-/* ------------------------------------------------------------------------
- * 1ac2:28cb and the table at 0x3044
+/* ========================================================================
+ * Brick behaviour: the table at 0x3044, indexed by cell value.
  *
- * Each cell value has its own handler; the table maps value to routine, and a
- * value of 0 or above 12 has none. Only the ordinary brick - value 1, routine
- * 0x28cb - is transcribed, and every other type falls back to it, so the
- * unusual bricks currently behave as ordinary ones rather than not at all.
- *
- * The real one has two paths and both clear the cell and take one off the
- * count: usually the brick vanishes at once, but one time in three (while
- * [0x3384] is under 3) it hands itself to an entity running 0x3b2a, which is
- * the crumbling animation.
- */
-#define SCORE_ADD_LO  0x1415
-#define SCORE_ADD_MID 0x1417
-#define SCORE_ADD_HI  0x1419
+ * Value 0 and 13 have no handler, 4 and 12 are indestructible, 5 through 8 are
+ * a chain that degrades one step per hit, and 1, 2, 3 and 9 through 11 each do
+ * something of their own. They share a preamble - add to the score, ask for a
+ * sound, and reset the ball's bounce counter, so that a brick hit does not
+ * count towards the every-0x23-bounces slope shuffle.
+ * ===================================================================== */
+#define SCORE_ADD  0x1415               /* six bytes, most significant first */
 #define SOUND_BRICK      3
+#define BONUS_CAP  0x3384               /* how many capsules are out */
+#define BONUS_ODDS 0x33b1               /* cumulative weights for the kinds */
 
-void brick_hit(unsigned slot, unsigned cell, unsigned ball)
+static void brick_score(unsigned a, unsigned b, unsigned c)
 {
-    img_setw(SCORE_ADD_LO, 0);
-    img_setw(SCORE_ADD_MID, 0);
-    img_setw(SCORE_ADD_HI, 2);
+    img_setw(SCORE_ADD + 0, a);
+    img_setw(SCORE_ADD + 2, b);
+    img_setw(SCORE_ADD + 4, c);
     score_add();                        /* 1ac2:413d */
-    g_image[SOUND_REQUEST] = SOUND_BRICK;
+}
+
+/* The common opening: score, sound, and clear the ball's bounce counter. */
+static void brick_common(unsigned ball, unsigned sound,
+                         unsigned a, unsigned b, unsigned c)
+{
+    brick_score(a, b, c);
+    g_image[SOUND_REQUEST] = (unsigned char)sound;
     if (ball)
         g_image[ball + B_BOUNCES] = 0;
+}
 
-    /* The immediate-removal path at 0x2929: clear the cell, take one off the
-     * count, and XOR the brick's own picture off the screen. The other path
-     * hands it to an entity running 0x3b2a that crumbles it over several
-     * frames; that entity is not transcribed, so every brick goes at once. */
+/* Attach a fresh entity to the brick that was just hit. `slot` is the hit
+ * record: its word is the cell address, the two bytes after it the centre. */
+static unsigned brick_entity(unsigned slot, unsigned handler,
+                             unsigned frames, unsigned rate)
+{
+    unsigned si = entity_alloc();
+    img_setw(si + 0, handler);
+    img_setw(si + 2, img_w(slot));
+    img_setw(si + 4, img_w(slot + 2));
+    img_setw(si + 6, frames);
+    g_image[si + 8] = (unsigned char)rate;
+    g_image[si + 9] = (unsigned char)rate;
+    return si;
+}
+
+/* Degrade a brick one step: the cell becomes `next`, the old picture comes off
+ * and the new one goes on. Cells 5, 6 and 7 all do exactly this. */
+static void brick_degrade(unsigned slot, unsigned next,
+                          unsigned old_pic, unsigned new_pic)
+{
+    g_image[img_w(slot)] = (unsigned char)next;
+    unsigned x = g_image[slot + 2], y = g_image[slot + 3];
+    xor_sprite_16x7(x, y, old_pic);
+    xor_sprite_16x7(x, y, new_pic);
+}
+
+/* Pick one of the bonus kinds by the cumulative weights at 0x33b1: walk the
+ * table until an entry is at least random(0xff) and take that index. */
+static unsigned bonus_kind(void)
+{
+    unsigned r = game_random(io_ticks(), 0xff);
+    unsigned i = 0;
+    while (g_image[BONUS_ODDS + i] < r)
+        i++;
+    return i;
+}
+
+/* 1ac2:28cb  brick 1, and 1ac2:2985  brick 2
+ *
+ * Both score 20 and both usually hand the brick to a crumbling entity. The
+ * other path - taken while fewer than three capsules are out, and then one
+ * time in three - removes the brick at once and leaves something behind:
+ * brick 1 a score popup (0x3561), brick 2 a falling capsule (0x3273).
+ */
+static void brick_1_or_2(unsigned slot, unsigned ball, int is_two)
+{
+    brick_common(ball, SOUND_BRICK, 0, 0, 2);
+
+    if (g_image[BONUS_CAP] >= 3 || game_random(io_ticks(), 3) != 0) {
+        brick_entity(slot, 0x3b2a, is_two ? 0x6508 : 0x65fe, 7);
+        g_image[img_w(slot)] = 0;
+        g_image[LEVEL_CELLS]--;
+        return;
+    }
+
     g_image[LEVEL_CELLS]--;
+    unsigned cell = img_w(slot);
     g_image[cell] = 0;
-    xor_sprite_16x7(g_image[slot + 2], g_image[slot + 3],
-                    img_w(CELL_TABLE + 1 * 2));
+    unsigned x = g_image[slot + 2], y = g_image[slot + 3];
+    xor_sprite_16x7(x, y, is_two ? 0x63a6 : img_w(CELL_TABLE + 2));
+
+    unsigned si = entity_alloc();
+    img_setw(si + 0, is_two ? 0x3273 : 0x3561);
+    unsigned centre = img_w(slot + 2);
+    img_setw(si + 2, centre + 0x100);   /* `inc bh`: one row further down */
+    g_image[si + 4] = (unsigned char)bonus_kind();
+    g_image[si + 5] = 0;
+    g_image[si + 6] = 0;
+    g_image[si + 7] = 1;
+    /* The sprite goes at the brick's centre, one scan line down - `inc bh`
+     * before the store at [si+2], and BL untouched. Passing [si+4], the kind
+     * that was just picked, as the x instead put it wherever the random
+     * number landed. */
+    xor_sprite_16xn(centre & 0xff, ((centre >> 8) + 1) & 0xff,
+                    is_two ? 0x4e13 : 0x5863, 6);
+    g_image[BONUS_CAP]++;
+}
+
+void brick_1(unsigned slot, unsigned ball) { brick_1_or_2(slot, ball, 0); }
+void brick_2(unsigned slot, unsigned ball) { brick_1_or_2(slot, ball, 1); }
+
+/* 1ac2:2a3f  brick 3 - hardens into a 4, which nothing can break */
+void brick_3(unsigned slot, unsigned ball)
+{
+    g_image[SOUND_REQUEST] = 4;
+    if (ball)
+        g_image[ball + B_BOUNCES]++;
+    brick_entity(slot, 0x365e, 0x66f4, 8);
+    g_image[img_w(slot)] = 4;
+}
+
+/* 1ac2:3221  bricks 4 and 12 - indestructible; the ball only bounces */
+void brick_solid(unsigned slot, unsigned ball)
+{
+    (void)slot;
+    g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+    if (ball)
+        g_image[ball + B_BOUNCES]++;
+}
+
+/* 1ac2:2a73, 2ab4, 2af5  bricks 5, 6, 7 - a step down the chain each hit */
+void brick_5(unsigned slot, unsigned ball)
+{
+    brick_common(ball, SOUND_BRICK, 0, 0, 2);
+    brick_degrade(slot, 6, 0x6466, 0x6486);
+}
+
+void brick_6(unsigned slot, unsigned ball)
+{
+    brick_common(ball, SOUND_BRICK, 0, 0, 3);
+    brick_degrade(slot, 7, 0x6486, 0x64a6);
+}
+
+void brick_7(unsigned slot, unsigned ball)
+{
+    brick_common(ball, SOUND_BRICK, 0, 0, 5);
+    brick_degrade(slot, 8, 0x64a6, 0x64c6);
+}
+
+/* 1ac2:2b36  brick 8 - the end of that chain. A hundred points, and it leaves
+ * an entity running 0x366f where it was. */
+void brick_8(unsigned slot, unsigned ball)
+{
+    brick_common(ball, 4, 0, 0x100, 0);
+    g_image[img_w(slot)] = 0;
+    unsigned x = g_image[slot + 2], y = g_image[slot + 3];
+    xor_sprite_16x7(x, y, 0x64c6);
+    xor_sprite_16x7(x, y, 0x681c);
+    unsigned si = brick_entity(slot, 0x366f, 0x67ea, 7);
+    g_image[si + 2] = 4;
+    g_image[LEVEL_CELLS]--;
+}
+
+/* The dispatch ball_bricks does through the table at 0x3044. */
+void brick_hit(unsigned slot, unsigned cell, unsigned ball)
+{
+    switch (g_image[cell]) {
+    case 1:  brick_1(slot, ball); break;
+    case 2:  brick_2(slot, ball); break;
+    case 3:  brick_3(slot, ball); break;
+    case 4:
+    case 12: brick_solid(slot, ball); break;
+    case 5:  brick_5(slot, ball); break;
+    case 6:  brick_6(slot, ball); break;
+    case 7:  brick_7(slot, ball); break;
+    case 8:  brick_8(slot, ball); break;
+    case 9:  brick_9(slot, ball); break;
+    case 10: brick_10(slot, ball); break;
+    case 11: brick_11(slot, ball); break;
+    default: break;                     /* 0 and 13 have no handler */
+    }
 }
 
 /* ------------------------------------------------------------------------
@@ -2598,4 +2745,15 @@ int bonus_steer(unsigned bx)
     }
     b[3] = (unsigned char)game_random(io_ticks(), 0x3d);
     return 1;
+}
+
+/* 1ac2:40f2  xor_sprite_16xn - like 0x3b64 but the caller says how many rows */
+void xor_sprite_16xn(unsigned x, unsigned y, unsigned src, unsigned rows)
+{
+    unsigned di = cga_at(x, y);
+    for (unsigned r = 0; r < rows; r++) {
+        for (int b = 0; b < 4; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[src + r * 4 + b];
+        di = cga_next_row(di);
+    }
 }

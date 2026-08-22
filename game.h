@@ -217,7 +217,19 @@ int  ball_redraw(unsigned ball);  /* 1ac2:2827 */
 int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
 void ball_after(unsigned ball);   /* 1ac2:247f */
 void ball_bricks(unsigned ball);  /* 1ac2:254d */
-void brick_hit(unsigned slot, unsigned cell, unsigned ball);  /* 1ac2:28cb */
+void brick_hit(unsigned slot, unsigned cell, unsigned ball);
+void xor_sprite_16xn(unsigned x, unsigned y, unsigned src, unsigned rows); /* 1ac2:40f2 */
+void brick_1(unsigned slot, unsigned ball);     /* 1ac2:28cb */
+void brick_2(unsigned slot, unsigned ball);     /* 1ac2:2985 */
+void brick_3(unsigned slot, unsigned ball);     /* 1ac2:2a3f */
+void brick_solid(unsigned slot, unsigned ball); /* 1ac2:3221 */
+void brick_5(unsigned slot, unsigned ball);     /* 1ac2:2a73 */
+void brick_6(unsigned slot, unsigned ball);     /* 1ac2:2ab4 */
+void brick_7(unsigned slot, unsigned ball);     /* 1ac2:2af5 */
+void brick_8(unsigned slot, unsigned ball);     /* 1ac2:2b36 */
+void brick_9(unsigned slot, unsigned ball);     /* 1ac2:2b9d */
+void brick_10(unsigned slot, unsigned ball);    /* 1ac2:2c59 */
+void brick_11(unsigned slot, unsigned ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(unsigned x, unsigned y, unsigned src); /* 1ac2:3b64 */
 void score_add(void);             /* 1ac2:413d */
 void ball_paddle(unsigned ball);  /* 1ac2:2316 */
@@ -250,6 +262,7 @@ void demo_input_step(void);       /* the recorded-input cursor at 0x3134 */
 void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(unsigned x, unsigned y);
 unsigned io_ticks(void);
+void io_set_ticks(unsigned t);
 unsigned io_mouse_x(void);
 unsigned io_mouse_buttons(void);
 
@@ -311,7 +324,19 @@ int  ball_redraw(unsigned ball);  /* 1ac2:2827 */
 int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
 void ball_after(unsigned ball);   /* 1ac2:247f */
 void ball_bricks(unsigned ball);  /* 1ac2:254d */
-void brick_hit(unsigned slot, unsigned cell, unsigned ball);  /* 1ac2:28cb */
+void brick_hit(unsigned slot, unsigned cell, unsigned ball);
+void xor_sprite_16xn(unsigned x, unsigned y, unsigned src, unsigned rows); /* 1ac2:40f2 */
+void brick_1(unsigned slot, unsigned ball);     /* 1ac2:28cb */
+void brick_2(unsigned slot, unsigned ball);     /* 1ac2:2985 */
+void brick_3(unsigned slot, unsigned ball);     /* 1ac2:2a3f */
+void brick_solid(unsigned slot, unsigned ball); /* 1ac2:3221 */
+void brick_5(unsigned slot, unsigned ball);     /* 1ac2:2a73 */
+void brick_6(unsigned slot, unsigned ball);     /* 1ac2:2ab4 */
+void brick_7(unsigned slot, unsigned ball);     /* 1ac2:2af5 */
+void brick_8(unsigned slot, unsigned ball);     /* 1ac2:2b36 */
+void brick_9(unsigned slot, unsigned ball);     /* 1ac2:2b9d */
+void brick_10(unsigned slot, unsigned ball);    /* 1ac2:2c59 */
+void brick_11(unsigned slot, unsigned ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(unsigned x, unsigned y, unsigned src); /* 1ac2:3b64 */
 void score_add(void);             /* 1ac2:413d */
 void ball_paddle(unsigned ball);  /* 1ac2:2316 */
@@ -344,6 +369,7 @@ void demo_input_step(void);       /* the recorded-input cursor at 0x3134 */
 void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(unsigned x, unsigned y);
 unsigned io_ticks(void);
+void io_set_ticks(unsigned t);
 unsigned io_mouse_x(void);
 unsigned io_mouse_buttons(void);
 

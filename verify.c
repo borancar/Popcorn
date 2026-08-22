@@ -13,9 +13,17 @@
  *
  * The state file is deliberately dumb:
  *
- *     "PVS1"  u32 routine  u16 regs[10]  u32 image_len  image  u32 vram_len  vram
+ *     "PVS2"  u32 routine  u16 regs[10]  u32 ticks
+ *             u32 image_len  image  u32 vram_len  vram
  *
  * with regs in the order ax bx cx dx si di bp es ds flags.
+ *
+ * `ticks` is the BIOS counter at 0040:006c that the game's PRNG stirs in. It
+ * has to come from the emulator, not from the host clock, or every routine
+ * that consults random() diverges for a reason that is not a bug - which is
+ * exactly what happened to the brick handlers: the C decided to crumble a
+ * brick where the original decided to remove it, and the only difference was
+ * the seed.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -110,18 +118,19 @@ int verify_main(const char *in_path, const char *out_path)
         return 1;
     }
     char magic[4];
-    unsigned routine, image_len, vram_len;
+    unsigned routine, image_len, vram_len, ticks;
     unsigned short regs[R_COUNT];
     unsigned char rb[R_COUNT * 2];
-    if (fread(magic, 1, 4, f) != 4 || memcmp(magic, "PVS1", 4) ||
+    if (fread(magic, 1, 4, f) != 4 || memcmp(magic, "PVS2", 4) ||
         !rd32(f, &routine) || fread(rb, 1, sizeof rb, f) != sizeof rb ||
-        !rd32(f, &image_len)) {
+        !rd32(f, &ticks) || !rd32(f, &image_len)) {
         fprintf(stderr, "%s: not a state file\n", in_path);
         fclose(f);
         return 1;
     }
     for (int i = 0; i < R_COUNT; i++)
         regs[i] = (unsigned short)(rb[i * 2] | rb[i * 2 + 1] << 8);
+    io_set_ticks(ticks);
 
     g_image = malloc(image_len);
     if (!g_image || fread(g_image, 1, image_len, f) != image_len) {
