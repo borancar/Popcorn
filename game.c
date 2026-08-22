@@ -4744,7 +4744,15 @@ void panel_finish(void)
  * brick at all: the drawing code has a special case for it. */
 void brick_11(uint32_t slot, uint32_t ball)
 {
-    brick_common(ball, SOUND_BRICK, 0, 0, 0x0207);
+    /* **Not** brick_common. 1ac2:2d68 scores and asks for a sound and then
+     * never touches the ball: there is no `inc [di+0x1d]` and no bp anywhere
+     * in the routine, where every other handler has one. Zeroing the bounce
+     * counter here made the every-0x23-bounces slope shuffle fire at a
+     * different moment - which matters most on level 49, the last one, since
+     * that is 168 of these bricks and nothing else. */
+    (void)ball;
+    brick_score(0, 0, 0x0207);
+    g_image[SOUND_REQUEST] = SOUND_BRICK;
     g_image[img_w(slot)] = 0x0c;
     g_image[LEVEL_CELLS]--;
     uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
