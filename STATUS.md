@@ -206,9 +206,23 @@ first difference onto the pointer, which is the same divergence a byte later.
 
 ### Verification coverage is bounded by what a run reaches
 
-Three routes - the mouse play route, the keyboard one, and sitting in the menu
-- verify **71 routines byte-identical with nothing failing**, 70 of them on a
-call that actually changed something. `verify.py --menu` and `--keyboard` exist
+A ten-minute play route verifies **82 routines byte-identical with nothing
+failing**. Every failure that stood in this list for most of a session turned
+out to be the harness rather than the port:
+
+- **1ac2:1a4f and 1ac2:1a6f are not routines.** 0x1a4f is a call site,
+  `call word ptr [0x2d45]`, and 0x1a6f is an inline block inside play_loop.
+  The harness reads [SP] as a return address, which for these is play_loop's
+  own frame, lets the "original" run to somewhere arbitrary, and blames the C
+  for the difference. Both are out of the dispatch now.
+- **bonus_steer and bonus_script were called with zeros.** entity_bonus hands
+  the capsule's x and y in CL and AL; the harness passed 0 and 0, so the
+  routine worked on a capsule at the origin, took a different branch, and drew
+  twice from the PRNG where the original drew nothing.
+
+A check that cannot fail is worth nothing, and a check that fails for its own
+reasons is worse - it spends attention on the wrong thing. Both kinds were
+here. `verify.py --menu` and `--keyboard` exist
 because the attract demo and the keyboard input path are not reachable from a
 route that starts a game with the mouse.
 

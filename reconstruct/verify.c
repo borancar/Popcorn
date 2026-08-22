@@ -48,6 +48,14 @@ static int64_t g_result = -1;
 /* Every routine transcribed so far, by the image offset it was read from.
  * The argument mapping is part of what is being asserted: getting it wrong
  * shows up as a mismatch, which is the point. */
+/* 1ac2:1a4f and 1ac2:1a6f are deliberately absent. Neither is a routine
+ * entry - 0x1a4f is a call site, `call word ptr [0x2d45]`, and 0x1a6f is an
+ * inline block inside play_loop - so the harness's model does not apply to
+ * them: it reads [SP] as a return address when what is there is play_loop's
+ * own frame, lets the "original" run to somewhere arbitrary, and reports the
+ * difference as a failure of the C. Both were in the outstanding list for
+ * most of a session on the strength of that. The C routines are real and are
+ * exercised through play_loop; only verifying them *as routines* is wrong. */
 static int32_t dispatch(uint32_t routine, const uint16_t *r)
 {
     switch (routine) {
@@ -218,12 +226,6 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x164c:
         game_delay();
         return 1;
-    case 0x1a4f:
-        game_input();
-        return 1;
-    case 0x1a6f:
-        demo_input_step();
-        return 1;
     case 0x27b7:
         drop_duplicate_hits();
         return 1;
@@ -317,13 +319,23 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x34d7:                        /* morph_step(bx) */
         morph_step(r[R_BX]);
         return 1;
-    case 0x3bf7: {                      /* bonus_steer(bx, &x, &y) */
-        uint32_t x = 0, y = 0;
+    case 0x3bf7: {                      /* bonus_steer(bx, cl, al) */
+        /* entity_bonus hands these in CL and AL - the capsule's x
+         * and y. Passing zero instead made the routine work on a
+         * capsule at the origin, take a different branch, and draw
+         * twice from the PRNG where the original drew nothing. The
+         * failure that reported was the harness's, not the port's. */
+        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
         g_result = bonus_steer(r[R_BX], &x, &y);
         return 1;
     }
-    case 0x3c35: {                      /* bonus_script(bx, &x, &y) */
-        uint32_t x = 0, y = 0;
+    case 0x3c35: {                      /* bonus_script(bx, cl, al) */
+        /* entity_bonus hands these in CL and AL - the capsule's x
+         * and y. Passing zero instead made the routine work on a
+         * capsule at the origin, take a different branch, and draw
+         * twice from the PRNG where the original drew nothing. The
+         * failure that reported was the harness's, not the port's. */
+        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
         g_result = bonus_script(r[R_BX], &x, &y);
         return 1;
     }
