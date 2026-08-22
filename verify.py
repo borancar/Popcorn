@@ -44,6 +44,7 @@ ROUTINES = {
     0x221A: "draw_paddle",
     0x0C64: "draw_char",
     0x1712: "input_keyboard",
+    0x1E50: "walker_draw",
     0x1FC1: "field_backdrop",
     0x2034: "draw_brick_row",
     0x20B9: "draw_sprite_20x6",

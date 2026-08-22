@@ -59,7 +59,6 @@ STUB(play_prepare,        0xcc5,  "after the names are entered")
 STUB(level_load_file,     0x08c8, "reads a .PPC level set named on the command line")
 
 /* --- called from the play loop, which is transcribed ------------------ */
-STUB(level_draw,          0x1c4f, "paints the brick field from 0x2f10")
 STUB(laser_fire,          0x2ee3, "the paddle's laser")
 STUB(play_teardown,       0x41d4, "tidies up when a level ends")
 STUB(bonus_spawn,         0x3d95, "drops a bonus capsule")
@@ -84,7 +83,6 @@ void entity_unlink(unsigned node) { note("entity_unlink", 0x3257); (void)node; }
 void entity_spawn(unsigned what) { note("entity_spawn", 0x3146); (void)what; }
 
 /* --- called from play_session, which is transcribed ------------------- */
-STUB(panel_draw,            0x0b0b, "the right-hand score panel")
 STUB(level_colours,         0x044b, "picks the level's colour scheme")
 STUB(life_lost,             0x0735, "the losing-a-ball sequence")
 STUB(screen_game_over,      0x0473, "GAME OVER")

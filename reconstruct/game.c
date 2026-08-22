@@ -1926,3 +1926,244 @@ void field_backdrop(unsigned y)
         p = 0xff;
     g_image[BACKDROP_PHASE] = (unsigned char)(p + 1);
 }
+
+/* ========================================================================
+ * The level's opening animation: a creature walks the paddle row carrying
+ * the ball on. 1ac2:1c4f drives it, 1ac2:1e23 steps it, 1ac2:1e50 draws one
+ * frame.
+ * ===================================================================== */
+#define WALKER_ANIM   0x1468            /* cursor into a list of frames */
+#define WALKER_WORK   0x146a            /* 0x15 bytes, shifted in place */
+#define WALKER_ROW    0x1cc0            /* the paddle row */
+#define WALKER_FIRST  0x7521            /* where the frame list restarts */
+
+/* 1ac2:1e50  walker_draw
+ *
+ * One frame of the creature, 12 pixels by 7, XORed onto the paddle row. The
+ * frame is copied to a work buffer and shifted right `(x & 3) * 2` bits -
+ * a pixel per two - across each row of three bytes, since at this depth a
+ * byte holds four pixels and there is no pre-shifted copy for this one.
+ */
+void walker_draw(unsigned x)
+{
+    unsigned src = img_w(img_w(WALKER_ANIM));
+    memcpy(g_image + WALKER_WORK, g_image + src, 0x15);
+
+    for (unsigned n = (x & 3) * 2; n > 0; n--) {
+        for (int r = 0; r < 7; r++) {
+            unsigned p = WALKER_WORK + r * 3, carry = 0;
+            for (int b = 0; b < 3; b++) {
+                unsigned v = g_image[p + b];
+                g_image[p + b] = (unsigned char)((v >> 1) | (carry << 7));
+                carry = v & 1;
+            }
+        }
+    }
+
+    unsigned di = (x >> 2) + WALKER_ROW;
+    for (int r = 0; r < 7; r++) {
+        g_vram[di & (CGA_SIZE - 1)] ^= g_image[WALKER_WORK + r * 3];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[WALKER_WORK + r * 3 + 1];
+        g_vram[(di + 2) & (CGA_SIZE - 1)] ^= g_image[WALKER_WORK + r * 3 + 2];
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:1e23  walker_step
+ *
+ * Erase the creature where it was - two pixels to the right, with the frame
+ * before this one, which is what XOR needs to cancel exactly - then draw it
+ * where it is, then advance the animation, wrapping at the 0xffff that ends
+ * the frame list.
+ */
+void walker_step(unsigned x)
+{
+    img_setw(WALKER_ANIM, img_w(WALKER_ANIM) - 2);
+    walker_draw(x + 2);
+    img_setw(WALKER_ANIM, img_w(WALKER_ANIM) + 2);
+    walker_draw(x);
+    img_setw(WALKER_ANIM, img_w(WALKER_ANIM) + 2);
+    if (img_w(img_w(WALKER_ANIM)) == 0xffff)
+        img_setw(WALKER_ANIM, WALKER_FIRST);
+}
+
+/* One strip of the hatch the creature comes out of: 19 rows of one word at a
+ * fixed position, from a list of frames. */
+static void hatch_frame(unsigned src, unsigned x, unsigned y)
+{
+    unsigned di = cga_at(x, y);
+    for (int r = 0; r < 0x13; r++) {
+        g_vram[di & (CGA_SIZE - 1)] = g_image[src + r * 2];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[src + r * 2 + 1];
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:1c4f  level_draw
+ *
+ * The hatch opens, the creature walks from x=0xc8 to x=0x6d laying the paddle
+ * row down behind it, the hatch closes, and six frames of something play at
+ * 0x1cd9. Cosmetic, but it is also what puts the bottom band of the playfield
+ * on screen - the backdrop sweep only reaches y=179.
+ */
+#define HATCH_X    0x33f3               /* 0xc8 */
+#define HATCH_Y    0x33f4               /* 0xb3 */
+#define HATCH_OPEN  0x770d
+#define HATCH_SHUT  0x7717
+#define LIVES_MARK  0x3a7c
+
+void level_draw(void)
+{
+    unsigned hx = g_image[HATCH_X], hy = (g_image[HATCH_Y] - 1) & 0xff;
+
+    g_image[PADDLE_X] = 0xc8;
+    for (int f = 0; f < 5; f++) {
+        hatch_frame(img_w(HATCH_OPEN + f * 2), hx, hy);
+        for (int i = 0; i < 0x12c; i++)
+            game_delay();
+    }
+
+    /* Rub out one life marker: the lives are four to a row, 0xf0 apart. */
+    unsigned n = (g_image[LIVES] - 1) & 0xff;
+    unsigned di = LIVES_MARK + (n & 0xfc) + (n & 3) * 0xf0;
+    for (int r = 0; r < 5; r++) {
+        for (int b = 0; b < 4; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] = 0;
+        di = cga_prev_row((di - 4) & 0xffff);
+    }
+
+    img_setw(WALKER_ANIM, 0x7525);
+    g_image[PADDLE_X] = 0xc6;
+    walker_draw(0xc8);
+    img_setw(WALKER_ANIM, img_w(WALKER_ANIM) + 2);
+    for (int i = 0; i < 9; i++) {
+        for (int d = 0; d < 0x4b; d++)
+            game_delay();
+        walker_step(g_image[PADDLE_X]);
+        g_image[PADDLE_X] -= 2;
+        io_present();
+        if (!io_pump())
+            return;
+    }
+
+    /* Closing the hatch, one frame every fourth step of the walk. */
+    for (int f = 0; f < 0x14; f++) {
+        unsigned ch = (unsigned)(0x14 - f);
+        if (!(ch & 3))
+            hatch_frame(img_w(HATCH_SHUT + (f >> 2) * 2), hx, hy);
+        for (int d = 0; d < 0x4b; d++)
+            game_delay();
+        walker_step(g_image[PADDLE_X]);
+        g_image[PADDLE_X] -= 2;
+        io_present();
+        if (!io_pump())
+            return;
+    }
+    while (g_image[PADDLE_X] >= 0x6d) {
+        walker_step(g_image[PADDLE_X]);
+        g_image[PADDLE_X] -= 2;
+        for (int d = 0; d < 0x4b; d++)
+            game_delay();
+        io_present();
+        if (!io_pump())
+            return;
+    }
+
+    for (int f = 0; f < 6; f++) {
+        unsigned src = img_w(0x75db + f * 2);
+        unsigned d = 0x1cd9;
+        for (int r = 0; r < 7; r++) {
+            for (int b = 0; b < 7; b++)
+                g_vram[(d + b) & (CGA_SIZE - 1)] = g_image[src + r * 7 + b];
+            d = cga_next_row(d);
+        }
+        for (int i = 0; i < 0x147; i++)
+            game_delay();
+        io_present();
+        if (!io_pump())
+            return;
+    }
+}
+
+/* ========================================================================
+ * 1ac2:0b0b  panel_draw
+ *
+ * The score panel down the right-hand side: the player's name, the score, and
+ * a row of life markers. It is composed in the image first - a picture 28
+ * bytes (112 pixels) wide starting at 0x85f0 - and then revealed on screen a
+ * row at a time from the bottom up, with a retrace wait for each.
+ *
+ * The glyph copy is written out again here rather than calling draw_char,
+ * because the original does the same: draw_char writes to the framebuffer with
+ * the CGA interlace between rows, and this writes to a flat buffer 28 bytes to
+ * a row. The character-to-glyph mapping is the same one, minus the cursor.
+ * ===================================================================== */
+#define PANEL_IMAGE   0x85f0
+#define PANEL_STRIDE      28
+#define PANEL_NAME    0x86ee            /* row 9, byte 2 */
+#define PANEL_SCORE   0x8962            /* row 31, byte 14 */
+#define PANEL_LIVES   0x8cc0            /* row 62, byte 8 */
+#define LIFE_SPRITE   0x48e7
+#define PANEL_ON_SCREEN 0x3f24          /* bottom-right, and it grows upwards */
+#define PANEL_ROWS     0x5d
+
+static void panel_char(unsigned char c, unsigned di)
+{
+    unsigned g;
+    if (c == '-')                       g = 0x0b;
+    else if (c <= ' ')                  g = 0;
+    else if (c <= '9')                  g = c - 0x2f;
+    else if (c >= 'A')                  g = c - 0x35;
+    else                                g = 0x0b;
+    const unsigned char *src = g_image + FONT + g * FONT_GLYPH;
+    for (int r = 0; r < FONT_ROWS; r++, di += PANEL_STRIDE) {
+        g_image[di] = src[r * 2];
+        g_image[di + 1] = src[r * 2 + 1];
+    }
+}
+
+void panel_draw(void)
+{
+    unsigned di = PANEL_NAME;
+    for (int i = 0; i < 0x0c; i++, di += 2)
+        panel_char(g_image[PLAYER_NAME + i], di);
+
+    di = PANEL_SCORE;
+    for (int i = 0; i < 6; i++, di += 2)
+        panel_char(g_image[SCORE_TEXT + i], di);
+
+    /* Twelve life markers, four to a row: `al & 0xfc` steps along the row and
+     * `(al & 3) * 0xa8` steps down. Ones past the lives left are blanked
+     * rather than skipped, so a lost life is rubbed out. */
+    for (unsigned n = 1; n <= 0x0c; n++) {
+        unsigned k = n - 1;
+        unsigned d = PANEL_LIVES + (k & 0xfc) + (k & 3) * 0xa8;
+        int lit = n <= g_image[LIVES];
+        for (int r = 0; r < 5; r++, d += PANEL_STRIDE) {
+            for (int b = 0; b < 4; b++)
+                g_image[d + b] = lit
+                    ? g_image[LIFE_SPRITE + r * 4 + b] : 0;
+        }
+    }
+
+    /* Reveal it. Each pass redraws one more row than the last, from the
+     * bottom of the panel upwards, so it wipes on rather than appearing. */
+    unsigned bottom = PANEL_ON_SCREEN;
+    for (unsigned rows = 1; rows != PANEL_ROWS; rows++) {
+        unsigned src = PANEL_IMAGE;
+        unsigned d = bottom;
+        io_wait_retrace();
+        for (unsigned r = 0; r < rows; r++) {
+            for (int b = 0; b < PANEL_STRIDE; b++)
+                g_vram[(d + b) & (CGA_SIZE - 1)] = g_image[src + b];
+            src += PANEL_STRIDE;
+            d = cga_next_row(d);
+        }
+        for (int i = 0; i < 0x32; i++)
+            game_delay();
+        bottom = cga_prev_row(bottom);
+        io_present();
+        if (!io_pump())
+            return;
+    }
+}
