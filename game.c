@@ -1160,8 +1160,15 @@ int play_loop(void)
         }
         if (g_image[EXTRA_ON]) {
             img_setw(EXTRA_TIMER, img_w(EXTRA_TIMER) - 1);
-            if (img_w(EXTRA_TIMER) == 0)
-                erase_shot(EXTRA_POS, 0, EXTRA_TIMER), img_setw(EXTRA_TIMER, 0x190);
+            if (img_w(EXTRA_TIMER) == 0) {
+                /* One cell off the bar. `stosw` leaves di two on, and the
+                 * two `dec di` put it back, so what follows is a plain step
+                 * to the next scan line - the bar drains downwards. */
+                unsigned di = img_w(EXTRA_POS);
+                img_vram_setw(di, 0);
+                img_setw(EXTRA_POS, cga_next_row(di));
+                img_setw(EXTRA_TIMER, 0x190);
+            }
             img_setw(SERVE_TIMEOUT, img_w(SERVE_TIMEOUT) - 1);
             if (img_w(SERVE_TIMEOUT) == 0)
                 g_image[EXTRA_ON] = 0;
@@ -3770,6 +3777,10 @@ void bonus_effect(unsigned kind)
     case 7: extra_life(); break;
     case 8: bonus_end_level(); break;
     case 9: bonus_speed(); break;
+    case 10: bonus_slow(); break;
+    /* The table has a twelfth word, 0x2e55, but it points into the middle of
+     * ball_on_paddle and no capsule reaches it: the kind comes from [bx+4],
+     * which also indexes the eleven-byte paddle table at 0x2d2d. */
     default: break;
     }
 }
@@ -6279,4 +6290,20 @@ int bonus_script(unsigned bx, unsigned *px, unsigned *py)
     *px = cl;
     *py = (0x79 + ah) & 0xff;
     return 1;
+}
+
+/* 1ac2:3200  bonus 10 - the game slows down
+ *
+ * It arms the timer at [0x2e7a] for ten thousand frames and lights a bar down
+ * the panel at vram 0x1a8b, which `play_frame` drains one cell at a time -
+ * [0x2e87] walks it - so the player can see how long is left. While it runs,
+ * `play_frame` takes the branch at 0x1c19 and skips spawning new capsules.
+ */
+void bonus_slow(void)
+{
+    g_image[EXTRA_ON] = 1;
+    img_setw(SERVE_TIMEOUT, 0x2710);
+    img_setw(EXTRA_TIMER, 0x190);
+    fill_column(0x1a8b, 0xaaaa);
+    img_setw(EXTRA_POS, 0x1a8b);
 }
