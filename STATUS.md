@@ -19,14 +19,26 @@ bytes, with the entry point, stack and 35 relocations all as the stub would have
 set them. The relocation count is agreed on by two independent readings — the
 stub's own table, and a diff of two unpacks at different load segments.
 
-### The game runs, and the CGA output is right
+`reconstruct/exepack.c` decodes it again in C, and the port reads the player's
+own `POPCORN.EXE` at startup. No game data is embedded and none is committed.
 
-`emulation.py` reaches the title screen, the animated main menu, the player-name
-boxes and a playing level, with the colours the game is meant to have.
-Keyboard works on both paths: the BIOS INT 16h buffer in menus, and IRQ 1 with
-scan codes at port 0x60 while the game's own INT 09h handler is installed.
+### The game runs under emulation, and the CGA output is right
 
-### The game paces itself on instruction throughput, and the emulator now does too
+`emulation.py` reaches the title screen, the animated main menu, the
+player-name boxes, a playing level and the hall of fame, with the colours the
+game is meant to have. Keyboard works on both paths: the BIOS INT 16h buffer in
+menus, and IRQ 1 with scan codes at port 0x60 while the game's own INT 09h
+handler is installed.
+
+INT 10h AH=0Ch/0Dh — one pixel per BIOS call — is implemented for modes 4, 5
+and 6, XOR included. It had been missing, and since the menu's bouncing kernels
+are drawn entirely through it, six hundred thousand calls a minute were being
+dropped on the floor. That is worth stating plainly because of *how* it was
+found: the port and the emulator disagreed, an independent model of the
+instructions agreed with the port exactly, and so the hole had to be on the
+emulator's side. Verification catches the checker as well as the checked.
+
+### The game paces itself on instruction throughput, and the emulator does too
 
 Popcorn programs PIT channel 0 **never**. The only ports it writes in a whole
 session are 0x42, 0x43 and 0x61, and those are the PC speaker. Its pacing comes
@@ -36,6 +48,9 @@ So an emulator that runs as fast as it can plays the game as fast as it can.
 `--ips` holds the guest to a fixed instruction rate, defaulting to 800,000,
 which is roughly the 8 MHz 8086 the readme says the default speed is written
 for. The retrace bit also moved from 70 Hz to CGA's 60.
+
+POPSPEED stores its setting in the **offset half of interrupt vector 0x68**,
+which is why the startup disk reads looked load-bearing and were not.
 
 ### It plays itself
 
@@ -51,8 +66,7 @@ tick, with an accelerator at `0x2d4b` that only builds while a single direction
 is held. A bot that has to reverse loses that acceleration and arrives late.
 That delay is the game's, not the emulator's.
 
-Two things about the ball structure cost a debugging round each, and both are
-worth knowing before the C port touches this code:
+Two things about the ball structure cost a debugging round each:
 
 - **`+0x18/+0x19` is not the ball's position.** It is the anchor: where the
   current straight segment began. It does not move again until the next bounce,
@@ -65,268 +79,110 @@ worth knowing before the C port touches this code:
   square of the slope, which presents as a paddle that jerks at each bounce and
   catches the ball only when the geometry happens to agree.
 
-### 129 of 179 routines transcribed; 84 of them byte-checked
+### Every reachable routine is transcribed
 
-`port_coverage.py` measures it by the image offset each routine carries, not by
-name, and counts a routine only when its header comment appears outside
-`stubs.c`:
+**179 of 179, all 24,062 bytes.** `port_coverage.py` measures it by the image
+offset each routine carries, not by counting functions: a routine counts only
+when its `1ac2:xxxx` header appears somewhere that is not `stubs.c`, so a stub
+renamed to look finished does not move the number.
 
-```
-129 of 179 reachable routines transcribed, 16791 of 24062 bytes (69.8%)
-84 of those are byte-checked
-```
+`reconstruct/stubs.c` is down to `entity_unknown`, which is a safety net for a
+handler address that is not in any table. It should never fire.
 
-Static reachability itself went from 62.4% to 93.7% along the way, by adding
-the three indirect jump tables as entry points — brick behaviour at `0x3044`
-indexed by cell value, bonus movement at `0x3447`, and what a bonus *does* at
-`0x33bc` — plus every entity handler installed by a `mov word ptr [si], imm`.
-None of those is reachable by following control flow, which is why the first
-count was so far out.
+The last one in was `0d2e`, where a player's turn ends. Each player's whole
+state lives in a 0x11b-byte record — lives, level, score, their copy of the
+cells, and at `+0xd2` a count followed by copies of the live entities. Saving
+the entity list is what lets a player come back to a level with the capsules
+still falling.
 
-Two routines are checked and still differ, and both are recorded rather than
-hidden: `panel_reveal` (`0x0911`) writes a different byte at vram `0x50` than
-the original leaves there, so the order of its fills is misread somewhere; and
-`menu_particles_tick` (`0x53c2`) leaves a short vertical run of pixels the
-original does not, so one kernel's erase is landing in the wrong place.
+### The transcription is checked against the original, not against the screen
 
-### The verifier had to be sharpened three times
+`verify.py` captures the machine at a routine's entry, lets the **original**
+run to its return, captures again, then runs the C on the first capture and
+diffs the image, the video memory and, where the routine has one, its return
+value. A routine that compiles proves nothing and one that looks right on
+screen proves very little more; a blitter can be wrong in ways that still draw
+something plausible.
 
-Each time it turned passes into failures, and each time the failures were real.
+`reconstruct/verify.c` dispatches 142 routines. Which registers a routine takes
+its arguments in is part of what is being asserted — getting that wrong shows
+up as a mismatch, which is the point.
 
-1. **"25 calls, identical" on a routine whose common path is an early return
-   proves nothing.** It now counts calls that *changed something* and caps on
-   that, which is what made it keep sampling `ball_bricks` through 670 calls
-   until ten had actually hit a brick.
-2. **The PRNG is seeded from the BIOS tick counter**, so a C port reading its
-   own clock diverges for a reason that is not a bug. The state file now
-   carries the value the emulator saw — and that is not the tick count either:
-   the routine adds the counter's *two words* and works in sixteen bits.
-3. **Comparing memory alone cannot check a routine whose answer is a return
-   value.** `game_random` only bumps a counter by a constant, so it passed with
-   any seed — I was literally passing it zero. The harness now compares the
-   answer too, which immediately failed it.
+The harness had to be sharpened four times, each time because it was agreeing
+for a reason that was not evidence:
 
-That third one also exposed `particle_random` (`0x5448`): it does **not** zero
-AX first, so whatever the caller left there is part of the seed. Threading that
-through is the difference between the kernels bouncing the same way and not.
+1. **It counted calls, not work.** Twenty-five agreements on a routine whose
+   common path is an early return. It now caps on calls that *changed
+   something*, and says so when a routine's whole sample was early returns.
+2. **The PRNG is seeded from the BIOS tick count.** Without carrying
+   `0040:006c` across from the emulator, every routine that consults it
+   diverged for a reason that was not a bug — the C crumbled a brick where the
+   original removed it, and the only difference was the seed.
+3. **Memory comparison alone passes a pure function.** `game_random` only bumps
+   a counter by a constant, so it agreed whatever it computed. Routines may now
+   report a **return value** and have that compared too.
+4. **The stack is not evidence.** Excluded (`0x1AA20`–`0x1AC20`), because
+   leftovers below SP differ for reasons that have nothing to do with the
+   routine.
 
-### Sixteen routines were the first to be transcribed, and the ball physics is proven exactly
+Two failures that stood for a while are now settled, and neither was what it
+looked like:
 
-```
-  ok   draw_char           (0x0c64)      ok   ball_redraw     (0x2827)
-  ok   draw_brick_row      (0x2034)      ok   ball_draw       (0x2881)
-  ok   draw_sprite_20x6    (0x20b9)      ok   xor_sprite_16x7 (0x3b64)
-  ok   draw_paddle         (0x221a)      ok   score_add       (0x413d)
-  ok   blit_xor            (0x2281)      ok   save_screen     (0x5099)
-  ok   paddle_row_offsets  (0x22de)      ok   restore_screen  (0x50bc)
-  ok   ball_paddle         (0x2316)      ok   input_keyboard  (0x1712)
-  ok   ball_step           (0x27d7)
-  FAIL ball_after          (0x247f): 2 of 431 calls differ
-  FAIL ball_bricks         (0x254d): 5 of 670 calls differ
-```
-
-Both remaining failures are the same missing thing and the harness says so:
-the difference is at image `0x3138`, the **entity list head**. Hitting a brick
-allocates an entity running `0x3561` - the score popup - and that handler is
-not transcribed, so the C does not allocate it. Nothing else about the
-collision differs.
-
-### The verification harness had to be sharpened twice
-
-The first version reported "25 calls, identical" for `ball_paddle` and
-`ball_bricks` and both were **completely unproven**: their common path is an
-early return, and twenty-five agreements on an early return say nothing. That
-is the same trap as "never called", one level down, and it was invisible.
-
-So the harness now counts calls that **changed something** and caps on that
-rather than on calls made - which is what made it keep sampling `ball_bricks`
-through 670 calls until ten of them had actually hit a brick. It reports the
-distinction in every line, and says "every one was an early return: unproven"
-where it applies. Sharpening it immediately turned two false passes into two
-real failures, both of which were then real bugs.
-
-### Eight routines were transcribed first, and all eight were proven
-
-`verify.py` stops the emulator at a routine's entry, captures the machine, lets
-the **original** body run to its return, captures again, then runs the C on the
-first capture and diffs against the second. The comparison is between the C and
-the original *on the same call inside one run*, so it needs no determinism to
-mean anything — the host clock and the game's RNG cannot make it flaky.
-
-```
-  ok   draw_char           (0x0c64): 25 calls, identical
-  ok   input_keyboard      (0x1712): 25 calls, identical
-  ok   draw_paddle         (0x221a): 25 calls, identical
-  ok   blit_xor            (0x2281): 25 calls, identical
-  ok   paddle_row_offsets  (0x22de): 25 calls, identical
-  ok   ball_step           (0x27d7): 25 calls, identical
-  ok   save_screen         (0x5099):  1 call,  identical
-  ok   restore_screen      (0x50bc):  1 call,  identical
-```
-
-It reports "NOT REACHED, so unproven" separately from "agreed", because zero
-mismatches over a state that never reaches the routine reads exactly like a
-pass. `input_keyboard` was in that category until `--keyboard` was added: the
-bot plays through the mouse, so `0x16d2` never ran.
-
-The first run of this caught four things, and three were real:
-
-- **`draw_paddle` was missing `sub word [0x1487], 0x1e0`** — taken only when
-  the paddle actually moves. `[0x1487]` is a countdown the play loop reloads
-  from `[0x1489]`; most likely the level time bonus, charged for moving.
-- **`save_screen` copies 16,000 bytes, not the 16,384 of the aperture** — two
-  `rep movsw` of `0xfa0` words, which is the 200 visible scan lines at 80 bytes
-  for every other one. The 192 bytes of padding at the end of each half are
-  neither saved nor restored, and the two halves land *adjacent* in the buffer
-  rather than 0x2000 apart. A `memcpy` of the whole aperture is wrong twice
-  over.
-- **`input_keyboard`'s equal case is not a no-op.** With neither key held it
-  resets the acceleration to 5 and clamps the paddle to the right-hand limit;
-  with *both* held it moves in the direction of whichever key was pressed most
-  recently, which the INT 09h handler records at `[0x2d4a]`.
-
-The fourth was the harness's own: the stack is scratch, not state, and
-comparing it flags every routine that pushes anything. It is excluded, and the
-note says why.
-
-### The built-in level table is decoded
-
-Fifty levels of 176 bytes at image `0xc46c`, which main copies to `0x2f10` one
-at a time. The first byte of each is the **brick count** - checked against the
-non-zero cells of the first four levels and exact every time - and the
-remaining 175 bytes are the cells.
-
-### The C port draws the menu, and it is the emulator's screen exactly
-
-`make -C reconstruct && ./reconstruct/popcorn` reads your own `POPCORN.EXE`,
-unpacks it, runs the four opening animations and leaves you on the main menu
-with the function keys live.
-
-`compare_screen.py` settles what "correct" means here: it runs both to the same
-point, dumps the 0xb8000 aperture from each and diffs them.
-
-```
-visible screen: 15878 of 16000 bytes identical (99.24%)
-  10 of 200 scan lines differ
-```
-
-The 122 bytes that differ are the two animated elements that are still stubs —
-the scrolling banner across the character's belly and the bouncing kernel under
-the menu. Everything static is byte-for-byte the original: the lettering, the
-logo, the credits, the character, the arrow.
-
-Getting there took four bugs, and the eye would have passed three of them:
-
-- **`movsw` under a set direction flag copies the word *at* `si`** and steps
-  afterwards. Reading at `si-1`/`si-2` instead shifted the whole title by two
-  bytes, which drew its cyan background and none of the lettering.
-- **Two of the four logo passes run forwards.** There is a `cld` at `0x5565`
-  between them, and the interlace step reverses with it. Running all four
-  backwards drew the character as streaks across the middle of the screen.
-- **`intro_curtain` does not just draw bars.** Its second half grows the title
-  into the corner, and between the two sits a colour remap that reads two
-  source bits and emits two: a leading 0 emits `00` and *discards the bit
-  after it*. That maps colour 1 to 0 — it strips the cyan out of the leading
-  edge, which is what makes the lettering fade in rather than snap on.
-- The player-name boxes, the level loader and the play loop are stubs, so F1
-  starts nothing yet.
-
-### The code segment is mapped
-
-`analyze.py` follows control flow from the entry point and the INT 09h handler
-and reaches **122 routines, 14,798 of 23,696 bytes (62.4%)**. What it does not
-reach is either data between routines or reached through a pointer, and
-`--gaps` lists it.
+- `panel_reveal` (`0911`) draws its corner pieces with `rep movsb`, and `si` is
+  set **once**, before the loop. They are two 21-byte sprites read straight
+  through, three bytes a row — not one row drawn seven times. The disputed
+  bytes at vram `0x50` were the sprite's third row.
+- `menu_particles_tick` (`53c2`) was the emulator's missing pixel call,
+  described above. The port was right all along.
 
 ## Open
 
-### Reaching a particular screen
+### Verification coverage is bounded by what a run reaches
 
-Input is scripted by **code offset** rather than wall clock (`@13d2:return`
-fires the first time execution reaches `0x13d2`; several at one offset fire on
-successive arrivals). That is reproducible, where a timed script tuned on one
-run missed on the next. What is still missing is snapshots — saving and
-restoring the whole machine — which is what makes a test *start* at a screen
-rather than play to it. shift+F10 writes a screenshot and a VRAM dump, useful as
-a rendering reference but unable to resume.
+A ninety-second run reaches 46 routines and finds nothing wrong with any of
+them. The rest need game states a short run does not get to: the endings, the
+hall of fame, the level tally, game over, the attract-mode demo. Longer runs
+reach more, but the honest limit is that **a routine no run reaches is
+unproven**, and `verify.py` prints that list rather than quietly omitting it.
+
+What would fix this properly is **snapshots** — saving and restoring the whole
+machine — so a check can *start* at a screen instead of playing to it. Input is
+currently scripted by code offset (`@13d2:return` fires the first time
+execution reaches `0x13d2`), which is reproducible where a timed script tuned
+on one run missed on the next, but it still has to play the game to get there.
+
+A few routines cannot be checked this way at all and are excluded on purpose:
+the ones that never return normally (`play_session` leaves by longjmp), the
+ones that are DOS or hardware I/O (`hsc_save`, `drive_check`,
+`read_speed_setting`), and `screen_define_keys`, which switches to text mode
+01h — the port has no text renderer.
 
 ### Not yet modelled
 
 - **PC-speaker sound.** Ports 0x42 and 0x61 are understood (`sound_tick` at
   `0x0097`) but nothing generates audio yet.
-- **The disk reads at startup.** The program issues INT 13h AX=0002 and INT 25h
-  AX=0002 before anything else. Both are refused and the game carries on, so
-  they are not load-bearing, but what they are reading is not yet known — the
-  first guess is where `POPSPEED.EXE` stores its value.
-- **`popspeed.exe` and `popgen.exe`.** Neither is examined. `popspeed` patches
-  the `mov cx,N` immediate in the delay at `0x164c`; where it puts N is the
-  same question as the disk reads above.
 - **The `.PPC` level format.** `poptab.ppc` is 8,630 bytes and is read whole by
-  the loader at `0x08c8`. Not decoded yet. The levels being ported are the ones
-  **baked into the executable**, which is what running with no command tail
-  uses; `.PPC` files are the level editor's output and come later.
-- **The `.HSC` high-score format.** ASCII, 180 bytes, one line per entry.
+  the loader at `0x08c8`, which is transcribed; the format its contents are in
+  is not decoded. The levels being ported are the ones **baked into the
+  executable**, which is what running with no command tail uses.
+- **`popspeed.exe` and `popgen.exe`.** Neither is examined.
 
 ### Not started
 
 - `native.py` — routines hooked at their entry points and reimplemented in
-  Python. Less obviously needed now than it was in Ducks: `verify.py` checks
-  the **C** against the original directly, which is what `native.py` existed to
-  make possible, so the Python middle layer may never be worth writing.
-### The playfield draws
-
-`draw_brick_row` (`0x2034`) and `draw_sprite_20x6` (`0x20b9`) are in, and they
-settle the level geometry from the code rather than from staring at the data: a
-brick is **16 pixels wide and eight scan lines tall**, the field starts eight
-pixels in and six lines down, twelve to a row. `(y - 6) >> 3` picks the row of
-cells and `((y - 6) & 7) * 4` picks which of its eight lines to copy - which is
-where the 12x14 grid comes from, independently of the eyeball reading of the
-table.
-
-Pressing F1 now paints level one's brick field correctly, over a working
-paddle. What is not right is *how* it arrives: the original reveals it behind
-four popcorn kernels sweeping the screen, and the loop is not driven by a
-counter of its own - `[0x2f0c]` **is** kernel zero's position, and the reveal
-advances only when that kernel's timer at `[0x2efc]` runs out. Those records
-are set up by `0x2109`, which is not transcribed, so the reveal is driven
-directly instead and no kernels appear.
-
-- **50 routines are still stubs**, and `reconstruct/stubs.c` lists every one.
-  The big ones left are the hall of fame and end-of-game screen (`0x0d2e`,
-  1341 bytes), the level-transition sequence (`0x4210`, reached by the bonus
-  that ends a level throwing four words off the stack), the two menu input
-  routines (`0x1654`, `0x16d2`), the key-definition screen (`0x1581`, which
-  switches to text mode 01h and so needs a text renderer the port has not got),
-  and the `.PPC` loader (`0x08c8`).
-
-- **The play path is half done.** `play_loop` (`0x1873`) and `play_session`
-  (`0x02f5`) are transcribed, and F1 now enters a level with a working paddle.
-  What is still empty is everything they call into: `level_draw` (`0x1c4f`,
-  the playfield and the brick reveal), `ball_collide` (`0x2827`), `ball_draw`
-  (`0x2881`), `panel_draw` (`0x0b0b`), the eight entity handlers, and the
-  end-of-level and end-of-game screens. Until `ball_collide` is real the ball
-  cannot be lost and no brick can be hit, so a level neither ends nor
-  progresses.
-- **The other screens.** F5 (define keys), F6 (hall of fame), F8 (palette),
-  F10, and the demo are stubs. `reconstruct/stubs.c` is the list, and
-  `POPCORN_TRACE_STUBS=1` prints each one the first time it is reached, so
-  "that screen is blank" and "that routine is missing" are the same
-  observation.
+  Python. Less obviously needed than it was in Ducks: `verify.py` checks the
+  **C** against the original directly, which is what `native.py` existed to make
+  possible, so the Python middle layer may never be worth writing.
 
 ## Next
 
-1. Keep transcribing outwards from the play loop at `0x1873`, verifying each
-   routine as it lands. The order that gets the port running soonest is: the
-   sprite blitters the entity handlers use, the level loader, then the play
-   loop itself.
-2. Decode the built-in level table.
-3. Snapshots, so a verification run can start at a screen rather than play to
-   it — the 60-second runs are dominated by getting into a level.
-4. The menus, which are a large fraction of the code and none of it is
-   transcribed.
+1. Widen verification coverage: longer and differently-routed runs, and then
+   snapshots, so the screens a bot does not reach can be checked too.
+2. Sound.
+3. The `.PPC` format, which is what makes the level editor's output playable.
 
 ## Deferred
 
 - **A full per-file inventory in `CLAUDE.md`.** It currently documents only the
-  tools that exist. Once the game is fully reversed, every file in the
-  repository gets an entry saying what it is and why it is there.
+  tools that exist. Now that the transcription is complete this is the next
+  documentation job.
