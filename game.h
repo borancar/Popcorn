@@ -210,6 +210,8 @@ unsigned char screen_player_names(void);  /* 1ac2:10de */
 int  play_loop(void);             /* 1ac2:1873 - transcribed */
 void draw_text(unsigned src, unsigned count, unsigned di);  /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
+void walker_draw(unsigned x);     /* 1ac2:1e50 */
+void walker_step(unsigned x);     /* 1ac2:1e23 */
 void ball_draw(unsigned sprite, unsigned x, unsigned y);    /* 1ac2:2881 */
 int  ball_redraw(unsigned ball);  /* 1ac2:2827 */
 int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
@@ -283,6 +285,8 @@ unsigned char screen_player_names(void);  /* 1ac2:10de */
 int  play_loop(void);             /* 1ac2:1873 - transcribed */
 void draw_text(unsigned src, unsigned count, unsigned di);  /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
+void walker_draw(unsigned x);     /* 1ac2:1e50 */
+void walker_step(unsigned x);     /* 1ac2:1e23 */
 void ball_draw(unsigned sprite, unsigned x, unsigned y);    /* 1ac2:2881 */
 int  ball_redraw(unsigned ball);  /* 1ac2:2827 */
 int  ball_on_paddle(unsigned ball); /* 1ac2:2e1e */
