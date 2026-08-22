@@ -347,9 +347,11 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x5171:                        /* cheat_match(al) */
         cheat_match(r[R_AX] & 0xff);
         return 1;
-    case 0x538d:                        /* tall_sprite(si, di) */
-        tall_sprite(r[R_SI], r[R_DI]);
+    case 0x538d: {                      /* tall_sprite(si, di) */
+        unsigned si = r[R_SI];
+        g_result = tall_sprite(&si, r[R_DI]);
         return 1;
+    }
     case 0x59f7:                        /* ending_particle_init(si, ax) */
         g_result = ending_particle_init(r[R_SI], r[R_AX]);
         return 1;

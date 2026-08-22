@@ -263,7 +263,7 @@ void employee_enter(void);        /* 1ac2:4ae0 */
 void cell_hole_draw(unsigned x, unsigned y);  /* 1ac2:4cc1 */
 void screen_unstash(void);        /* 1ac2:4c13 */
 void border_setup(void);          /* 1ac2:4f73 */
-void tall_sprite(unsigned si, unsigned di);   /* 1ac2:538d */
+int  tall_sprite(unsigned *si, unsigned di);   /* 1ac2:538d */
 void screen_scroll_up(void);      /* 1ac2:4878 */
 void level_tally(void);           /* 1ac2:48ce */
 void screen_stash(void);          /* 1ac2:4ba9 */
@@ -477,7 +477,7 @@ void employee_enter(void);        /* 1ac2:4ae0 */
 void cell_hole_draw(unsigned x, unsigned y);  /* 1ac2:4cc1 */
 void screen_unstash(void);        /* 1ac2:4c13 */
 void border_setup(void);          /* 1ac2:4f73 */
-void tall_sprite(unsigned si, unsigned di);   /* 1ac2:538d */
+int  tall_sprite(unsigned *si, unsigned di);   /* 1ac2:538d */
 void screen_scroll_up(void);      /* 1ac2:4878 */
 void level_tally(void);           /* 1ac2:48ce */
 void screen_stash(void);          /* 1ac2:4ba9 */

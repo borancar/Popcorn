@@ -136,6 +136,8 @@ def main():
 
     captured = {}
     frame_hit = {}
+    reentries = [0]
+    hits = collections.Counter()
 
     def on_code(uc, address, size, user):
         off = address - code
@@ -144,6 +146,10 @@ def main():
             sc, asc = KEYMAP[q.popleft()]
             m.press_key(sc, asc, True)
             m.press_key(sc, asc, False)
+        if off == PLAY_LOOP and captured:
+            reentries[0] += 1
+        if captured and off in (0x1AD8, 0x1AF5, 0x1B04, 0x1B4D, 0x1C3F):
+            hits[off] += 1
         if off == PLAY_LOOP and not captured:
             captured["regs"] = regs_now()
             captured["img"] = snapshot_image()
@@ -327,6 +333,8 @@ def main():
         port.wait(timeout=5)
     except Exception:
         port.kill()
+    print(f"the emulator re-entered play_loop {reentries[0]} times")
+    print("   " + ", ".join(f"{k:#06x}x{v}" for k, v in sorted(hits.items())))
     if differing:
         print(f"\n{compared} frames compared, {differing} differed")
         return 1
