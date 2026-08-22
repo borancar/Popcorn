@@ -55,6 +55,7 @@ Usage:
 import argparse
 import collections
 import os
+import random
 import time
 
 import pygame
@@ -92,9 +93,65 @@ B_DY, B_DX = 0x16, 0x17
 B_ANCHOR_X, B_ANCHOR_Y = 0x18, 0x19
 B_STATE = 0x1C
 
-PADDLE_W = 28              # measured on screen: left edge 100 spans 100..127
+# The default paddle's width, and only the default: the table at 0x2d0d holds
+# four (sprite, width) pairs and E morphs to kind 1, which is 39 wide. The bot
+# reads the live width out of 0x2d3a and uses this only as a fallback.
+PADDLE_W = 27              # 0x2d0d+2, and it matches the screen
 PADDLE_Y = 186             # the row the paddle sits on
+CEILING_Y = 6              # the top of the playfield, where a rising ball turns
 WALL_L, WALL_R = 9, 195    # the ball's turning points, measured in play
+
+# --------------------------------------------------------------- the capsules
+# A falling capsule is an entity running 1ac2:3273, and the fields its catch
+# test reads are +2 x, +3 y and +4 the kind. The window is `right = x + 0x0e`
+# overlapping [paddle, paddle + width], for y from 0xb6 to 0xbe.
+ENTITY_HEAD = 0x3144       # first link; 0xffff ends the chain
+E_NEXT = 0x0C
+CAPSULE = 0x3273           # entity_capsule's handler address
+C_X, C_Y, C_KIND = 0x02, 0x03, 0x04
+CATCH_Y = 0xB6             # the first row the paddle can take it on
+CAPSULE_W = 0x0E           # the capsule's own width, from the same test
+PADDLE_WIDTH = 0x2D3A      # the live width, which the paddle morphs change
+
+# What each kind gives, read off the letter drawn on the capsule and matched
+# against the effect table at 0x33bc. The letters are French: F is *filet*,
+# the safety net, and V is *vie*, an extra life.
+CAPSULE_LETTER = {0: "B", 1: "C", 2: "E", 3: "L", 4: "T", 5: "F",
+                  6: "I", 7: "V", 8: "+", 9: "S", 10: "M"}
+CAPSULE_EFFECT = {0: "100 points", 1: "catch", 2: "wider paddle",
+                  3: "laser", 4: "multiball", 5: "net", 6: "reverse",
+                  7: "extra life", 8: "end level", 9: "slower ball",
+                  10: "stops the monsters"}
+# Higher is chased first; below zero is never chased at all.
+#
+# + skips the level, L is the laser and F is the net: the three worth leaving
+# the ball for. V is a life and E widens the paddle, so both rank just under
+# them - they buy survival, which is what the bot is short of. S is refused on
+# instruction; it slows the ball, which is not dangerous, but a slower ball is
+# a longer level.
+#
+# 1ac2:31e8 is what S runs, and it decrements the ball's step gate at [0x1486]
+# down to 2: the ball then moves on one frame in two instead of two in three.
+# The comment here used to say "speed up", which had it exactly backwards.
+CAPSULE_WANT = {8: 4, 3: 3, 5: 3, 7: 2, 2: 2,
+                10: 1, 0: 1, 1: 1, 4: 1, 6: 0,
+                9: -1}
+# How much slack to keep between catching a capsule and being back under the
+# ball. The mouse route is absolute - the paddle is wherever the pointer says
+# on the very next frame - so this is margin against the prediction being
+# wrong, not time spent travelling.
+SAFETY_FRAMES = 40
+# A few pixels of wander on the aim point, resampled every so often. Without
+# it the bot returns the ball off the same part of the paddle every time and
+# the two settle into a cycle that clears nothing - the paddle sitting still
+# while the ball retraces one path. The offset is small enough not to cost a
+# catch on a 28-pixel paddle, and it comes from a seeded generator so a run is
+# still reproducible.
+JITTER = 3
+JITTER_HOLD = 24                # bot steps before a new offset is drawn
+# With one ball left there is nothing to come back to, so the margin is the
+# whole descent rather than a slice of it.
+LAST_BALL_FRAMES = 140
 
 # The menu route to a level. `@off` fires the first time execution reaches that
 # offset in the game's code segment; several at one offset fire on successive
@@ -114,10 +171,14 @@ ROUTE_PLAY_KEYS = ["@0206:f4"] + ROUTE_PLAY[1:]
 class Bot:
     """Keep the paddle under the ball, through the mouse."""
 
-    def __init__(self, m, keyboard=False):
+    def __init__(self, m, keyboard=False, seed=0, jitter=JITTER):
         self.m = m
         self.base = m.load_seg * 16
         self.idle = 0
+        self.rng = random.Random(seed)
+        self.jitter = jitter
+        self.wander = 0
+        self.held = 0
         # Drive the three key-state bytes instead of the pointer. Only for
         # exercising the keyboard input routine: the paddle then moves one
         # pixel per repeat tick and the bot plays much worse.
@@ -140,13 +201,72 @@ class Bot:
                                             target[3])
         lo, hi = self.rd(PADDLE_MIN)[0], self.rd(PADDLE_MAX)[0]
         px = self.rd(PADDLE_X)[0]
-        want = max(lo, min(hi, aim - PADDLE_W // 2))
+        want = max(lo, min(hi, aim - self.width() // 2))
         self.wr(KEY_RIGHT, 1 if want > px + 3 else 0)
         self.wr(KEY_LEFT, 1 if want < px - 3 else 0)
         return f"keys {px:3d}->{want:3d}"
 
     def rd(self, off, n=1):
         return bytes(self.m.uc.mem_read(self.base + off, n))
+
+    def w(self, off):
+        return int.from_bytes(self.rd(off, 2), "little")
+
+    def capsules(self):
+        """Every falling capsule, as (want, kind, x, y).
+
+        Walking the entity list is the only way to see them: a capsule is not
+        in a table anywhere, it is a node whose handler word happens to be
+        1ac2:3273.  The list is the same one the play loop walks at 0x1b4d.
+        """
+        out = []
+        bx = self.w(ENTITY_HEAD)
+        for _ in range(64):             # the pool is smaller than this
+            if bx == 0xFFFF:
+                break
+            if self.w(bx) == CAPSULE:
+                kind = self.rd(bx + C_KIND)[0]
+                out.append((CAPSULE_WANT.get(kind, 0), kind,
+                            self.rd(bx + C_X)[0], self.rd(bx + C_Y)[0]))
+            bx = self.w(bx + E_NEXT)
+        return out
+
+    def frames_to_paddle(self, b):
+        """Roughly how many frames until this ball reaches the paddle row.
+
+        The stepper advances one pixel along the major axis per step, so the
+        vertical part of a step is dy/max(dx, dy), and the play loop only lets
+        it step on two frames in three - the gate at [0x1485]/[0x1486].  Both
+        are approximations; what they have to be right about is the *order* of
+        "the ball is a long way off" and "the ball is nearly here".
+        """
+        x, y, dy_up, dx_neg, dy, dx = b
+        major = max(dx, dy) or 1
+        per_step = dy / major
+        if per_step <= 0:
+            return 9999
+        drop = (y - CEILING_Y) + (PADDLE_Y - CEILING_Y) if dy_up \
+            else PADDLE_Y - y
+        if drop <= 0:
+            return 0
+        return int(drop / per_step * 1.5)
+
+    def width(self):
+        """The paddle's live width, which is not a constant.
+
+        E morphs it to paddle kind 1, which is 39 pixels against the default
+        27 - so aiming with the default centres a wide paddle six pixels off,
+        every time, for as long as the capsule lasts.
+        """
+        return self.rd(PADDLE_WIDTH)[0] or PADDLE_W
+
+    def capsule_aim(self, cx):
+        """Where the paddle's left edge has to be to take a capsule at cx.
+
+        Centre on centre: the capsule spans cx..cx+CAPSULE_W and the paddle
+        spans px..px+width, so px = cx + (CAPSULE_W - width) / 2.
+        """
+        return cx + (CAPSULE_W - self.width()) // 2
 
     def balls(self):
         out = []
@@ -202,12 +322,37 @@ class Bot:
         bx, by, dy_up = target[0], target[1], target[2]
         aim = bx if dy_up else self.predict(bx, by, target[4], target[5],
                                             target[3])
-        want = max(lo, min(hi, aim - PADDLE_W // 2))
+        note = f"ball {bx},{by}"
+
+        # A capsule is worth going for only while the ball can spare the
+        # paddle.  Every ball has to be safe, not just the one being chased:
+        # leaving to collect something and losing a different ball on the way
+        # is not a trade.  With one ball left the margin is the whole descent,
+        # because there is nothing to come back to.
+        spare = min((self.frames_to_paddle(b) for b in live), default=0)
+        margin = LAST_BALL_FRAMES if len(live) == 1 else SAFETY_FRAMES
+        if spare > margin:
+            wanted = [c for c in self.capsules()
+                      if c[0] > 0 and c[3] < CATCH_Y]
+            if wanted:
+                # Best first, and among equals the one that lands soonest.
+                w, kind, cx, cy = max(wanted, key=lambda c: (c[0], c[3]))
+                aim = self.capsule_aim(cx) + self.width() // 2
+                note = (f"grab {CAPSULE_LETTER.get(kind, kind)} "
+                        f"({CAPSULE_EFFECT.get(kind, '?')}) at {cx},{cy}, "
+                        f"ball {spare}f away")
+        # See JITTER: a few pixels of wander, held for a while so the aim is
+        # steady across one approach rather than shaking every frame.
+        if self.held <= 0:
+            self.wander = self.rng.randint(-self.jitter, self.jitter)
+            self.held = JITTER_HOLD
+        self.held -= 1
+        want = max(lo, min(hi, aim - self.width() // 2 + self.wander))
         # The game reads only CL after `shr cx,1`, so the pointer must stay
         # inside 0..510 for the paddle position to survive the truncation.
         self.m.mouse_pos = (min(510, 2 * want), 100)
         self.m.mouse_btn = 1
-        return f"{px:3d}->{want:3d} ball {bx},{by}"
+        return f"{px:3d}->{want:3d} {note}"
 
 
 def parse_route(route):

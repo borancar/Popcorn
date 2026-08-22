@@ -147,7 +147,12 @@ convention every note and every reconstructed routine here uses.
 | `0x13d5` | the player's name, 12 characters |
 | `0x1487` | **the frame delay**, reloaded from `0x1489` every frame |
 | `0x1485`, `0x1486` | how often the ball is allowed to step, and the limit |
-| `0x2d0d` | table of four paddle sprite bases |
+| `0x2d0d` | four (paddle sprite base, width) pairs: 27, 39, laser, catch |
+| `0x2d2d` | capsule kind -> paddle kind, eleven bytes |
+| `0x2d39` | the paddle kind in play |
+| `0x2d3a` | the paddle's live **width**, which the morphs change |
+| `0x3385` | capsule frame tables, by kind - the letters are drawn here |
+| `0xac60` | the eight capsules a hatch can release: (sprite, flags) |
 | `0x2e73` | clear when the last ball is lost |
 | `0x4903` | the paddle sprites: four sets of four pre-shifted 7x44 images |
 | `0xc46c` | **the level table**: fifty records of 176 bytes |
@@ -438,6 +443,36 @@ Glyph 0, what a space maps to, is **not blank**: it is a solid block of colour
 `dump_data.py font` renders the sheet, which is the check — a wrong stride is
 obvious at a glance and invisible in a hex dump. This is the score-panel font;
 the menu uses a second, larger one that has not been located yet.
+
+## The capsules
+
+Eight of the eleven kinds can come out of a hatch (the table at `0xac60`);
+`bonus_release` at `0x39a1` picks one. A falling capsule is an **entity running
+`0x3273`** with `+2` x, `+3` y and `+4` its kind - it is in no table, so the
+only way to find one is to walk the entity list. Caught, it rewrites its own
+handler to `0x3386` and the paddle morphs; the effect fires when the morph
+finishes, out of the table at `0x33bc`.
+
+The letters are French, and two of them are the opposite of what they look
+like:
+
+| kind | letter | what it does |
+| --- | --- | --- |
+| 0 | B | a hundred points, and it cancels the net |
+| 1 | C | the paddle catches the ball |
+| 2 | E | **the wider paddle** - 39 pixels against 27. The effect routine at `0x3231` is empty; the widening is the morph, through `0x2d2d` |
+| 3 | L | the laser |
+| 4 | T | more balls |
+| 5 | F | *filet*, the safety net across the bottom |
+| 6 | I | every ball reverses vertically |
+| 7 | V | *vie*, an extra life |
+| 8 | + | the level is over |
+| 9 | S | **the ball moves less often** - `0x31e8` counts `[0x1486]` *down* to 2, so two frames in three becomes one in two |
+| 10 | M | **the monsters stop** - no hatch opens while its timer runs. It does not slow the game down |
+
+`dump_data.py` will not render these; the letters were read by printing only
+the colour-3 pixels of frame 7 of each kind's table at `0x3385`, which is the
+frame where the capsule is fully open.
 
 ## Conventions
 

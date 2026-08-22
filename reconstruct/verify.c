@@ -136,10 +136,10 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x2def: bonus_catch(); return 1;
     case 0x2e03: bonus_laser(); return 1;
     case 0x2e16: bonus_multiball(); return 1;
-    case 0x3231: bonus_nothing(); return 1;
+    case 0x3231: bonus_wider_paddle(); return 1;
     case 0x3119: bonus_net(); return 1;
     case 0x315b: bonus_reverse(); return 1;
-    case 0x31e8: bonus_speed(); return 1;
+    case 0x31e8: bonus_slower_ball(); return 1;
     case 0x41b1: fill_column(r[R_DI], r[R_AX]); return 1;
     case 0x3717: entity_multiball(r[R_BX]); return 1;
     case 0x3386: entity_paddle_fx(r[R_BX]); return 1;
