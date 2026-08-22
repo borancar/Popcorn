@@ -20,6 +20,7 @@ Usage:
 """
 import argparse
 import os
+import re
 import struct
 import sys
 from collections import defaultdict
@@ -41,6 +42,10 @@ EXTRA_ENTRIES = {
     # called through that pointer from the play loop.
     0x1654: "input_mouse (INT 33h; paddle = clamp(mouse x / 2))",
     0x16D2: "input_keyboard (steps the paddle one pixel per repeat tick)",
+    # The third one. demo_start stores it in [0x2d45] the way F1 stores
+    # 0x1654 or 0x16d2, and the play loop calls whatever is there - so
+    # nothing that follows control flow reaches it either.
+    0x1785: "input_demo (chases the ball, and any key ends the demo)",
     # Entity handlers. The play loop at 0x1873 walks a linked list from the
     # head link at 0x3144 and calls each node's `+0x00` - so none of these is
     # reachable by following control flow, and all of them are the game.
@@ -259,6 +264,31 @@ def main():
                     continue
                 print(f"  {name}[{i}] -> {v:#06x} is NOT in the map")
                 bad += 1
+        # Tables are not the only indirection. [0x2d45] is a single word the
+        # play loop calls through - `call word ptr [0x2d45]` - and the menu
+        # stores one of three routine addresses in it. Two were in the seed
+        # list and the demo's was not, so it was never disassembled and the
+        # demo had no way to move its paddle. Find every word the code calls
+        # through, then every immediate stored into it.
+        called_through = set()
+        for off, ins in sorted(cm.insns.items()):
+            text = f"{ins.mnemonic} {ins.op_str}"
+            m = re.match(r"call\s+word ptr \[(0x[0-9a-f]+)\]$", text)
+            if m:
+                called_through.add(int(m.group(1), 16))
+        for off, ins in sorted(cm.insns.items()):
+            text = f"{ins.mnemonic} {ins.op_str}"
+            m = re.match(r"mov\s+word ptr \[(0x[0-9a-f]+)\], (0x[0-9a-f]+)$",
+                         text)
+            if not m:
+                continue
+            var, val = int(m.group(1), 16), int(m.group(2), 16)
+            if var not in called_through or val in cm.insns:
+                continue
+            print(f"  [{var:#06x}] <- {val:#06x} at {off:#06x} "
+                  f"is NOT in the map")
+            bad += 1
+
         print("every dispatch target is mapped" if not bad
               else f"{bad} dispatch targets are missing")
         return
