@@ -423,6 +423,13 @@ the menu uses a second, larger one that has not been located yet.
   routine carries the offset it was read from, so any line can be checked back
   against the binary.
 - Where a name or a type is a guess, say so.
+- **Integer types are always `stdint`**: `uint8_t`, `uint16_t`, `uint32_t`,
+  `int16_t`, `int32_t`. Never `unsigned`, `unsigned char`, `short` or `long`.
+  This is a port of 16-bit assembly, where every value has a width the
+  original depended on - `int16_t` says "this truncation is the `imul`'s" in a
+  way `short` does not, and a bare `int` says nothing at all. `char` stays
+  `char` for actual strings. `reconstruct/tostdint.py` did the conversion and
+  is comment-aware, because "the compare is unsigned" is prose.
 - The C port is **structured C that reads as a game**, not transliterated
   register-shuffling — checked against the emulator rather than assumed. If a
   routine genuinely cannot be written honestly as structured C, write it

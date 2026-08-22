@@ -10,15 +10,16 @@
  * environment prints each one the first time it is reached, so "that screen is
  * blank" and "that routine is missing" are the same observation.
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "game.h"
 
-static int trace = -1;
+static int32_t trace = -1;
 
-static void note(const char *name, unsigned off)
+static void note(const char *name, uint32_t off)
 {
     if (trace < 0)
         trace = getenv("POPCORN_TRACE_STUBS") != NULL;
@@ -26,8 +27,8 @@ static void note(const char *name, unsigned off)
         return;
     /* Once each: a stub inside a frame loop would otherwise flood. */
     static const char *seen[64];
-    static int n;
-    for (int i = 0; i < n; i++)
+    static int32_t n;
+    for (int32_t i = 0; i < n; i++)
         if (seen[i] == name)
             return;
     if (n < 64)
@@ -40,7 +41,7 @@ static void note(const char *name, unsigned off)
 
 /* The same, for a handler that takes its node. */
 #define STUB2(name, off) \
-    void name(unsigned bx) { note(#name, off); (void)bx; }
+    void name(uint32_t bx) { note(#name, off); (void)bx; }
 
 /* --- the menu's live decoration ------------------------------------- */
 
@@ -59,7 +60,7 @@ static void note(const char *name, unsigned off)
 /* An entity whose handler has not been transcribed. Doing nothing leaves it in
  * the list for ever, so it is unlinked - the animation is lost but the list
  * does not fill up and stall the game. */
-void entity_unknown(unsigned bx)
+void entity_unknown(uint32_t bx)
 {
     note("entity_unknown", 0x1b5e);
     (void)bx;

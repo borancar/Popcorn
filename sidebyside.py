@@ -104,6 +104,11 @@ def main():
     ap.add_argument("--frames", type=int, default=200,
                     help="0 runs until a comparison fails or you "
                          "stop it")
+    ap.add_argument("--trace-from", type=int, default=-1, metavar="N",
+                    help="from frame N, print one entity node and the PRNG on "
+                         "both sides every frame")
+    ap.add_argument("--trace-node", type=lambda v: int(v, 0), default=0x3154,
+                    help="which node --trace-from follows")
     ap.add_argument("--inject", type=int, default=-1, metavar="N",
                     help="flip one byte of the port's image at frame N, to "
                          "prove the comparison can fail")
@@ -185,7 +190,7 @@ def main():
             sp = m._reg(UC_X86_REG_SP)
             ss = m._reg(UC_X86_REG_SS)
             ret, = struct.unpack("<H", m.uc.mem_read(ss * 16 + sp, 2))
-            draws.append(ret)
+            draws.append((ret, m._reg(UC_X86_REG_DX) & 0xff))
         if off == PLAY_LOOP and not captured:
             captured["regs"] = regs_now()
             captured["img"] = snapshot_image()
@@ -265,7 +270,10 @@ def main():
         n, = struct.unpack("<I", read_exact(4))
         img = read_exact(n)
         v, = struct.unpack("<I", read_exact(4))
-        return img, read_exact(v)
+        vram = read_exact(v)
+        k, = struct.unpack("<I", read_exact(4))
+        got = list(struct.unpack(f"<{k}H", read_exact(k * 2))) if k else []
+        return img, vram, got
 
     def port_go(mouse_x, buttons, ticks, stop_it=0):
         try:
@@ -371,7 +379,7 @@ def main():
         if pf is None:
             print(f"the port stopped at frame {n}")
             break
-        pimg, pvram = pf
+        pimg, pvram, pdraws = pf
 
         frame_hit.clear()
         del draws[:]
@@ -387,6 +395,15 @@ def main():
         # The whole-buffer compare is a C memcmp; the per-byte walk only
         # happens when there is something to report. Without this the Python
         # loops cost more than running both emulators.
+        if args.trace_from >= 0 and n >= args.trace_from:
+            nd = args.trace_node
+            ee, pp = frame_hit["img"], pimg
+            print("  f%-5d node %s | %s   prng %02x%02x | %02x%02x" % (
+                n,
+                " ".join(f"{ee[nd + k]:02x}" for k in range(14)),
+                " ".join(f"{pp[nd + k]:02x}" for k in range(14)),
+                ee[0x33D3], ee[0x33D2], pp[0x33D3], pp[0x33D2]), flush=True)
+
         if n == args.inject:                # prove the check can fail
             pimg = bytearray(pimg)
             pimg[PADDLE_X] ^= 0x01
@@ -417,10 +434,12 @@ def main():
                 if len(seen) >= 20:
                     print(f"    ... and {len(img_bad) - 20} more image bytes")
                     break
-            if draws:
-                print("    the emulator's random() calls this frame, by "
-                      "return address: " +
-                      ", ".join(f"{d:#06x}" for d in draws))
+            if draws or pdraws:
+                print("    random() this frame - emulator: " +
+                      (", ".join(f"{a:#06x}/{dl}" for a, dl in draws)
+                       or "none"))
+                print("                          port: " +
+                      (", ".join(str(dl) for dl in pdraws) or "none"))
             if vram_bad:
                 rows = collections.Counter()
                 xs = []

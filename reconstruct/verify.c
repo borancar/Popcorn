@@ -31,6 +31,7 @@
  * brick where the original decided to remove it, and the only difference was
  * the seed.
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdlib.h>
@@ -42,12 +43,12 @@ enum { R_AX, R_BX, R_CX, R_DX, R_SI, R_DI, R_BP, R_ES, R_DS, R_FL, R_COUNT };
 
 /* A routine's answer to its caller, where it has one. -1 means "this routine
  * says nothing the caller reads that is not already in memory". */
-static long g_result = -1;
+static int64_t g_result = -1;
 
 /* Every routine transcribed so far, by the image offset it was read from.
  * The argument mapping is part of what is being asserted: getting it wrong
  * shows up as a mismatch, which is the point. */
-static int dispatch(unsigned routine, const unsigned short *r)
+static int32_t dispatch(uint32_t routine, const uint16_t *r)
 {
     switch (routine) {
     case 0x27d7:                        /* ball_step(si = the ball) */
@@ -69,7 +70,7 @@ static int dispatch(unsigned routine, const unsigned short *r)
         ball_redraw(r[R_SI]);
         return 1;
     case 0x044b: level_colours(); return 1;
-    case 0x10c5: draw_run((unsigned char)(r[R_AX] & 0xff), r[R_DX] & 0xff,
+    case 0x10c5: draw_run((uint8_t)(r[R_AX] & 0xff), r[R_DX] & 0xff,
                           r[R_DI]); return 1;
     case 0x10d1: draw_text(r[R_SI], r[R_DX] & 0xff, r[R_DI]); return 1;
     case 0x14a7: draw_cursor(r[R_DI]); return 1;
@@ -90,8 +91,8 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x40c0:
         if (getenv("POPCORN_DEBUG_RNG"))
             fprintf(stderr, "rng: ticks=%u stir0=%04x state=%04x dl=%02x\n",
-                    io_ticks(), (unsigned)(g_image[0x3164] |
-                    g_image[0x3165] << 8), (unsigned)(g_image[0x33d2] |
+                    io_ticks(), (uint32_t)(g_image[0x3164] |
+                    g_image[0x3165] << 8), (uint32_t)(g_image[0x33d2] |
                     g_image[0x33d3] << 8), r[R_DX] & 0xff);
         g_result = game_random(io_ticks(), r[R_DX] & 0xff);
         return 1;
@@ -176,7 +177,7 @@ static int dispatch(unsigned routine, const unsigned short *r)
         walker_draw(r[R_CX] & 0xff);
         return 1;
     case 0x0c64:                        /* draw_char(al, di) */
-        draw_char((unsigned char)(r[R_AX] & 0xff), r[R_DI]);
+        draw_char((uint8_t)(r[R_AX] & 0xff), r[R_DI]);
         return 1;
     case 0x1712:                        /* input_keyboard, no arguments */
         input_keyboard();
@@ -317,12 +318,12 @@ static int dispatch(unsigned routine, const unsigned short *r)
         morph_step(r[R_BX]);
         return 1;
     case 0x3bf7: {                      /* bonus_steer(bx, &x, &y) */
-        unsigned x = 0, y = 0;
+        uint32_t x = 0, y = 0;
         g_result = bonus_steer(r[R_BX], &x, &y);
         return 1;
     }
     case 0x3c35: {                      /* bonus_script(bx, &x, &y) */
-        unsigned x = 0, y = 0;
+        uint32_t x = 0, y = 0;
         g_result = bonus_script(r[R_BX], &x, &y);
         return 1;
     }
@@ -348,7 +349,7 @@ static int dispatch(unsigned routine, const unsigned short *r)
         cheat_match(r[R_AX] & 0xff);
         return 1;
     case 0x538d: {                      /* tall_sprite(si, di) */
-        unsigned si = r[R_SI];
+        uint32_t si = r[R_SI];
         g_result = tall_sprite(&si, r[R_DI]);
         return 1;
     }
@@ -374,23 +375,23 @@ static int dispatch(unsigned routine, const unsigned short *r)
         input_demo();
         return 1;
     case 0x58b3:                        /* cheat_sequence(al) */
-        g_result = cheat_sequence((unsigned char)(r[R_AX] & 0xff));
+        g_result = cheat_sequence((uint8_t)(r[R_AX] & 0xff));
         return 1;
     default:
         return 0;
     }
 }
 
-static int rd32(FILE *f, unsigned *out)
+static int32_t rd32(FILE *f, uint32_t *out)
 {
-    unsigned char b[4];
+    uint8_t b[4];
     if (fread(b, 1, 4, f) != 4)
         return 0;
     *out = b[0] | b[1] << 8 | b[2] << 16 | b[3] << 24;
     return 1;
 }
 
-int verify_main(const char *in_path, const char *out_path)
+int32_t verify_main(const char *in_path, const char *out_path)
 {
     FILE *f = fopen(in_path, "rb");
     if (!f) {
@@ -398,9 +399,9 @@ int verify_main(const char *in_path, const char *out_path)
         return 1;
     }
     char magic[4];
-    unsigned routine, image_len, vram_len, ticks;
-    unsigned short regs[R_COUNT];
-    unsigned char rb[R_COUNT * 2];
+    uint32_t routine, image_len, vram_len, ticks;
+    uint16_t regs[R_COUNT];
+    uint8_t rb[R_COUNT * 2];
     if (fread(magic, 1, 4, f) != 4 || memcmp(magic, "PVS2", 4) ||
         !rd32(f, &routine) || fread(rb, 1, sizeof rb, f) != sizeof rb ||
         !rd32(f, &ticks) || !rd32(f, &image_len)) {
@@ -408,8 +409,8 @@ int verify_main(const char *in_path, const char *out_path)
         fclose(f);
         return 1;
     }
-    for (int i = 0; i < R_COUNT; i++)
-        regs[i] = (unsigned short)(rb[i * 2] | rb[i * 2 + 1] << 8);
+    for (int32_t i = 0; i < R_COUNT; i++)
+        regs[i] = (uint16_t)(rb[i * 2] | rb[i * 2 + 1] << 8);
     io_set_ticks(ticks);
 
     g_image = malloc(image_len);
@@ -438,10 +439,10 @@ int verify_main(const char *in_path, const char *out_path)
     }
     fwrite(g_image, 1, image_len, o);
     fwrite(g_vram, 1, CGA_SIZE, o);
-    unsigned char res[5];
+    uint8_t res[5];
     res[0] = g_result >= 0;
-    res[1] = (unsigned char)(g_result & 0xff);
-    res[2] = (unsigned char)((g_result >> 8) & 0xff);
+    res[1] = (uint8_t)(g_result & 0xff);
+    res[2] = (uint8_t)((g_result >> 8) & 0xff);
     res[3] = res[4] = 0;
     fwrite(res, 1, sizeof res, o);
     fclose(o);

@@ -22,6 +22,7 @@
  * program's own unpacker stub under an emulator - that is the reference, and
  * ../validate.py proves the two agree.
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,9 +31,9 @@
 
 #define EXEPACK_SIG 0x4252u             /* 'RB' */
 
-static unsigned rd16(const unsigned char *p) { return p[0] | (p[1] << 8); }
+static uint32_t rd16(const uint8_t *p) { return p[0] | (p[1] << 8); }
 
-unsigned char *exepack_load(const char *path, size_t *out_len)
+uint8_t *exepack_load(const char *path, size_t *out_len)
 {
     FILE *f = fopen(path, "rb");
     if (!f) {
@@ -40,11 +41,11 @@ unsigned char *exepack_load(const char *path, size_t *out_len)
         return NULL;
     }
     if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return NULL; }
-    long file_len = ftell(f);
+    int64_t file_len = ftell(f);
     rewind(f);
     if (file_len < 0x40) { fclose(f); return NULL; }
 
-    unsigned char *file = malloc((size_t)file_len);
+    uint8_t *file = malloc((size_t)file_len);
     if (!file || fread(file, 1, (size_t)file_len, f) != (size_t)file_len) {
         fclose(f);
         free(file);
@@ -57,16 +58,16 @@ unsigned char *exepack_load(const char *path, size_t *out_len)
         free(file);
         return NULL;
     }
-    unsigned cblp = rd16(file + 2), cp = rd16(file + 4);
-    unsigned hdr = rd16(file + 8) * 16u;
-    unsigned ip = rd16(file + 20), cs = rd16(file + 22);
+    uint32_t cblp = rd16(file + 2), cp = rd16(file + 4);
+    uint32_t hdr = rd16(file + 8) * 16u;
+    uint32_t ip = rd16(file + 20), cs = rd16(file + 22);
     size_t img_len = (cblp ? (size_t)(cp - 1) * 512 + cblp : (size_t)cp * 512);
     if (img_len > (size_t)file_len || hdr >= img_len) {
         fprintf(stderr, "popcorn: %s has a malformed MZ header\n", path);
         free(file);
         return NULL;
     }
-    unsigned char *img = file + hdr;
+    uint8_t *img = file + hdr;
     size_t packed_end = (size_t)cs * 16;      /* the stub starts here */
 
     /* The signature sits a fixed distance from the end of the header, and two
@@ -91,7 +92,7 @@ unsigned char *exepack_load(const char *path, size_t *out_len)
                         "%#zx\n", ip, hsize);
 
     size_t dest_len = (size_t)rd16(img + packed_end + 12) * 16;
-    unsigned char *out = calloc(1, dest_len ? dest_len : 1);
+    uint8_t *out = calloc(1, dest_len ? dest_len : 1);
     if (!out) { free(file); return NULL; }
 
     /* Decode backwards: source walks down from the last non-padding byte of
@@ -100,15 +101,15 @@ unsigned char *exepack_load(const char *path, size_t *out_len)
     while (src > 0 && img[src - 1] == 0xff)
         src--;
     size_t dp = dest_len;
-    int ok = 0;
+    int32_t ok = 0;
 
     while (src >= 3) {
-        unsigned cmd = img[--src];
-        unsigned len = (unsigned)img[src - 1] << 8 | img[src - 2];
+        uint32_t cmd = img[--src];
+        uint32_t len = (uint32_t)img[src - 1] << 8 | img[src - 2];
         src -= 2;
         if ((cmd & 0xfe) == 0xb0) {                  /* run of one byte */
             if (src < 1 || dp < len) break;
-            unsigned char b = img[--src];
+            uint8_t b = img[--src];
             dp -= len;
             memset(out + dp, b, len);
         } else if ((cmd & 0xfe) == 0xb2) {           /* literal copy */

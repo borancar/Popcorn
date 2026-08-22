@@ -26,24 +26,39 @@
  * started, and every io_ call that would have waited or presented returns at
  * once, so a frame costs what the C costs and nothing else.
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "game.h"
 
-static int active;
-static unsigned ls_frame;
-static unsigned ls_mouse_x, ls_mouse_btn;
+static int32_t active;
 
-int io_lockstep(void) { return active; }
-unsigned io_lockstep_mouse_x(void) { return ls_mouse_x; }
-unsigned io_lockstep_buttons(void) { return ls_mouse_btn; }
-void io_lockstep_warp(unsigned x) { ls_mouse_x = x; }
+/* Every game_random of the frame, in order, by the modulus it was asked for.
+ * The modulus identifies the caller well enough to line the two sides up: 4
+ * and 0x3d are bonus_steer's kind and duration, 0x86 the spawn gate, 7 the
+ * ball bounce. Sent with the frame so it arrives in step with it. */
+#define DRAWS_MAX 256
+static uint16_t draws[DRAWS_MAX];
+static uint32_t draw_n;
 
-static void put32(unsigned v)
+void io_log_random(uint32_t dl)
 {
-    unsigned char b[4] = { v & 0xff, v >> 8 & 0xff, v >> 16 & 0xff, v >> 24 };
+    if (active && draw_n < DRAWS_MAX)
+        draws[draw_n++] = (uint16_t)dl;
+}
+static uint32_t ls_frame;
+static uint32_t ls_mouse_x, ls_mouse_btn;
+
+int32_t io_lockstep(void) { return active; }
+uint32_t io_lockstep_mouse_x(void) { return ls_mouse_x; }
+uint32_t io_lockstep_buttons(void) { return ls_mouse_btn; }
+void io_lockstep_warp(uint32_t x) { ls_mouse_x = x; }
+
+static void put32(uint32_t v)
+{
+    uint8_t b[4] = { v & 0xff, v >> 8 & 0xff, v >> 16 & 0xff, v >> 24 };
     fwrite(b, 1, 4, stdout);
 }
 
@@ -57,14 +72,20 @@ void io_frame_sync(void)
     fwrite(g_image, 1, IMAGE_LEN, stdout);
     put32(CGA_SIZE);
     fwrite(g_vram, 1, CGA_SIZE, stdout);
+    put32(draw_n);
+    for (uint32_t i = 0; i < draw_n; i++) {
+        uint8_t b[2] = { draws[i] & 0xff, draws[i] >> 8 };
+        fwrite(b, 1, 2, stdout);
+    }
+    draw_n = 0;
     fflush(stdout);
 
-    unsigned char cmd[12];
+    uint8_t cmd[12];
     if (fread(cmd, 1, sizeof cmd, stdin) != sizeof cmd)
         exit(0);                        /* the driver has finished with us */
     ls_mouse_x   = cmd[0] | cmd[1] << 8;
     ls_mouse_btn = cmd[2] | cmd[3] << 8;
-    io_set_ticks(cmd[4] | cmd[5] << 8 | cmd[6] << 16 | (unsigned)cmd[7] << 24);
+    io_set_ticks(cmd[4] | cmd[5] << 8 | cmd[6] << 16 | (uint32_t)cmd[7] << 24);
     if (cmd[8])
         exit(0);
     ls_frame++;
@@ -73,16 +94,16 @@ void io_frame_sync(void)
 /* The same PVS2 state file verify.py writes, minus the parts only a single
  * routine needs: what matters here is the image, the screen and the tick
  * count the PRNG is seeded from. */
-static int rd32(FILE *f, unsigned *out)
+static int32_t rd32(FILE *f, uint32_t *out)
 {
-    unsigned char b[4];
+    uint8_t b[4];
     if (fread(b, 1, 4, f) != 4)
         return 0;
-    *out = b[0] | b[1] << 8 | b[2] << 16 | (unsigned)b[3] << 24;
+    *out = b[0] | b[1] << 8 | b[2] << 16 | (uint32_t)b[3] << 24;
     return 1;
 }
 
-int lockstep_main(const char *state_path)
+int32_t lockstep_main(const char *state_path)
 {
     FILE *f = fopen(state_path, "rb");
     if (!f) {
@@ -90,8 +111,8 @@ int lockstep_main(const char *state_path)
         return 1;
     }
     char magic[4];
-    unsigned routine, ticks, image_len, vram_len;
-    unsigned char regs[20];
+    uint32_t routine, ticks, image_len, vram_len;
+    uint8_t regs[20];
     if (fread(magic, 1, 4, f) != 4 || memcmp(magic, "PVS2", 4) ||
         !rd32(f, &routine) || fread(regs, 1, sizeof regs, f) != sizeof regs ||
         !rd32(f, &ticks) || !rd32(f, &image_len)) {
@@ -117,13 +138,13 @@ int lockstep_main(const char *state_path)
      * doing waits out the whole timeout while the emulator serves at once -
      * and the two are a hundred frames apart before the first comparison. */
     {
-        unsigned char cmd[12];
+        uint8_t cmd[12];
         if (fread(cmd, 1, sizeof cmd, stdin) != sizeof cmd)
             return 0;
         ls_mouse_x   = cmd[0] | cmd[1] << 8;
         ls_mouse_btn = cmd[2] | cmd[3] << 8;
         io_set_ticks(cmd[4] | cmd[5] << 8 | cmd[6] << 16 |
-                     (unsigned)cmd[7] << 24);
+                     (uint32_t)cmd[7] << 24);
     }
     play_loop();                        /* 1ac2:1873 */
     return 0;

@@ -7,6 +7,7 @@
  * it recovered, which is how the C unpacker is checked against the Python one
  * (they must agree byte for byte; see ../validate.py).
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,17 +33,17 @@ static const char *find_exe(void)
     return NULL;
 }
 
-int main(int argc, char **argv)
+int32_t main(int32_t argc, char **argv)
 {
     const char *dump = NULL;
-    int scale = 3;
-    unsigned speed = 0;          /* as if POPSPEED had never been run */
-    unsigned run_ms = 0;
+    int32_t scale = 3;
+    uint32_t speed = 0;          /* as if POPSPEED had never been run */
+    uint32_t run_ms = 0;
     const char *shot = NULL;
     const char *vram = NULL;
     const char *keys = NULL;
     const char *lockstep = NULL;
-    for (int i = 1; i < argc; i++) {
+    for (int32_t i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--lockstep") && i + 1 < argc)
             lockstep = argv[++i];
         else if (!strcmp(argv[i], "--verify") && i + 2 < argc)
@@ -52,9 +53,9 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc)
             scale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--speed") && i + 1 < argc)
-            speed = (unsigned)atoi(argv[++i]);
+            speed = (uint32_t)atoi(argv[++i]);
         else if (!strcmp(argv[i], "--run-ms") && i + 1 < argc)
-            run_ms = (unsigned)atoi(argv[++i]);
+            run_ms = (uint32_t)atoi(argv[++i]);
         else if (!strcmp(argv[i], "--shot") && i + 1 < argc)
             shot = argv[++i];
         else if (!strcmp(argv[i], "--dump-vram") && i + 1 < argc)
@@ -110,10 +111,10 @@ int main(int argc, char **argv)
     io_set_deadline(run_ms, shot, vram);
     /* --keys 3b@30000,39@34000 : scan code, then when to press it. */
     for (const char *k = keys; k && *k; ) {
-        unsigned scan = (unsigned)strtoul(k, (char **)&k, 16);
+        uint32_t scan = (uint32_t)strtoul(k, (char **)&k, 16);
         if (*k == '@')
             k++;
-        unsigned ms = (unsigned)strtoul(k, (char **)&k, 10);
+        uint32_t ms = (uint32_t)strtoul(k, (char **)&k, 10);
         io_script_key(scan, ms);
         if (*k == ',')
             k++;

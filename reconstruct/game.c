@@ -12,6 +12,7 @@
  * shuffling - and where a routine genuinely cannot be written that way, it is
  * written literally and the comment says why.
  */
+#include <stdint.h>
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,7 +20,7 @@
 
 #include "game.h"
 
-unsigned char *g_image;
+uint8_t *g_image;
 const char *g_dir = "";     /* where the game files are */
 
 /* ------------------------------------------------------------------------
@@ -40,28 +41,28 @@ const char *g_dir = "";     /* where the game files are */
  * position written to +0x00/+0x01 is anchor plus offset.  So +0x18/+0x19 is
  * not where the ball is, and stays put until the next bounce.
  */
-void ball_step(unsigned ball)
+void ball_step(uint32_t ball)
 {
-    unsigned char *b = g_image + ball;
-    unsigned dy = b[B_DY], dx = b[B_DX];
-    unsigned off_x, off_y;
+    uint8_t *b = g_image + ball;
+    uint32_t dy = b[B_DY], dx = b[B_DX];
+    uint32_t off_x, off_y;
 
     if (dx >= dy) {                     /* x is the major axis */
         off_x = b[B_ACC_X];
-        off_y = dy ? (unsigned)(off_x * dy) / dx : 0;
+        off_y = dy ? (uint32_t)(off_x * dy) / dx : 0;
         b[B_ACC_X]++;
     } else {                            /* y is the major axis */
         off_y = b[B_ACC_Y];
-        off_x = dx ? (unsigned)(off_y * dx) / dy : 0;
+        off_x = dx ? (uint32_t)(off_y * dx) / dy : 0;
         b[B_ACC_Y]++;
     }
     /* The direction flags negate each axis independently. The original does
      * this in 8-bit registers and lets the add wrap, which is what keeps a
      * ball at the left wall from running off into high coordinates. */
-    int sx = b[B_DIR_X] ? -(int)off_x : (int)off_x;
-    int sy = b[B_DIR_Y] ? -(int)off_y : (int)off_y;
-    b[B_X] = (unsigned char)(b[B_ANCHOR_X] + sx);
-    b[B_Y] = (unsigned char)(b[B_ANCHOR_Y] + sy);
+    int32_t sx = b[B_DIR_X] ? -(int32_t)off_x : (int32_t)off_x;
+    int32_t sy = b[B_DIR_Y] ? -(int32_t)off_y : (int32_t)off_y;
+    b[B_X] = (uint8_t)(b[B_ANCHOR_X] + sx);
+    b[B_Y] = (uint8_t)(b[B_ANCHOR_Y] + sy);
 }
 
 /* ------------------------------------------------------------------------
@@ -93,7 +94,7 @@ void input_keyboard(void)
         g_image[REPEAT_DIV]--;
     g_image[REPEAT_COUNT] = g_image[REPEAT_DIV];
 
-    int go_left = g_image[KEY_LEFT] != 0;
+    int32_t go_left = g_image[KEY_LEFT] != 0;
     if (g_image[KEY_LEFT] == g_image[KEY_RIGHT]) {
         if (!g_image[KEY_LEFT]) {              /* neither key held */
             g_image[REPEAT_COUNT] = REPEAT_RESET;
@@ -111,12 +112,12 @@ void input_keyboard(void)
      * never comes up because x never gets below the minimum in the first
      * place. Transcribed as it is rather than as it should be. */
     if (!go_left) {
-        unsigned char x = (unsigned char)(g_image[PADDLE_X] + 1);
+        uint8_t x = (uint8_t)(g_image[PADDLE_X] + 1);
         if (x > g_image[PADDLE_MAX])
             x = g_image[PADDLE_MAX];
         g_image[PADDLE_X] = x;
     } else {
-        unsigned char x = (unsigned char)(g_image[PADDLE_X] - 1);
+        uint8_t x = (uint8_t)(g_image[PADDLE_X] - 1);
         if (x < g_image[PADDLE_MIN])
             x = g_image[PADDLE_MIN];
         g_image[PADDLE_X] = x;
@@ -137,11 +138,11 @@ void input_keyboard(void)
  * not saturated.  Kept here because a pointer beyond 510 would wrap rather
  * than pin to the right wall, and that is the game's behaviour.
  */
-void input_mouse(unsigned mouse_x, unsigned buttons)
+void input_mouse(uint32_t mouse_x, uint32_t buttons)
 {
     g_image[KEY_ACTION] = (buttons & 3) ? 1 : 0;
 
-    unsigned char x = (unsigned char)((mouse_x >> 1) & 0xff);
+    uint8_t x = (uint8_t)((mouse_x >> 1) & 0xff);
     if (x > g_image[PADDLE_MAX])
         x = g_image[PADDLE_MAX];
     else if (x < g_image[PADDLE_MIN])
@@ -211,10 +212,10 @@ void restore_screen(void)
 #define PADDLE_BYTES        11          /* five words and a byte: 44 pixels */
 #define PADDLE_IMAGE      0x4d          /* PADDLE_ROWS * PADDLE_BYTES */
 
-void paddle_row_offsets(unsigned x, unsigned rows_out)
+void paddle_row_offsets(uint32_t x, uint32_t rows_out)
 {
-    unsigned off = (x >> 2) + PADDLE_ROW_BASE;
-    for (int r = 0; r < PADDLE_ROWS; r++) {
+    uint32_t off = (x >> 2) + PADDLE_ROW_BASE;
+    for (int32_t r = 0; r < PADDLE_ROWS; r++) {
         img_setw(rows_out + r * 2, off);
         off = cga_next_row(off);
     }
@@ -227,11 +228,11 @@ void paddle_row_offsets(unsigned x, unsigned rows_out)
  * interrupts off, because it writes CGA memory without waiting for retrace and
  * a timer tick in the middle would show as a tear.
  */
-void blit_xor(unsigned pixels, unsigned rows)
+void blit_xor(uint32_t pixels, uint32_t rows)
 {
-    for (int r = 0; r < PADDLE_ROWS; r++) {
-        unsigned di = img_w(rows + r * 2);
-        for (int b = 0; b < PADDLE_BYTES; b++)
+    for (int32_t r = 0; r < PADDLE_ROWS; r++) {
+        uint32_t di = img_w(rows + r * 2);
+        for (int32_t b = 0; b < PADDLE_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] ^=
                 g_image[pixels + r * PADDLE_BYTES + b];
     }
@@ -254,7 +255,7 @@ void blit_xor(unsigned pixels, unsigned rows)
 #define PADDLE_PIX_CUR     0x2d8c       /* PADDLE_IMAGE bytes */
 #define PADDLE_PIX_PREV    0x2ddc
 
-void draw_paddle(unsigned sprite)
+void draw_paddle(uint32_t sprite)
 {
     if (!g_image[PADDLE_FORCE_DRAW] &&
         g_image[PADDLE_X] == g_image[PADDLE_PREV_X])
@@ -277,8 +278,8 @@ void draw_paddle(unsigned sprite)
     memcpy(g_image + PADDLE_PIX_PREV, g_image + PADDLE_PIX_CUR,
            PADDLE_IMAGE + 1);
 
-    unsigned x = g_image[PADDLE_X];
-    g_image[PADDLE_PREV_X] = (unsigned char)x;
+    uint32_t x = g_image[PADDLE_X];
+    g_image[PADDLE_PREV_X] = (uint8_t)x;
     paddle_row_offsets(x, PADDLE_ROWS_CUR);
 
     /* Pick the copy pre-shifted to this pixel within its byte. */
@@ -306,7 +307,7 @@ void draw_paddle(unsigned sprite)
 #define FONT_ROWS      12
 #define FONT_GLYPH     24
 
-static unsigned glyph_of(unsigned char c)
+static uint32_t glyph_of(uint8_t c)
 {
     if (c == ':')  return 0x26;
     if (c == 0xff) return 0x27;         /* the text-entry cursor */
@@ -316,10 +317,10 @@ static unsigned glyph_of(unsigned char c)
     return 0;                           /* space, and everything unmapped */
 }
 
-void draw_char(unsigned char c, unsigned di)
+void draw_char(uint8_t c, uint32_t di)
 {
-    const unsigned char *g = g_image + FONT + glyph_of(c) * FONT_GLYPH;
-    for (int r = 0; r < FONT_ROWS; r++) {
+    const uint8_t *g = g_image + FONT + glyph_of(c) * FONT_GLYPH;
+    for (int32_t r = 0; r < FONT_ROWS; r++) {
         g_vram[di & (CGA_SIZE - 1)] = g[r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] = g[r * 2 + 1];
         di = cga_next_row(di);
@@ -341,17 +342,18 @@ void draw_char(unsigned char c, unsigned di)
 #define RNG_STIR   0x3164               /* ten words folded in */
 #define RNG_STATE  0x33d2
 
-unsigned game_random(unsigned ticks, unsigned limit)
+uint32_t game_random(uint32_t ticks, uint32_t limit)
 {
-    unsigned ax = ticks & 0xffff;
-    for (int i = 0; i < 10; i++)
+    io_log_random(limit);               /* for sidebyside.py, no-op otherwise */
+    uint32_t ax = ticks & 0xffff;
+    for (int32_t i = 0; i < 10; i++)
         ax = (ax + img_w(RNG_STIR + i * 2)) & 0xffff;
     ax = (ax + img_w(RNG_STATE)) & 0xffff;
     img_setw(RNG_STATE, (img_w(RNG_STATE) + 0x5ec5) & 0xffff);
 
     /* `add al,ah` then `xor ah,ah` then `div dl`: folded to eight bits before
      * the divide, so the result really is only ever 0..255 wide. */
-    unsigned al = ((ax & 0xff) + (ax >> 8)) & 0xff;
+    uint32_t al = ((ax & 0xff) + (ax >> 8)) & 0xff;
     return limit ? al % limit : 0;
 }
 
@@ -371,7 +373,7 @@ unsigned game_random(unsigned ticks, unsigned limit)
 #define DELAY_ENTRY    (CS_BASE + 0x164c) /* patched to 0xc3 to disable */
 #define DELAY_COUNT    (CS_BASE + 0x164e) /* the `mov cx,N` immediate */
 
-static int g_speaker_on;
+static int32_t g_speaker_on;
 
 /* 1ac2:0085 and 1ac2:0090  speaker_on / speaker_off
  *
@@ -397,7 +399,7 @@ void speaker_off(void) { g_speaker_on = 0; io_sound(0); }
  */
 void sound_tick(void)
 {
-    unsigned char req = g_image[SOUND_REQUEST];
+    uint8_t req = g_image[SOUND_REQUEST];
 
     if (req) {
         g_image[SOUND_REQUEST] = 0;
@@ -414,14 +416,14 @@ void sound_tick(void)
      * 0x1e and so on - because that is where the note data sits and DS is set
      * to the code segment at the top of the routine. Reading them as plain
      * image offsets lands in the sprite data and plays whatever is there. */
-    unsigned si = img_w(SOUND_PTR);
-    unsigned note = img_w(CS_BASE + si);
+    uint32_t si = img_w(SOUND_PTR);
+    uint32_t note = img_w(CS_BASE + si);
     if (note == 0) {                    /* end of tune */
         speaker_off();
         return;
     }
     img_setw(SOUND_PTR, si + 2);
-    g_image[SOUND_TIMER] = (unsigned char)(note >> 8);
+    g_image[SOUND_TIMER] = (uint8_t)(note >> 8);
     io_sound(((note & 0xff) << 8) | 1);
 }
 
@@ -460,7 +462,7 @@ void game_delay(void)
  * Nothing sets that vector under the port, so `speed` comes from the command
  * line or defaults the way an unrun POPSPEED would.
  */
-void read_speed_setting(unsigned speed)
+void read_speed_setting(uint32_t speed)
 {
     if (speed == 1) {
         g_image[DELAY_ENTRY] = 0xc3;
@@ -490,19 +492,19 @@ void read_speed_setting(unsigned speed)
 
 void build_shifted_sprites(void)
 {
-    unsigned bp = SPRITE_BASE;
-    for (int set = 0; set < SPRITE_SETS; set++, bp += SPRITE_SET_LEN) {
-        unsigned si = bp;
-        for (int shift = 0; shift < 3; shift++, si += PADDLE_IMAGE) {
-            unsigned di = si + PADDLE_IMAGE;
+    uint32_t bp = SPRITE_BASE;
+    for (int32_t set = 0; set < SPRITE_SETS; set++, bp += SPRITE_SET_LEN) {
+        uint32_t si = bp;
+        for (int32_t shift = 0; shift < 3; shift++, si += PADDLE_IMAGE) {
+            uint32_t di = si + PADDLE_IMAGE;
             memcpy(g_image + di, g_image + si, PADDLE_IMAGE);
-            for (int row = 0; row < PADDLE_ROWS; row++) {
-                unsigned r = di + row * PADDLE_BYTES;
-                for (int twice = 0; twice < 2; twice++) {
-                    unsigned carry = 0;
-                    for (int b = 0; b < PADDLE_BYTES; b++) {
-                        unsigned v = g_image[r + b];
-                        g_image[r + b] = (unsigned char)((v >> 1) | (carry << 7));
+            for (int32_t row = 0; row < PADDLE_ROWS; row++) {
+                uint32_t r = di + row * PADDLE_BYTES;
+                for (int32_t twice = 0; twice < 2; twice++) {
+                    uint32_t carry = 0;
+                    for (int32_t b = 0; b < PADDLE_BYTES; b++) {
+                        uint32_t v = g_image[r + b];
+                        g_image[r + b] = (uint8_t)((v >> 1) | (carry << 7));
                         carry = v & 1;
                     }
                 }
@@ -571,23 +573,23 @@ void load_high_scores(const char *dir)
 
 void intro_curtain(void)
 {
-    unsigned ah = 0, dl = 0xff, di0 = 0x213f;
+    uint32_t ah = 0, dl = 0xff, di0 = 0x213f;
 
-    for (int bx = 0x1a; bx > 0; bx--, di0--) {
+    for (int32_t bx = 0x1a; bx > 0; bx--, di0--) {
         ah = 0;
-        for (int dh = 4; dh > 0; dh--) {
-            for (int i = 0; i < 0x32; i++)
+        for (int32_t dh = 4; dh > 0; dh--) {
+            for (int32_t i = 0; i < 0x32; i++)
                 game_delay();
             ah = ((ah << 2) | 3) & 0xff;        /* two `stc; rcl ah,1` */
-            unsigned al = 0x55 & ah;
+            uint32_t al = 0x55 & ah;
 
             io_wait_retrace();
-            unsigned di = di0;
-            for (int cx = 0x31; cx > 0; cx--, di += 0x50)
-                g_vram[di & (CGA_SIZE - 1)] = (unsigned char)al;
+            uint32_t di = di0;
+            for (int32_t cx = 0x31; cx > 0; cx--, di += 0x50)
+                g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
             di = (di0 - 0x1fb0) & 0xffff;
-            for (int cx = 0x31; cx > 0; cx--, di += 0x50)
-                g_vram[di & (CGA_SIZE - 1)] = (unsigned char)al;
+            for (int32_t cx = 0x31; cx > 0; cx--, di += 0x50)
+                g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
 
             if (bx == 1) {
                 /* The last column is drawn a second time from `dl`, which is
@@ -595,43 +597,43 @@ void intro_curtain(void)
                 dl = (dl << 2) & 0xff;
                 al = 0x55 & dl;
                 di = 0x213f;
-                for (int cx = 0x31; cx > 0; cx--, di += 0x50)
-                    g_vram[di & (CGA_SIZE - 1)] = (unsigned char)al;
+                for (int32_t cx = 0x31; cx > 0; cx--, di += 0x50)
+                    g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
                 di = (0x213f - 0x1fb0) & 0xffff;
-                for (int cx = 0x31; cx > 0; cx--, di += 0x50)
-                    g_vram[di & (CGA_SIZE - 1)] = (unsigned char)al;
+                for (int32_t cx = 0x31; cx > 0; cx--, di += 0x50)
+                    g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
             }
         }
     }
-    for (int i = 0; i < 0x32; i++)
+    for (int32_t i = 0; i < 0x32; i++)
         game_delay();
 
-    for (unsigned rows = 1; rows != 0x6a; rows++) {
-        unsigned n = (CURTAIN_ROW * (rows & 0xff)) & 0xffff;
+    for (uint32_t rows = 1; rows != 0x6a; rows++) {
+        uint32_t n = (CURTAIN_ROW * (rows & 0xff)) & 0xffff;
         memcpy(g_image + CURTAIN_WORK, g_image + CURTAIN_SRC - n, n);
 
-        for (unsigned i = 0; i < n && i < 0xbd; i++) {
-            unsigned al = g_image[CURTAIN_WORK + i], out = 0;
-            for (int k = 0; k < 4; k++) {
-                unsigned hi = (al >> 7) & 1;
+        for (uint32_t i = 0; i < n && i < 0xbd; i++) {
+            uint32_t al = g_image[CURTAIN_WORK + i], out = 0;
+            for (int32_t k = 0; k < 4; k++) {
+                uint32_t hi = (al >> 7) & 1;
                 al = (al << 1) & 0xff;
-                unsigned lo = (al >> 7) & 1;
+                uint32_t lo = (al >> 7) & 1;
                 al = (al << 1) & 0xff;
                 out = hi ? (((out << 1) | 1) << 1 | lo) & 0xff
                          : (out << 2) & 0xff;
             }
-            g_image[CURTAIN_WORK + i] = (unsigned char)out;
+            g_image[CURTAIN_WORK + i] = (uint8_t)out;
         }
 
-        unsigned si = CURTAIN_WORK, di = 0x34;
+        uint32_t si = CURTAIN_WORK, di = 0x34;
         io_wait_retrace();
-        for (unsigned r = 0; r < rows; r++) {
-            for (int b = 0; b < CURTAIN_ROW; b++)
+        for (uint32_t r = 0; r < rows; r++) {
+            for (int32_t b = 0; b < CURTAIN_ROW; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
             si += CURTAIN_ROW;
             di = cga_next_row(di);
         }
-        for (int i = 0; i < 0x28; i++)
+        for (int32_t i = 0; i < 0x28; i++)
             game_delay();
     }
 }
@@ -648,12 +650,12 @@ void intro_curtain(void)
  * backwards, so the source pointer runs continuously up through the image
  * while the destination steps one scan line at a time.
  */
-static void logo_pass(unsigned src, unsigned di0, int rows, int erase, int back)
+static void logo_pass(uint32_t src, uint32_t di0, int32_t rows, int32_t erase, int32_t back)
 {
-    unsigned si = src, di = di0;
-    for (int n = rows; n > 0; n--) {
-        unsigned bx = di;
-        for (int i = 0; i < 12; i++) {          /* 12 words */
+    uint32_t si = src, di = di0;
+    for (int32_t n = rows; n > 0; n--) {
+        uint32_t bx = di;
+        for (int32_t i = 0; i < 12; i++) {          /* 12 words */
             /* `movsw` copies the word **at** si and si+1 and *then* steps
              * both pointers - by +2 with the direction flag clear, by -2 with
              * it set. Writing at si-1 and si-2 for the backward case instead
@@ -670,9 +672,9 @@ static void logo_pass(unsigned src, unsigned di0, int rows, int erase, int back)
         /* The white bar that trails the slice. Backwards it starts four bytes
          * behind the row and walks down; forwards it starts at the row and
          * walks up. Twenty bytes either way. */
-        unsigned w = back ? di - 4 : di;
-        for (int i = 0; i < 10; i++) {
-            unsigned a = w & (CGA_SIZE - 1), b = (w + 1) & (CGA_SIZE - 1);
+        uint32_t w = back ? di - 4 : di;
+        for (int32_t i = 0; i < 10; i++) {
+            uint32_t a = w & (CGA_SIZE - 1), b = (w + 1) & (CGA_SIZE - 1);
             if (erase) {
                 g_vram[a] ^= 0xff;
                 g_vram[b] ^= 0xff;
@@ -683,7 +685,7 @@ static void logo_pass(unsigned src, unsigned di0, int rows, int erase, int back)
             w = back ? w - 2 : w + 2;
         }
         di = bx;
-        for (int i = 0; i < 0x32; i++)
+        for (int32_t i = 0; i < 0x32; i++)
             game_delay();
     }
 }
@@ -707,34 +709,34 @@ void intro_logo(void)
  */
 void intro_reveal(void)
 {
-    unsigned bx0 = 0x230;
-    for (int dl = 0x34; dl > 0; dl--, bx0++) {
-        unsigned al = 0xc0;
-        unsigned di0 = bx0;
-        for (int dh = 4; dh > 0; dh--) {
+    uint32_t bx0 = 0x230;
+    for (int32_t dl = 0x34; dl > 0; dl--, bx0++) {
+        uint32_t al = 0xc0;
+        uint32_t di0 = bx0;
+        for (int32_t dh = 4; dh > 0; dh--) {
             al &= 0x55;
-            unsigned di = di0;
-            for (int cl = 7; cl > 0; cl--, di += 0x370)
-                g_vram[di & (CGA_SIZE - 1)] = (unsigned char)al;
-            for (int i = 0; i < 0x19; i++)
+            uint32_t di = di0;
+            for (int32_t cl = 7; cl > 0; cl--, di += 0x370)
+                g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
+            for (int32_t i = 0; i < 0x19; i++)
                 game_delay();
             al = ((al >> 1) | 0x80) & 0xff;     /* stc; rcr al,1 */
             al = ((al >> 1) | 0x80) & 0xff;
         }
     }
 
-    unsigned si0 = SEG_C46 + 0x4db7, bp = 0xa0;
-    for (int dh = 7; dh > 0; dh--, si0 += 0x444, bp += 0x370) {
-        for (unsigned bx = 1; bx < 0x35; bx++) {
-            unsigned si = si0 - (bx - 1), di = bp;
+    uint32_t si0 = SEG_C46 + 0x4db7, bp = 0xa0;
+    for (int32_t dh = 7; dh > 0; dh--, si0 += 0x444, bp += 0x370) {
+        for (uint32_t bx = 1; bx < 0x35; bx++) {
+            uint32_t si = si0 - (bx - 1), di = bp;
             io_wait_retrace();
-            for (int dl = 0x15; dl > 0; dl--) {
-                for (unsigned i = 0; i < bx; i++)
+            for (int32_t dl = 0x15; dl > 0; dl--) {
+                for (uint32_t i = 0; i < bx; i++)
                     g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[si + i];
                 si += 0x34;
                 di = cga_next_row(di);
             }
-            for (int i = 0; i < 0x0a; i++)
+            for (int32_t i = 0; i < 0x0a; i++)
                 game_delay();
         }
     }
@@ -748,21 +750,21 @@ void intro_reveal(void)
  */
 void intro_scroll(void)
 {
-    unsigned bp = SEG_C46 + 0x488a;
-    for (int bl = 0x1a; bl > 0; bl--) {
-        unsigned di = 0x1b33;
+    uint32_t bp = SEG_C46 + 0x488a;
+    for (int32_t bl = 0x1a; bl > 0; bl--) {
+        uint32_t di = 0x1b33;
         io_wait_retrace();
-        for (int bh = 0x19; bh > 0; bh--) {
-            unsigned src = cga_next_row(di);
-            for (int i = 0; i < 0x31; i++)
+        for (int32_t bh = 0x19; bh > 0; bh--) {
+            uint32_t src = cga_next_row(di);
+            for (int32_t i = 0; i < 0x31; i++)
                 g_vram[(di + i) & (CGA_SIZE - 1)] =
                     g_vram[(src + i) & (CGA_SIZE - 1)];
             di = src;
         }
-        for (int i = 0; i < 0x31; i++)
+        for (int32_t i = 0; i < 0x31; i++)
             g_vram[(0x3ef3 + i) & (CGA_SIZE - 1)] = g_image[bp + i];
         bp += 0x31;
-        for (int i = 0; i < 0x19; i++)
+        for (int32_t i = 0; i < 0x19; i++)
             game_delay();
     }
 }
@@ -829,7 +831,7 @@ static void menu_redraw(void)
     img_setw(BANNER_PTR, 0x3f1e);
 }
 
-void game_main(const char *dir, unsigned speed)
+void game_main(const char *dir, uint32_t speed)
 {
     read_speed_setting(speed);
     img_setw(INPUT_SELECTED, INPUT_KEYBOARD);
@@ -848,7 +850,7 @@ void game_main(const char *dir, unsigned speed)
 
     for (;;) {
         menu_redraw();
-        int back_to_menu = 0;
+        int32_t back_to_menu = 0;
         while (!back_to_menu) {
             if (!io_pump())
                 return;
@@ -869,7 +871,7 @@ void game_main(const char *dir, unsigned speed)
                 continue;
             }
 
-            unsigned key = io_get_key();
+            uint32_t key = io_get_key();
             switch (key >> 8) {
             case 0x43:                                  /* F9: sound */
                 g_image[SOUND_ON] ^= 1;
@@ -934,7 +936,7 @@ void game_main(const char *dir, unsigned speed)
             }
             /* Every key also feeds the cheat matcher at 0x5171. */
             if (g_image[0x3f1b] != 1)
-                cheat_match((unsigned char)(key & 0xff));
+                cheat_match((uint8_t)(key & 0xff));
             io_present();
         }
     }
@@ -954,7 +956,7 @@ void game_main(const char *dir, unsigned speed)
  */
 void game_input(void)
 {
-    unsigned which = img_w(INPUT_ACTIVE);
+    uint32_t which = img_w(INPUT_ACTIVE);
     if (which == INPUT_MOUSE)
         input_mouse(io_mouse_x(), io_mouse_buttons());
     else if (which == INPUT_DEMO)
@@ -1011,30 +1013,30 @@ void game_input(void)
 #define SPEED_STEP      0x1485
 #define SPEED_LIMIT     0x1486
 
-static void erase_shot(unsigned pos_var, unsigned reload, unsigned timer)
+static void erase_shot(uint32_t pos_var, uint32_t reload, uint32_t timer)
 {
-    unsigned di = img_w(pos_var);
+    uint32_t di = img_w(pos_var);
     g_vram[di & (CGA_SIZE - 1)] = 0;
     g_vram[(di + 1) & (CGA_SIZE - 1)] = 0;
     di = cga_next_row(di);
     img_setw(pos_var, di);
-    g_image[timer] = (unsigned char)reload;
+    g_image[timer] = (uint8_t)reload;
 }
 
-int play_loop(void)
+int32_t play_loop(void)
 {
     /* The level number, drawn into the header bar as two digits. */
-    unsigned n = (g_image[LEVEL_NUMBER] + 1) & 0xff;
+    uint32_t n = (g_image[LEVEL_NUMBER] + 1) & 0xff;
     img_setw(LEVEL_NUM_TEXT, ((n % 10) << 8 | (n / 10)) + 0x3030);
 
-    unsigned di = 0x177e;
-    for (int i = 0; i < 12; i++, di += 2) {
+    uint32_t di = 0x177e;
+    for (int32_t i = 0; i < 12; i++, di += 2) {
         g_vram[di & (CGA_SIZE - 1)] = 0xaa;
         g_vram[(di + 1) & (CGA_SIZE - 1)] = 0xaa;
     }
     draw_text(0x1407, 0xc, 0x377e);
     di = 0x377e + 0x1e0;
-    for (int i = 0; i < 12; i++, di += 2) {
+    for (int32_t i = 0; i < 12; i++, di += 2) {
         g_vram[di & (CGA_SIZE - 1)] = 0xaa;
         g_vram[(di + 1) & (CGA_SIZE - 1)] = 0xaa;
     }
@@ -1046,8 +1048,8 @@ int play_loop(void)
      * what `rep stosw` advanced; taking it literally walks the wipe left a
      * band a row and leaves the banner on screen under everything else. */
     di = 0x177e;
-    for (int dl = 0xe; dl > 0; dl--) {
-        for (int i = 0; i < 24; i++)
+    for (int32_t dl = 0xe; dl > 0; dl--) {
+        for (int32_t i = 0; i < 24; i++)
             g_vram[(di + i) & (CGA_SIZE - 1)] = 0;
         di = cga_next_row(di);
     }
@@ -1086,7 +1088,7 @@ int play_loop(void)
     g_image[GAME_OVER] = g_image[EXTRA_ON] = g_image[LASER_ON] = 0;
 
     /* The serve: ball 0 on the paddle, the other two idle. */
-    unsigned char *b = g_image + BALLS;
+    uint8_t *b = g_image + BALLS;
     b[0x00] = b[0x02] = 0x70;
     b[0x01] = b[0x03] = 0xb5;
     b[B_DY] = 1;
@@ -1111,7 +1113,7 @@ int play_loop(void)
             img_setw(SERVE_TIMEOUT, img_w(SERVE_TIMEOUT) - 1);
             if (img_w(SERVE_TIMEOUT) == 0)
                 break;
-            for (int i = 0; i < 0xf; i++)
+            for (int32_t i = 0; i < 0xf; i++)
                 game_delay();
             game_input();
             if (g_image[KEY_ACTION] == 1)
@@ -1154,9 +1156,9 @@ int play_loop(void)
         }
 
         if (--g_image[SPEED_STEP] != 0) {
-            for (int i = 0; i < 3; i++) {
-                unsigned ball = BALLS + i * BALL_STRIDE;
-                unsigned char st = g_image[ball + B_STATE];
+            for (int32_t i = 0; i < 3; i++) {
+                uint32_t ball = BALLS + i * BALL_STRIDE;
+                uint8_t st = g_image[ball + B_STATE];
                 if (st == 0 || st >= 3)
                     continue;
                 if (g_image[CAUGHT] == 1 && !ball_on_paddle(ball))
@@ -1180,14 +1182,14 @@ int play_loop(void)
         /* The entity list. [0x3142] trails one node behind so a handler that
          * asks to be removed can be unlinked without walking the list again. */
         img_setw(ENTITY_PREV, 0x3138);
-        unsigned bx = img_w(ENTITY_HEAD);
+        uint32_t bx = img_w(ENTITY_HEAD);
         while (bx != 0xffff) {
             entity_call(bx);
             if (g_image[ENTITY_REMOVE] == 0) {
                 img_setw(ENTITY_PREV, bx);
                 bx = img_w(bx + E_NEXT);
             } else {
-                unsigned next = img_w(bx + E_NEXT);
+                uint32_t next = img_w(bx + E_NEXT);
                 entity_unlink(bx);
                 bx = next;
             }
@@ -1208,7 +1210,7 @@ int play_loop(void)
                 /* One cell off the bar. `stosw` leaves di two on, and the
                  * two `dec di` put it back, so what follows is a plain step
                  * to the next scan line - the bar drains downwards. */
-                unsigned di = img_w(EXTRA_POS);
+                uint32_t di = img_w(EXTRA_POS);
                 img_vram_setw(di, 0);
                 img_setw(EXTRA_POS, cga_next_row(di));
                 img_setw(EXTRA_TIMER, 0x190);
@@ -1220,7 +1222,7 @@ int play_loop(void)
 
         /* A pause that gets shorter as [0x33d6] rises: three passes of 0xb4
          * empty loops, minus one per point of it. */
-        for (int i = 3 - g_image[0x33d6]; i > 0; i--)
+        for (int32_t i = 3 - g_image[0x33d6]; i > 0; i--)
             io_delay_cycles(0xb4 * CYCLES_PER_LOOP);
 
         if (g_image[EXTRA_ON] != 1 && g_image[0x33d5] != 3 &&
@@ -1276,10 +1278,10 @@ void play_session(void)
     g_image[LIVES] = 5;
 
     /* A demo starts on a random level; a game always starts on the first. */
-    unsigned lv = game_random(io_ticks(), 0x1e);
+    uint32_t lv = game_random(io_ticks(), 0x1e);
     if (img_w(INPUT_ACTIVE) != 0x1785)
         lv = 0;
-    g_image[LEVEL_NUMBER] = (unsigned char)lv;
+    g_image[LEVEL_NUMBER] = (uint8_t)lv;
     img_setw(LEVEL_SRC, lv * LEVEL_BYTES + LEVEL_TABLE);
     panel_draw();
 
@@ -1291,7 +1293,7 @@ void play_session(void)
         for (;;) {                              /* one level, retried on death */
             level_intro();                      /* 1ac2:1eb9 */
             for (;;) {
-                int lost = play_loop();
+                int32_t lost = play_loop();
                 speaker_off();
                 if (!lost)
                     goto level_done;
@@ -1327,9 +1329,9 @@ void play_session(void)
  *     if (y & 1) di += 0x2000           odd scan lines live in the far half
  *     di += (y >> 1) * 80               `shl ax,4` then `shl ax,2` twice more
  */
-static unsigned cga_at(unsigned x, unsigned y)
+static uint32_t cga_at(uint32_t x, uint32_t y)
 {
-    unsigned di = x >> 2;
+    uint32_t di = x >> 2;
     if (y & 1)
         di += CGA_PLANE;
     return di + (y >> 1) * CGA_STRIDE;
@@ -1355,23 +1357,23 @@ static unsigned cga_at(unsigned x, unsigned y)
 #define CELL_TABLE  0x3080              /* cell value -> bitmap pointer */
 #define SEG_14A1   0x14a10
 
-void draw_brick_row(unsigned y)
+void draw_brick_row(uint32_t y)
 {
-    unsigned di = cga_at(0, y) + BRICK_LEFT;
-    unsigned row = (y - BRICK_TOP) & 0xff;
-    unsigned sub = (row & 7) * 4;
-    unsigned si = LEVEL_CELLS + 8 + (row >> 3) * BRICK_COLS;
+    uint32_t di = cga_at(0, y) + BRICK_LEFT;
+    uint32_t row = (y - BRICK_TOP) & 0xff;
+    uint32_t sub = (row & 7) * 4;
+    uint32_t si = LEVEL_CELLS + 8 + (row >> 3) * BRICK_COLS;
 
-    for (int c = 0; c < BRICK_COLS; c++, si++, di += BRICK_BYTES) {
-        unsigned cell = g_image[si];
+    for (int32_t c = 0; c < BRICK_COLS; c++, si++, di += BRICK_BYTES) {
+        uint32_t cell = g_image[si];
         if (cell == 0x0c) {
             cell_special(row & 0xff, di);
             continue;
         }
-        unsigned idx = cell * 2;
-        unsigned base = (idx >= 0x30 ? SEG_14A1 : 0) + img_w(CELL_TABLE + idx);
-        const unsigned char *src = g_image + base + sub;
-        for (int b = 0; b < BRICK_BYTES; b++)
+        uint32_t idx = cell * 2;
+        uint32_t base = (idx >= 0x30 ? SEG_14A1 : 0) + img_w(CELL_TABLE + idx);
+        const uint8_t *src = g_image + base + sub;
+        for (int32_t b = 0; b < BRICK_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
     }
 }
@@ -1381,11 +1383,11 @@ void draw_brick_row(unsigned y)
  * Six rows of five bytes at a pixel position - the popcorn kernels the level
  * intro sweeps down the screen.
  */
-void draw_sprite_20x6(unsigned x, unsigned y, unsigned src)
+void draw_sprite_20x6(uint32_t x, uint32_t y, uint32_t src)
 {
-    unsigned di = cga_at(x, y);
-    for (int r = 0; r < 6; r++) {
-        for (int b = 0; b < 5; b++)
+    uint32_t di = cga_at(x, y);
+    for (int32_t r = 0; r < 6; r++) {
+        for (int32_t b = 0; b < 5; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + r * 5 + b];
         di = cga_next_row(di);
     }
@@ -1421,19 +1423,19 @@ void draw_sprite_20x6(unsigned x, unsigned y, unsigned src)
 #define SWEEP_STATE 0x2efc              /* four of (timer, period, sprite) */
 #define SWEEP_X     0x60
 
-static void intro_pause(int n)
+static void intro_pause(int32_t n)
 {
-    for (int i = 0; i < n; i++)
+    for (int32_t i = 0; i < n; i++)
         game_delay();                   /* 1ac2:164c */
 }
 
 void level_intro(void)
 {
     /* The panel scrolls up, a fresh row feeding in at the bottom. */
-    unsigned si = 0x6d9f;
-    for (int bl = 8; bl > 0; bl--) {
+    uint32_t si = 0x6d9f;
+    for (int32_t bl = 8; bl > 0; bl--) {
         scroll_up_band();               /* 1ac2:2109 */
-        for (int i = 0; i < 0x18 * 2; i++)
+        for (int32_t i = 0; i < 0x18 * 2; i++)
             g_vram[(0x3ef2 + i) & (CGA_SIZE - 1)] = g_image[si + i];
         si += 0x18 * 2;
         io_delay_cycles(0x7d0 * CYCLES_PER_LOOP);
@@ -1442,9 +1444,9 @@ void level_intro(void)
             return;
     }
     si = 0x6d36;
-    for (int bl = 0x13; bl > 0; bl--) {
+    for (int32_t bl = 0x13; bl > 0; bl--) {
         scroll_up_band();
-        for (int i = 0; i < 5; i++)
+        for (int32_t i = 0; i < 5; i++)
             g_vram[(0x3f08 + i) & (CGA_SIZE - 1)] = g_image[si + i];
         si += 5;
         io_delay_cycles(0x8fc * CYCLES_PER_LOOP);
@@ -1461,8 +1463,8 @@ void level_intro(void)
     /* Up the screen, laying the backdrop over what was there. */
     while (g_image[SWEEP_Y] != 0x0c) {
         field_backdrop((g_image[SWEEP_Y] - 7) & 0xff);
-        for (unsigned k = 0; k < 4; k++) {
-            unsigned st = SWEEP_STATE + k * 4;
+        for (uint32_t k = 0; k < 4; k++) {
+            uint32_t st = SWEEP_STATE + k * 4;
             g_image[st]++;
             if (g_image[st + 1] != g_image[st])
                 continue;
@@ -1481,11 +1483,11 @@ void level_intro(void)
      * here - `mov cx,3` and down to -1 - which is not the same order as the
      * sweep up, and shows: they trail the reveal instead of leading it. */
     while (g_image[SWEEP_Y] != 0xb3) {
-        unsigned y = (g_image[SWEEP_Y] - 6) & 0xff;
+        uint32_t y = (g_image[SWEEP_Y] - 6) & 0xff;
         draw_brick_row(y);              /* 1ac2:2034 */
         field_backdrop((y + 1) & 0xff); /* 1ac2:1fc1 */
-        for (int k = 3; k >= 0; k--) {
-            unsigned st = SWEEP_STATE + k * 4;
+        for (int32_t k = 3; k >= 0; k--) {
+            uint32_t st = SWEEP_STATE + k * 4;
             if (g_image[st] == 0) {
                 g_image[st] = g_image[st + 1];
                 g_image[SWEEP_Y + k]++;
@@ -1501,7 +1503,7 @@ void level_intro(void)
     }
 
     /* The panel back down. */
-    for (int n = 0x1b; n > 0; n--) {
+    for (int32_t n = 0x1b; n > 0; n--) {
         scroll_down_band();             /* 1ac2:2148 */
         intro_pause(0xc);
         io_present();
@@ -1517,10 +1519,10 @@ void level_intro(void)
  * drawing the same sprite twice erases it. Everything that moves in this game
  * is drawn this way.
  */
-void ball_draw(unsigned sprite, unsigned x, unsigned y)
+void ball_draw(uint32_t sprite, uint32_t x, uint32_t y)
 {
-    unsigned di = cga_at(x, y);
-    for (int r = 0; r < 4; r++) {
+    uint32_t di = cga_at(x, y);
+    for (int32_t r = 0; r < 4; r++) {
         g_vram[di & (CGA_SIZE - 1)] ^= g_image[sprite + r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[sprite + r * 2 + 1];
         di = cga_next_row(di);
@@ -1547,20 +1549,20 @@ void ball_draw(unsigned sprite, unsigned x, unsigned y)
  */
 #define BALL_SPRITE_SRC 0x48fb
 
-int ball_redraw(unsigned ball)
+int32_t ball_redraw(uint32_t ball)
 {
-    unsigned char *b = g_image + ball;
+    uint8_t *b = g_image + ball;
 
     memcpy(b + B_PREV_SPR, b + B_SPRITE, 8);
     memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
 
-    unsigned shift = (b[B_X] & 3) * 2;
+    uint32_t shift = (b[B_X] & 3) * 2;
     if (shift) {
-        for (int r = 0; r < 4; r++) {
-            unsigned w = b[B_SPRITE + r * 2] | (b[B_SPRITE + r * 2 + 1] << 8);
+        for (int32_t r = 0; r < 4; r++) {
+            uint32_t w = b[B_SPRITE + r * 2] | (b[B_SPRITE + r * 2 + 1] << 8);
             w = ((w >> shift) | (w << (16 - shift))) & 0xffff;
-            b[B_SPRITE + r * 2] = (unsigned char)w;
-            b[B_SPRITE + r * 2 + 1] = (unsigned char)(w >> 8);
+            b[B_SPRITE + r * 2] = (uint8_t)w;
+            b[B_SPRITE + r * 2 + 1] = (uint8_t)(w >> 8);
         }
     }
 
@@ -1597,27 +1599,27 @@ int ball_redraw(unsigned ball)
 #define SOUND_BOUNCE   2
 #define SAFETY_NET  0x2e81
 
-void ball_after(unsigned ball)
+void ball_after(uint32_t ball)
 {
-    unsigned char *b = g_image + ball;
+    uint8_t *b = g_image + ball;
 
     if (b[B_BOUNCES] >= 0x23) {
         b[B_BOUNCES] = 0;
         b[B_ANCHOR_X] = b[B_X];
         b[B_ANCHOR_Y] = b[B_Y];
         b[B_ACC_X] = b[B_ACC_Y] = 0;
-        b[B_DY] = (unsigned char)(game_random(io_ticks(), 5) + 1);
-        b[B_DX] = (unsigned char)(game_random(io_ticks(), 5) + 1);
+        b[B_DY] = (uint8_t)(game_random(io_ticks(), 5) + 1);
+        b[B_DX] = (uint8_t)(game_random(io_ticks(), 5) + 1);
     }
 
-    unsigned x = b[B_X], y = b[B_Y];
+    uint32_t x = b[B_X], y = b[B_Y];
     if (x <= WALL_LEFT || x >= WALL_RIGHT) {
         g_image[SOUND_REQUEST] = SOUND_BOUNCE;
         b[B_DIR_X] = (x <= WALL_LEFT) ? 0 : 1;
         b[B_ACC_X] = 1;
         b[B_ACC_Y] = 0;
-        b[B_ANCHOR_X] = (unsigned char)(x <= WALL_LEFT ? 9 : 0xc3);
-        b[B_ANCHOR_Y] = (unsigned char)y;
+        b[B_ANCHOR_X] = (uint8_t)(x <= WALL_LEFT ? 9 : 0xc3);
+        b[B_ANCHOR_Y] = (uint8_t)y;
         b[B_BOUNCES]++;
     }
     if (y <= WALL_TOP) {
@@ -1626,8 +1628,8 @@ void ball_after(unsigned ball)
         b[B_BOUNCES]++;
         b[B_ACC_X] = 0;
         b[B_ACC_Y] = 1;
-        b[B_ANCHOR_X] = (unsigned char)x;
-        b[B_ANCHOR_Y] = (unsigned char)(y + 1);
+        b[B_ANCHOR_X] = (uint8_t)x;
+        b[B_ANCHOR_Y] = (uint8_t)(y + 1);
     }
 
     ball_bricks(ball);                  /* 1ac2:254d */
@@ -1681,9 +1683,9 @@ void ball_after(unsigned ball)
 
 /* The common tail of every top-of-paddle bounce: reverse vertically, anchor
  * one pixel clear of the paddle, and restart the accumulators. */
-static void paddle_bounce_up(unsigned char *b)
+static void paddle_bounce_up(uint8_t *b)
 {
-    unsigned ah = b[B_Y];
+    uint32_t ah = b[B_Y];
     if (b[B_Y] == PADDLE_BOTTOM) {
         b[B_DIR_Y] = 0;                 /* it came from below: send it down */
         ah++;
@@ -1692,23 +1694,23 @@ static void paddle_bounce_up(unsigned char *b)
         ah--;
     }
     b[B_ANCHOR_X] = b[B_X];
-    b[B_ANCHOR_Y] = (unsigned char)ah;
+    b[B_ANCHOR_Y] = (uint8_t)ah;
     b[B_ACC_X] = b[B_ACC_Y] = 1;
     b[B_BOUNCES] = 0;
     g_image[SOUND_REQUEST] = SOUND_PADDLE;
 }
 
-static void paddle_slope(unsigned char *b, unsigned table, unsigned index)
+static void paddle_slope(uint8_t *b, uint32_t table, uint32_t index)
 {
-    unsigned w = img_w(table + index * 2);
-    b[B_DY] = (unsigned char)w;
-    b[B_DX] = (unsigned char)(w >> 8);
+    uint32_t w = img_w(table + index * 2);
+    b[B_DY] = (uint8_t)w;
+    b[B_DX] = (uint8_t)(w >> 8);
 }
 
-void ball_paddle(unsigned ball)
+void ball_paddle(uint32_t ball)
 {
-    unsigned char *b = g_image + ball;
-    unsigned y = b[B_Y];
+    uint8_t *b = g_image + ball;
+    uint32_t y = b[B_Y];
 
     if (y < PADDLE_TOP || y > PADDLE_BOTTOM)
         return;
@@ -1716,22 +1718,22 @@ void ball_paddle(unsigned ball)
     if (y > PADDLE_TOP && b[B_DIR_Y] != 1) {
         /* The sides. Only the two single columns just outside the paddle
          * count, which is why this is an equality and not a range. */
-        unsigned left = (g_image[PADDLE_X] - 3) & 0xff;
-        unsigned bx = b[B_X];
-        int from_left = 1;
+        uint32_t left = (g_image[PADDLE_X] - 3) & 0xff;
+        uint32_t bx = b[B_X];
+        int32_t from_left = 1;
         if (bx != left) {
-            unsigned off = (bx - left) & 0xff;
+            uint32_t off = (bx - left) & 0xff;
             if (off != ((g_image[PADDLE_WIDTH] + 3) & 0xff))
                 return;
             from_left = 0;
         }
-        unsigned depth = (y - 0xb6) & 0xff;
+        uint32_t depth = (y - 0xb6) & 0xff;
         b[B_DIR_Y] = (depth <= 5) ? 1 : 0;
-        b[B_DIR_X] = (unsigned char)from_left;
+        b[B_DIR_X] = (uint8_t)from_left;
         b[B_ANCHOR_X] = from_left
-            ? (unsigned char)(g_image[PADDLE_X] - 4)
-            : (unsigned char)(g_image[PADDLE_X] + g_image[PADDLE_WIDTH] + 1);
-        b[B_ANCHOR_Y] = (unsigned char)y;
+            ? (uint8_t)(g_image[PADDLE_X] - 4)
+            : (uint8_t)(g_image[PADDLE_X] + g_image[PADDLE_WIDTH] + 1);
+        b[B_ANCHOR_Y] = (uint8_t)y;
         b[B_ACC_X] = b[B_ACC_Y] = 1;
         b[B_BOUNCES] = 0;
         paddle_slope(b, SLOPE_SIDE, depth);
@@ -1740,10 +1742,10 @@ void ball_paddle(unsigned ball)
     }
 
     /* The top. */
-    unsigned left = (g_image[PADDLE_X] - 3) & 0xff;
+    uint32_t left = (g_image[PADDLE_X] - 3) & 0xff;
     if (b[B_X] < left)
         return;
-    unsigned off = (b[B_X] - left) & 0xff;
+    uint32_t off = (b[B_X] - left) & 0xff;
 
     if (off <= 0x0a) {                          /* the left end */
         paddle_slope(b, SLOPE_TOP, off);
@@ -1751,10 +1753,10 @@ void ball_paddle(unsigned ball)
         paddle_bounce_up(b);
         return;
     }
-    unsigned span = (g_image[PADDLE_WIDTH] + 3) & 0xff;
+    uint32_t span = (g_image[PADDLE_WIDTH] + 3) & 0xff;
     if (off > span)
         return;
-    unsigned from_right = (span - off) & 0xff;
+    uint32_t from_right = (span - off) & 0xff;
     if (from_right <= 0x0a) {                   /* the right end */
         paddle_slope(b, SLOPE_TOP, from_right);
         b[B_DIR_X] = 0;                         /* away to the right */
@@ -1786,23 +1788,23 @@ void ball_paddle(unsigned ball)
 #define HIT_SLOTS  0x2e89               /* four of four bytes */
 #define HIT_DIRS   0x2e99               /* the direction to leave in, per slot */
 
-void probe_cell_at(unsigned x, unsigned y, unsigned slot)
+void probe_cell_at(uint32_t x, uint32_t y, uint32_t slot)
 {
     if (x > 0xbf || y > 0xc4) {
         img_setw(slot, 0);
         return;
     }
-    unsigned row = y & 0xf8;
-    unsigned di = row + (row >> 1) + (x >> 4) + LEVEL_CELLS + 8;
-    unsigned cell = g_image[di];
+    uint32_t row = y & 0xf8;
+    uint32_t di = row + (row >> 1) + (x >> 4) + LEVEL_CELLS + 8;
+    uint32_t cell = g_image[di];
     if (cell == 0x0c || cell == 0) {
         img_setw(slot, 0);
         return;
     }
     img_setw(slot, di);
     g_image[HIT_COUNT]++;
-    g_image[slot + 2] = (unsigned char)((x & 0xf0) + 8);   /* the brick's */
-    g_image[slot + 3] = (unsigned char)((y & 0xf8) + 6);   /* centre */
+    g_image[slot + 2] = (uint8_t)((x & 0xf0) + 8);   /* the brick's */
+    g_image[slot + 3] = (uint8_t)((y & 0xf8) + 6);   /* centre */
 }
 
 /* 1ac2:27b7  drop_duplicate_hits
@@ -1813,13 +1815,13 @@ void probe_cell_at(unsigned x, unsigned y, unsigned slot)
  */
 void drop_duplicate_hits(void)
 {
-    for (int i = 0; i < 3; i++) {
-        unsigned si = HIT_SLOTS + i * 4;
+    for (int32_t i = 0; i < 3; i++) {
+        uint32_t si = HIT_SLOTS + i * 4;
         if (!img_w(si))
             continue;
-        unsigned centre = img_w(si + 2);
-        for (int j = i + 1; j < 4; j++) {
-            unsigned di = HIT_SLOTS + j * 4;
+        uint32_t centre = img_w(si + 2);
+        for (int32_t j = i + 1; j < 4; j++) {
+            uint32_t di = HIT_SLOTS + j * 4;
             if (img_w(di) && img_w(di + 2) == centre)
                 img_setw(di, 0);
         }
@@ -1827,25 +1829,25 @@ void drop_duplicate_hits(void)
 }
 
 /* Reverse one axis, anchoring one pixel back the way the ball came. */
-static void bounce_x(unsigned char *b)
+static void bounce_x(uint8_t *b)
 {
     if (b[B_DIR_X] == 0) {
         b[B_DIR_X] = 1;
-        b[B_ANCHOR_X] = (unsigned char)(b[B_X] - 1);
+        b[B_ANCHOR_X] = (uint8_t)(b[B_X] - 1);
     } else {
         b[B_DIR_X] = 0;
-        b[B_ANCHOR_X] = (unsigned char)(b[B_X] + 1);
+        b[B_ANCHOR_X] = (uint8_t)(b[B_X] + 1);
     }
 }
 
-static void bounce_y(unsigned char *b)
+static void bounce_y(uint8_t *b)
 {
     if (b[B_DIR_Y] == 0) {
         b[B_DIR_Y] = 1;
-        b[B_ANCHOR_Y] = (unsigned char)(b[B_Y] - 1);
+        b[B_ANCHOR_Y] = (uint8_t)(b[B_Y] - 1);
     } else {
         b[B_DIR_Y] = 0;
-        b[B_ANCHOR_Y] = (unsigned char)(b[B_Y] + 1);
+        b[B_ANCHOR_Y] = (uint8_t)(b[B_Y] + 1);
     }
 }
 
@@ -1862,23 +1864,23 @@ static void bounce_y(unsigned char *b)
  * the ball sprite is 16 by 4 but only its middle counts for collision, which
  * is why it can graze a brick without taking it.
  */
-void ball_bricks(unsigned ball)
+void ball_bricks(uint32_t ball)
 {
-    unsigned char *b = g_image + ball;
+    uint8_t *b = g_image + ball;
     g_image[HIT_COUNT] = 0;
 
-    unsigned x = (b[B_X] - 8) & 0xff, y = (b[B_Y] - 6) & 0xff;
+    uint32_t x = (b[B_X] - 8) & 0xff, y = (b[B_Y] - 6) & 0xff;
     probe_cell_at(x, y, HIT_SLOTS + 0);
     probe_cell_at((x + 3) & 0xff, y, HIT_SLOTS + 4);
     probe_cell_at((x + 3) & 0xff, (y + 3) & 0xff, HIT_SLOTS + 8);
     probe_cell_at(x, (y + 3) & 0xff, HIT_SLOTS + 12);
 
-    unsigned n = g_image[HIT_COUNT];
+    uint32_t n = g_image[HIT_COUNT];
     if (n == 0)
         return;
 
-    unsigned s0 = img_w(HIT_SLOTS + 0), s1 = img_w(HIT_SLOTS + 4);
-    unsigned s2 = img_w(HIT_SLOTS + 8), s3 = img_w(HIT_SLOTS + 12);
+    uint32_t s0 = img_w(HIT_SLOTS + 0), s1 = img_w(HIT_SLOTS + 4);
+    uint32_t s2 = img_w(HIT_SLOTS + 8), s3 = img_w(HIT_SLOTS + 12);
 
     if (n == 3 || (n == 2 && ((s0 && s2) || (!s0 && s1 && s3)))) {
         bounce_x(b);                    /* wedged, or hit on the diagonal */
@@ -1893,15 +1895,15 @@ void ball_bricks(unsigned ball)
             bounce_x(b), b[B_ANCHOR_Y] = b[B_Y];
     } else {
         /* One corner, or all four: leave in the direction its slot names. */
-        int i = 0;
+        int32_t i = 0;
         while (i < 4 && !img_w(HIT_SLOTS + i * 4))
             i++;
         if (i < 4) {
-            unsigned d = img_w(HIT_DIRS + i * 2);
-            b[B_DIR_X] = (unsigned char)(d & 0xff);
-            b[B_DIR_Y] = (unsigned char)(d >> 8);
-            b[B_ANCHOR_Y] = (unsigned char)(b[B_Y] + (b[B_DIR_Y] ? -1 : 1));
-            b[B_ANCHOR_X] = (unsigned char)(b[B_X] + (b[B_DIR_X] ? -1 : 1));
+            uint32_t d = img_w(HIT_DIRS + i * 2);
+            b[B_DIR_X] = (uint8_t)(d & 0xff);
+            b[B_DIR_Y] = (uint8_t)(d >> 8);
+            b[B_ANCHOR_Y] = (uint8_t)(b[B_Y] + (b[B_DIR_Y] ? -1 : 1));
+            b[B_ANCHOR_X] = (uint8_t)(b[B_X] + (b[B_DIR_X] ? -1 : 1));
         }
     }
 
@@ -1922,8 +1924,8 @@ void ball_bricks(unsigned ball)
     b[B_ACC_X] = b[B_ACC_Y] = 1;
     drop_duplicate_hits();
 
-    for (int i = 0; i < 4; i++) {
-        unsigned cell = img_w(HIT_SLOTS + i * 4);
+    for (int32_t i = 0; i < 4; i++) {
+        uint32_t cell = img_w(HIT_SLOTS + i * 4);
         if (cell)
             brick_hit(HIT_SLOTS + i * 4, cell, ball);
     }
@@ -1943,7 +1945,7 @@ void ball_bricks(unsigned ball)
 #define BONUS_CAP  0x3384               /* how many capsules are out */
 #define BONUS_ODDS 0x33b1               /* cumulative weights for the kinds */
 
-static void brick_score(unsigned a, unsigned b, unsigned c)
+static void brick_score(uint32_t a, uint32_t b, uint32_t c)
 {
     img_setw(SCORE_ADD + 0, a);
     img_setw(SCORE_ADD + 2, b);
@@ -1952,47 +1954,47 @@ static void brick_score(unsigned a, unsigned b, unsigned c)
 }
 
 /* The common opening: score, sound, and clear the ball's bounce counter. */
-static void brick_common(unsigned ball, unsigned sound,
-                         unsigned a, unsigned b, unsigned c)
+static void brick_common(uint32_t ball, uint32_t sound,
+                         uint32_t a, uint32_t b, uint32_t c)
 {
     brick_score(a, b, c);
-    g_image[SOUND_REQUEST] = (unsigned char)sound;
+    g_image[SOUND_REQUEST] = (uint8_t)sound;
     if (ball)
         g_image[ball + B_BOUNCES] = 0;
 }
 
 /* Attach a fresh entity to the brick that was just hit. `slot` is the hit
  * record: its word is the cell address, the two bytes after it the centre. */
-static unsigned brick_entity(unsigned slot, unsigned handler,
-                             unsigned frames, unsigned rate)
+static uint32_t brick_entity(uint32_t slot, uint32_t handler,
+                             uint32_t frames, uint32_t rate)
 {
-    unsigned si = entity_alloc();
+    uint32_t si = entity_alloc();
     img_setw(si + 0, handler);
     img_setw(si + 2, img_w(slot));
     img_setw(si + 4, img_w(slot + 2));
     img_setw(si + 6, frames);
-    g_image[si + 8] = (unsigned char)rate;
-    g_image[si + 9] = (unsigned char)rate;
+    g_image[si + 8] = (uint8_t)rate;
+    g_image[si + 9] = (uint8_t)rate;
     return si;
 }
 
 /* Degrade a brick one step: the cell becomes `next`, the old picture comes off
  * and the new one goes on. Cells 5, 6 and 7 all do exactly this. */
-static void brick_degrade(unsigned slot, unsigned next,
-                          unsigned old_pic, unsigned new_pic)
+static void brick_degrade(uint32_t slot, uint32_t next,
+                          uint32_t old_pic, uint32_t new_pic)
 {
-    g_image[img_w(slot)] = (unsigned char)next;
-    unsigned x = g_image[slot + 2], y = g_image[slot + 3];
+    g_image[img_w(slot)] = (uint8_t)next;
+    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
     xor_sprite_16x7(x, y, old_pic);
     xor_sprite_16x7(x, y, new_pic);
 }
 
 /* Pick one of the bonus kinds by the cumulative weights at 0x33b1: walk the
  * table until an entry is at least random(0xff) and take that index. */
-static unsigned bonus_kind(void)
+static uint32_t bonus_kind(void)
 {
-    unsigned r = game_random(io_ticks(), 0xff);
-    unsigned i = 0;
+    uint32_t r = game_random(io_ticks(), 0xff);
+    uint32_t i = 0;
     while (g_image[BONUS_ODDS + i] < r)
         i++;
     return i;
@@ -2005,7 +2007,7 @@ static unsigned bonus_kind(void)
  * time in three - removes the brick at once and leaves something behind:
  * brick 1 a score popup (0x3561), brick 2 a falling capsule (0x3273).
  */
-static void brick_1_or_2(unsigned slot, unsigned ball, int is_two)
+static void brick_1_or_2(uint32_t slot, uint32_t ball, int32_t is_two)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 2);
 
@@ -2017,16 +2019,16 @@ static void brick_1_or_2(unsigned slot, unsigned ball, int is_two)
     }
 
     g_image[LEVEL_CELLS]--;
-    unsigned cell = img_w(slot);
+    uint32_t cell = img_w(slot);
     g_image[cell] = 0;
-    unsigned x = g_image[slot + 2], y = g_image[slot + 3];
+    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
     xor_sprite_16x7(x, y, is_two ? 0x63a6 : img_w(CELL_TABLE + 2));
 
-    unsigned si = entity_alloc();
+    uint32_t si = entity_alloc();
     img_setw(si + 0, is_two ? 0x3273 : 0x3561);
-    unsigned centre = img_w(slot + 2);
+    uint32_t centre = img_w(slot + 2);
     img_setw(si + 2, centre + 0x100);   /* `inc bh`: one row further down */
-    g_image[si + 4] = (unsigned char)bonus_kind();
+    g_image[si + 4] = (uint8_t)bonus_kind();
     g_image[si + 5] = 0;
     g_image[si + 6] = 0;
     g_image[si + 7] = 1;
@@ -2039,11 +2041,11 @@ static void brick_1_or_2(unsigned slot, unsigned ball, int is_two)
     g_image[BONUS_CAP]++;
 }
 
-void brick_1(unsigned slot, unsigned ball) { brick_1_or_2(slot, ball, 0); }
-void brick_2(unsigned slot, unsigned ball) { brick_1_or_2(slot, ball, 1); }
+void brick_1(uint32_t slot, uint32_t ball) { brick_1_or_2(slot, ball, 0); }
+void brick_2(uint32_t slot, uint32_t ball) { brick_1_or_2(slot, ball, 1); }
 
 /* 1ac2:2a3f  brick 3 - hardens into a 4, which nothing can break */
-void brick_3(unsigned slot, unsigned ball)
+void brick_3(uint32_t slot, uint32_t ball)
 {
     g_image[SOUND_REQUEST] = 4;
     if (ball)
@@ -2053,7 +2055,7 @@ void brick_3(unsigned slot, unsigned ball)
 }
 
 /* 1ac2:3221  bricks 4 and 12 - indestructible; the ball only bounces */
-void brick_solid(unsigned slot, unsigned ball)
+void brick_solid(uint32_t slot, uint32_t ball)
 {
     (void)slot;
     g_image[SOUND_REQUEST] = SOUND_BOUNCE;
@@ -2063,19 +2065,19 @@ void brick_solid(unsigned slot, unsigned ball)
 
 /* 1ac2:2a73, 1ac2:2ab4, 1ac2:2af5  bricks 5, 6, 7 - one step down the
  * chain per hit */
-void brick_5(unsigned slot, unsigned ball)
+void brick_5(uint32_t slot, uint32_t ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 2);
     brick_degrade(slot, 6, 0x6466, 0x6486);
 }
 
-void brick_6(unsigned slot, unsigned ball)
+void brick_6(uint32_t slot, uint32_t ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 3);
     brick_degrade(slot, 7, 0x6486, 0x64a6);
 }
 
-void brick_7(unsigned slot, unsigned ball)
+void brick_7(uint32_t slot, uint32_t ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 5);
     brick_degrade(slot, 8, 0x64a6, 0x64c6);
@@ -2083,20 +2085,20 @@ void brick_7(unsigned slot, unsigned ball)
 
 /* 1ac2:2b36  brick 8 - the end of that chain. A hundred points, and it leaves
  * an entity running 0x366f where it was. */
-void brick_8(unsigned slot, unsigned ball)
+void brick_8(uint32_t slot, uint32_t ball)
 {
     brick_common(ball, 4, 0, 0x100, 0);
     g_image[img_w(slot)] = 0;
-    unsigned x = g_image[slot + 2], y = g_image[slot + 3];
+    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
     xor_sprite_16x7(x, y, 0x64c6);
     xor_sprite_16x7(x, y, 0x681c);
-    unsigned si = brick_entity(slot, 0x366f, 0x67ea, 7);
+    uint32_t si = brick_entity(slot, 0x366f, 0x67ea, 7);
     g_image[si + 2] = 4;
     g_image[LEVEL_CELLS]--;
 }
 
 /* The dispatch ball_bricks does through the table at 0x3044. */
-void brick_hit(unsigned slot, unsigned cell, unsigned ball)
+void brick_hit(uint32_t slot, uint32_t cell, uint32_t ball)
 {
     switch (g_image[cell]) {
     case 1:  brick_1(slot, ball); break;
@@ -2122,11 +2124,11 @@ void brick_hit(unsigned slot, unsigned cell, unsigned ball)
  * apart but only seven of them are drawn - the eighth is the gap between
  * rows - so this both draws a brick and, run again, rubs it out.
  */
-void xor_sprite_16x7(unsigned x, unsigned y, unsigned src)
+void xor_sprite_16x7(uint32_t x, uint32_t y, uint32_t src)
 {
-    unsigned di = cga_at(x, y);
-    for (int r = 0; r < 7; r++) {
-        for (int b = 0; b < 4; b++)
+    uint32_t di = cga_at(x, y);
+    for (int32_t r = 0; r < 7; r++) {
+        for (int32_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[src + r * 4 + b];
         di = cga_next_row(di);
     }
@@ -2147,18 +2149,18 @@ void xor_sprite_16x7(unsigned x, unsigned y, unsigned src)
  */
 void score_add(void)
 {
-    unsigned si = 0x13d2, di = 0x141a;
-    unsigned carry = 0;
-    for (int i = 0; i < 6; i++, si--, di--) {
-        unsigned sum = (g_image[si] & 0x0f) + g_image[di] + (carry ? 1 : 0);
-        unsigned adjusted = (sum + 6) & 0xff;
+    uint32_t si = 0x13d2, di = 0x141a;
+    uint32_t carry = 0;
+    for (int32_t i = 0; i < 6; i++, si--, di--) {
+        uint32_t sum = (g_image[si] & 0x0f) + g_image[di] + (carry ? 1 : 0);
+        uint32_t adjusted = (sum + 6) & 0xff;
         carry = (adjusted & 0xf0) || (sum & 0xf0);
-        g_image[si] = (unsigned char)(0x30 | ((carry ? adjusted : sum) & 0x0f));
+        g_image[si] = (uint8_t)(0x30 | ((carry ? adjusted : sum) & 0x0f));
     }
     /* Redraw the six digits into the panel. */
     si = 0x13cd;
     di = 0x15d2;
-    for (int i = 0; i < 6; i++, si++, di += 2)
+    for (int32_t i = 0; i < 6; i++, si++, di += 2)
         draw_char(g_image[si], di);
 
     /* An extra life every time the score passes the threshold at [0x13d3],
@@ -2166,8 +2168,8 @@ void score_add(void)
      * out of '9' and the fix-up puts it back to '0' and carries by hand. The
      * comparison is byte-swapped because the score's top two digits are stored
      * the other way round from the threshold. */
-    unsigned thresh = img_w(0x13d3);
-    unsigned top = img_w(0x13cd);
+    uint32_t thresh = img_w(0x13d3);
+    uint32_t top = img_w(0x13cd);
     top = ((top & 0xff) << 8) | (top >> 8);          /* `xchg bl,bh` */
     if (top >= thresh) {
         thresh += 2;
@@ -2187,11 +2189,11 @@ void extra_life(void)
 {
     if (g_image[LIVES] == 0x0c)
         return;
-    unsigned n = (g_image[LIVES] - 1) & 0xff;
-    unsigned di = 0x3a7c + (n & 0xfc) + (n & 3) * 0xf0;
-    unsigned si = 0x48e7;
-    for (int r = 0; r < 5; r++) {
-        for (int b = 0; b < 4; b++)
+    uint32_t n = (g_image[LIVES] - 1) & 0xff;
+    uint32_t di = 0x3a7c + (n & 0xfc) + (n & 3) * 0xf0;
+    uint32_t si = 0x48e7;
+    for (int32_t r = 0; r < 5; r++) {
+        for (int32_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + r * 4 + b];
         /* `sub di, 4` only puts back what `rep movsw` advanced, and what
          * follows is the ordinary step to the next scan line. */
@@ -2217,12 +2219,12 @@ void extra_life(void)
 #define BACKDROP_PHASE 0x2efb
 #define BACKDROP_BYTES     48
 
-void field_backdrop(unsigned y)
+void field_backdrop(uint32_t y)
 {
-    unsigned di = cga_at(0, y) + BRICK_LEFT;
-    unsigned si = img_w(BACKDROP_TABLE + ((g_image[BACKDROP_PHASE] >> 3) & 7) * 2);
-    for (int r = 0; r < 8; r++) {
-        for (int b = 0; b < BACKDROP_BYTES; b++)
+    uint32_t di = cga_at(0, y) + BRICK_LEFT;
+    uint32_t si = img_w(BACKDROP_TABLE + ((g_image[BACKDROP_PHASE] >> 3) & 7) * 2);
+    for (int32_t r = 0; r < 8; r++) {
+        for (int32_t b = 0; b < BACKDROP_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
         si += BACKDROP_BYTES;
         di = cga_next_row(di);
@@ -2230,10 +2232,10 @@ void field_backdrop(unsigned y)
     /* `shr al,1` three times looking for a set bit, then `cmp al,4`: the
      * counter resets only when its low three bits are clear and it has
      * reached the last of the eight patterns. */
-    unsigned p = g_image[BACKDROP_PHASE];
+    uint32_t p = g_image[BACKDROP_PHASE];
     if ((p & 7) == 0 && (p >> 3) == 4)
         p = 0xff;
-    g_image[BACKDROP_PHASE] = (unsigned char)(p + 1);
+    g_image[BACKDROP_PHASE] = (uint8_t)(p + 1);
 }
 
 /* ========================================================================
@@ -2253,24 +2255,24 @@ void field_backdrop(unsigned y)
  * a pixel per two - across each row of three bytes, since at this depth a
  * byte holds four pixels and there is no pre-shifted copy for this one.
  */
-void walker_draw(unsigned x)
+void walker_draw(uint32_t x)
 {
-    unsigned src = img_w(img_w(WALKER_ANIM));
+    uint32_t src = img_w(img_w(WALKER_ANIM));
     memcpy(g_image + WALKER_WORK, g_image + src, 0x15);
 
-    for (unsigned n = (x & 3) * 2; n > 0; n--) {
-        for (int r = 0; r < 7; r++) {
-            unsigned p = WALKER_WORK + r * 3, carry = 0;
-            for (int b = 0; b < 3; b++) {
-                unsigned v = g_image[p + b];
-                g_image[p + b] = (unsigned char)((v >> 1) | (carry << 7));
+    for (uint32_t n = (x & 3) * 2; n > 0; n--) {
+        for (int32_t r = 0; r < 7; r++) {
+            uint32_t p = WALKER_WORK + r * 3, carry = 0;
+            for (int32_t b = 0; b < 3; b++) {
+                uint32_t v = g_image[p + b];
+                g_image[p + b] = (uint8_t)((v >> 1) | (carry << 7));
                 carry = v & 1;
             }
         }
     }
 
-    unsigned di = (x >> 2) + WALKER_ROW;
-    for (int r = 0; r < 7; r++) {
+    uint32_t di = (x >> 2) + WALKER_ROW;
+    for (int32_t r = 0; r < 7; r++) {
         g_vram[di & (CGA_SIZE - 1)] ^= g_image[WALKER_WORK + r * 3];
         g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[WALKER_WORK + r * 3 + 1];
         g_vram[(di + 2) & (CGA_SIZE - 1)] ^= g_image[WALKER_WORK + r * 3 + 2];
@@ -2285,7 +2287,7 @@ void walker_draw(unsigned x)
  * where it is, then advance the animation, wrapping at the 0xffff that ends
  * the frame list.
  */
-void walker_step(unsigned x)
+void walker_step(uint32_t x)
 {
     img_setw(WALKER_ANIM, img_w(WALKER_ANIM) - 2);
     walker_draw(x + 2);
@@ -2298,10 +2300,10 @@ void walker_step(unsigned x)
 
 /* One strip of the hatch the creature comes out of: 19 rows of one word at a
  * fixed position, from a list of frames. */
-static void hatch_frame(unsigned src, unsigned x, unsigned y)
+static void hatch_frame(uint32_t src, uint32_t x, uint32_t y)
 {
-    unsigned di = cga_at(x, y);
-    for (int r = 0; r < 0x13; r++) {
+    uint32_t di = cga_at(x, y);
+    for (int32_t r = 0; r < 0x13; r++) {
         g_vram[di & (CGA_SIZE - 1)] = g_image[src + r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[src + r * 2 + 1];
         di = cga_next_row(di);
@@ -2323,12 +2325,12 @@ static void hatch_frame(unsigned src, unsigned x, unsigned y)
 
 void level_draw(void)
 {
-    unsigned hx = g_image[HATCH_X], hy = (g_image[HATCH_Y] - 1) & 0xff;
+    uint32_t hx = g_image[HATCH_X], hy = (g_image[HATCH_Y] - 1) & 0xff;
 
     g_image[PADDLE_X] = 0xc8;
-    for (int f = 0; f < 5; f++) {
+    for (int32_t f = 0; f < 5; f++) {
         hatch_frame(img_w(HATCH_OPEN + f * 2), hx, hy);
-        for (int i = 0; i < 0x12c; i++)
+        for (int32_t i = 0; i < 0x12c; i++)
             game_delay();
     }
 
@@ -2336,10 +2338,10 @@ void level_draw(void)
      * the same layout extra_life draws them in, and the same trap. The
      * `sub di, 4` only puts back what `rep stosw` advanced, and the step
      * that follows is forwards. */
-    unsigned n = (g_image[LIVES] - 1) & 0xff;
-    unsigned di = LIVES_MARK + (n & 0xfc) + (n & 3) * 0xf0;
-    for (int r = 0; r < 5; r++) {
-        for (int b = 0; b < 4; b++)
+    uint32_t n = (g_image[LIVES] - 1) & 0xff;
+    uint32_t di = LIVES_MARK + (n & 0xfc) + (n & 3) * 0xf0;
+    for (int32_t r = 0; r < 5; r++) {
+        for (int32_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = 0;
         di = cga_next_row(di);
     }
@@ -2348,8 +2350,8 @@ void level_draw(void)
     g_image[PADDLE_X] = 0xc6;
     walker_draw(0xc8);
     img_setw(WALKER_ANIM, img_w(WALKER_ANIM) + 2);
-    for (int i = 0; i < 9; i++) {
-        for (int d = 0; d < 0x4b; d++)
+    for (int32_t i = 0; i < 9; i++) {
+        for (int32_t d = 0; d < 0x4b; d++)
             game_delay();
         walker_step(g_image[PADDLE_X]);
         g_image[PADDLE_X] -= 2;
@@ -2359,11 +2361,11 @@ void level_draw(void)
     }
 
     /* Closing the hatch, one frame every fourth step of the walk. */
-    for (int f = 0; f < 0x14; f++) {
-        unsigned ch = (unsigned)(0x14 - f);
+    for (int32_t f = 0; f < 0x14; f++) {
+        uint32_t ch = (uint32_t)(0x14 - f);
         if (!(ch & 3))
             hatch_frame(img_w(HATCH_SHUT + (f >> 2) * 2), hx, hy);
-        for (int d = 0; d < 0x4b; d++)
+        for (int32_t d = 0; d < 0x4b; d++)
             game_delay();
         walker_step(g_image[PADDLE_X]);
         g_image[PADDLE_X] -= 2;
@@ -2374,22 +2376,22 @@ void level_draw(void)
     while (g_image[PADDLE_X] >= 0x6d) {
         walker_step(g_image[PADDLE_X]);
         g_image[PADDLE_X] -= 2;
-        for (int d = 0; d < 0x4b; d++)
+        for (int32_t d = 0; d < 0x4b; d++)
             game_delay();
         io_present();
         if (!io_pump())
             return;
     }
 
-    for (int f = 0; f < 6; f++) {
-        unsigned src = img_w(0x75db + f * 2);
-        unsigned d = 0x1cd9;
-        for (int r = 0; r < 7; r++) {
-            for (int b = 0; b < 7; b++)
+    for (int32_t f = 0; f < 6; f++) {
+        uint32_t src = img_w(0x75db + f * 2);
+        uint32_t d = 0x1cd9;
+        for (int32_t r = 0; r < 7; r++) {
+            for (int32_t b = 0; b < 7; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] = g_image[src + r * 7 + b];
             d = cga_next_row(d);
         }
-        for (int i = 0; i < 0x147; i++)
+        for (int32_t i = 0; i < 0x147; i++)
             game_delay();
         io_present();
         if (!io_pump())
@@ -2424,16 +2426,16 @@ void level_draw(void)
  * its bottom row of caps survives every clear. */
 #define PANEL_ROWS     0x5e
 
-static void panel_char(unsigned char c, unsigned di)
+static void panel_char(uint8_t c, uint32_t di)
 {
-    unsigned g;
+    uint32_t g;
     if (c == '-')                       g = 0x0b;
     else if (c <= ' ')                  g = 0;
     else if (c <= '9')                  g = c - 0x2f;
     else if (c >= 'A')                  g = c - 0x35;
     else                                g = 0x0b;
-    const unsigned char *src = g_image + FONT + g * FONT_GLYPH;
-    for (int r = 0; r < FONT_ROWS; r++, di += PANEL_STRIDE) {
+    const uint8_t *src = g_image + FONT + g * FONT_GLYPH;
+    for (int32_t r = 0; r < FONT_ROWS; r++, di += PANEL_STRIDE) {
         g_image[di] = src[r * 2];
         g_image[di + 1] = src[r * 2 + 1];
     }
@@ -2441,23 +2443,23 @@ static void panel_char(unsigned char c, unsigned di)
 
 void panel_draw(void)
 {
-    unsigned di = PANEL_NAME;
-    for (int i = 0; i < 0x0c; i++, di += 2)
+    uint32_t di = PANEL_NAME;
+    for (int32_t i = 0; i < 0x0c; i++, di += 2)
         panel_char(g_image[PLAYER_NAME + i], di);
 
     di = PANEL_SCORE;
-    for (int i = 0; i < 6; i++, di += 2)
+    for (int32_t i = 0; i < 6; i++, di += 2)
         panel_char(g_image[SCORE_TEXT + i], di);
 
     /* Twelve life markers, four to a row: `al & 0xfc` steps along the row and
      * `(al & 3) * 0xa8` steps down. Ones past the lives left are blanked
      * rather than skipped, so a lost life is rubbed out. */
-    for (unsigned n = 1; n <= 0x0c; n++) {
-        unsigned k = n - 1;
-        unsigned d = PANEL_LIVES + (k & 0xfc) + (k & 3) * 0xa8;
-        int lit = n <= g_image[LIVES];
-        for (int r = 0; r < 5; r++, d += PANEL_STRIDE) {
-            for (int b = 0; b < 4; b++)
+    for (uint32_t n = 1; n <= 0x0c; n++) {
+        uint32_t k = n - 1;
+        uint32_t d = PANEL_LIVES + (k & 0xfc) + (k & 3) * 0xa8;
+        int32_t lit = n <= g_image[LIVES];
+        for (int32_t r = 0; r < 5; r++, d += PANEL_STRIDE) {
+            for (int32_t b = 0; b < 4; b++)
                 g_image[d + b] = lit
                     ? g_image[LIFE_SPRITE + r * 4 + b] : 0;
         }
@@ -2465,18 +2467,18 @@ void panel_draw(void)
 
     /* Reveal it. Each pass redraws one more row than the last, from the
      * bottom of the panel upwards, so it wipes on rather than appearing. */
-    unsigned bottom = PANEL_ON_SCREEN;
-    for (unsigned rows = 1; rows != PANEL_ROWS; rows++) {
-        unsigned src = PANEL_IMAGE;
-        unsigned d = bottom;
+    uint32_t bottom = PANEL_ON_SCREEN;
+    for (uint32_t rows = 1; rows != PANEL_ROWS; rows++) {
+        uint32_t src = PANEL_IMAGE;
+        uint32_t d = bottom;
         io_wait_retrace();
-        for (unsigned r = 0; r < rows; r++) {
-            for (int b = 0; b < PANEL_STRIDE; b++)
+        for (uint32_t r = 0; r < rows; r++) {
+            for (int32_t b = 0; b < PANEL_STRIDE; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] = g_image[src + b];
             src += PANEL_STRIDE;
             d = cga_next_row(d);
         }
-        for (int i = 0; i < 0x32; i++)
+        for (int32_t i = 0; i < 0x32; i++)
             game_delay();
         bottom = cga_prev_row(bottom);
         io_present();
@@ -2503,7 +2505,7 @@ void panel_draw(void)
 
 void level_colours(void)
 {
-    unsigned si = SEG_14A1 + g_image[LEVEL_NUMBER] * 4;
+    uint32_t si = SEG_14A1 + g_image[LEVEL_NUMBER] * 4;
     img_setw(ANIM_PTR, img_w(si));
     g_image[ANIM_RATE] = g_image[si + 2];
     g_image[ANIM_COUNT] = g_image[si + 2];
@@ -2515,9 +2517,9 @@ void level_colours(void)
  * the screens rely on it: the high-score table spells its heading out as a
  * run of spaces, ten separate `call 0xc64`, and another run, each picking up
  * exactly where the last left off. */
-unsigned draw_run(unsigned char c, unsigned count, unsigned di)
+uint32_t draw_run(uint8_t c, uint32_t count, uint32_t di)
 {
-    for (unsigned i = 0; i < count; i++, di = (di + 2) & 0xffff)
+    for (uint32_t i = 0; i < count; i++, di = (di + 2) & 0xffff)
         draw_char(c, di);
     return di;
 }
@@ -2526,9 +2528,9 @@ unsigned draw_run(unsigned char c, unsigned count, unsigned di)
  * the same reason as draw_run. `lodsb` advances SI too, so a caller that
  * wants it preserved pushes it - which is what the high-score table does
  * around every run of spaces between its columns. */
-unsigned draw_text(unsigned src, unsigned count, unsigned di)
+uint32_t draw_text(uint32_t src, uint32_t count, uint32_t di)
 {
-    for (unsigned i = 0; i < count; i++, di = (di + 2) & 0xffff)
+    for (uint32_t i = 0; i < count; i++, di = (di + 2) & 0xffff)
         draw_char(g_image[src + i], di);
     return di;
 }
@@ -2539,7 +2541,7 @@ unsigned draw_text(unsigned src, unsigned count, unsigned di)
  * is left where it was, because the caller is still pointing at the character
  * being typed.
  */
-void draw_cursor(unsigned di)
+void draw_cursor(uint32_t di)
 {
     draw_char(0xff, di + 2);
 }
@@ -2551,7 +2553,7 @@ void draw_cursor(unsigned di)
  * alone. Only the key-definition screen uses it, and only because that screen
  * switches to mode 01h rather than drawing in graphics.
  */
-void copy_string_text(unsigned src, unsigned dst)
+void copy_string_text(uint32_t src, uint32_t dst)
 {
     while (g_image[src]) {
         g_vram[dst & (CGA_SIZE - 1)] = g_image[src++];
@@ -2565,12 +2567,12 @@ void copy_string_text(unsigned src, unsigned dst)
  * playfield. Called with the pattern in DX, so the same routine both draws it
  * and rubs it out.
  */
-void flash_bar(unsigned pattern)
+void flash_bar(uint32_t pattern)
 {
-    unsigned di = 0x3ef2;
-    for (int i = 0; i < 0x18; i++, di += 2) {
-        g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)pattern;
-        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= (unsigned char)(pattern >> 8);
+    uint32_t di = 0x3ef2;
+    for (int32_t i = 0; i < 0x18; i++, di += 2) {
+        g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)pattern;
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= (uint8_t)(pattern >> 8);
     }
 }
 
@@ -2587,12 +2589,12 @@ void flash_bar(unsigned pattern)
  * created, which is the order they are drawn in.
  */
 
-unsigned entity_alloc(void)
+uint32_t entity_alloc(void)
 {
-    unsigned si = img_w(ENTITY_FREE);
+    uint32_t si = img_w(ENTITY_FREE);
     img_setw(ENTITY_FREE, img_w(si + E_NEXT));
 
-    unsigned bx = ENTITY_FREE;
+    uint32_t bx = ENTITY_FREE;
     while (img_w(bx + E_NEXT) != 0xffff)
         bx = img_w(bx + E_NEXT);
     img_setw(si + E_NEXT, 0xffff);
@@ -2606,7 +2608,7 @@ unsigned entity_alloc(void)
  * [0x3142] is the node before it, which the play loop keeps up to date as it
  * walks - a singly linked list cannot find it otherwise.
  */
-void entity_unlink(unsigned node)
+void entity_unlink(uint32_t node)
 {
     img_setw(img_w(ENTITY_PREV) + E_NEXT, img_w(node + E_NEXT));
     img_setw(node + E_NEXT, img_w(ENTITY_FREE));
@@ -2615,7 +2617,7 @@ void entity_unlink(unsigned node)
 }
 
 /* 1ac2:3668  cell_set_three - the cell an entity is sitting on becomes a 3 */
-void cell_set_three(unsigned node)
+void cell_set_three(uint32_t node)
 {
     g_image[img_w(node + 2)] = 3;
 }
@@ -2627,8 +2629,8 @@ void cell_set_three(unsigned node)
  */
 void cells_restore(void)
 {
-    unsigned n = g_image[LEVEL_CELLS + 1];
-    for (unsigned i = 0; i < n; i++)
+    uint32_t n = g_image[LEVEL_CELLS + 1];
+    for (uint32_t i = 0; i < n; i++)
         g_image[LEVEL_CELLS + 8 + g_image[LEVEL_CELLS + 2 + i]] = 9;
     g_image[ENTITY_REMOVE] = 1;
 }
@@ -2649,11 +2651,11 @@ void cells_restore(void)
  * ===================================================================== */
 
 /* 1ac2:406a  xor_sprite_20x16 - sixteen rows of five bytes, XORed in */
-void xor_sprite_20x16(unsigned x, unsigned y, unsigned src)
+void xor_sprite_20x16(uint32_t x, uint32_t y, uint32_t src)
 {
-    unsigned di = cga_at(x, y);
-    for (int r = 0; r < 0x10; r++) {
-        for (int b = 0; b < 5; b++)
+    uint32_t di = cga_at(x, y);
+    for (int32_t r = 0; r < 0x10; r++) {
+        for (int32_t b = 0; b < 5; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[src + r * 5 + b];
         di = cga_next_row(di);
     }
@@ -2669,15 +2671,15 @@ void xor_sprite_20x16(unsigned x, unsigned y, unsigned src)
  */
 #define SPRITE_WORK 0x33f7
 
-void sprite_shift_draw(unsigned x, unsigned y, unsigned src)
+void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src)
 {
     memcpy(g_image + SPRITE_WORK, g_image + src, 0x50);
-    for (unsigned n = (x & 3) * 2; n > 0; n--) {
-        for (int r = 0; r < 0x10; r++) {
-            unsigned p = SPRITE_WORK + r * 5, carry = 0;
-            for (int b = 0; b < 5; b++) {
-                unsigned v = g_image[p + b];
-                g_image[p + b] = (unsigned char)((v >> 1) | (carry << 7));
+    for (uint32_t n = (x & 3) * 2; n > 0; n--) {
+        for (int32_t r = 0; r < 0x10; r++) {
+            uint32_t p = SPRITE_WORK + r * 5, carry = 0;
+            for (int32_t b = 0; b < 5; b++) {
+                uint32_t v = g_image[p + b];
+                g_image[p + b] = (uint8_t)((v >> 1) | (carry << 7));
                 carry = v & 1;
             }
         }
@@ -2688,7 +2690,7 @@ void sprite_shift_draw(unsigned x, unsigned y, unsigned src)
 /* Step a two-frame XOR animation: erase the frame before this one, draw this
  * one, advance. Shared by the handlers below, which differ only in which
  * drawing routine they use and what they do when the list ends. */
-static int entity_anim(unsigned bx, void (*draw)(unsigned, unsigned, unsigned))
+static int32_t entity_anim(uint32_t bx, void (*draw)(uint32_t, uint32_t, uint32_t))
 {
     if (--g_image[bx + 8] != 0)
         return 0;                       /* not time for the next frame yet */
@@ -2697,10 +2699,10 @@ static int entity_anim(unsigned bx, void (*draw)(unsigned, unsigned, unsigned))
     /* [bx+6] points *into* a list of frame pointers, so one dereference gets
      * the frame: `[si]` where si is the cursor. Dereferencing twice reads the
      * first word of the frame's pixels as if it were an address. */
-    unsigned cur = img_w(bx + 6);
-    unsigned x = g_image[bx + 4], y = g_image[bx + 5];
+    uint32_t cur = img_w(bx + 6);
+    uint32_t x = g_image[bx + 4], y = g_image[bx + 5];
     draw(x, y, img_w(cur - 2));         /* the previous frame, to erase */
-    unsigned next = img_w(cur);
+    uint32_t next = img_w(cur);
     if (next == 0xffff)
         return -1;                      /* the animation is over */
     draw(x, y, next);
@@ -2714,7 +2716,7 @@ static int entity_anim(unsigned bx, void (*draw)(unsigned, unsigned, unsigned))
  * off [0x33d5] - the count of how many are on screen, which caps them - and
  * asks to be unlinked.
  */
-void entity_sparkle(unsigned bx)
+void entity_sparkle(uint32_t bx)
 {
     if (entity_anim(bx, sprite_shift_draw) < 0) {
         g_image[0x33d5]--;
@@ -2729,14 +2731,14 @@ void entity_sparkle(unsigned bx)
  * before - so it plays its last frame and then goes, where the sparkle stops
  * one frame earlier.
  */
-void entity_crumble(unsigned bx)
+void entity_crumble(uint32_t bx)
 {
     if (--g_image[bx + 8] != 0)
         return;
     g_image[bx + 8] = g_image[bx + 9];
 
-    unsigned cur = img_w(bx + 6);
-    unsigned x = g_image[bx + 4], y = g_image[bx + 5];
+    uint32_t cur = img_w(bx + 6);
+    uint32_t x = g_image[bx + 4], y = g_image[bx + 5];
     xor_sprite_16x7(x, y, img_w(cur - 2));
     xor_sprite_16x7(x, y, img_w(cur));
     img_setw(bx + 6, cur + 2);
@@ -2754,25 +2756,25 @@ void entity_crumble(unsigned bx)
 #define BONUS_KINDS 0xac60
 #define BONUS_LIVE  0x33d6
 
-void bonus_release(unsigned bx)
+void bonus_release(uint32_t bx)
 {
     g_image[BONUS_LIVE]++;
-    unsigned si = entity_alloc();
+    uint32_t si = entity_alloc();
     img_setw(si + 0, 0x39fa);
     g_image[si + 2] = 0;
-    g_image[si + 3] = (unsigned char)(game_random(io_ticks(), 0x3c) + 9);
+    g_image[si + 3] = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
 
-    unsigned k = game_random(io_ticks(), 8);
-    unsigned di = BONUS_KINDS + k * 4;
+    uint32_t k = game_random(io_ticks(), 8);
+    uint32_t di = BONUS_KINDS + k * 4;
     img_setw(si + 6, img_w(di));
     img_setw(si + 8, img_w(di + 2));
 
-    unsigned al = g_image[bx + 4];
+    uint32_t al = g_image[bx + 4];
     if (al) {
         al = (al - 8) & 0xff;
         g_image[si + 2] = 2;
     }
-    g_image[si + 4] = (unsigned char)al;
+    g_image[si + 4] = (uint8_t)al;
     g_image[si + 5] = g_image[bx + 5];
     xor_sprite_20x16(g_image[si + 4], g_image[si + 5],
                      img_w(img_w(si + 6)));
@@ -2786,7 +2788,7 @@ void bonus_release(unsigned bx)
  * only way an 8086 has. Frame 0x635c is the one where the capsule appears, and
  * that is where it calls bonus_release.
  */
-void entity_hatch(unsigned bx)
+void entity_hatch(uint32_t bx)
 {
     if (g_image[EXTRA_ON] != 0) {
         img_setw(bx + 6, img_w(bx + 6) - 1);
@@ -2800,9 +2802,9 @@ void entity_hatch(unsigned bx)
     if (img_w(bx + 8) % 0x23 != 0)
         return;
 
-    unsigned si = img_w(img_w(bx + 0x0a));
-    unsigned di = cga_at(g_image[bx + 4], (g_image[bx + 5] - 0x0a) & 0xff);
-    for (int r = 0; r < 0x25; r++) {
+    uint32_t si = img_w(img_w(bx + 0x0a));
+    uint32_t di = cga_at(g_image[bx + 4], (g_image[bx + 5] - 0x0a) & 0xff);
+    for (int32_t r = 0; r < 0x25; r++) {
         g_vram[di & (CGA_SIZE - 1)] = g_image[si + r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[si + r * 2 + 1];
         di = cga_next_row(di);
@@ -2832,18 +2834,18 @@ void entity_hatch(unsigned bx)
  * cells each one checks (`+0x0c` one row down, `+1` one column right) are the
  * rest of the capsule's footprint.
  */
-static unsigned cell_index(unsigned y, unsigned x)
+static uint32_t cell_index(uint32_t y, uint32_t x)
 {
-    unsigned row = y & 0xf8;
+    uint32_t row = y & 0xf8;
     return LEVEL_CELLS + 8 + row + (row >> 1) + ((x >> 4) & 0x0f);
 }
 
-int bonus_move_right(unsigned *px, unsigned *py)
+int32_t bonus_move_right(uint32_t *px, uint32_t *py)
 {
-    unsigned y = *py, x = *px;
+    uint32_t y = *py, x = *px;
     if (x >= 0xb8)
         return 0;
-    unsigned di = cell_index((y - 6) & 0xff, (x + 8) & 0xff);
+    uint32_t di = cell_index((y - 6) & 0xff, (x + 8) & 0xff);
     if (g_image[di] || g_image[di + 0x0c])
         return 0;
     if ((((y - 6) & 7) != 0) && g_image[di + 0x18])
@@ -2852,12 +2854,12 @@ int bonus_move_right(unsigned *px, unsigned *py)
     return 1;
 }
 
-int bonus_move_left(unsigned *px, unsigned *py)
+int32_t bonus_move_left(uint32_t *px, uint32_t *py)
 {
-    unsigned y = *py, x = *px;
+    uint32_t y = *py, x = *px;
     if (x <= 8)
         return 0;
-    unsigned di = cell_index((y - 6) & 0xff, (x - 9) & 0xff);
+    uint32_t di = cell_index((y - 6) & 0xff, (x - 9) & 0xff);
     if (g_image[di] || g_image[di + 0x0c])
         return 0;
     if ((((y - 6) & 7) != 0) && g_image[di + 0x18])
@@ -2866,12 +2868,12 @@ int bonus_move_left(unsigned *px, unsigned *py)
     return 1;
 }
 
-int bonus_move_up(unsigned *px, unsigned *py)
+int32_t bonus_move_up(uint32_t *px, uint32_t *py)
 {
-    unsigned y = *py, x = *px;
+    uint32_t y = *py, x = *px;
     if (y <= 6)
         return 0;
-    unsigned di = cell_index((y - 7) & 0xff, (x - 8) & 0xff);
+    uint32_t di = cell_index((y - 7) & 0xff, (x - 8) & 0xff);
     if (g_image[di])
         return 0;
     if ((((x - 8) & 0x0f) != 0) && g_image[di + 1])
@@ -2880,10 +2882,10 @@ int bonus_move_up(unsigned *px, unsigned *py)
     return 1;
 }
 
-int bonus_move_down(unsigned *px, unsigned *py)
+int32_t bonus_move_down(uint32_t *px, uint32_t *py)
 {
-    unsigned y = *py, x = *px;
-    unsigned di = cell_index((y + 2) & 0xff, (x - 8) & 0xff);
+    uint32_t y = *py, x = *px;
+    uint32_t di = cell_index((y + 2) & 0xff, (x - 8) & 0xff);
     if (g_image[di])
         return 0;
     if ((((x - 8) & 0x0f) != 0) && g_image[di + 1])
@@ -2902,14 +2904,14 @@ int bonus_move_down(unsigned *px, unsigned *py)
  */
 #define BONUS_MOVES 0x3447
 
-int bonus_steer(unsigned bx, unsigned *px, unsigned *py)
+int32_t bonus_steer(uint32_t bx, uint32_t *px, uint32_t *py)
 {
-    unsigned char *b = g_image + bx;
+    uint8_t *b = g_image + bx;
     if (b[2] == 4)
         return bonus_script(bx, px, py);
 
     if (--b[3] != 0) {
-        int moved;
+        int32_t moved;
         switch (b[2]) {
         case 0:  moved = bonus_move_right(px, py); break;
         case 1:  moved = bonus_move_down(px, py);  break;
@@ -2920,21 +2922,21 @@ int bonus_steer(unsigned bx, unsigned *px, unsigned *py)
         if (moved)
             return 1;
     }
-    b[2] = (unsigned char)game_random(io_ticks(), 4);
+    b[2] = (uint8_t)game_random(io_ticks(), 4);
     if (b[2] == 1) {
         b[3] = 0xff;
         return 1;
     }
-    b[3] = (unsigned char)game_random(io_ticks(), 0x3d);
+    b[3] = (uint8_t)game_random(io_ticks(), 0x3d);
     return 1;
 }
 
 /* 1ac2:40f2  xor_sprite_16xn - like 0x3b64 but the caller says how many rows */
-void xor_sprite_16xn(unsigned x, unsigned y, unsigned src, unsigned rows)
+void xor_sprite_16xn(uint32_t x, uint32_t y, uint32_t src, uint32_t rows)
 {
-    unsigned di = cga_at(x, y);
-    for (unsigned r = 0; r < rows; r++) {
-        for (int b = 0; b < 4; b++)
+    uint32_t di = cga_at(x, y);
+    for (uint32_t r = 0; r < rows; r++) {
+        for (int32_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[src + r * 4 + b];
         di = cga_next_row(di);
     }
@@ -2949,7 +2951,7 @@ void xor_sprite_16xn(unsigned x, unsigned y, unsigned src, unsigned rows)
 
 /* 1ac2:365e  from brick 3 - when the animation ends the cell becomes a 3
  * again, so a hardened brick softens back. */
-void entity_soften(unsigned bx)
+void entity_soften(uint32_t bx)
 {
     entity_crumble(bx);
     if (g_image[ENTITY_REMOVE] == 1)
@@ -2958,7 +2960,7 @@ void entity_soften(unsigned bx)
 
 /* 1ac2:366f  from brick 8 - plays its animation [bx+2] times over, cancelling
  * its own removal each time round, and rubs the last frame out at the end. */
-void entity_repeat(unsigned bx)
+void entity_repeat(uint32_t bx)
 {
     entity_crumble(bx);
     if (g_image[ENTITY_REMOVE] != 1)
@@ -2972,7 +2974,7 @@ void entity_repeat(unsigned bx)
 }
 
 /* 1ac2:3696  from brick 9 - the animation and nothing else */
-void entity_plain(unsigned bx)
+void entity_plain(uint32_t bx)
 {
     entity_crumble(bx);
 }
@@ -2980,11 +2982,11 @@ void entity_plain(unsigned bx)
 /* Put a ball down at a point and set it going upwards: position, anchor and
  * both accumulators, a fresh sprite, and draw it. Three handlers do exactly
  * this and only the offsets they add differ. */
-void ball_place(unsigned ball, unsigned x, unsigned y)
+void ball_place(uint32_t ball, uint32_t x, uint32_t y)
 {
-    unsigned char *b = g_image + ball;
-    b[B_X] = b[B_PREV_X] = b[B_ANCHOR_X] = (unsigned char)x;
-    b[B_Y] = b[B_PREV_Y] = b[B_ANCHOR_Y] = (unsigned char)y;
+    uint8_t *b = g_image + ball;
+    b[B_X] = b[B_PREV_X] = b[B_ANCHOR_X] = (uint8_t)x;
+    b[B_Y] = b[B_PREV_Y] = b[B_ANCHOR_Y] = (uint8_t)y;
     b[B_ACC_X] = b[B_ACC_Y] = 0;
     b[B_STATE] = 1;
     b[B_DIR_Y] = 1;                     /* set off upwards */
@@ -2998,7 +3000,7 @@ void ball_place(unsigned ball, unsigned x, unsigned y)
  * position, eight pixels right and four up, gives it a fresh sprite, and draws
  * it. [bx+2] is the ball, not a cell, for this one.
  */
-void entity_ball_arrive(unsigned bx)
+void entity_ball_arrive(uint32_t bx)
 {
     entity_crumble(bx);
     if (g_image[ENTITY_REMOVE] != 1)
@@ -3009,7 +3011,7 @@ void entity_ball_arrive(unsigned bx)
 }
 
 /* 1ac2:36f6  from brick 9 - counts [bx+4] down and then puts the cells back */
-void entity_cells_timer(unsigned bx)
+void entity_cells_timer(uint32_t bx)
 {
     img_setw(bx + 4, img_w(bx + 4) - 1);
     if (img_w(bx + 4) == 0)
@@ -3029,17 +3031,17 @@ void entity_cells_timer(unsigned bx)
  * quotient is the row and the remainder the column, so x = column * 16 + 8 and
  * y = row * 8 + 6, which is the same grid as everywhere else read backwards.
  */
-void brick_9(unsigned slot, unsigned ball)
+void brick_9(uint32_t slot, uint32_t ball)
 {
     if (!ball)
         return;
     brick_score(0, 0, 0x0502);
 
-    unsigned n = g_image[LEVEL_CELLS + 1];
-    for (unsigned i = 0; i < n; i++)
+    uint32_t n = g_image[LEVEL_CELLS + 1];
+    for (uint32_t i = 0; i < n; i++)
         g_image[LEVEL_CELLS + 8 + g_image[LEVEL_CELLS + 2 + i]] = 4;
 
-    unsigned char *b = g_image + ball;
+    uint8_t *b = g_image + ball;
     b[B_STATE] = 3;
     b[B_BOUNCES] = 0;
     ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
@@ -3047,13 +3049,13 @@ void brick_9(unsigned slot, unsigned ball)
     brick_entity(slot, 0x3696, 0x6abe, 0x32);
 
     /* A cell that is not this one. */
-    unsigned cell, idx;
+    uint32_t cell, idx;
     do {
         idx = g_image[LEVEL_CELLS + 2 + game_random(io_ticks(), n)];
         cell = LEVEL_CELLS + 8 + idx;
     } while (cell == img_w(slot));
 
-    unsigned si = entity_alloc();
+    uint32_t si = entity_alloc();
     img_setw(si + 0, 0x36f6);
     img_setw(si + 4, 0x514);
 
@@ -3062,32 +3064,32 @@ void brick_9(unsigned slot, unsigned ball)
     img_setw(si + 2, ball);
     img_setw(si + 6, 0x6ad0);
     g_image[si + 8] = g_image[si + 9] = 0x32;
-    g_image[si + 4] = (unsigned char)((idx % 12) * 16 + 8);
-    g_image[si + 5] = (unsigned char)((idx / 12) * 8 + 6);
+    g_image[si + 4] = (uint8_t)((idx % 12) * 16 + 8);
+    g_image[si + 5] = (uint8_t)((idx / 12) * 8 + 6);
 }
 
 /* 1ac2:2c59  brick 10 - fifty points, and the ball goes into state 4 while an
  * entity runs at where the brick was. */
-void brick_10(unsigned slot, unsigned ball)
+void brick_10(uint32_t slot, uint32_t ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 5);
     g_image[img_w(slot)] = 0;
     g_image[LEVEL_CELLS]--;
-    unsigned x = g_image[slot + 2], y = g_image[slot + 3];
+    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
     xor_sprite_16x7(x, y, 0x63e6);
     if (!ball)
         return;
 
-    unsigned si = entity_alloc();
+    uint32_t si = entity_alloc();
     img_setw(si + 0, 0x37e0);
     img_setw(si + 2, ball);
     img_setw(si + 6, 0x6b88);
-    g_image[si + 4] = (unsigned char)x;
-    g_image[si + 5] = (unsigned char)y;
+    g_image[si + 4] = (uint8_t)x;
+    g_image[si + 5] = (uint8_t)y;
     g_image[si + 8] = g_image[si + 9] = 0x69;
     sprite_shift_draw(x, y, 0x6b9c);
 
-    unsigned char *b = g_image + ball;
+    uint8_t *b = g_image + ball;
     b[B_STATE] = 4;
     ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
 }
@@ -3099,7 +3101,7 @@ void brick_10(unsigned slot, unsigned ball)
  * is the whole type system. Anything not transcribed yet is dropped rather
  * than run, which leaves it stuck in the list - so it says so once.
  */
-void entity_call(unsigned node)
+void entity_call(uint32_t node)
 {
     switch (img_w(node + E_HANDLER)) {
     case 0x3273: entity_capsule(node); break;
@@ -3129,9 +3131,9 @@ void entity_call(unsigned node)
  * way down ([0x33d4] non-zero) it releases early, and scores 33 or 50
  * depending on what hit it.
  */
-void entity_ball_hold(unsigned bx)
+void entity_ball_hold(uint32_t bx)
 {
-    unsigned y = g_image[bx + 5], x = g_image[bx + 4];
+    uint32_t y = g_image[bx + 5], x = g_image[bx + 4];
 
     if ((g_image[bx + 8] & 0x0f) == 1 && ((y + 1) & 0xff) == 0xb8) {
         /* It has arrived at the bottom. */
@@ -3155,7 +3157,7 @@ void entity_ball_hold(unsigned bx)
 
     /* Hit: let the ball go, and score for it unless the hit was type 1. */
     g_image[ENTITY_REMOVE] = 1;
-    unsigned ny = g_image[bx + 5];
+    uint32_t ny = g_image[bx + 5];
     if (g_image[0x33d4] != 1) {
         brick_score(0, 0, 0x0303);
         ny = (ny + 4) & 0xff;
@@ -3175,11 +3177,11 @@ void entity_ball_hold(unsigned bx)
  * right `(x & 3) * 2` bits to the pixel wanted. Returns the framebuffer offset
  * it used, because 1ac2:306b carries on from there down the next two rows.
  */
-unsigned pixel_xor(unsigned x, unsigned y)
+uint32_t pixel_xor(uint32_t x, uint32_t y)
 {
-    unsigned di = cga_at(x, y);
-    unsigned mask = 0xc0 >> ((x & 3) * 2);
-    g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)mask;
+    uint32_t di = cga_at(x, y);
+    uint32_t mask = 0xc0 >> ((x & 3) * 2);
+    g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
     return di;
 }
 
@@ -3189,15 +3191,15 @@ unsigned pixel_xor(unsigned x, unsigned y)
  * each end of the paddle. Drawing it twice rubs it out, and it leaves
  * [0x2e7e] at 1 to say a shot is on its way.
  */
-void shot_xor(unsigned x, unsigned y)
+void shot_xor(uint32_t x, uint32_t y)
 {
-    for (int side = 0; side < 2; side++) {
-        unsigned sx = side ? (x + 0x13) & 0xff : x;
-        unsigned mask = 0xc0 >> ((sx & 3) * 2);
-        unsigned di = pixel_xor(sx, y);
-        for (int r = 0; r < 2; r++) {
+    for (int32_t side = 0; side < 2; side++) {
+        uint32_t sx = side ? (x + 0x13) & 0xff : x;
+        uint32_t mask = 0xc0 >> ((sx & 3) * 2);
+        uint32_t di = pixel_xor(sx, y);
+        for (int32_t r = 0; r < 2; r++) {
             di = cga_next_row(di);
-            g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)mask;
+            g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
         }
     }
     g_image[LASER_ON] = 1;
@@ -3208,14 +3210,14 @@ void shot_xor(unsigned x, unsigned y)
  * Do a capsule's sixteen-pixel box and a ball's four overlap? Sets [0x33d4] to
  * 2 if so, which is the answer bonus_update passes back up.
  */
-void bonus_hits_ball(unsigned bx, unsigned ball)
+void bonus_hits_ball(uint32_t bx, uint32_t ball)
 {
-    unsigned by = g_image[bx + 5], ballY = g_image[ball + B_Y];
+    uint32_t by = g_image[bx + 5], ballY = g_image[ball + B_Y];
     if (by > ((ballY + 3) & 0xff))
         return;
     if (((by + 0x0f) & 0xff) < ballY)
         return;
-    unsigned bxx = g_image[bx + 4], ballX = g_image[ball + B_X];
+    uint32_t bxx = g_image[bx + 4], ballX = g_image[ball + B_X];
     if (((bxx + 0x0f) & 0xff) < ballX)
         return;
     if (bxx > ((ballX + 3) & 0xff))
@@ -3239,15 +3241,15 @@ void bonus_hits_ball(unsigned bx, unsigned ball)
 #define HIT_KIND 0x33d4
 
 /* Which ball the collision found - the original's DI across 3df1/3f20. */
-static unsigned g_hit_ball = BALLS;
+static uint32_t g_hit_ball = BALLS;
 
-void bonus_update(unsigned bx, unsigned nx, unsigned ny)
+void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
 {
     g_image[HIT_KIND] = 0;
 
     if ((--g_image[bx + 8] & 0x0f) == 0) {
         g_image[bx + 8]--;
-        g_image[bx + 8] = (unsigned char)((g_image[bx + 8] & 0xf0) |
+        g_image[bx + 8] = (uint8_t)((g_image[bx + 8] & 0xf0) |
                                           (g_image[bx + 9] & 0x0f));
         /* Erase where the node still says it is - the move so far has only
          * happened in registers - then commit the new position and draw
@@ -3256,9 +3258,9 @@ void bonus_update(unsigned bx, unsigned nx, unsigned ny)
          * properly. */
         sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
                           img_w(img_w(bx + 6)));
-        g_image[bx + 4] = (unsigned char)nx;
-        g_image[bx + 5] = (unsigned char)ny;
-        unsigned x = nx, y = ny;
+        g_image[bx + 4] = (uint8_t)nx;
+        g_image[bx + 5] = (uint8_t)ny;
+        uint32_t x = nx, y = ny;
         if ((g_image[bx + 8] >> 4) == 0) {
             g_image[bx + 8] = g_image[bx + 9];
             img_setw(bx + 6, img_w(bx + 6) + 2);
@@ -3270,11 +3272,11 @@ void bonus_update(unsigned bx, unsigned nx, unsigned ny)
 
     /* The laser shot, if one is in flight. */
     if (g_image[LASER_ON] == 2) {
-        unsigned sy = (g_image[SHOT_Y] + 2) & 0xff;
-        unsigned by = g_image[bx + 5];
+        uint32_t sy = (g_image[SHOT_Y] + 2) & 0xff;
+        uint32_t by = g_image[bx + 5];
         if (((sy + 1) & 0xff) >= by && sy <= ((by + 0x0f) & 0xff)) {
-            unsigned sx = g_image[SHOT_X], bxx = g_image[bx + 4];
-            int hit = (sx >= bxx && sx <= ((bxx + 0x0f) & 0xff)) ||
+            uint32_t sx = g_image[SHOT_X], bxx = g_image[bx + 4];
+            int32_t hit = (sx >= bxx && sx <= ((bxx + 0x0f) & 0xff)) ||
                       (((sx + 0x13) & 0xff) >= bxx &&
                        ((sx + 0x13) & 0xff) <= ((bxx + 0x0f) & 0xff));
             if (hit) {
@@ -3289,9 +3291,9 @@ void bonus_update(unsigned bx, unsigned nx, unsigned ny)
     }
 
     /* The paddle. */
-    unsigned y = g_image[bx + 5];
+    uint32_t y = g_image[bx + 5];
     if (y <= 0xbe && ((y + 0x0f) & 0xff) >= 0xb8) {
-        unsigned bxx = g_image[bx + 4], px = g_image[PADDLE_X];
+        uint32_t bxx = g_image[bx + 4], px = g_image[PADDLE_X];
         if (((bxx + 0x0f) & 0xff) >= px &&
             bxx <= ((px + g_image[PADDLE_WIDTH]) & 0xff)) {
             g_image[HIT_KIND] = 1;
@@ -3303,8 +3305,8 @@ void bonus_update(unsigned bx, unsigned nx, unsigned ny)
     /* Any ball in play. Which one matched matters: the original leaves it in
      * DI and entity_bonus bounces *that* ball, not the first one it can find
      * afterwards. */
-    for (int i = 0; i < 3; i++) {
-        unsigned ball = BALLS + i * BALL_STRIDE;
+    for (int32_t i = 0; i < 3; i++) {
+        uint32_t ball = BALLS + i * BALL_STRIDE;
         if (g_image[ball + B_STATE] != 1)
             continue;
         bonus_hits_ball(bx, ball);
@@ -3336,10 +3338,10 @@ void bonus_update(unsigned bx, unsigned nx, unsigned ny)
  * That last one is why the sound request diverged. cs:[0xf4] = 6 is raised
  * here, and a port that returned early after the bounce never raised it.
  */
-void entity_bonus(unsigned bx)
+void entity_bonus(uint32_t bx)
 {
-    unsigned x = g_image[bx + 4], y = g_image[bx + 5];
-    int draw = 1;
+    uint32_t x = g_image[bx + 4], y = g_image[bx + 5];
+    int32_t draw = 1;
 
     if (g_image[EXTRA_ON] != 1 && (g_image[bx + 8] & 0x0f) == 1) {
         if (!bonus_steer(bx, &x, &y))
@@ -3355,9 +3357,9 @@ void entity_bonus(unsigned bx)
     }
 
     {   /* A ball: fresh slope, re-anchor, and reverse both ways. */
-        unsigned char *b = g_image + g_hit_ball;
-        b[B_DY] = (unsigned char)(game_random(io_ticks(), 7) + 1);
-        b[B_DX] = (unsigned char)(game_random(io_ticks(), 7) + 1);
+        uint8_t *b = g_image + g_hit_ball;
+        b[B_DY] = (uint8_t)(game_random(io_ticks(), 7) + 1);
+        b[B_DX] = (uint8_t)(game_random(io_ticks(), 7) + 1);
         b[B_ANCHOR_X] = b[B_X];
         b[B_ANCHOR_Y] = b[B_Y];
         b[B_ACC_X] = b[B_ACC_Y] = 0;
@@ -3404,10 +3406,10 @@ settle:
  */
 void scroll_up_band(void)
 {
-    unsigned di = 0x1ae2;
-    for (int r = 0x1b; r > 0; r--) {
-        unsigned si = cga_next_row(di);
-        for (int b = 0; b < 48; b++)
+    uint32_t di = 0x1ae2;
+    for (int32_t r = 0x1b; r > 0; r--) {
+        uint32_t si = cga_next_row(di);
+        for (int32_t b = 0; b < 48; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] =
                 g_vram[(si + b) & (CGA_SIZE - 1)];
         di = si;
@@ -3416,10 +3418,10 @@ void scroll_up_band(void)
 
 void scroll_down_band(void)
 {
-    unsigned si = 0x1ef2;
-    for (int r = 0x1b; r > 0; r--) {
-        unsigned di = cga_next_row(si);
-        for (int b = 0; b < 48; b++)
+    uint32_t si = 0x1ef2;
+    for (int32_t r = 0x1b; r > 0; r--) {
+        uint32_t di = cga_next_row(si);
+        for (int32_t b = 0; b < 48; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] =
                 g_vram[(si + b) & (CGA_SIZE - 1)];
         si = cga_prev_row(si);
@@ -3432,11 +3434,11 @@ void scroll_down_band(void)
  * shift - it overwrites. The game-over sequence uses it to put the paddle's
  * remains down.
  */
-void draw_paddle_raw(unsigned src)
+void draw_paddle_raw(uint32_t src)
 {
-    unsigned di = (g_image[PADDLE_X] >> 2) + PADDLE_ROW_BASE;
-    for (int r = 0; r < 0x10; r++) {
-        for (int b = 0; b < 7; b++)
+    uint32_t di = (g_image[PADDLE_X] >> 2) + PADDLE_ROW_BASE;
+    for (int32_t r = 0; r < 0x10; r++) {
+        for (int32_t b = 0; b < 7; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + r * 7 + b];
         di = cga_next_row(di);
     }
@@ -3449,7 +3451,7 @@ void draw_paddle_raw(unsigned src)
  * erase-then-draw and the same early-out, but it charges the frame delay
  * 0x1f3 rather than 0x1e0 - a shift costs more than picking a copy.
  */
-void draw_paddle_shifted(unsigned sprite)
+void draw_paddle_shifted(uint32_t sprite)
 {
     if (!g_image[PADDLE_FORCE_DRAW] &&
         g_image[PADDLE_X] == g_image[PADDLE_PREV_X])
@@ -3461,17 +3463,17 @@ void draw_paddle_shifted(unsigned sprite)
     memcpy(g_image + PADDLE_PIX_PREV, g_image + PADDLE_PIX_CUR,
            PADDLE_IMAGE + 1);
 
-    unsigned x = g_image[PADDLE_X];
-    g_image[PADDLE_PREV_X] = (unsigned char)x;
+    uint32_t x = g_image[PADDLE_X];
+    g_image[PADDLE_PREV_X] = (uint8_t)x;
     paddle_row_offsets(x, PADDLE_ROWS_CUR);
     memcpy(g_image + PADDLE_PIX_CUR, g_image + sprite, PADDLE_IMAGE + 1);
 
-    for (unsigned n = (x & 3) * 2; n > 0; n--) {
-        for (int r = 0; r < PADDLE_ROWS; r++) {
-            unsigned p = PADDLE_PIX_CUR + r * PADDLE_BYTES, carry = 0;
-            for (int b = 0; b < PADDLE_BYTES; b++) {
-                unsigned v = g_image[p + b];
-                g_image[p + b] = (unsigned char)((v >> 1) | (carry << 7));
+    for (uint32_t n = (x & 3) * 2; n > 0; n--) {
+        for (int32_t r = 0; r < PADDLE_ROWS; r++) {
+            uint32_t p = PADDLE_PIX_CUR + r * PADDLE_BYTES, carry = 0;
+            for (int32_t b = 0; b < PADDLE_BYTES; b++) {
+                uint32_t v = g_image[p + b];
+                g_image[p + b] = (uint8_t)((v >> 1) | (carry << 7));
                 carry = v & 1;
             }
         }
@@ -3491,9 +3493,9 @@ void draw_paddle_shifted(unsigned sprite)
 
 /* Tell a node that is about to be discarded, if it is one of the two that
  * care. Shared by all three purges below. */
-static void entity_farewell(unsigned bx)
+static void entity_farewell(uint32_t bx)
 {
-    unsigned handler = img_w(bx);
+    uint32_t handler = img_w(bx);
     if (handler == 0x36f6)
         cells_restore();
     else if (handler == 0x365e)
@@ -3503,10 +3505,10 @@ static void entity_farewell(unsigned bx)
 /* 1ac2:055e  entities_clear - empty the active list onto the free one */
 void entities_clear(void)
 {
-    unsigned bx = img_w(ENTITY_HEAD);
+    uint32_t bx = img_w(ENTITY_HEAD);
     while (bx != 0xffff) {
         entity_farewell(bx);
-        unsigned next = img_w(bx + E_NEXT);
+        uint32_t next = img_w(bx + E_NEXT);
         img_setw(bx + E_NEXT, img_w(ENTITY_FREE));
         img_setw(ENTITY_FREE, bx);
         bx = next;
@@ -3533,7 +3535,7 @@ void life_lost(void)
 {
     level_colours();
     img_setw(ENTITY_PREV, ENTITY_FREE);
-    unsigned bx = img_w(ENTITY_HEAD);
+    uint32_t bx = img_w(ENTITY_HEAD);
     while (bx != 0xffff) {
         if (img_w(bx) == 0x3abf) {      /* this one stays */
             img_setw(ENTITY_PREV, bx);
@@ -3541,7 +3543,7 @@ void life_lost(void)
             continue;
         }
         entity_farewell(bx);
-        unsigned next = img_w(bx + E_NEXT);
+        uint32_t next = img_w(bx + E_NEXT);
         img_setw(bx + E_NEXT, img_w(ENTITY_FREE));
         img_setw(ENTITY_FREE, bx);
         img_setw(img_w(ENTITY_PREV) + E_NEXT, next);
@@ -3567,17 +3569,17 @@ void life_lost(void)
 #define HOLD_OFFSET 0x2e56
 #define SOUND_CATCH      7
 
-int ball_on_paddle(unsigned ball)
+int32_t ball_on_paddle(uint32_t ball)
 {
-    unsigned char *b = g_image + ball;
+    uint8_t *b = g_image + ball;
     if (g_image[PADDLE_SUPPRESS] != 0)
         return 1;
 
     if (img_w(HOLD_TIMER) == HOLD_RESET) {
         /* Not holding one yet: is this ball landing on the paddle? */
-        unsigned y = b[B_Y];
-        unsigned left = (g_image[PADDLE_X] - 3) & 0xff;
-        unsigned off = (b[B_X] - left) & 0xff;
+        uint32_t y = b[B_Y];
+        uint32_t left = (g_image[PADDLE_X] - 3) & 0xff;
+        uint32_t off = (b[B_X] - left) & 0xff;
         if (y < PADDLE_TOP || y > PADDLE_BOTTOM || b[B_X] < left ||
             off > ((g_image[PADDLE_WIDTH] + 3) & 0xff)) {
             img_setw(HOLD_TIMER, HOLD_RESET);
@@ -3586,7 +3588,7 @@ int ball_on_paddle(unsigned ball)
         b[B_Y] = PADDLE_TOP;
         b[B_STATE] = 2;                 /* held */
         img_setw(HOLD_TIMER, (img_w(HOLD_TIMER) - g_image[SPEED_LIMIT]) & 0xffff);
-        g_image[HOLD_OFFSET] = (unsigned char)(b[B_X] - g_image[PADDLE_X]);
+        g_image[HOLD_OFFSET] = (uint8_t)(b[B_X] - g_image[PADDLE_X]);
         ball_redraw(ball);
         g_image[SOUND_REQUEST] = SOUND_CATCH;
         return 0;
@@ -3595,7 +3597,7 @@ int ball_on_paddle(unsigned ball)
     if (b[B_STATE] != 2)
         return 1;                       /* a different ball; not held */
 
-    int release = g_image[KEY_ACTION] == 1;
+    int32_t release = g_image[KEY_ACTION] == 1;
     if (!release) {
         img_setw(HOLD_TIMER, img_w(HOLD_TIMER) - 1);
         if (img_w(HOLD_TIMER) == 0) {
@@ -3611,7 +3613,7 @@ int ball_on_paddle(unsigned ball)
     }
 
     if (!release) {
-        b[B_X] = (unsigned char)(g_image[PADDLE_X] + g_image[HOLD_OFFSET]);
+        b[B_X] = (uint8_t)(g_image[PADDLE_X] + g_image[HOLD_OFFSET]);
         ball_redraw(ball);
         return 0;
     }
@@ -3634,11 +3636,11 @@ int ball_on_paddle(unsigned ball)
  * the `bl` keys defined so far, and not one of the four the game keeps for
  * itself at 0x2d52. Then store it as key number `bl`.
  */
-void read_new_key(unsigned which)
+void read_new_key(uint32_t which)
 {
     for (;;) {
-        unsigned sc = g_image[0x2d49] & 0x7f;
-        unsigned i;
+        uint32_t sc = g_image[0x2d49] & 0x7f;
+        uint32_t i;
         for (i = 0; i < which; i++)
             if (sc == g_image[KEY_SCAN_L + i])
                 break;
@@ -3649,7 +3651,7 @@ void read_new_key(unsigned which)
                 break;
         if (g_image[0x2d52 + i])
             continue;                   /* reserved */
-        g_image[KEY_SCAN_L + which] = (unsigned char)sc;
+        g_image[KEY_SCAN_L + which] = (uint8_t)sc;
         return;
     }
 }
@@ -3660,9 +3662,9 @@ void read_new_key(unsigned which)
  * hall-of-fame sort walks the table with this. `scasb` compares and steps, so
  * the first digit that differs decides.
  */
-int score_before(unsigned si, unsigned di)
+int32_t score_before(uint32_t si, uint32_t di)
 {
-    for (int i = 0; i < 6; i++)
+    for (int32_t i = 0; i < 6; i++)
         if (g_image[si + i] != g_image[di + i])
             return g_image[si + i] > g_image[di + i];
     return 0;
@@ -3684,18 +3686,18 @@ int score_before(unsigned si, unsigned di)
  * ===================================================================== */
 #define SHOT_SOUND 5
 
-static void laser_dot_rows(unsigned x, unsigned y, int moving)
+static void laser_dot_rows(uint32_t x, uint32_t y, int32_t moving)
 {
-    unsigned mask = 0xc0 >> ((x & 3) * 2);
-    unsigned di = pixel_xor(x, y);
+    uint32_t mask = 0xc0 >> ((x & 3) * 2);
+    uint32_t di = pixel_xor(x, y);
     di = cga_next_row(di);
-    g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)mask;
+    g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
     if (moving) {
         di = (di + 0x50) & 0xffff;
-        g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)mask;
+        g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
     }
     di = cga_next_row(di);
-    g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)mask;
+    g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
 }
 
 void laser_fire(void)
@@ -3703,10 +3705,10 @@ void laser_fire(void)
     if (g_image[PADDLE_SUPPRESS] == 0 && g_image[LASER_ON] != 2) {
         if (g_image[KEY_ACTION] != 1)
             return;
-        unsigned x = (g_image[PADDLE_X] + 4) & 0xff;
+        uint32_t x = (g_image[PADDLE_X] + 4) & 0xff;
         g_image[SOUND_REQUEST] = SHOT_SOUND;
-        g_image[SHOT_X] = (unsigned char)x;
-        unsigned y = g_image[SHOT_Y];
+        g_image[SHOT_X] = (uint8_t)x;
+        uint32_t y = g_image[SHOT_Y];
         laser_dot_rows(x, y, 0);
         laser_dot_rows((x + 0x13) & 0xff, y, 0);
         g_image[SHOT_Y] = 0xb1;
@@ -3716,7 +3718,7 @@ void laser_fire(void)
     if (g_image[LASER_ON] != 2)
         return;
 
-    unsigned x = g_image[SHOT_X], y = g_image[SHOT_Y];
+    uint32_t x = g_image[SHOT_X], y = g_image[SHOT_Y];
     laser_dot_rows(x, y, 1);
     laser_dot_rows((x + 0x13) & 0xff, y, 1);
     g_image[SHOT_Y] -= 2;
@@ -3729,14 +3731,14 @@ void laser_fire(void)
 
     /* Probe the two cells the shot covers. */
     g_image[HIT_COUNT] = 0;
-    unsigned py = (x - 8) & 0xff, px = (y - 6) & 0xff;
+    uint32_t py = (x - 8) & 0xff, px = (y - 6) & 0xff;
     probe_cell_at(py, px, HIT_SLOTS + 0);
     probe_cell_at((py + 0x13) & 0xff, px, HIT_SLOTS + 4);
     if (g_image[HIT_COUNT] == 0)
         return;
 
-    for (int i = 0; i < 2; i++) {
-        unsigned cell = img_w(HIT_SLOTS + i * 4);
+    for (int32_t i = 0; i < 2; i++) {
+        uint32_t cell = img_w(HIT_SLOTS + i * 4);
         if (cell)
             brick_hit(HIT_SLOTS + i * 4, cell, 0);   /* no ball: BP is zero */
     }
@@ -3765,19 +3767,19 @@ void laser_fire(void)
 
 /* 1ac2:3561  entity_popup is the same routine with a different set of frames -
  * table 0x339b rather than 0x3385 - so the two share a body. */
-void entity_popup(unsigned bx) { entity_capsule_frames(bx, 0x339b); }
-void entity_capsule(unsigned bx) { entity_capsule_frames(bx, CAPSULE_FRAMES); }
+void entity_popup(uint32_t bx) { entity_capsule_frames(bx, 0x339b); }
+void entity_capsule(uint32_t bx) { entity_capsule_frames(bx, CAPSULE_FRAMES); }
 
-void entity_capsule_frames(unsigned bx, unsigned table)
+void entity_capsule_frames(uint32_t bx, uint32_t table)
 {
     if ((--g_image[bx + 5] & 7) != 0)
         return;                         /* not this tick */
 
-    unsigned base = img_w(table + g_image[bx + 4] * 2);
-    unsigned di = base + g_image[bx + 6] * 4;
-    unsigned src = img_w(di), rows = img_w(di + 2);
+    uint32_t base = img_w(table + g_image[bx + 4] * 2);
+    uint32_t di = base + g_image[bx + 6] * 4;
+    uint32_t src = img_w(di), rows = img_w(di + 2);
 
-    unsigned y = g_image[bx + 3];
+    uint32_t y = g_image[bx + 3];
     g_image[bx + 3]++;
     xor_sprite_16xn(g_image[bx + 2], y, src, rows & 0xff);
 
@@ -3792,8 +3794,8 @@ void entity_capsule_frames(unsigned bx, unsigned table)
         /* Level with the paddle: does it overlap? The comparison is done in
          * sixteen bits with an `adc ch,0`, so a paddle at the right-hand edge
          * does not wrap. */
-        unsigned right = (g_image[bx + 2] + 0x0e) & 0xffff;
-        unsigned px = g_image[PADDLE_X];
+        uint32_t right = (g_image[bx + 2] + 0x0e) & 0xffff;
+        uint32_t px = g_image[PADDLE_X];
         if (right >= px &&
             (right - 0x0f) <= (px + g_image[PADDLE_WIDTH])) {
             g_image[bx + 6] = g_image[PADDLE_KIND];
@@ -3827,11 +3829,11 @@ void entity_capsule_frames(unsigned bx, unsigned table)
 /* 1ac2:41b1  fill_column - 0x19 words down one column, stepping the interlace.
  * `stosw` then `dec di` twice leaves the offset where it started, so the
  * column stays put while the rows advance. */
-void fill_column(unsigned di, unsigned value)
+void fill_column(uint32_t di, uint32_t value)
 {
-    for (int i = 0; i < 0x19; i++) {
-        g_vram[di & (CGA_SIZE - 1)] = (unsigned char)value;
-        g_vram[(di + 1) & (CGA_SIZE - 1)] = (unsigned char)(value >> 8);
+    for (int32_t i = 0; i < 0x19; i++) {
+        g_vram[di & (CGA_SIZE - 1)] = (uint8_t)value;
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = (uint8_t)(value >> 8);
         di = cga_next_row(di);
     }
 }
@@ -3896,11 +3898,11 @@ void bonus_net(void)
  * where it is */
 void bonus_reverse(void)
 {
-    for (int i = 0; i < 3; i++) {
-        unsigned char *b = g_image + BALLS + i * BALL_STRIDE;
+    for (int32_t i = 0; i < 3; i++) {
+        uint8_t *b = g_image + BALLS + i * BALL_STRIDE;
         if (b[B_STATE] == 0)
             continue;
-        b[B_DIR_Y] = (unsigned char)(b[B_DIR_Y] == 1 ? 0 : 1);
+        b[B_DIR_Y] = (uint8_t)(b[B_DIR_Y] == 1 ? 0 : 1);
         b[B_ANCHOR_X] = b[B_X];
         b[B_ANCHOR_Y] = b[B_Y];
         b[B_ACC_X] = b[B_ACC_Y] = 0;
@@ -3921,7 +3923,7 @@ void bonus_speed(void)
 /* The dispatch at 1ac2:337d. Kind 8 ends the level and is not here: it throws
  * four words off the stack and jumps into 0x4210, which no C call can do, so
  * it is handled where the morph animation calls this. */
-void bonus_effect(unsigned kind)
+void bonus_effect(uint32_t kind)
 {
     switch (kind) {
     case 0: bonus_points(); break;
@@ -3950,7 +3952,7 @@ void bonus_effect(unsigned kind)
  * Sets [0x2e73] to 3 - three balls alive - and unlinks itself; it exists only
  * to run once.
  * ===================================================================== */
-void entity_multiball(unsigned bx)
+void entity_multiball(uint32_t bx)
 {
     if (g_image[BALL_ALIVE] == 3) {
         g_image[ENTITY_REMOVE] = 1;
@@ -3958,9 +3960,9 @@ void entity_multiball(unsigned bx)
     }
 
     /* Find one that is in play to copy. */
-    unsigned src = 0;
-    for (int i = 0; i < 3; i++) {
-        unsigned b = BALLS + i * BALL_STRIDE;
+    uint32_t src = 0;
+    for (int32_t i = 0; i < 3; i++) {
+        uint32_t b = BALLS + i * BALL_STRIDE;
         if (g_image[b + B_STATE] != 0) {
             src = b;
             break;
@@ -3970,19 +3972,19 @@ void entity_multiball(unsigned bx)
         return;                         /* none: nothing to multiply */
 
     g_image[BALL_ALIVE] = 3;
-    unsigned dy = g_image[src + B_DY], dx = g_image[src + B_DX];
-    unsigned x = g_image[src + B_X], y = g_image[src + B_Y];
+    uint32_t dy = g_image[src + B_DY], dx = g_image[src + B_DX];
+    uint32_t x = g_image[src + B_X], y = g_image[src + B_Y];
 
-    for (int i = 0; i < 3; i++) {
-        unsigned si = BALLS + i * BALL_STRIDE;
+    for (int32_t i = 0; i < 3; i++) {
+        uint32_t si = BALLS + i * BALL_STRIDE;
         if (g_image[si + B_STATE] != 0)
             continue;
-        unsigned char *b = g_image + si;
-        b[B_X] = b[B_PREV_X] = b[B_ANCHOR_X] = (unsigned char)x;
-        b[B_Y] = b[B_PREV_Y] = b[B_ANCHOR_Y] = (unsigned char)y;
+        uint8_t *b = g_image + si;
+        b[B_X] = b[B_PREV_X] = b[B_ANCHOR_X] = (uint8_t)x;
+        b[B_Y] = b[B_PREV_Y] = b[B_ANCHOR_Y] = (uint8_t)y;
         dx = (dx + 2) & 0xff;           /* each copy a little steeper */
-        b[B_DY] = (unsigned char)dy;
-        b[B_DX] = (unsigned char)dx;
+        b[B_DY] = (uint8_t)dy;
+        b[B_DX] = (uint8_t)dx;
         b[B_DIR_X] = g_image[src + B_DIR_X];
         b[B_DIR_Y] = g_image[src + B_DIR_Y];
         b[B_ACC_X] = b[B_ACC_Y] = 1;
@@ -3990,14 +3992,14 @@ void entity_multiball(unsigned bx)
         b[B_BOUNCES] = 0;
 
         memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
-        unsigned shift = (b[B_X] & 3) * 2;
+        uint32_t shift = (b[B_X] & 3) * 2;
         if (shift) {
-            for (int r = 0; r < 4; r++) {
-                unsigned w = b[B_SPRITE + r * 2] |
+            for (int32_t r = 0; r < 4; r++) {
+                uint32_t w = b[B_SPRITE + r * 2] |
                              (b[B_SPRITE + r * 2 + 1] << 8);
                 w = ((w >> shift) | (w << (16 - shift))) & 0xffff;
-                b[B_SPRITE + r * 2] = (unsigned char)w;
-                b[B_SPRITE + r * 2 + 1] = (unsigned char)(w >> 8);
+                b[B_SPRITE + r * 2] = (uint8_t)w;
+                b[B_SPRITE + r * 2 + 1] = (uint8_t)(w >> 8);
             }
         }
         ball_draw(si + B_SPRITE, b[B_X], b[B_Y]);
@@ -4031,13 +4033,13 @@ void entity_multiball(unsigned bx)
 #define PADDLE_SHRINK 0x2d25
 #define PADDLE_GROW   0x2d1d
 
-static void morph_finish(unsigned bx)
+static void morph_finish(uint32_t bx)
 {
     bonus_effect(g_image[bx + 0x0a]);
     g_image[ENTITY_REMOVE] = 1;
 }
 
-void entity_paddle_fx(unsigned bx)
+void entity_paddle_fx(uint32_t bx)
 {
     if (g_image[PADDLE_SUPPRESS] == 0) {
         /* Nothing is morphing. If the paddle is already the kind this capsule
@@ -4060,9 +4062,9 @@ void entity_paddle_fx(unsigned bx)
             /* Losing the catch: release anything held. */
             g_image[CAUGHT] = 0;
             img_setw(HOLD_TIMER, 0x460);
-            for (int i = 0; i < 3; i++) {
-                unsigned ball = BALLS + i * BALL_STRIDE;
-                unsigned char *b = g_image + ball;
+            for (int32_t i = 0; i < 3; i++) {
+                uint32_t ball = BALLS + i * BALL_STRIDE;
+                uint8_t *b = g_image + ball;
                 if (b[B_STATE] != 2)
                     continue;
                 ball_after(ball);
@@ -4089,7 +4091,7 @@ void entity_paddle_fx(unsigned bx)
             draw_paddle(img_w(PADDLE_SPRITES + g_image[PADDLE_KIND] * 4));
             return;
         }
-        unsigned si = img_w(bx + 4) + g_image[bx + 3] * 2;
+        uint32_t si = img_w(bx + 4) + g_image[bx + 3] * 2;
         draw_paddle_shifted(img_w(si));
         return;
     }
@@ -4101,7 +4103,7 @@ void entity_paddle_fx(unsigned bx)
 
     /* A frame boundary with [bx+3] == 6: pick the sprite list for this stage.
      * [bx+2] is 1 while shrinking the old paddle and 0 while growing the new. */
-    unsigned si, kind;
+    uint32_t si, kind;
     if (g_image[bx + 2] != 0) {
         si = PADDLE_SHRINK;
         g_image[PADDLE_STEP] = 0;
@@ -4132,7 +4134,7 @@ void entity_paddle_fx(unsigned bx)
 
 /* 1ac2:34c5  morph_begin - start a stage: remember its sprite list and run
  * the first frame. */
-void morph_begin(unsigned bx, unsigned table, unsigned kind)
+void morph_begin(uint32_t bx, uint32_t table, uint32_t kind)
 {
     img_setw(bx + 4, img_w(table + kind * 2));
     g_image[bx + 3] = 6;
@@ -4141,10 +4143,10 @@ void morph_begin(unsigned bx, unsigned table, unsigned kind)
 }
 
 /* 1ac2:34d7  morph_step - one frame of the shrink or grow */
-void morph_step(unsigned bx)
+void morph_step(uint32_t bx)
 {
     g_image[bx + 3]--;
-    unsigned si = img_w(bx + 4) + g_image[bx + 3] * 2;
+    uint32_t si = img_w(bx + 4) + g_image[bx + 3] * 2;
     draw_paddle_shifted(img_w(si));
 
     g_image[PADDLE_WIDTH] += g_image[PADDLE_STEP];
@@ -4159,8 +4161,8 @@ void morph_step(unsigned bx)
         return;
     }
     /* Done growing: install the new paddle and apply the effect. */
-    unsigned kind = g_image[bx + 7];
-    g_image[PADDLE_KIND] = (unsigned char)kind;
+    uint32_t kind = g_image[bx + 7];
+    g_image[PADDLE_KIND] = (uint8_t)kind;
     g_image[PADDLE_WIDTH] = g_image[PADDLE_SPRITES + kind * 4 + 2];
     g_image[PADDLE_SUPPRESS] = 0;
     morph_finish(bx);
@@ -4183,43 +4185,43 @@ void morph_step(unsigned bx)
 
 void level_between(void)
 {
-    unsigned si = FIELD_MARKS;
-    for (int i = 0; i < 4; i++, si += 4) {
-        unsigned x = g_image[si], y = (g_image[si + 1] - 0x0a) & 0xff;
+    uint32_t si = FIELD_MARKS;
+    for (int32_t i = 0; i < 4; i++, si += 4) {
+        uint32_t x = g_image[si], y = (g_image[si + 1] - 0x0a) & 0xff;
         g_image[si + 3] = 0;
-        unsigned src = 0x6078, di = cga_at(x, y);
-        for (int r = 0; r < 0x25; r++) {
+        uint32_t src = 0x6078, di = cga_at(x, y);
+        for (int32_t r = 0; r < 0x25; r++) {
             g_vram[di & (CGA_SIZE - 1)] = g_image[src + r * 2];
             g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[src + r * 2 + 1];
             di = cga_next_row(di);
         }
     }
 
-    for (int i = 0; i < 0x18; i++) {
+    for (int32_t i = 0; i < 0x18; i++) {
         g_vram[(0xa2 + i * 2) & (CGA_SIZE - 1)] = 0;
         g_vram[(0xa3 + i * 2) & (CGA_SIZE - 1)] = 0;
         g_vram[(0x20a2 + i * 2) & (CGA_SIZE - 1)] = 0;
         g_vram[(0x20a3 + i * 2) & (CGA_SIZE - 1)] = 0;
     }
 
-    unsigned di_cell = LEVEL_CELLS + 8;
-    unsigned y = 6;
-    for (int row = 0; row < 0x0e; row++, y += 8) {
-        unsigned x = 8;
-        for (int col = 0; col < 0x0c; col++, di_cell++, x += 0x10) {
-            unsigned cell = g_image[di_cell];
+    uint32_t di_cell = LEVEL_CELLS + 8;
+    uint32_t y = 6;
+    for (int32_t row = 0; row < 0x0e; row++, y += 8) {
+        uint32_t x = 8;
+        for (int32_t col = 0; col < 0x0c; col++, di_cell++, x += 0x10) {
+            uint32_t cell = g_image[di_cell];
             if (cell == 0x0c) {
                 cell_hole_draw(x, y);
                 continue;
             }
             if (cell == 4)
                 continue;               /* empty */
-            unsigned idx = cell * 2;
-            unsigned src = (idx >= 0x30 ? SEG_14A1 : 0) +
+            uint32_t idx = cell * 2;
+            uint32_t src = (idx >= 0x30 ? SEG_14A1 : 0) +
                            img_w(CELL_TABLE + idx);
-            unsigned di = cga_at(x, y);
-            for (int r = 0; r < 8; r++) {
-                for (int b = 0; b < 4; b++)
+            uint32_t di = cga_at(x, y);
+            for (int32_t r = 0; r < 8; r++) {
+                for (int32_t b = 0; b < 4; b++)
                     g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + r * 4 + b];
                 di = cga_next_row(di);
             }
@@ -4227,9 +4229,9 @@ void level_between(void)
     }
 
     /* And the empty band under the bricks, 0x29 rows of 48 bytes. */
-    unsigned bp = 0x1272;
-    for (int r = 0; r < 0x29; r++, bp += 0x50) {
-        for (int i = 0; i < 48; i++) {
+    uint32_t bp = 0x1272;
+    for (int32_t r = 0; r < 0x29; r++, bp += 0x50) {
+        for (int32_t i = 0; i < 48; i++) {
             g_vram[(bp + i) & (CGA_SIZE - 1)] = 0;
             g_vram[(bp + CGA_PLANE + i) & (CGA_SIZE - 1)] = 0;
         }
@@ -4255,10 +4257,10 @@ void level_between(void)
 #define NAME_INDEX   0x13e9             /* ASCII '1' upwards */
 #define PLAYER_COUNT 0x3f08
 
-int name_field(unsigned di, unsigned char *abort)
+int32_t name_field(uint32_t di, uint8_t *abort)
 {
-    unsigned si = NAME_TABLE + (g_image[NAME_INDEX] - '1') * NAME_STRIDE;
-    unsigned len = 0;
+    uint32_t si = NAME_TABLE + (g_image[NAME_INDEX] - '1') * NAME_STRIDE;
+    uint32_t len = 0;
     *abort = 0;
 
     di -= 2;
@@ -4266,7 +4268,7 @@ int name_field(unsigned di, unsigned char *abort)
     di += 2;
 
     for (;;) {
-        unsigned c = io_get_key() & 0xff;
+        uint32_t c = io_get_key() & 0xff;
         if (!c) {
             if (!io_pump())
                 return 0;
@@ -4308,28 +4310,28 @@ int name_field(unsigned di, unsigned char *abort)
         }
         if (c >= 0x60)
             c &= 0xdf;                  /* fold to upper case */
-        int ok = (c == ' ' || c == '-' ||
+        int32_t ok = (c == ' ' || c == '-' ||
                   (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'));
         if (!ok || len == 0x0c)
             continue;
-        g_image[si++] = (unsigned char)c;
+        g_image[si++] = (uint8_t)c;
         len++;
-        draw_char((unsigned char)c, di);
+        draw_char((uint8_t)c, di);
         draw_cursor(di);
         di += 2;
     }
 
     /* Pad the rest of the field with spaces, then shift the name right by
      * half the space left so it sits centred in the box. */
-    unsigned pad = 0x0d - len;
-    unsigned shift = (pad - 1) >> 1;
-    for (unsigned i = 0; i < pad; i++, si++, di += 2) {
+    uint32_t pad = 0x0d - len;
+    uint32_t shift = (pad - 1) >> 1;
+    for (uint32_t i = 0; i < pad; i++, si++, di += 2) {
         g_image[si] = ' ';
         draw_char(' ', di);
     }
-    unsigned base = NAME_TABLE + (g_image[NAME_INDEX] - '1') * NAME_STRIDE + 0x0a;
-    for (unsigned n = 0; n < shift; n++) {
-        for (int k = 0x0b; k >= 0; k--)
+    uint32_t base = NAME_TABLE + (g_image[NAME_INDEX] - '1') * NAME_STRIDE + 0x0a;
+    for (uint32_t n = 0; n < shift; n++) {
+        for (int32_t k = 0x0b; k >= 0; k--)
             g_image[base - k + 1] = g_image[base - k];
         g_image[base - 0x0b] = ' ';
     }
@@ -4357,9 +4359,9 @@ int name_field(unsigned di, unsigned char *abort)
 #define NAME_PROMPT 0x13e1              /* "NOM DU JOUEUR", 0x18 characters */
 #define NAME_WIDTH  0x18                /* characters, and words of bar */
 
-static unsigned name_bar(unsigned di, unsigned word)
+static uint32_t name_bar(uint32_t di, uint32_t word)
 {
-    for (int i = 0; i < NAME_WIDTH; i++)
+    for (int32_t i = 0; i < NAME_WIDTH; i++)
         img_vram_setw((di + i * 2) & 0xffff, word);
     return cga_next_row(di);
 }
@@ -4367,38 +4369,38 @@ static unsigned name_bar(unsigned di, unsigned word)
 /* One row of the engraved panel: a byte, a middle, and a byte. The middle is
  * given as a byte so both the `rep stosw` rows and the `rep stosb` rows can
  * use it - 0xffff is 0xff twice, 0x5555 is 0x55 twice. */
-static unsigned panel_row(unsigned di, unsigned lead, unsigned mid,
-                          unsigned tail, int has_tail)
+static uint32_t panel_row(uint32_t di, uint32_t lead, uint32_t mid,
+                          uint32_t tail, int32_t has_tail)
 {
-    unsigned d = di;
-    g_vram[d++ & (CGA_SIZE - 1)] = (unsigned char)lead;
-    for (int i = 0; i < (has_tail ? 0x2e : 0x2f); i++)
-        g_vram[(d + i) & (CGA_SIZE - 1)] = (unsigned char)mid;
+    uint32_t d = di;
+    g_vram[d++ & (CGA_SIZE - 1)] = (uint8_t)lead;
+    for (int32_t i = 0; i < (has_tail ? 0x2e : 0x2f); i++)
+        g_vram[(d + i) & (CGA_SIZE - 1)] = (uint8_t)mid;
     if (has_tail)
-        g_vram[(d + 0x2e) & (CGA_SIZE - 1)] = (unsigned char)tail;
+        g_vram[(d + 0x2e) & (CGA_SIZE - 1)] = (uint8_t)tail;
     return cga_next_row(di);
 }
 
-unsigned char screen_player_names(void)
+uint8_t screen_player_names(void)
 {
     g_image[PLAYER_COUNT] = 0;
     play_frame();                       /* 1ac2:1212 - the surround */
     io_flush_keys();
 
-    unsigned di = 0x142;
+    uint32_t di = 0x142;
     for (;;) {
-        unsigned top = di;                      /* pushed at 1ac2:10f2 */
-        unsigned label = name_bar(top, 0xaaaa); /* pushed at 1ac2:110e */
+        uint32_t top = di;                      /* pushed at 1ac2:10f2 */
+        uint32_t label = name_bar(top, 0xaaaa); /* pushed at 1ac2:110e */
 
         draw_text(NAME_PROMPT, NAME_WIDTH, label);
         name_bar((label + 0x1e0) & 0xffff, 0xaaaa);
 
-        unsigned char abort = 0;
-        int done = name_field((label + 0x16) & 0xffff, &abort);
+        uint8_t abort = 0;
+        int32_t done = name_field((label + 0x16) & 0xffff, &abort);
         if (done) {
             /* Rub the box out and start: fourteen rows of nothing. */
-            unsigned d = top;
-            for (int r = 0; r < 0x0e; r++)
+            uint32_t d = top;
+            for (int32_t r = 0; r < 0x0e; r++)
                 d = name_bar(d, 0);
             g_image[NAME_INDEX] = '1';
             return 0;
@@ -4413,7 +4415,7 @@ unsigned char screen_player_names(void)
         }
 
         /* The box just filled in becomes an engraved panel. */
-        unsigned d = (top + 0x280) & 0xffff;
+        uint32_t d = (top + 0x280) & 0xffff;
         d = panel_row(d, 0x3f, 0xff, 0xfc, 1);
         d = panel_row(d, 0xf5, 0x55, 0,    0);
         d = panel_row(d, 0xd5, 0x15, 0,    0);
@@ -4433,17 +4435,17 @@ unsigned char screen_player_names(void)
  * ===================================================================== */
 #define FRAME_PHASE (CS_BASE + 0x5c6d)
 
-unsigned frame_band(unsigned di, unsigned fill)
+uint32_t frame_band(uint32_t di, uint32_t fill)
 {
-    unsigned n = g_image[FRAME_PHASE] * 3;
-    for (int i = 0; i < 3; i++)
+    uint32_t n = g_image[FRAME_PHASE] * 3;
+    for (int32_t i = 0; i < 3; i++)
         g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[0x48d2 + n + i];
     di += 3;
-    for (int i = 0; i < 0x17; i++, di += 2) {
-        g_vram[di & (CGA_SIZE - 1)] = (unsigned char)fill;
-        g_vram[(di + 1) & (CGA_SIZE - 1)] = (unsigned char)(fill >> 8);
+    for (int32_t i = 0; i < 0x17; i++, di += 2) {
+        g_vram[di & (CGA_SIZE - 1)] = (uint8_t)fill;
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = (uint8_t)(fill >> 8);
     }
-    for (int i = 0; i < 3; i++)
+    for (int32_t i = 0; i < 3; i++)
         g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[0x48bd + n + i];
     g_image[FRAME_PHASE]++;
     return di + 3;
@@ -4462,43 +4464,43 @@ void play_frame(void)
 {
     g_image[FRAME_PHASE] = 0;
 
-    unsigned di = 0x1e50;
-    static const unsigned fills[6] = { 0xffff, 0x5555, 0x5454, 0x5555, 0, 0 };
-    for (int i = 0; i < 6; i++) {
+    uint32_t di = 0x1e50;
+    static const uint32_t fills[6] = { 0xffff, 0x5555, 0x5454, 0x5555, 0, 0 };
+    for (int32_t i = 0; i < 6; i++) {
         frame_band(di, fills[i]);
         if (i < 5)
             di = cga_next_row(di);
     }
 
     /* The walls. Each pass scrolls the column up six rows and caps it. */
-    unsigned bp = 0x3e00;
-    for (int pass = 0xc2; pass > 0; pass--) {
+    uint32_t bp = 0x3e00;
+    for (int32_t pass = 0xc2; pass > 0; pass--) {
         io_wait_retrace();
         di = bp;
-        for (int dh = 6; dh > 0; dh--) {
+        for (int32_t dh = 6; dh > 0; dh--) {
             /* Copy the row below over this one. `rep movsw` leaves SI
              * 0x34 on and the `sub di, 0x34` puts it back, so what the next
              * iteration works on is the row just read - not 0x34 to the left
              * of it. Taking the subtraction literally walks the column left
              * a third of a line every row, which smears the white band at
              * the top of the frame across the whole screen. */
-            unsigned src = cga_next_row(di);
-            for (int i = 0; i < 0x1a * 2; i++)
+            uint32_t src = cga_next_row(di);
+            for (int32_t i = 0; i < 0x1a * 2; i++)
                 g_vram[(di + i) & (CGA_SIZE - 1)] =
                     g_vram[(src + i) & (CGA_SIZE - 1)];
             di = src;
         }
         di = cga_next_row(di);
 
-        unsigned cap = (g_image[FRAME_PHASE] & 3) ? 0x50 : 0x10;
+        uint32_t cap = (g_image[FRAME_PHASE] & 3) ? 0x50 : 0x10;
         g_vram[di++ & (CGA_SIZE - 1)] = 0x0d;
-        g_vram[di++ & (CGA_SIZE - 1)] = (unsigned char)cap;
-        for (int i = 0; i < 0x18; i++, di += 2) {
+        g_vram[di++ & (CGA_SIZE - 1)] = (uint8_t)cap;
+        for (int32_t i = 0; i < 0x18; i++, di += 2) {
             g_vram[di & (CGA_SIZE - 1)] = 0;
             g_vram[(di + 1) & (CGA_SIZE - 1)] = 0;
         }
         g_vram[di++ & (CGA_SIZE - 1)] = 0x0d;
-        g_vram[di & (CGA_SIZE - 1)] = (unsigned char)cap;
+        g_vram[di & (CGA_SIZE - 1)] = (uint8_t)cap;
         g_image[FRAME_PHASE]++;
 
         bp = cga_prev_row(bp);
@@ -4513,8 +4515,8 @@ void play_frame(void)
     }
 
     panel_reveal();                     /* 1ac2:0911 */
-    for (int b = 5; b > 0; b--)
-        for (int i = 0; i < 0x147; i++)
+    for (int32_t b = 5; b > 0; b--)
+        for (int32_t i = 0; i < 0x147; i++)
             game_delay();
     panel_finish();                     /* 1ac2:09c5 */
 }
@@ -4529,13 +4531,13 @@ void play_frame(void)
  * ===================================================================== */
 void panel_reveal(void)
 {
-    unsigned di = 0;
-    for (int i = 0; i < 0x64; i++, di += 0x50) {
+    uint32_t di = 0;
+    for (int32_t i = 0; i < 0x64; i++, di += 0x50) {
         img_vram_setw(di, 0x500d);
         img_vram_setw(di + 0x32, 0x500d);
     }
     di = CGA_PLANE;
-    for (int i = 0; i < 0x32; i++, di += 0xa0) {
+    for (int32_t i = 0; i < 0x32; i++, di += 0xa0) {
         img_vram_setw(di, 0x500d);
         img_vram_setw(di + 0x32, 0x500d);
         img_vram_setw(di + 0x50, 0x100d);
@@ -4543,11 +4545,11 @@ void panel_reveal(void)
     }
 
     /* The top edge: a solid row, then a lighter one under it. */
-    for (int i = 0; i < 0x19; i++)
+    for (int32_t i = 0; i < 0x19; i++)
         img_vram_setw(i * 2, 0xffff);
-    for (int i = 0; i < 0x19; i++)
+    for (int32_t i = 0; i < 0x19; i++)
         img_vram_setw(0x50 + i * 2, 0x1515);
-    for (int i = 0; i < 0x32; i++) {
+    for (int32_t i = 0; i < 0x32; i++) {
         g_vram[(CGA_PLANE + i) & (CGA_SIZE - 1)] = 0x55;
         g_vram[(CGA_PLANE + 0x50 + i) & (CGA_SIZE - 1)] = 0x55;
     }
@@ -4557,16 +4559,16 @@ void panel_reveal(void)
      * sprites read straight through, three bytes per row, not one row drawn
      * seven times. */
     di = 0;
-    unsigned si = 0x48d2;
-    for (int r = 0; r < 7; r++) {
-        for (int i = 0; i < 3; i++)
+    uint32_t si = 0x48d2;
+    for (int32_t r = 0; r < 7; r++) {
+        for (int32_t i = 0; i < 3; i++)
             g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[si++];
         di = cga_next_row(di);
     }
     di = 0x31;
     si = 0x48bd;
-    for (int r = 0; r < 7; r++) {
-        for (int i = 0; i < 3; i++)
+    for (int32_t r = 0; r < 7; r++) {
+        for (int32_t i = 0; i < 3; i++)
             g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[si++];
         di = cga_next_row(di);
     }
@@ -4580,12 +4582,12 @@ void panel_reveal(void)
  */
 void field_marks(void)
 {
-    unsigned si = FIELD_MARKS;
-    for (int i = 0; i < 8; i++, si += 4) {
-        unsigned x = g_image[si], y = (g_image[si + 1] - 0x0a) & 0xff;
+    uint32_t si = FIELD_MARKS;
+    for (int32_t i = 0; i < 8; i++, si += 4) {
+        uint32_t x = g_image[si], y = (g_image[si + 1] - 0x0a) & 0xff;
         g_image[si + 3] = 0;
-        unsigned di = cga_at(x, y);
-        for (int r = 0; r < 0x1f; r++) {
+        uint32_t di = cga_at(x, y);
+        for (int32_t r = 0; r < 0x1f; r++) {
             g_vram[di & (CGA_SIZE - 1)] = g_image[0x6078 + r * 2];
             g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[0x6078 + r * 2 + 1];
             di = cga_next_row(di);
@@ -4601,9 +4603,9 @@ void field_marks(void)
  */
 void panel_finish(void)
 {
-    unsigned di = 0x1cc0;
-    for (int pass = 0; pass < 6; pass++) {
-        unsigned d = di;
+    uint32_t di = 0x1cc0;
+    for (int32_t pass = 0; pass < 6; pass++) {
+        uint32_t d = di;
         field_marks_wide(d, pass);
         d = (d - 0x7d0) & 0xffff;
         field_marks_wide(d, pass);
@@ -4612,7 +4614,7 @@ void panel_finish(void)
         d = (d - 0x780) & 0xffff;
         field_marks_wide(d, pass);
         di = di > CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
-        for (int i = 0; i < 0x147; i++)
+        for (int32_t i = 0; i < 0x147; i++)
             game_delay();
         io_present();
         if (!io_pump())
@@ -4627,12 +4629,12 @@ void panel_finish(void)
 
 /* 1ac2:2d68  brick 11 - 72 points, and the cell becomes 0x0c, which is not a
  * brick at all: the drawing code has a special case for it. */
-void brick_11(unsigned slot, unsigned ball)
+void brick_11(uint32_t slot, uint32_t ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 0x0207);
     g_image[img_w(slot)] = 0x0c;
     g_image[LEVEL_CELLS]--;
-    unsigned x = g_image[slot + 2], y = g_image[slot + 3];
+    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
     xor_sprite_16x7(x, y, 0x6406);
     brick_11_after(x, y);               /* 1ac2:4c4b */
 }
@@ -4647,16 +4649,16 @@ void brick_11(unsigned slot, unsigned ball)
  */
 void bonus_spawn(void)
 {
-    unsigned si = FIELD_MARKS + game_random(io_ticks(), 4) * 4;
+    uint32_t si = FIELD_MARKS + game_random(io_ticks(), 4) * 4;
     if (g_image[si + 3] != 0)
         return;                         /* that hatch is already open */
-    unsigned di = LEVEL_CELLS + 8 + g_image[si + 2];
+    uint32_t di = LEVEL_CELLS + 8 + g_image[si + 2];
     if (g_image[di] != 0 || g_image[di + 0x0c] != 0)
         return;                         /* still bricked over */
 
     g_image[si + 3] = 1;
     g_image[0x33d5]++;
-    unsigned node = entity_alloc();
+    uint32_t node = entity_alloc();
     img_setw(node + 0, 0x390d);
     img_setw(node + 2, si);
     g_image[node + 4] = g_image[si];
@@ -4679,15 +4681,15 @@ void menu_banner_tick(void)
     if (g_image[BANNER_STATE] == 2) {
         g_image[BANNER_STATE] = 0x80;
         img_setw(BANNER_PTR, img_w(BANNER_PTR) + 1);
-        unsigned c = g_image[img_w(BANNER_PTR)];
+        uint32_t c = g_image[img_w(BANNER_PTR)];
         c = ((c ^ 0xaa) - 0x20) & 0xff;
-        unsigned src = 0xa3c0 + c * 6;
+        uint32_t src = 0xa3c0 + c * 6;
         memcpy(g_image, g_image + src, 6);
     }
     banner_shift();                     /* 1ac2:5140 */
 
-    unsigned di = 0x38a9;
-    for (int i = 0; i < 6; i++) {
+    uint32_t di = 0x38a9;
+    for (int32_t i = 0; i < 6; i++) {
         if (g_image[i] & g_image[BANNER_STATE])
             g_vram[di & (CGA_SIZE - 1)] ^= 3;
         di = cga_next_row(di);
@@ -4706,10 +4708,10 @@ void menu_banner_tick(void)
  * threads its answer from one call to the next - starting from zero gives a
  * different sequence and the two runs diverge from the very first kernel.
  */
-unsigned particle_random(unsigned ax, unsigned ticks, unsigned limit)
+uint32_t particle_random(uint32_t ax, uint32_t ticks, uint32_t limit)
 {
-    unsigned n = img_w(PARTICLE_COUNT);
-    for (unsigned i = 0; i < n; i++)
+    uint32_t n = img_w(PARTICLE_COUNT);
+    for (uint32_t i = 0; i < n; i++)
         ax = (ax + img_w(PARTICLES + i * 2)) & 0xffff;
     ax = (ax + ticks) & 0xffff;
     ax = (ax + img_w(0x1acd)) & 0xffff;
@@ -4726,11 +4728,11 @@ unsigned particle_random(unsigned ax, unsigned ticks, unsigned limit)
  * height is a parabola computed as `step * t * t / 100`, which is why the
  * record carries the time in [si+6] rather than a velocity.
  */
-unsigned particle_init(unsigned si, unsigned ax_in)
+uint32_t particle_init(uint32_t si, uint32_t ax_in)
 {
     img_setw(si + 0, 0x68);
     img_setw(si + 2, 0xa0);
-    unsigned ax = (particle_random(ax_in, io_ticks(), 6) + 8) & 0xffff;
+    uint32_t ax = (particle_random(ax_in, io_ticks(), 6) + 8) & 0xffff;
     img_setw(si + 0x0e, ax);
     ax = (particle_random(ax, io_ticks(), 0x46) - 0x23) & 0xffff;
     if (ax == 0)
@@ -4743,13 +4745,13 @@ unsigned particle_init(unsigned si, unsigned ax_in)
      * and only the second keeps its high half, because `idiv` divides DX:AX.
      * Doing the whole thing in 32-bit C gives a different answer as soon as
      * the first product overflows, which it does for most angles. */
-    short v = (short)img_w(si + 0x0e);
-    short t = (short)ax;
-    short first = (short)(v * t);
-    int prod = (int)first * (int)t;
-    img_setw(si + 0x0a, (short)(prod / 100) & 0xffff);
-    img_setw(si + 8, (short)(prod / 100) & 0xffff);
-    return (unsigned)(short)(prod / 100) & 0xffff;   /* what AX is left as */
+    int16_t v = (int16_t)img_w(si + 0x0e);
+    int16_t t = (int16_t)ax;
+    int16_t first = (int16_t)(v * t);
+    int32_t prod = (int32_t)first * (int32_t)t;
+    img_setw(si + 0x0a, (int16_t)(prod / 100) & 0xffff);
+    img_setw(si + 8, (int16_t)(prod / 100) & 0xffff);
+    return (uint32_t)(int16_t)(prod / 100) & 0xffff;   /* what AX is left as */
 }
 
 /* 1ac2:53c2  menu_particles_tick
@@ -4771,21 +4773,21 @@ unsigned particle_init(unsigned si, unsigned ax_in)
  */
 void menu_particles_tick(void)
 {
-    unsigned si = PARTICLES;
-    unsigned n = img_w(PARTICLE_COUNT);
-    for (unsigned k = 0; k < n; k++, si += 0x10) {
+    uint32_t si = PARTICLES;
+    uint32_t n = img_w(PARTICLE_COUNT);
+    for (uint32_t k = 0; k < n; k++, si += 0x10) {
         /* Rub out where it was. */
-        unsigned x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
-        unsigned y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
+        uint32_t x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
+        uint32_t y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
         if (x <= 0x13f && y <= 0xc7)
             plot_pixel_xor(x, y, 3);
 
         img_setw(si + 6, (img_w(si + 6) + img_w(si + 0x0c)) & 0xffff);
-        short t = (short)img_w(si + 6);
-        short v = (short)img_w(si + 0x0e);
-        short first = (short)(v * t);
-        int prod = (int)first * (int)t;
-        img_setw(si + 8, (short)(prod / 100) & 0xffff);
+        int16_t t = (int16_t)img_w(si + 6);
+        int16_t v = (int16_t)img_w(si + 0x0e);
+        int16_t first = (int16_t)(v * t);
+        int32_t prod = (int32_t)first * (int32_t)t;
+        img_setw(si + 8, (int16_t)(prod / 100) & 0xffff);
 
         y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
         x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
@@ -4804,35 +4806,35 @@ void menu_particles_tick(void)
 /* `ax_in` is the seed the caller happened to leave in AX. It changes only
  * which kernels you get, so at the real call site anything will do - but the
  * verifier has to pass what the original had or the two diverge. */
-void menu_particles_init(unsigned ax_in)
+void menu_particles_init(uint32_t ax_in)
 {
-    unsigned n = img_w(PARTICLE_COUNT);
-    unsigned ax = ax_in;
-    for (unsigned i = 0; i < n; i++)
+    uint32_t n = img_w(PARTICLE_COUNT);
+    uint32_t ax = ax_in;
+    for (uint32_t i = 0; i < n; i++)
         ax = particle_init(PARTICLES + i * 0x10, ax);
 }
 
 /* INT 10h AH=0Ch in mode 05h: one pixel, two bits, in the byte that holds it.
  * The virtual screen the game plots into is 320 wide, so `cx` is used as it
  * comes rather than halved. */
-void plot_pixel(unsigned x, unsigned y, unsigned colour)
+void plot_pixel(uint32_t x, uint32_t y, uint32_t colour)
 {
     if (x >= CGA_W || y >= CGA_H)
         return;
-    unsigned di = cga_at(x, y);
-    unsigned shift = 6 - (x & 3) * 2;
-    unsigned char *p = &g_vram[di & (CGA_SIZE - 1)];
-    *p = (unsigned char)((*p & ~(3u << shift)) | ((colour & 3) << shift));
+    uint32_t di = cga_at(x, y);
+    uint32_t shift = 6 - (x & 3) * 2;
+    uint8_t *p = &g_vram[di & (CGA_SIZE - 1)];
+    *p = (uint8_t)((*p & ~(3u << shift)) | ((colour & 3) << shift));
 }
 
 /* The same with bit 7 of AL set: XOR rather than replace. */
-void plot_pixel_xor(unsigned x, unsigned y, unsigned colour)
+void plot_pixel_xor(uint32_t x, uint32_t y, uint32_t colour)
 {
     if (x >= CGA_W || y >= CGA_H)
         return;
-    unsigned di = cga_at(x, y);
-    unsigned shift = 6 - (x & 3) * 2;
-    g_vram[di & (CGA_SIZE - 1)] ^= (unsigned char)((colour & 3) << shift);
+    uint32_t di = cga_at(x, y);
+    uint32_t shift = 6 - (x & 3) * 2;
+    g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)((colour & 3) << shift);
 }
 
 /* 1ac2:5140  banner_shift
@@ -4851,14 +4853,14 @@ void plot_pixel_xor(unsigned x, unsigned y, unsigned colour)
 
 void banner_shift(void)
 {
-    unsigned di = BANNER_ROW;
-    for (int row = 0; row < 6; row++) {
-        for (int twice = 0; twice < 2; twice++) {
-            unsigned carry = 0;
-            for (int b = 0; b < BANNER_LEN; b++) {
-                unsigned a = (di - b) & (CGA_SIZE - 1);
-                unsigned v = g_vram[a];
-                g_vram[a] = (unsigned char)((v << 1) | carry);
+    uint32_t di = BANNER_ROW;
+    for (int32_t row = 0; row < 6; row++) {
+        for (int32_t twice = 0; twice < 2; twice++) {
+            uint32_t carry = 0;
+            for (int32_t b = 0; b < BANNER_LEN; b++) {
+                uint32_t a = (di - b) & (CGA_SIZE - 1);
+                uint32_t v = g_vram[a];
+                g_vram[a] = (uint8_t)((v << 1) | carry);
                 carry = (v >> 7) & 1;
             }
         }
@@ -4884,7 +4886,7 @@ void banner_shift(void)
 #define REC_CELLS    0x16
 #define REC_END      0xc6
 
-static void player_record_init(unsigned di)
+static void player_record_init(uint32_t di)
 {
     g_image[di + REC_LIVES] = 5;
     img_setw(di + REC_LEVEL, LEVEL_TABLE);
@@ -4894,14 +4896,14 @@ static void player_record_init(unsigned di)
     img_setw(di + REC_SCORE + 4, 0x3030);
     memcpy(g_image + di + REC_CELLS, g_image + SEG_C46 + LEVEL_TABLE,
            LEVEL_BYTES);
-    for (int i = 0; i < 6; i++)
+    for (int32_t i = 0; i < 6; i++)
         img_setw(di + REC_END + i * 2, 0xffff);
 }
 
 void play_prepare(void)
 {
-    unsigned di = NAME_TABLE;
-    for (unsigned n = g_image[PLAYER_COUNT]; n > 0; n--, di += NAME_STRIDE) {
+    uint32_t di = NAME_TABLE;
+    for (uint32_t n = g_image[PLAYER_COUNT]; n > 0; n--, di += NAME_STRIDE) {
         player_record_init(di);
         g_image[di + 0xd2] = 0;
     }
@@ -4933,11 +4935,11 @@ void demo_start(void)
 #define ARROW_KEYS  0x088e
 
 /* 1ac2:492f  arrow_head - nine rows of five bytes from 0x4890 */
-void arrow_head(unsigned di)
+void arrow_head(uint32_t di)
 {
-    unsigned si = 0x4890;
-    for (int r = 0; r < 9; r++) {
-        for (int b = 0; b < 5; b++)
+    uint32_t si = 0x4890;
+    for (int32_t r = 0; r < 9; r++) {
+        for (int32_t b = 0; b < 5; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[si + r * 5 + b];
         di = cga_next_row(di);
     }
@@ -4946,14 +4948,14 @@ void arrow_head(unsigned di)
 /* 1ac2:4957  arrow_tail - four blank rows, one solid, four blank: XOR-ing
  * zero changes nothing, so what this actually draws is the single 0x5555 row
  * in the middle. The blank rows only step the offset. */
-void arrow_tail(unsigned di)
+void arrow_tail(uint32_t di)
 {
-    for (int r = 0; r < 4; r++)
+    for (int32_t r = 0; r < 4; r++)
         di = cga_next_row(di);
-    for (int b = 0; b < 5; b++)
+    for (int32_t b = 0; b < 5; b++)
         g_vram[(di + b) & (CGA_SIZE - 1)] ^= 0x55;
     di = cga_next_row(di);
-    for (int r = 0; r < 4; r++)
+    for (int32_t r = 0; r < 4; r++)
         di = cga_next_row(di);
 }
 
@@ -5024,11 +5026,11 @@ void play_teardown(void)
  * 0xc46, at 0x28f0 + row * 0x30 + column * 4. Not a brick - it is the hole
  * brick 11 leaves.
  */
-void cell_special(unsigned row, unsigned di)
+void cell_special(uint32_t row, uint32_t di)
 {
-    unsigned col = (di - (LEVEL_CELLS + 8)) % BRICK_COLS;
-    unsigned src = SEG_C46 + 0x28f0 + (row & 0xff) * 0x30 + col * 4;
-    for (int b = 0; b < 4; b++)
+    uint32_t col = (di - (LEVEL_CELLS + 8)) % BRICK_COLS;
+    uint32_t src = SEG_C46 + 0x28f0 + (row & 0xff) * 0x30 + col * 4;
+    for (int32_t b = 0; b < 4; b++)
         g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + b];
 }
 
@@ -5047,9 +5049,9 @@ void input_and_draw_paddle(void)
  * a wrong character starts it over at 0x3f0b, and reaching the terminating
  * 0x0d sets [0x3f1b], which is what the menu tests.
  */
-void cheat_match(unsigned char c)
+void cheat_match(uint8_t c)
 {
-    unsigned bx = img_w(0x3f1c);
+    uint32_t bx = img_w(0x3f1c);
     if (c != g_image[bx]) {
         img_setw(0x3f1c, 0x3f0b);       /* wrong: back to the beginning */
         return;
@@ -5089,13 +5091,13 @@ void palette_cycle(void)
 /* 1ac2:4d5d  hsc_bubble - one pass of the sort, from the bottom up.
  * `scasb` compares a name's six score digits against the entry above it and
  * swaps the whole nine-word record when the lower one is bigger. */
-void hsc_bubble(unsigned si, unsigned di)
+void hsc_bubble(uint32_t si, uint32_t di)
 {
     si += 0x0c;
     di += 0x0c;
-    for (int n = 0x0a; n > 0; n--) {
-        int higher = 0;
-        for (int i = 0; i < 6; i++) {
+    for (int32_t n = 0x0a; n > 0; n--) {
+        int32_t higher = 0;
+        for (int32_t i = 0; i < 6; i++) {
             if (g_image[si + i] != g_image[di - 0x12 + i]) {
                 higher = g_image[si + i] > g_image[di - 0x12 + i];
                 break;
@@ -5111,8 +5113,8 @@ void hsc_bubble(unsigned si, unsigned di)
 /* 1ac2:4d37  hsc_sort - the whole table, once per player who just finished */
 void hsc_sort(void)
 {
-    unsigned di = 0x3ef6, si = 0x1aef;
-    for (unsigned n = g_image[PLAYER_COUNT]; n > 0; n--) {
+    uint32_t di = 0x3ef6, si = 0x1aef;
+    for (uint32_t n = g_image[PLAYER_COUNT]; n > 0; n--) {
         hsc_bubble(si, di);
         memcpy(g_image + di, g_image + si, 0x12);
         si += 0x12;
@@ -5134,18 +5136,18 @@ void hsc_save(const char *dir)
 }
 
 /* 1ac2:4ff1  border_draw - eight words from cs:0x506d down a column */
-void border_draw(unsigned di)
+void border_draw(uint32_t di)
 {
-    for (int i = 0; i < 8; i++) {
+    for (int32_t i = 0; i < 8; i++) {
         img_vram_setw(di, img_w(BORDER_SPR + i * 2));
         di = cga_next_row(di);
     }
 }
 
 /* 1ac2:4fd3  border_erase - the same eight rows, blanked */
-void border_erase(unsigned di)
+void border_erase(uint32_t di)
 {
-    for (int i = 0; i < 8; i++) {
+    for (int32_t i = 0; i < 8; i++) {
         img_vram_setw(di, 0);
         di = cga_next_row(di);
     }
@@ -5158,9 +5160,9 @@ void border_erase(unsigned di)
  * going up, column 0x32 going down, row 0 going right and row 0x60 going
  * left. `0x140` is four scan lines, which is the vertical step.
  */
-unsigned border_step(unsigned di)
+uint32_t border_step(uint32_t di)
 {
-    unsigned row = di / 0x50, col = di % 0x50;
+    uint32_t row = di / 0x50, col = di % 0x50;
     if (row == 0)
         return (col == 0x32) ? di + 0x140 : di + 2;
     if (row == 0x60)
@@ -5172,8 +5174,8 @@ unsigned border_step(unsigned di)
  * redrawn, with their positions kept in the code segment at 0x507d */
 void border_animate(void)
 {
-    for (int i = 0; i < 0x0e; i++) {
-        unsigned di = img_w(BORDER_POS + i * 2);
+    for (int32_t i = 0; i < 0x0e; i++) {
+        uint32_t di = img_w(BORDER_POS + i * 2);
         border_draw(di);
         di = border_step(di);
         border_erase(di);
@@ -5187,16 +5189,16 @@ void border_animate(void)
  * side, and 0x17 rows of it stacked. Between them they lay the frame the
  * markers then run around.
  */
-void border_row(unsigned di)
+void border_row(uint32_t di)
 {
-    for (int n = 0x1a; n > 0; n--, di += 2)
+    for (int32_t n = 0x1a; n > 0; n--, di += 2)
         border_draw(di);
 }
 
-void border_block(unsigned di)
+void border_block(uint32_t di)
 {
-    for (int n = 0x17; n > 0; n--)
-        for (int i = 0; i < 8; i++) {
+    for (int32_t n = 0x17; n > 0; n--)
+        for (int32_t i = 0; i < 8; i++) {
             img_vram_setw(di, img_w(BORDER_SPR + i * 2));
             di = cga_next_row(di);
         }
@@ -5213,11 +5215,11 @@ void border_block(unsigned di)
  */
 void screen_scroll_up(void)
 {
-    for (int n = 0x6f; n > 0; n--) {
-        unsigned di = 0x13;
-        for (int r = 0; r < 7; r++) {
-            unsigned si = cga_next_row(di);
-            for (int b = 0; b < 14; b++)
+    for (int32_t n = 0x6f; n > 0; n--) {
+        uint32_t di = 0x13;
+        for (int32_t r = 0; r < 7; r++) {
+            uint32_t si = cga_next_row(di);
+            for (int32_t b = 0; b < 14; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] =
                     g_vram[(si + b) & (CGA_SIZE - 1)];
             di = si;
@@ -5235,8 +5237,8 @@ void screen_scroll_up(void)
  */
 void level_tally(void)
 {
-    for (int i = 0; i < 0xa8; i++) {
-        unsigned si = 0x30bc + g_image[LEVEL_CELLS + 8 + i] * 4;
+    for (int32_t i = 0; i < 0xa8; i++) {
+        uint32_t si = 0x30bc + g_image[LEVEL_CELLS + 8 + i] * 4;
         img_setw(SCORE_ADD + 0, 0);
         img_setw(SCORE_ADD + 2, img_w(si));
         img_setw(SCORE_ADD + 4, img_w(si + 2));
@@ -5254,11 +5256,11 @@ void level_tally(void)
 void screen_stash(void)
 {
     speaker_off();
-    unsigned di = 0x1aef;
-    unsigned si = 0x1900;
-    for (int half = 0; half < 2; half++) {
-        for (int r = 0; r < 0x14; r++) {
-            for (int b = 0; b < 0x32; b++)
+    uint32_t di = 0x1aef;
+    uint32_t si = 0x1900;
+    for (int32_t half = 0; half < 2; half++) {
+        for (int32_t r = 0; r < 0x14; r++) {
+            for (int32_t b = 0; b < 0x32; b++)
                 g_image[di + b] = g_vram[(si + b) & (CGA_SIZE - 1)];
             di += 0x32;
             si += 0x32 + 0x1e;
@@ -5267,8 +5269,8 @@ void screen_stash(void)
     }
     di = 0x1900;
     si = 0x93e0;
-    for (int r = 0; r < 0x26; r++) {
-        for (int b = 0; b < 0x32; b++)
+    for (int32_t r = 0; r < 0x26; r++) {
+        for (int32_t b = 0; b < 0x32; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
         si += 0x32;
         di = cga_next_row(di);
@@ -5294,12 +5296,12 @@ void screen_restore(void)
  * 0xc46:0x28f0, indexed the same way cell_special indexes it but with the
  * column taken from `(x >> 2) - 2` rather than from the cell address.
  */
-void brick_11_after(unsigned x, unsigned y)
+void brick_11_after(uint32_t x, uint32_t y)
 {
-    unsigned row = (y - 6) & 0xff;
-    unsigned si = SEG_C46 + 0x28f0 + row * 0x30 + (((x >> 2) & 0xff) - 2);
-    unsigned di = cga_at(x, y);
-    for (int r = 0; r < 8; r++) {
+    uint32_t row = (y - 6) & 0xff;
+    uint32_t si = SEG_C46 + 0x28f0 + row * 0x30 + (((x >> 2) & 0xff) - 2);
+    uint32_t di = cga_at(x, y);
+    for (int32_t r = 0; r < 8; r++) {
         g_vram[di & (CGA_SIZE - 1)] ^= g_image[si];
         g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[si + 1];
         g_vram[(di + 2) & (CGA_SIZE - 1)] ^= g_image[si + 2];
@@ -5319,13 +5321,13 @@ void brick_11_after(unsigned x, unsigned y)
  * four bytes from 0xc46:0x28f0 at row * 0x30 + (x >> 2) - 2, stepping 0x30
  * bytes a row. level_between uses it for a cell of 0x0c.
  */
-void cell_hole_draw(unsigned x, unsigned y)
+void cell_hole_draw(uint32_t x, uint32_t y)
 {
-    unsigned row = (y - 6) & 0xff;
-    unsigned si = SEG_C46 + 0x28f0 + row * 0x30 + (((x >> 2) & 0xff) - 2);
-    unsigned di = cga_at(x, y);
-    for (int r = 0; r < 8; r++) {
-        for (int b = 0; b < 4; b++)
+    uint32_t row = (y - 6) & 0xff;
+    uint32_t si = SEG_C46 + 0x28f0 + row * 0x30 + (((x >> 2) & 0xff) - 2);
+    uint32_t di = cga_at(x, y);
+    for (int32_t r = 0; r < 8; r++) {
+        for (int32_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
         si += 0x30;
         di = cga_next_row(di);
@@ -5336,11 +5338,11 @@ void cell_hole_draw(unsigned x, unsigned y)
  * the speaker on again */
 void screen_unstash(void)
 {
-    unsigned si = 0x1aef;
-    unsigned di = 0x1900;
-    for (int half = 0; half < 2; half++) {
-        for (int r = 0; r < 0x14; r++) {
-            for (int b = 0; b < 0x32; b++)
+    uint32_t si = 0x1aef;
+    uint32_t di = 0x1900;
+    for (int32_t half = 0; half < 2; half++) {
+        for (int32_t r = 0; r < 0x14; r++) {
+            for (int32_t b = 0; b < 0x32; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
             si += 0x32;
             di += 0x32 + 0x1e;
@@ -5380,11 +5382,11 @@ void border_setup(void)
     border_block(0x140);
     border_block(0x172);
 
-    unsigned di = 0;
-    for (int i = 0; i < 0x0e; i++) {
+    uint32_t di = 0;
+    for (int32_t i = 0; i < 0x0e; i++) {
         img_setw(BORDER_POS + i * 2, di);
         border_erase(di);
-        for (int k = 0; k < 7; k++)
+        for (int32_t k = 0; k < 7; k++)
             di = border_step(di);
     }
 }
@@ -5400,16 +5402,16 @@ void border_setup(void)
 #define TALL_SPRITE_BYTES  (0x0f * 4)
 #define KBD_POLL_CYCLES    150          /* what one INT 16h AH=01 cost */
 
-int tall_sprite(unsigned *si, unsigned di)
+int32_t tall_sprite(uint32_t *si, uint32_t di)
 {
-    for (int r = 0; r < 0x0f; r++) {
-        for (int b = 0; b < 4; b++)
+    for (int32_t r = 0; r < 0x0f; r++) {
+        for (int32_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[*si + r * 4 + b];
         di = cga_next_row(di);
     }
     *si += TALL_SPRITE_BYTES;
 
-    for (int n = 0x4b0; n > 0; n--) {
+    for (int32_t n = 0x4b0; n > 0; n--) {
         if (io_key_ready()) {
             io_get_key();
             return 1;
@@ -5428,19 +5430,19 @@ int tall_sprite(unsigned *si, unsigned di)
  * how many of the middle segment to repeat, so the pillar grows a row per
  * pass and appears to extend downwards.
  * ===================================================================== */
-static unsigned pillar_pair(unsigned di, unsigned v)
+static uint32_t pillar_pair(uint32_t di, uint32_t v)
 {
     img_vram_setw(di, v);
     img_vram_setw(di + 0x32, v);
     return cga_next_row(di);
 }
 
-void field_marks_wide(unsigned di, unsigned rows)
+void field_marks_wide(uint32_t di, uint32_t rows)
 {
     di = pillar_pair(di, 0x4001);
     di = pillar_pair(di, 0x500f);
     di = pillar_pair(di, 0x4435);
-    for (unsigned n = rows; n > 0; n--) {
+    for (uint32_t n = rows; n > 0; n--) {
         di = pillar_pair(di, 0xd43f);
         di = pillar_pair(di, 0x1005);
     }
@@ -5456,11 +5458,11 @@ void field_marks_wide(unsigned di, unsigned rows)
  * (0x68, 0x98) instead of (0x68, 0xa0) and with a speed of `random(3) + 8`
  * rather than `random(6) + 8`, so the kernels there rise more slowly.
  */
-unsigned ending_particle_init(unsigned si, unsigned ax_in)
+uint32_t ending_particle_init(uint32_t si, uint32_t ax_in)
 {
     img_setw(si + 0, 0x68);
     img_setw(si + 2, 0x98);
-    unsigned ax = (particle_random(ax_in, io_ticks(), 3) + 8) & 0xffff;
+    uint32_t ax = (particle_random(ax_in, io_ticks(), 3) + 8) & 0xffff;
     img_setw(si + 0x0e, ax);
     ax = (particle_random(ax, io_ticks(), 0x46) - 0x23) & 0xffff;
     if (ax == 0)
@@ -5468,12 +5470,12 @@ unsigned ending_particle_init(unsigned si, unsigned ax_in)
     img_setw(si + 4, ax);
     img_setw(si + 6, ax);
     img_setw(si + 0x0c, ax >= 0x8000 ? 1 : 0xffff);
-    short v = (short)img_w(si + 0x0e), t = (short)ax;
-    short first = (short)(v * t);
-    int prod = (int)first * (int)t;
-    img_setw(si + 0x0a, (short)(prod / 100) & 0xffff);
-    img_setw(si + 8, (short)(prod / 100) & 0xffff);
-    return (unsigned)(short)(prod / 100) & 0xffff;
+    int16_t v = (int16_t)img_w(si + 0x0e), t = (int16_t)ax;
+    int16_t first = (int16_t)(v * t);
+    int32_t prod = (int32_t)first * (int32_t)t;
+    img_setw(si + 0x0a, (int16_t)(prod / 100) & 0xffff);
+    img_setw(si + 8, (int16_t)(prod / 100) & 0xffff);
+    return (uint32_t)(int16_t)(prod / 100) & 0xffff;
 }
 
 /* 1ac2:5c36  ending_blob
@@ -5484,15 +5486,15 @@ unsigned ending_particle_init(unsigned si, unsigned ax_in)
  * 0x50. A whole address in sixteen bits, which is why the ending's script can
  * be a list of words.
  */
-void ending_blob(unsigned pos)
+void ending_blob(uint32_t pos)
 {
-    unsigned al = (pos & 0xff) >> 2;
-    unsigned ah = (pos >> 8) & 0xff;
-    unsigned di = al;
+    uint32_t al = (pos & 0xff) >> 2;
+    uint32_t ah = (pos >> 8) & 0xff;
+    uint32_t di = al;
     if (ah & 1)
         di += CGA_PLANE;
     di += (ah >> 1) * 0x50;
-    for (int r = 0; r < 8; r++) {
+    for (int32_t r = 0; r < 8; r++) {
         g_vram[di & (CGA_SIZE - 1)] ^= g_image[0x28d9 + r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[0x28d9 + r * 2 + 1];
         di = cga_next_row(di);
@@ -5507,11 +5509,11 @@ void ending_blob(unsigned pos)
  */
 void ending_blobs(void)
 {
-    unsigned si = 0x289d, prev = 0;
+    uint32_t si = 0x289d, prev = 0;
     for (;;) {
-        for (int i = 0; i < 0x0f; i++)
+        for (int32_t i = 0; i < 0x0f; i++)
             game_delay();
-        unsigned pos = img_w(si);
+        uint32_t pos = img_w(si);
         si += 2;
         if (pos == 0)
             return;
@@ -5535,12 +5537,12 @@ void ending_blobs(void)
  */
 void ending_column(void)
 {
-    unsigned di = 0x34f8, bx = 0xb7a2;
-    for (int n = 8; n > 0; n--, bx += 2) {
+    uint32_t di = 0x34f8, bx = 0xb7a2;
+    for (int32_t n = 8; n > 0; n--, bx += 2) {
         if (img_w(bx) == 0xffff)
             return;
-        unsigned si = img_w(bx), d = di;
-        for (int r = 0; r < 0x0f; r++) {
+        uint32_t si = img_w(bx), d = di;
+        for (int32_t r = 0; r < 0x0f; r++) {
             g_vram[d & (CGA_SIZE - 1)] = g_image[si];
             g_vram[(d + 1) & (CGA_SIZE - 1)] = g_image[si + 1];
             g_vram[(d + 2) & (CGA_SIZE - 1)] = g_image[si + 2];
@@ -5564,21 +5566,21 @@ void screen_game_over(void)
 {
     memcpy(g_image + PADDLE_PIX_CUR, g_image + 0xa346, 0x27 * 2);
 
-    unsigned di = 0x1cc2;
-    for (int r = 0; r < 8; r++) {
-        for (int i = 0; i < 0x18; i++)
+    uint32_t di = 0x1cc2;
+    for (int32_t r = 0; r < 8; r++) {
+        for (int32_t i = 0; i < 0x18; i++)
             img_vram_setw(di + i * 2, 0);
         di = cga_next_row(di);
     }
     g_image[PADDLE_SUPPRESS] = 1;
 
-    unsigned kind = g_image[PADDLE_KIND];
+    uint32_t kind = g_image[PADDLE_KIND];
     if (kind) {
-        unsigned si = img_w(PADDLE_GROW + kind * 2);
-        for (int f = 0; f < 6; f++, si += 2) {
+        uint32_t si = img_w(PADDLE_GROW + kind * 2);
+        for (int32_t f = 0; f < 6; f++, si += 2) {
             io_wait_retrace();
             draw_paddle_shifted(img_w(si));
-            for (int i = 0; i < 0x96; i++)
+            for (int32_t i = 0; i < 0x96; i++)
                 game_delay();
             io_present();
             if (!io_pump())
@@ -5587,10 +5589,10 @@ void screen_game_over(void)
         blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
     }
 
-    for (unsigned si = 0x9bb0; img_w(si); si += 2) {
+    for (uint32_t si = 0x9bb0; img_w(si); si += 2) {
         io_wait_retrace();
         draw_paddle_raw(img_w(si));
-        for (int i = 0; i < 0x96; i++)
+        for (int32_t i = 0; i < 0x96; i++)
             game_delay();
         io_present();
         if (!io_pump())
@@ -5614,19 +5616,19 @@ void screen_game_over(void)
  * picks the half of the interlace, bits 0 and 1 of the column pick one of four
  * pre-shifted sprites in the table at 0x1acf.
  */
-void ending_plot(unsigned x, unsigned y)
+void ending_plot(uint32_t x, uint32_t y)
 {
-    unsigned di = (y & 1) ? CGA_PLANE : 0;
-    unsigned row = y >> 1;
+    uint32_t di = (y & 1) ? CGA_PLANE : 0;
+    uint32_t row = y >> 1;
     di += row * 0x50;
-    unsigned phase = ((x & 1) ? 1 : 0) + ((x & 2) ? 2 : 0);
-    unsigned si = 0x1acf + phase * 8;
+    uint32_t phase = ((x & 1) ? 1 : 0) + ((x & 2) ? 2 : 0);
+    uint32_t si = 0x1acf + phase * 8;
     di += x >> 2;
 
-    unsigned d = di;
-    for (int i = 0; i < 4; i++) {
-        g_vram[d & (CGA_SIZE - 1)] ^= (unsigned char)img_w(si + i * 2);
-        g_vram[(d + 1) & (CGA_SIZE - 1)] ^= (unsigned char)(img_w(si + i * 2) >> 8);
+    uint32_t d = di;
+    for (int32_t i = 0; i < 4; i++) {
+        g_vram[d & (CGA_SIZE - 1)] ^= (uint8_t)img_w(si + i * 2);
+        g_vram[(d + 1) & (CGA_SIZE - 1)] ^= (uint8_t)(img_w(si + i * 2) >> 8);
         d = (i & 1) ? (d - 0x1fb0) & 0xffff : (d + CGA_PLANE) & 0xffff;
     }
 }
@@ -5635,9 +5637,9 @@ void ending_plot(unsigned x, unsigned y)
  * starting point */
 void ending_particles_init(void)
 {
-    unsigned n = img_w(PARTICLE_COUNT);
-    unsigned ax = 0;
-    for (unsigned i = 0; i < n; i++)
+    uint32_t n = img_w(PARTICLE_COUNT);
+    uint32_t ax = 0;
+    for (uint32_t i = 0; i < n; i++)
         ax = ending_particle_init(PARTICLES + i * 0x10, ax);
 }
 
@@ -5645,19 +5647,19 @@ void ending_particles_init(void)
  * place of the BIOS pixel call and ending_particle_init to re-launch */
 void ending_particles_tick(void)
 {
-    unsigned si = PARTICLES;
-    unsigned n = img_w(PARTICLE_COUNT);
-    for (unsigned k = 0; k < n; k++, si += 0x10) {
-        unsigned x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
-        unsigned y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
+    uint32_t si = PARTICLES;
+    uint32_t n = img_w(PARTICLE_COUNT);
+    for (uint32_t k = 0; k < n; k++, si += 0x10) {
+        uint32_t x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
+        uint32_t y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
         if (x <= 0x13f && y <= 0xc7)
             ending_plot(x, y);
 
         img_setw(si + 6, (img_w(si + 6) + img_w(si + 0x0c)) & 0xffff);
-        short t = (short)img_w(si + 6), v = (short)img_w(si + 0x0e);
-        short first = (short)(v * t);
-        int prod = (int)first * (int)t;
-        img_setw(si + 8, (short)(prod / 100) & 0xffff);
+        int16_t t = (int16_t)img_w(si + 6), v = (int16_t)img_w(si + 0x0e);
+        int16_t first = (int16_t)(v * t);
+        int32_t prod = (int32_t)first * (int32_t)t;
+        img_setw(si + 8, (int16_t)(prod / 100) & 0xffff);
 
         y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
         x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
@@ -5677,15 +5679,15 @@ void ending_particles_tick(void)
  * each in turn, XOR-ing itself off and on again at every step. [0x2823] holds
  * the target while it works, which is why it is a variable and not a register.
  * ===================================================================== */
-void ending_walk(unsigned bl, unsigned bh)
+void ending_walk(uint32_t bl, uint32_t bh)
 {
-    unsigned dx = img_w(0x2821);        /* the blob's packed position */
+    uint32_t dx = img_w(0x2821);        /* the blob's packed position */
 
-    unsigned target = (0x50 - ((bl << 3) & 0xff)) & 0xff;
-    g_image[0x2823] = (unsigned char)target;
+    uint32_t target = (0x50 - ((bl << 3) & 0xff)) & 0xff;
+    g_image[0x2823] = (uint8_t)target;
     while (((dx >> 8) & 0xff) != target) {
-        unsigned next = (dx - 0x400) & 0xffff;   /* `sub ah,4` */
-        for (int i = 0; i < 0x0f; i++)
+        uint32_t next = (dx - 0x400) & 0xffff;   /* `sub ah,4` */
+        for (int32_t i = 0; i < 0x0f; i++)
             game_delay();
         io_wait_retrace();
         ending_blob(next);
@@ -5694,10 +5696,10 @@ void ending_walk(unsigned bl, unsigned bh)
     }
 
     target = (((bh << 3) + 8) & 0xff);
-    g_image[0x2823] = (unsigned char)target;
+    g_image[0x2823] = (uint8_t)target;
     while ((dx & 0xff) != target) {
-        unsigned next = (dx - 4) & 0xffff;       /* `sub al,4` */
-        for (int i = 0; i < 0x0f; i++)
+        uint32_t next = (dx - 4) & 0xffff;       /* `sub al,4` */
+        for (int32_t i = 0; i < 0x0f; i++)
             game_delay();
         io_wait_retrace();
         ending_blob(next);
@@ -5717,25 +5719,25 @@ void ending_walk(unsigned bl, unsigned bh)
  * ===================================================================== */
 void screen_all_levels_done(void)
 {
-    for (int n = 0x32; n > 0; n--)
-        for (int i = 0; i < 0xc8; i++)
+    for (int32_t n = 0x32; n > 0; n--)
+        for (int32_t i = 0; i < 0xc8; i++)
             game_delay();
 
     memset(g_image + LEVEL_CELLS + 8, 0, 0x54 * 2);
     level_intro();
 
-    unsigned bp = 0x3ef2;
-    for (unsigned bh = 1; bh != 0x5c; bh++) {
-        unsigned di = bp, si = SEG_C46 + 0x7c70;
+    uint32_t bp = 0x3ef2;
+    for (uint32_t bh = 1; bh != 0x5c; bh++) {
+        uint32_t di = bp, si = SEG_C46 + 0x7c70;
         io_wait_retrace();
-        for (unsigned r = 0; r < bh; r++) {
-            for (int b = 0; b < 0x1a; b++)
+        for (uint32_t r = 0; r < bh; r++) {
+            for (int32_t b = 0; b < 0x1a; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
             si += 0x1a;
             di = cga_next_row(di);      /* the `sub` undoes `rep movsb` */
         }
         bp = cga_prev_row(bp);
-        for (int i = 0; i < 5; i++)
+        for (int32_t i = 0; i < 5; i++)
             game_delay();
         io_present();
         if (!io_pump())
@@ -5743,8 +5745,8 @@ void screen_all_levels_done(void)
     }
     /* Then the blobs walk a 0x18 by `bl` grid, and the kernels run until a
      * key is pressed. */
-    for (unsigned bh = 0; bh != 0x18; bh++)
-        for (unsigned bl = 0x1a; bl > 0; bl--) {
+    for (uint32_t bh = 0; bh != 0x18; bh++)
+        for (uint32_t bl = 0x1a; bl > 0; bl--) {
             ending_blobs();
             ending_walk(bl, bh);
         }
@@ -5774,9 +5776,9 @@ void screen_all_levels_done(void)
  * action, and `[0x2d4c + cx]` turns that into 0x2d4e, 0x2d4d or 0x2d4c - so
  * the three state bytes run backwards against the three scan codes.
  */
-void int09_handler(unsigned scan)
+void int09_handler(uint32_t scan)
 {
-    unsigned make = scan <= 0x7f;
+    uint32_t make = scan <= 0x7f;
 
     if ((scan & 0xff) == g_image[KEY_SCAN_L])
         g_image[LAST_DIR] = 0;
@@ -5785,12 +5787,12 @@ void int09_handler(unsigned scan)
     if (scan == 0xc3)                   /* F9 released */
         g_image[SOUND_ON] ^= 1;
     if (make)
-        g_image[0x2d49] = (unsigned char)scan;
+        g_image[0x2d49] = (uint8_t)scan;
 
-    unsigned code = scan & 0x7f;
-    for (int i = 0; i < 3; i++)
+    uint32_t code = scan & 0x7f;
+    for (int32_t i = 0; i < 3; i++)
         if (code == g_image[KEY_SCAN_L + i]) {
-            g_image[KEY_ACTION + (2 - i)] = (unsigned char)make;
+            g_image[KEY_ACTION + (2 - i)] = (uint8_t)make;
             return;
         }
 }
@@ -5808,8 +5810,8 @@ void int09_handler(unsigned scan)
  * success. They are the two INT 13h/INT 25h calls the emulator sees at
  * startup, and this is what they were for.
  */
-int drive_check(void) { return 1; }
-int drive_writable(void) { return 1; }
+int32_t drive_check(void) { return 1; }
+int32_t drive_writable(void) { return 1; }
 
 /* ========================================================================
  * 1ac2:49bc  intro_paddle
@@ -5833,19 +5835,19 @@ int drive_writable(void) { return 1; }
 void intro_paddle(void)
 {
     /* Out of the wall. */
-    unsigned bp = 0x490a;
-    for (unsigned bh = 1; bh <= 8; bh++, bp--) {
-        unsigned si = bp;
-        for (int bl = 4; bl > 0; bl--, si += PADDLE_IMAGE) {
+    uint32_t bp = 0x490a;
+    for (uint32_t bh = 1; bh <= 8; bh++, bp--) {
+        uint32_t si = bp;
+        for (int32_t bl = 4; bl > 0; bl--, si += PADDLE_IMAGE) {
             io_wait_retrace();
-            unsigned di = 0x1900, s = si;
-            for (int dl = 7; dl > 0; dl--) {
-                for (unsigned b = 0; b < bh; b++)
+            uint32_t di = 0x1900, s = si;
+            for (int32_t dl = 7; dl > 0; dl--) {
+                for (uint32_t b = 0; b < bh; b++)
                     g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[s + b];
                 s += 0x0b;
                 di = cga_next_row(di);
             }
-            for (int i = 0; i < 0x19; i++)
+            for (int32_t i = 0; i < 0x19; i++)
                 game_delay();
             io_present();
             if (!io_pump())
@@ -5854,19 +5856,19 @@ void intro_paddle(void)
     }
 
     /* And across. */
-    for (unsigned bh = 0; bh < 0x16; bh++) {
-        unsigned si = 0x4903;
-        for (int bl = 4; bl > 0; bl--, si += PADDLE_IMAGE) {
+    for (uint32_t bh = 0; bh < 0x16; bh++) {
+        uint32_t si = 0x4903;
+        for (int32_t bl = 4; bl > 0; bl--, si += PADDLE_IMAGE) {
             io_wait_retrace();
-            unsigned di = (0x1900 + bh) & 0xffff, s = si;
-            for (int dl = 7; dl > 0; dl--) {
+            uint32_t di = (0x1900 + bh) & 0xffff, s = si;
+            for (int32_t dl = 7; dl > 0; dl--) {
                 g_vram[di & (CGA_SIZE - 1)] = 0;
-                for (int b = 0; b < 8; b++)
+                for (int32_t b = 0; b < 8; b++)
                     g_vram[(di + 1 + b) & (CGA_SIZE - 1)] = g_image[s + b];
                 s += 0x0b;
                 di = cga_next_row(di);
             }
-            for (int i = 0; i < 0x19; i++)
+            for (int32_t i = 0; i < 0x19; i++)
                 game_delay();
             io_present();
             if (!io_pump())
@@ -5889,7 +5891,7 @@ void intro_paddle(void)
  *
  * Returns 0 if the file could not be used, and the caller ends the program.
  * ===================================================================== */
-int level_load_file(const char *dir)
+int32_t level_load_file(const char *dir)
 {
     char path[512];
     snprintf(path, sizeof path, "%s%s", dir ? dir : "",
@@ -5916,9 +5918,9 @@ int level_load_file(const char *dir)
  * nothing on real CGA hardware - the two screens that use it (F10 and its
  * exit) look the same without it. Recorded because it runs.
  */
-void set_palette_registers(unsigned table)
+void set_palette_registers(uint32_t table)
 {
-    for (int i = 0; i < 0x0c; i++)
+    for (int32_t i = 0; i < 0x0c; i++)
         (void)g_image[table + i];
 }
 
@@ -5942,9 +5944,9 @@ void set_palette_registers(unsigned table)
 #define HSC_LINE   0x1b0                /* between lines, DI already +0x30 */
 #define HSC_WIDTH  0x18                 /* characters, and words of bar */
 
-static unsigned hsc_bar(unsigned di)
+static uint32_t hsc_bar(uint32_t di)
 {
-    for (int i = 0; i < HSC_WIDTH; i++)
+    for (int32_t i = 0; i < HSC_WIDTH; i++)
         img_vram_setw((di + i * 2) & 0xffff, 0xaaaa);
     return cga_next_row(di);
 }
@@ -5953,15 +5955,15 @@ void screen_high_scores(void)
 {
     border_setup();
 
-    for (int i = 0; i < HSC_WIDTH; i++)
+    for (int32_t i = 0; i < HSC_WIDTH; i++)
         img_vram_setw(0x142 + i * 2, 0xaaaa);
 
     /* HIGH SCORE, a glyph at a time - the original really does have ten
      * separate `mov al` / `call 0xc64` pairs for it. */
-    unsigned di = 0x2142;
+    uint32_t di = 0x2142;
     di = draw_run(' ', 7, di);
     for (const char *p = "HIGH SCORE"; *p; p++, di = (di + 2) & 0xffff)
-        draw_char((unsigned char)*p, di);
+        draw_char((uint8_t)*p, di);
     di = draw_run(' ', 7, di);
 
     di = (di + HSC_LINE) & 0xffff;              /* the rule */
@@ -5974,8 +5976,8 @@ void screen_high_scores(void)
 
     di = (di + HSC_LINE) & 0xffff;
 
-    unsigned si = HSC_TABLE;
-    for (int row = 0; row < HSC_COUNT; row++) {
+    uint32_t si = HSC_TABLE;
+    for (int32_t row = 0; row < HSC_COUNT; row++) {
         di = draw_run(' ', 2, di);
         di = draw_text(si, 12, di);
         di = draw_run(' ', 2, di);
@@ -5992,8 +5994,8 @@ void screen_high_scores(void)
         di = hsc_bar(di);
 
     /* The border animates until a key, 0x181 delays a step, 0xff steps. */
-    for (int dl = 0xff; dl > 0; dl--) {
-        for (int n = 0x181; n > 0; n--) {
+    for (int32_t dl = 0xff; dl > 0; dl--) {
+        for (int32_t n = 0x181; n > 0; n--) {
             if (io_key_ready()) {
                 io_get_key();
                 return;
@@ -6028,21 +6030,21 @@ void screen_define_keys(void)
     io_cga_mode(1);                     /* INT 10h AX=0001: 40x25 text */
     install_int09();
 
-    unsigned di = 0;
+    uint32_t di = 0;
     /* The frame: 0xc9 0xcd... 0xbb, then 0x17 rows of 0xba ... 0xba, then
      * 0xc8 0xcd... 0xbc, all in attribute 3. */
     img_vram_setw(di, 0x03c9); di += 2;
-    for (int i = 0; i < 0x26; i++, di += 2)
+    for (int32_t i = 0; i < 0x26; i++, di += 2)
         img_vram_setw(di, 0x03cd);
     img_vram_setw(di, 0x03bb); di += 2;
-    for (int r = 0x17; r > 0; r--) {
+    for (int32_t r = 0x17; r > 0; r--) {
         img_vram_setw(di, 0x03ba); di += 2;
-        for (int i = 0; i < 0x26; i++, di += 2)
+        for (int32_t i = 0; i < 0x26; i++, di += 2)
             img_vram_setw(di, 0x0720);
         img_vram_setw(di, 0x03ba); di += 2;
     }
     img_vram_setw(di, 0x03c8); di += 2;
-    for (int i = 0; i < 0x26; i++, di += 2)
+    for (int32_t i = 0; i < 0x26; i++, di += 2)
         img_vram_setw(di, 0x03cd);
     img_vram_setw(di, 0x03bc);
 
@@ -6053,7 +6055,7 @@ void screen_define_keys(void)
     g_image[KEY_SCAN_A] = 0;
 
     di = 0x14c;
-    for (unsigned which = 0; which < 3; which++, di += 0xa0) {
+    for (uint32_t which = 0; which < 3; which++, di += 0xa0) {
         copy_string_text(0x2d5c + which * 0x17, di);
         g_image[0x2d49] = 1;            /* a code no key can produce */
         read_new_key(which);
@@ -6099,9 +6101,9 @@ void screen_end_of_game(void)
 {
     /* The screen into the image - not screen to screen, and DI does not go
      * back to where it started each row. */
-    unsigned si = 8, di = EOG_SAVED;
-    for (int n = 0x96; n > 0; n--) {
-        for (int b = 0; b < EOG_WIDTH; b++)
+    uint32_t si = 8, di = EOG_SAVED;
+    for (int32_t n = 0x96; n > 0; n--) {
+        for (int32_t b = 0; b < EOG_WIDTH; b++)
             g_image[di + b] = g_vram[(si + b) & (CGA_SIZE - 1)];
         di += EOG_WIDTH;
         si = cga_next_row(si);
@@ -6110,32 +6112,32 @@ void screen_end_of_game(void)
     img_setw(EOG_SCREEN_AT, 8);
     img_setw(EOG_BUILD_AT, EOG_WIDTH);
 
-    for (int pass = 0x87; pass > 0; pass--) {
+    for (int32_t pass = 0x87; pass > 0; pass--) {
         /* The band as it stands, from the saved screen - not from vram. */
         memcpy(g_image + EOG_BAND, g_image + img_w(EOG_BUILD_AT), EOG_BAND_LEN);
 
-        unsigned src = EOG_PICTURE, dst = EOG_BAND;
-        for (int i = 0; i < EOG_BAND_LEN; i++, src++, dst++) {
-            unsigned old = g_image[dst], add = g_image[src], out = old;
-            for (int shift = 6; shift >= 0; shift -= 2) {
-                unsigned mask = 3u << shift;
+        uint32_t src = EOG_PICTURE, dst = EOG_BAND;
+        for (int32_t i = 0; i < EOG_BAND_LEN; i++, src++, dst++) {
+            uint32_t old = g_image[dst], add = g_image[src], out = old;
+            for (int32_t shift = 6; shift >= 0; shift -= 2) {
+                uint32_t mask = 3u << shift;
                 if ((old & mask) == 0)
                     out += add & mask;
             }
-            g_image[dst] = (unsigned char)out;
+            g_image[dst] = (uint8_t)out;
         }
 
         /* One band on screen from the saved copy, then the merged block. */
         di = img_w(EOG_SCREEN_AT);
-        unsigned from = (img_w(EOG_BUILD_AT) - EOG_WIDTH) & 0xffff;
-        for (int b = 0; b < EOG_WIDTH; b++)
+        uint32_t from = (img_w(EOG_BUILD_AT) - EOG_WIDTH) & 0xffff;
+        for (int32_t b = 0; b < EOG_WIDTH; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[from + b];
         di = cga_next_row(di);
         img_setw(EOG_SCREEN_AT, di);
 
-        unsigned m = EOG_BAND;
-        for (int r = 0x0f; r > 0; r--) {
-            for (int b = 0; b < EOG_WIDTH; b++)
+        uint32_t m = EOG_BAND;
+        for (int32_t r = 0x0f; r > 0; r--) {
+            for (int32_t b = 0; b < EOG_WIDTH; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[m + b];
             m += EOG_WIDTH;             /* `rep movsb` carries SI forward */
             di = cga_next_row(di);
@@ -6148,7 +6150,7 @@ void screen_end_of_game(void)
     }
 
     /* A key, or 0x1c20 ticks of waiting for one. */
-    for (int n = 0x1c20; n > 0; n--) {
+    for (int32_t n = 0x1c20; n > 0; n--) {
         if (io_key_ready()) {
             io_get_key();
             return;                     /* 1ac2:5314 - straight out */
@@ -6161,17 +6163,17 @@ void screen_end_of_game(void)
     /* The ending. Seven groups, each drawn twice, blanked, and drawn twice
      * more - SI carries forward inside tall_sprite, so every call is the next
      * frame rather than the same one again. */
-    unsigned bx = EOG_GROUPS;
-    int keyed = 0;
-    for (int dh = 7; dh > 0 && !keyed; dh--) {
-        unsigned at = (0x34f0 + img_w(bx)) & 0xffff;
+    uint32_t bx = EOG_GROUPS;
+    int32_t keyed = 0;
+    for (int32_t dh = 7; dh > 0 && !keyed; dh--) {
+        uint32_t at = (0x34f0 + img_w(bx)) & 0xffff;
         bx += 2;
-        unsigned sprite = img_w(bx);
+        uint32_t sprite = img_w(bx);
         bx += 2;
 
         if (tall_sprite(&sprite, at)) { keyed = 1; break; }
         tall_sprite(&sprite, at);       /* no test after the second */
-        unsigned blank = EOG_BLANK;
+        uint32_t blank = EOG_BLANK;
         if (tall_sprite(&blank, at)) { keyed = 1; break; }
         if (tall_sprite(&blank, at)) { keyed = 1; break; }
         if (tall_sprite(&blank, at)) { keyed = 1; break; }
@@ -6196,7 +6198,7 @@ void screen_end_of_game(void)
  * one more row of the brick field as [0x2f0c] counts down. */
 static void endgame_curtain(void)
 {
-    unsigned di = 0x1198;
+    uint32_t di = 0x1198;
     img_vram_setw(di, 0xffff);
     img_vram_setw(di + 2, 0xffff);
     di += CGA_PLANE;
@@ -6209,26 +6211,26 @@ static void endgame_curtain(void)
     img_vram_setw(di, 0x5555);
     img_vram_setw(di + 2, 0x5555);
 
-    unsigned bp = 0x3130;
-    for (unsigned ah = 0x70; ah > 0; ah--) {
-        unsigned d = bp;
-        for (int r = 7; r > 0; r--) {
-            unsigned s = cga_next_row(d);
-            for (int b = 0; b < 0x1a * 2; b++)
+    uint32_t bp = 0x3130;
+    for (uint32_t ah = 0x70; ah > 0; ah--) {
+        uint32_t d = bp;
+        for (int32_t r = 7; r > 0; r--) {
+            uint32_t s = cga_next_row(d);
+            for (int32_t b = 0; b < 0x1a * 2; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] =
                     g_vram[(s + b) & (CGA_SIZE - 1)];
             d = s;
         }
-        unsigned cap = (ah & 3) ? 0x50 : 0x10;
+        uint32_t cap = (ah & 3) ? 0x50 : 0x10;
         g_vram[d & (CGA_SIZE - 1)] = 0x0d;
-        g_vram[(d + 1) & (CGA_SIZE - 1)] = (unsigned char)cap;
+        g_vram[(d + 1) & (CGA_SIZE - 1)] = (uint8_t)cap;
         d += 2;
         draw_brick_row(g_image[SWEEP_Y]);
         g_vram[d & (CGA_SIZE - 1)] = 0x0d;
-        g_vram[(d + 1) & (CGA_SIZE - 1)] = (unsigned char)cap;
+        g_vram[(d + 1) & (CGA_SIZE - 1)] = (uint8_t)cap;
 
         bp = cga_prev_row(bp);
-        for (int i = 0; i < 0x0f; i++)
+        for (int32_t i = 0; i < 0x0f; i++)
             game_delay();
         g_image[SWEEP_Y]--;
         io_present();
@@ -6240,18 +6242,18 @@ static void endgame_curtain(void)
     panel_finish();
 }
 
-int ball_after_endgame(unsigned ball)
+int32_t ball_after_endgame(uint32_t ball)
 {
-    unsigned char *b = g_image + ball;
-    unsigned x = b[B_X], y = b[B_Y];
+    uint8_t *b = g_image + ball;
+    uint32_t x = b[B_X], y = b[B_Y];
 
     if (x <= WALL_LEFT || x >= WALL_RIGHT) {
         b[B_DIR_X] = (x <= WALL_LEFT) ? 0 : 1;
         g_image[SOUND_REQUEST] = SOUND_BOUNCE;
         b[B_ACC_X] = 1;
         b[B_ACC_Y] = 0;
-        b[B_ANCHOR_X] = (unsigned char)(x <= WALL_LEFT ? 9 : 0xc3);
-        b[B_ANCHOR_Y] = (unsigned char)y;
+        b[B_ANCHOR_X] = (uint8_t)(x <= WALL_LEFT ? 9 : 0xc3);
+        b[B_ANCHOR_Y] = (uint8_t)y;
     }
 
     if (y == 0x74) {
@@ -6262,8 +6264,8 @@ int ball_after_endgame(unsigned ball)
             b[B_BOUNCES]++;
             b[B_ACC_X] = 0;
             b[B_ACC_Y] = 1;
-            b[B_ANCHOR_X] = (unsigned char)x;
-            b[B_ANCHOR_Y] = (unsigned char)(y + 1);
+            b[B_ANCHOR_X] = (uint8_t)x;
+            b[B_ANCHOR_Y] = (uint8_t)(y + 1);
             g_image[SOUND_REQUEST] = SOUND_BOUNCE;
         }
     } else if (y < 0x74) {
@@ -6271,8 +6273,8 @@ int ball_after_endgame(unsigned ball)
             /* The upper chamber: the level is over. */
             speaker_off();
             ball_draw(BALLS + 4, g_image[BALLS], g_image[BALLS + 1]);
-            for (unsigned si = 0x6abe; img_w(si) != 0xffff; si += 2) {
-                for (int i = 0; i < 0x147; i++)
+            for (uint32_t si = 0x6abe; img_w(si) != 0xffff; si += 2) {
+                for (int32_t i = 0; i < 0x147; i++)
                     game_delay();
                 xor_sprite_16x7(0x60, 0x38, img_w(si - 2));
                 xor_sprite_16x7(0x60, 0x38, img_w(si));
@@ -6287,8 +6289,8 @@ int ball_after_endgame(unsigned ball)
             b[B_DIR_X] = (x <= 0x60) ? 0 : 1;
             b[B_ACC_X] = 1;
             b[B_ACC_Y] = 0;
-            b[B_ANCHOR_X] = (unsigned char)(x <= 0x60 ? 0x61 : 0x6b);
-            b[B_ANCHOR_Y] = (unsigned char)y;
+            b[B_ANCHOR_X] = (uint8_t)(x <= 0x60 ? 0x61 : 0x6b);
+            b[B_ANCHOR_Y] = (uint8_t)y;
             g_image[SOUND_REQUEST] = SOUND_BOUNCE;
         }
         return 0;
@@ -6334,19 +6336,19 @@ int ball_after_endgame(unsigned ball)
 
 /* One row of the banner: 0x13 blank bytes, an edge, twelve translated cells,
  * an edge, and 0x13 blank again - then the whole screen scrolls up. */
-static void banner_row(unsigned si)
+static void banner_row(uint32_t si)
 {
-    unsigned di = BANNER_ROW_VRAM;
-    for (int i = 0; i < 0x13; i++)
+    uint32_t di = BANNER_ROW_VRAM;
+    for (int32_t i = 0; i < 0x13; i++)
         g_vram[di++ & (CGA_SIZE - 1)] = 0;
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
-    for (int i = 0; i < 0x0c; i++) {
-        unsigned cell = g_image[si + i];
+    for (int32_t i = 0; i < 0x0c; i++) {
+        uint32_t cell = g_image[si + i];
         g_vram[di++ & (CGA_SIZE - 1)] =
             g_image[SEG_C46 + BANNER_XLAT + cell * 2];
     }
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
-    for (int i = 0; i < 0x13; i++)
+    for (int32_t i = 0; i < 0x13; i++)
         g_vram[di++ & (CGA_SIZE - 1)] = 0;
     screen_scroll_up();
 }
@@ -6367,14 +6369,14 @@ void bonus_end_level(void)
 
     /* The wall closing in: 0x70 passes of a 26-word band scrolled up six rows
      * with a fresh cap laid on each. */
-    unsigned bp = 0x20a0;
+    uint32_t bp = 0x20a0;
     g_image[PADDLE_SUPPRESS] = 0xff;
-    for (int dh = 0x70; dh > 0; dh--) {
+    for (int32_t dh = 0x70; dh > 0; dh--) {
         io_wait_retrace();
-        unsigned di = bp;
-        for (int dl = 6; dl > 0; dl--) {
-            unsigned s = cga_next_row(di);
-            for (int b = 0; b < 0x1a * 2; b++)
+        uint32_t di = bp;
+        for (int32_t dl = 6; dl > 0; dl--) {
+            uint32_t s = cga_next_row(di);
+            for (int32_t b = 0; b < 0x1a * 2; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] =
                     g_vram[(s + b) & (CGA_SIZE - 1)];
             di = cga_prev_row(s);
@@ -6382,9 +6384,9 @@ void bonus_end_level(void)
         di = cga_next_row(di);
         if (dh == 0x70)
             di = 0;
-        for (int i = 0; i < 0x1a; i++)
+        for (int32_t i = 0; i < 0x1a; i++)
             img_vram_setw(di + i * 2, 0);
-        for (int i = 0; i < 0x78; i++) {
+        for (int32_t i = 0; i < 0x78; i++) {
             input_and_draw_paddle();
             g_image[PADDLE_SUPPRESS] = 0;
         }
@@ -6395,17 +6397,17 @@ void bonus_end_level(void)
     }
 
     /* The banner: a fixed row, a blank one, then the level's own cells. */
-    for (int i = 0; i < 0x1a; i++)
+    for (int32_t i = 0; i < 0x1a; i++)
         img_vram_setw(BANNER_ROW_VRAM + i * 2, img_w(0x2b6d + i * 2));
     screen_scroll_up();
 
-    unsigned si = (img_w(LEVEL_SRC) + 0xb8) & 0xffff;
-    for (int n = 0x0e; n > 0; n--, si -= 0x0c)
+    uint32_t si = (img_w(LEVEL_SRC) + 0xb8) & 0xffff;
+    for (int32_t n = 0x0e; n > 0; n--, si -= 0x0c)
         banner_row(SEG_C46 + si);
 
     /* And a fresh ball, played until ball_after_endgame says the level is
      * over. */
-    unsigned char *b = g_image + BALLS;
+    uint8_t *b = g_image + BALLS;
     b[B_DY] = 1;
     b[B_DX] = 2;
     b[B_DIR_X] = 0;
@@ -6422,9 +6424,9 @@ void bonus_end_level(void)
         ball_redraw(BALLS);
         if (ball_after_endgame(BALLS))
             return;
-        for (int i = 0; i < 4; i++) {
+        for (int32_t i = 0; i < 4; i++) {
             sound_tick();
-            for (int k = 0; k < 9; k++)
+            for (int32_t k = 0; k < 9; k++)
                 game_delay();
         }
         io_present();
@@ -6461,7 +6463,7 @@ void next_player(const char *dir)
         g_image[GAME_OVER] = 1;
         if (--g_image[LIVE_COUNT] == 0) {
             /* Everybody is out: keep this player's final score and finish. */
-            unsigned di = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
+            uint32_t di = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
             memcpy(g_image + di + REC_SCORE, g_image + SCORE_TEXT, 6);
             screen_results(dir);
             return;
@@ -6471,7 +6473,7 @@ void next_player(const char *dir)
     }
 
     /* Save this player. */
-    unsigned di = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
+    uint32_t di = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
     g_image[di + REC_LIVES] = g_image[LIVES];
     img_setw(di + REC_LEVEL, img_w(LEVEL_SRC));
     g_image[di + REC_NUMBER] = g_image[LEVEL_NUMBER];
@@ -6481,8 +6483,8 @@ void next_player(const char *dir)
 
     /* And its entities, count first. */
     g_image[di + REC_ENTS] = 0;
-    unsigned out = di + REC_ENTS + 1;
-    for (unsigned bx = img_w(ENTITY_HEAD); bx != 0xffff;
+    uint32_t out = di + REC_ENTS + 1;
+    for (uint32_t bx = img_w(ENTITY_HEAD); bx != 0xffff;
          bx = img_w(bx + E_NEXT)) {
         g_image[di + REC_ENTS]++;
         memcpy(g_image + out, g_image + bx, 12);
@@ -6491,9 +6493,9 @@ void next_player(const char *dir)
     entities_clear();
 
     /* Move on to the next player who still has lives. */
-    unsigned si;
+    uint32_t si;
     do {
-        g_image[CUR_PLAYER] = (unsigned char)
+        g_image[CUR_PLAYER] = (uint8_t)
             ((g_image[CUR_PLAYER] + 1) % g_image[PLAYER_COUNT]);
         si = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
     } while (g_image[si + REC_LIVES] == 0);
@@ -6507,9 +6509,9 @@ void next_player(const char *dir)
     memcpy(g_image + LEVEL_CELLS, g_image + si + REC_CELLS, LEVEL_BYTES);
     memcpy(g_image + 0x30b0, g_image + si + REC_STATE, 12);
 
-    unsigned n = g_image[si + REC_ENTS];
-    unsigned in = si + REC_ENTS + 1;
-    for (unsigned k = 0; k < n; k++, in += 12)
+    uint32_t n = g_image[si + REC_ENTS];
+    uint32_t in = si + REC_ENTS + 1;
+    for (uint32_t k = 0; k < n; k++, in += 12)
         memcpy(g_image + entity_alloc(), g_image + in, 12);
 
     panel_draw();
@@ -6518,8 +6520,8 @@ void next_player(const char *dir)
     /* Set the next extra-life threshold two thousand above the score they
      * came back with: the two digits are pulled out with `and ax,0x0e0f`,
      * bumped, and carried by hand. */
-    unsigned ax = img_w(SCORE_TEXT) & 0x0e0f;
-    unsigned ah = ((ax >> 8) + 2) & 0xff, al = ax & 0xff;
+    uint32_t ax = img_w(SCORE_TEXT) & 0x0e0f;
+    uint32_t ah = ((ax >> 8) + 2) & 0xff, al = ax & 0xff;
     if (ah >= 0x0a) {
         al++;
         ah = 0;
@@ -6547,14 +6549,14 @@ void screen_results(const char *dir)
     level_intro();
 
     /* An insertion sort of the player records into the scratch at 0x1aef. */
-    unsigned di = 0x1aef, si = NAME_TABLE;
+    uint32_t di = 0x1aef, si = NAME_TABLE;
     memcpy(g_image + di, g_image + si, 12);
     memcpy(g_image + di + 12, g_image + si + REC_SCORE, 6);
     si += NAME_STRIDE;
-    for (unsigned n = g_image[PLAYER_COUNT] - 1; n > 0; n--,
+    for (uint32_t n = g_image[PLAYER_COUNT] - 1; n > 0; n--,
          si += NAME_STRIDE) {
         di += HSC_ENTRY;
-        unsigned at = di;
+        uint32_t at = di;
         while (at > 0x1aef && score_before(si + REC_SCORE, at - HSC_ENTRY + 12))
             at -= HSC_ENTRY;
         memmove(g_image + at + HSC_ENTRY, g_image + at, di - at);
@@ -6563,10 +6565,10 @@ void screen_results(const char *dir)
     }
 
     /* The bar the names go on, then the table itself. */
-    for (int i = 0; i < 0x18; i++)
+    for (int32_t i = 0; i < 0x18; i++)
         img_vram_setw(0xf2 + i * 2, 0xaaaa);
-    unsigned d = 0x20f2;
-    for (unsigned k = 0; k < g_image[PLAYER_COUNT]; k++) {
+    uint32_t d = 0x20f2;
+    for (uint32_t k = 0; k < g_image[PLAYER_COUNT]; k++) {
         draw_text(0x1aef + k * HSC_ENTRY, 12, d);
         draw_text(0x1aef + k * HSC_ENTRY + 12, 6, d + 12 * 2 + 4);
         d = cga_next_row((d - 0x30) & 0xffff);
@@ -6591,7 +6593,7 @@ void demo_input_step(void)
         return;
     g_image[ANIM_COUNT] = g_image[ANIM_RATE];
     img_setw(ANIM_PTR, img_w(ANIM_PTR) + 2);
-    unsigned si = img_w(ANIM_PTR);
+    uint32_t si = img_w(ANIM_PTR);
     if (img_w(SEG_14A1 + si) == 0xffff)
         img_setw(ANIM_PTR, img_w(SEG_14A1 + si + 2));
 }
@@ -6606,16 +6608,16 @@ void demo_input_step(void)
  *
  * The x is clamped to 8..0xb8, which are the same walls everything else uses.
  */
-int bonus_script(unsigned bx, unsigned *px, unsigned *py)
+int32_t bonus_script(uint32_t bx, uint32_t *px, uint32_t *py)
 {
-    unsigned si = img_w(bx + 0x0a);
+    uint32_t si = img_w(bx + 0x0a);
     img_setw(bx + 0x0a, si + 2);
-    unsigned word = img_w(si);
-    unsigned al = word & 0xff, ah = (word >> 8) & 0xff;
-    unsigned cl = g_image[bx + 3];
+    uint32_t word = img_w(si);
+    uint32_t al = word & 0xff, ah = (word >> 8) & 0xff;
+    uint32_t cl = g_image[bx + 3];
 
     if (al & 0x80) {                    /* a leftward step */
-        unsigned mag = (unsigned)(-(int)(signed char)al) & 0xff;
+        uint32_t mag = (uint32_t)(-(int32_t)(int8_t)al) & 0xff;
         if (cl < mag)
             cl = 8;                     /* it would go through the wall */
         else
@@ -6682,7 +6684,7 @@ static void demo_clamp(void)
 void input_demo(void)
 {
     if (io_key_ready()) {
-        unsigned key = io_get_key();
+        uint32_t key = io_get_key();
         if ((key >> 8) == 0x44) {               /* F10 */
             employee_enter();                   /* 1ac2:4ae0 */
             while ((io_get_key() >> 8) == 0x44)
@@ -6690,15 +6692,15 @@ void input_demo(void)
             screen_restore();                   /* 1ac2:4b4f */
         } else if ((key >> 8) == 0x43) {        /* F9: sound */
             g_image[SOUND_ON] ^= 1;
-        } else if (!cheat_sequence((unsigned char)(key & 0xff))) {
+        } else if (!cheat_sequence((uint8_t)(key & 0xff))) {
             entities_clear();                   /* 1ac2:055e */
             longjmp(g_back_to_menu, 1);         /* sp = [0x1405]; jmp 0x1d1 */
         }
     }
 
-    unsigned chasing = g_image[DEMO_BALL];
+    uint32_t chasing = g_image[DEMO_BALL];
     if (chasing != 0xff) {
-        unsigned b = BALLS + chasing * BALL_STRIDE;
+        uint32_t b = BALLS + chasing * BALL_STRIDE;
         if (g_image[b + B_Y] >= DEMO_CHASE_Y &&
             g_image[b + B_DIR_Y] != 1 &&
             g_image[b + B_STATE] != 0) {
@@ -6706,8 +6708,8 @@ void input_demo(void)
              * demo fires as well as chases. */
             g_image[KEY_ACTION] = g_image[LASER_ON] != 0;
 
-            unsigned ball_x = g_image[b + B_X];
-            unsigned paddle = g_image[PADDLE_X];
+            uint32_t ball_x = g_image[b + B_X];
+            uint32_t paddle = g_image[PADDLE_X];
             if (ball_x < paddle) {
                 if (paddle != g_image[PADDLE_LOW])
                     g_image[PADDLE_X]--;
@@ -6722,12 +6724,12 @@ void input_demo(void)
     }
 
     /* Nothing to chase, or the one we had is gone: pick another. */
-    for (unsigned cl = 0; cl < 3; cl++) {
-        unsigned b = BALLS + cl * BALL_STRIDE;
+    for (uint32_t cl = 0; cl < 3; cl++) {
+        uint32_t b = BALLS + cl * BALL_STRIDE;
         if (g_image[b + B_Y] > DEMO_CHASE_Y &&
             g_image[b + B_STATE] != 0 &&
             g_image[b + B_DIR_Y] != 1) {
-            g_image[DEMO_BALL] = (unsigned char)cl;
+            g_image[DEMO_BALL] = (uint8_t)cl;
             demo_clamp();
             return;
         }
@@ -6756,10 +6758,10 @@ void input_demo(void)
 #define CHEAT_START  0x56a5
 #define CHEAT_TEXT   0x56b5
 
-int cheat_sequence(unsigned char key)
+int32_t cheat_sequence(uint8_t key)
 {
-    unsigned si = img_w(CHEAT_CURSOR);
-    unsigned al = key ^ 0xaa;
+    uint32_t si = img_w(CHEAT_CURSOR);
+    uint32_t al = key ^ 0xaa;
 
     if (al != g_image[CS_BASE + si]) {
         /* Not the next one. The same key twice is not a failure. */
@@ -6770,7 +6772,7 @@ int cheat_sequence(unsigned char key)
         return 0;
     }
 
-    g_image[CHEAT_LAST] = (unsigned char)al;
+    g_image[CHEAT_LAST] = (uint8_t)al;
     img_setw(CHEAT_CURSOR, si + 1);
     if (g_image[CS_BASE + si + 1] != 0xaa)
         return 1;                       /* more to go */
@@ -6779,9 +6781,9 @@ int cheat_sequence(unsigned char key)
     io_cga_mode(3);
     {
         char line[256];
-        unsigned n = 0, ah = 0x20, s = CHEAT_TEXT;
+        uint32_t n = 0, ah = 0x20, s = CHEAT_TEXT;
         for (;;) {
-            unsigned c = (g_image[CS_BASE + s++] ^ ah) ^ 0xaa;
+            uint32_t c = (g_image[CS_BASE + s++] ^ ah) ^ 0xaa;
             ah = c;
             if (c == 0)
                 break;
