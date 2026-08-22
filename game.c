@@ -6377,8 +6377,12 @@ int32_t ball_after_endgame(uint32_t ball)
 
     if (y == 0x74) {
         /* The lower chamber: through the gap it goes down and on, otherwise
-         * it bounces. */
-        if (x >= 0x60 && x < 0x6c) {
+         * it bounces - and the test was written the other way round. The asm
+         * at 1ac2:45da is `cmp al,0x60 / jb bounce / cmp al,0x6c / jb skip`,
+         * so the bounce is for x **outside** 0x60..0x6b. Inverted, the ball
+         * bounced in the gap and fell through the wall, and then it was drawn
+         * somewhere the original never put it. */
+        if (x < 0x60 || x >= 0x6c) {
             b[B_DIR_Y] = 0;
             b[B_BOUNCES]++;
             b[B_ACC_X] = 0;
