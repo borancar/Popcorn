@@ -1908,7 +1908,16 @@ void ball_bricks(uint32_t ball)
     uint32_t s0 = img_w(HIT_SLOTS + 0), s1 = img_w(HIT_SLOTS + 4);
     uint32_t s2 = img_w(HIT_SLOTS + 8), s3 = img_w(HIT_SLOTS + 12);
 
-    if (n == 3 || (n == 2 && ((s0 && s2) || (!s0 && s1 && s3)))) {
+    /* The second half of that condition reads **[0x2e99]**, which is not slot
+     * 3 at [0x2e95] but the first word of the direction table - and that word
+     * is a constant zero. So `!s0 && s1` never reaches the both-axes bounce;
+     * it always falls through to the x-only one at 1ac2:26b3. Almost
+     * certainly a slip in the original - the offset is four too far and the
+     * three neighbouring tests do read slots - but it is the original's slip
+     * and the ball's path depends on it. Reading s3 here instead sends a ball
+     * that clips two corners off in the wrong direction, which took eleven
+     * thousand frames of a level 6 game to show up. */
+    if (n == 3 || (n == 2 && ((s0 && s2) || (!s0 && s1 && img_w(HIT_DIRS))))) {
         bounce_x(b);                    /* wedged, or hit on the diagonal */
         bounce_y(b);
     } else if (n == 2) {
