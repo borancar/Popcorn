@@ -104,8 +104,18 @@ void io_shutdown(void)
     SDL_Quit();
 }
 
-void io_present(void)
+static void present_now(void)
 {
+    if (getenv("POPCORN_FPS")) {
+        static uint64_t t0; static unsigned n;
+        uint64_t now = SDL_GetTicksNS();
+        if (!t0) t0 = now;
+        n++;
+        if (now - t0 >= SDL_NS_PER_SECOND) {
+            fprintf(stderr, "popcorn: [fps] %u presents/s\n", n);
+            n = 0; t0 = now;
+        }
+    }
     uint32_t *px;
     int pitch;
     if (!SDL_LockTexture(tex, NULL, (void **)&px, &pitch))
@@ -128,19 +138,47 @@ void io_present(void)
     SDL_RenderPresent(ren);
 }
 
-/* Show what has been drawn and answer the window manager, at most sixty times
- * a second. Called from the busy-wait as well as the retrace wait, because the
- * game spends the whole opening sequence inside the busy-wait and nothing else
- * would run: on the original the screen was simply always live, and a port
- * that only presents from its frame loop leaves the window blank and
- * unresponsive for the first half-minute. */
+/* Put the framebuffer on the screen, at most sixty times a second.
+ *
+ * The throttle belongs here, not only in keep_alive: the transcribed routines
+ * call io_present themselves wherever the original finished a picture, and a
+ * routine that finishes several in a frame - the level draw finishes four -
+ * used to present every one of them. Offscreen that costs nothing and the
+ * rate sat at sixty; through a real compositor each present is a texture
+ * upload the game loop has to wait for, so the game ran slower the more it
+ * drew. Measured at 116 presents a second on the menu.
+ *
+ * On the original there was no such thing as presenting: the CRT read the
+ * framebuffer continuously, so drawing twice between two scans showed only
+ * the second. Dropping a present nothing could have seen is what the hardware
+ * did, not a shortcut. */
+unsigned long io_ms(void)
+{
+    return (unsigned long)SDL_GetTicks();
+}
+
+void io_present(void)
+{
+    uint64_t now = SDL_GetTicksNS();
+    if (now < next_present_ns)
+        return;
+    next_present_ns = now + SDL_NS_PER_SECOND / 60;
+    present_now();
+}
+
+/* Show what has been drawn and answer the window manager. Called from the
+ * busy-wait as well as the retrace wait, because the game spends the whole
+ * opening sequence inside the busy-wait and nothing else would run: on the
+ * original the screen was simply always live, and a port that only presents
+ * from its frame loop leaves the window blank and unresponsive for the first
+ * half-minute. Shares io_present's budget, so the two cannot double up. */
 static void keep_alive(void)
 {
     uint64_t now = SDL_GetTicksNS();
     if (now < next_present_ns)
         return;
     next_present_ns = now + SDL_NS_PER_SECOND / 60;
-    io_present();
+    present_now();
     io_pump();
 }
 
