@@ -19,6 +19,7 @@
 #include "game.h"
 
 unsigned char *g_image;
+const char *g_dir = "";     /* where the game files are */
 
 /* ------------------------------------------------------------------------
  * 1ac2:27d7  ball_step
@@ -1243,7 +1244,7 @@ void play_session(void)
                     break;
             }
             screen_game_over();                 /* 1ac2:0473 */
-            screen_end_of_game();               /* 1ac2:0d2e */
+            next_player(g_dir);                 /* 1ac2:0d2e */
         }
 
     level_done:
@@ -1687,7 +1688,7 @@ void probe_cell_at(unsigned x, unsigned y, unsigned slot)
  * centre an earlier one already has are cleared, so the brick is only hit
  * once.
  */
-static void drop_duplicate_hits(void)
+void drop_duplicate_hits(void)
 {
     for (int i = 0; i < 3; i++) {
         unsigned si = HIT_SLOTS + i * 4;
@@ -4334,17 +4335,22 @@ void panel_reveal(void)
         g_vram[(CGA_PLANE + 0x50 + i) & (CGA_SIZE - 1)] = 0x55;
     }
 
-    /* And the corner pieces down each side. */
+    /* And the corner pieces down each side. `si` is set once, before the
+     * loop, and `rep movsb` carries it forward - so these are two 21-byte
+     * sprites read straight through, three bytes per row, not one row drawn
+     * seven times. */
     di = 0;
+    unsigned si = 0x48d2;
     for (int r = 0; r < 7; r++) {
         for (int i = 0; i < 3; i++)
-            g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[0x48d2 + i];
+            g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[si++];
         di = cga_next_row(di);
     }
     di = 0x31;
+    si = 0x48bd;
     for (int r = 0; r < 7; r++) {
         for (int i = 0; i < 3; i++)
-            g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[0x48bd + i];
+            g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[si++];
         di = cga_next_row(di);
     }
 }
@@ -4866,7 +4872,7 @@ void palette_cycle(void)
 /* 1ac2:4d5d  hsc_bubble - one pass of the sort, from the bottom up.
  * `scasb` compares a name's six score digits against the entry above it and
  * swaps the whole nine-word record when the lower one is bigger. */
-static void hsc_bubble(unsigned si, unsigned di)
+void hsc_bubble(unsigned si, unsigned di)
 {
     si += 0x0c;
     di += 0x0c;
@@ -6073,4 +6079,204 @@ void bonus_end_level(void)
         if (!io_pump())
             return;
     }
+}
+
+/* ========================================================================
+ * 1ac2:0d2e  next_player
+ *
+ * What happens when a player's turn ends: either hand over to the next one, or
+ * - when nobody has a life left - run the results.
+ *
+ * A player's whole state lives in their 0x11b-byte record: lives at +0x0c, the
+ * level at +0x0d and +0x0f, the score at +0x10, their copy of the cells at
+ * +0x16, six words of level state at +0xc6, and then, at +0xd2, a **count of
+ * live entities followed by copies of them**. Saving the entity list is what
+ * lets a player come back to a level with the capsules still falling.
+ *
+ * The results are the ten records sorted by score with the same six-digit
+ * comparison the hall of fame uses, merged into the table, and written back to
+ * popcorn.hsc.
+ * ===================================================================== */
+#define CUR_PLAYER  0x3f0a
+#define LIVE_COUNT  0x3f09
+#define REC_STATE   0xc6
+#define REC_ENTS    0xd2
+
+void next_player(const char *dir)
+{
+    g_image[GAME_OVER] = 0;
+    if (g_image[LIVES] == 0) {
+        g_image[GAME_OVER] = 1;
+        if (--g_image[LIVE_COUNT] == 0) {
+            /* Everybody is out: keep this player's final score and finish. */
+            unsigned di = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
+            memcpy(g_image + di + REC_SCORE, g_image + SCORE_TEXT, 6);
+            screen_results(dir);
+            return;
+        }
+    } else if (g_image[LIVE_COUNT] == 1 && g_image[GAME_OVER] != 1) {
+        return;                         /* one player: just carry on */
+    }
+
+    /* Save this player. */
+    unsigned di = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
+    g_image[di + REC_LIVES] = g_image[LIVES];
+    img_setw(di + REC_LEVEL, img_w(LEVEL_SRC));
+    g_image[di + REC_NUMBER] = g_image[LEVEL_NUMBER];
+    memcpy(g_image + di + REC_SCORE, g_image + SCORE_TEXT, 6);
+    memcpy(g_image + di + REC_CELLS, g_image + LEVEL_CELLS, LEVEL_BYTES);
+    memcpy(g_image + di + REC_STATE, g_image + 0x30b0, 12);
+
+    /* And its entities, count first. */
+    g_image[di + REC_ENTS] = 0;
+    unsigned out = di + REC_ENTS + 1;
+    for (unsigned bx = img_w(ENTITY_HEAD); bx != 0xffff;
+         bx = img_w(bx + E_NEXT)) {
+        g_image[di + REC_ENTS]++;
+        memcpy(g_image + out, g_image + bx, 12);
+        out += 12;
+    }
+    entities_clear();
+
+    /* Move on to the next player who still has lives. */
+    unsigned si;
+    do {
+        g_image[CUR_PLAYER] = (unsigned char)
+            ((g_image[CUR_PLAYER] + 1) % g_image[PLAYER_COUNT]);
+        si = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
+    } while (g_image[si + REC_LIVES] == 0);
+
+    /* Restore them. */
+    memcpy(g_image + PLAYER_NAME, g_image + si, 12);
+    g_image[LIVES] = g_image[si + REC_LIVES];
+    img_setw(LEVEL_SRC, img_w(si + REC_LEVEL));
+    g_image[LEVEL_NUMBER] = g_image[si + REC_NUMBER];
+    memcpy(g_image + SCORE_TEXT, g_image + si + REC_SCORE, 6);
+    memcpy(g_image + LEVEL_CELLS, g_image + si + REC_CELLS, LEVEL_BYTES);
+    memcpy(g_image + 0x30b0, g_image + si + REC_STATE, 12);
+
+    unsigned n = g_image[si + REC_ENTS];
+    unsigned in = si + REC_ENTS + 1;
+    for (unsigned k = 0; k < n; k++, in += 12)
+        memcpy(g_image + entity_alloc(), g_image + in, 12);
+
+    panel_draw();
+    level_colours();
+
+    /* Set the next extra-life threshold two thousand above the score they
+     * came back with: the two digits are pulled out with `and ax,0x0e0f`,
+     * bumped, and carried by hand. */
+    unsigned ax = img_w(SCORE_TEXT) & 0x0e0f;
+    unsigned ah = ((ax >> 8) + 2) & 0xff, al = ax & 0xff;
+    if (ah >= 0x0a) {
+        al++;
+        ah = 0;
+    }
+    img_setw(0x13d3, ((al + 0x30) << 8) | (ah + 0x30));
+}
+
+/* 1ac2:0ea3  screen_results
+ *
+ * With one player there is nothing to compare, so it goes straight to the
+ * hall of fame at 0x1053. With more, the field is cleared, the level intro
+ * runs on it, and the players are sorted into 0x1aef by score - the same
+ * `score_before` the hall of fame uses - and shown on a bar.
+ */
+void screen_results(const char *dir)
+{
+    if (g_image[PLAYER_COUNT] == 1) {
+        hsc_sort();
+        hsc_save(dir);
+        screen_high_scores();
+        return;
+    }
+
+    memset(g_image + LEVEL_CELLS + 8, 0, 0x54 * 2);
+    level_intro();
+
+    /* An insertion sort of the player records into the scratch at 0x1aef. */
+    unsigned di = 0x1aef, si = NAME_TABLE;
+    memcpy(g_image + di, g_image + si, 12);
+    memcpy(g_image + di + 12, g_image + si + REC_SCORE, 6);
+    si += NAME_STRIDE;
+    for (unsigned n = g_image[PLAYER_COUNT] - 1; n > 0; n--,
+         si += NAME_STRIDE) {
+        di += HSC_ENTRY;
+        unsigned at = di;
+        while (at > 0x1aef && score_before(si + REC_SCORE, at - HSC_ENTRY + 12))
+            at -= HSC_ENTRY;
+        memmove(g_image + at + HSC_ENTRY, g_image + at, di - at);
+        memcpy(g_image + at, g_image + si, 12);
+        memcpy(g_image + at + 12, g_image + si + REC_SCORE, 6);
+    }
+
+    /* The bar the names go on, then the table itself. */
+    for (int i = 0; i < 0x18; i++)
+        img_vram_setw(0xf2 + i * 2, 0xaaaa);
+    unsigned d = 0x20f2;
+    for (unsigned k = 0; k < g_image[PLAYER_COUNT]; k++) {
+        draw_text(0x1aef + k * HSC_ENTRY, 12, d);
+        draw_text(0x1aef + k * HSC_ENTRY + 12, 6, d + 12 * 2 + 4);
+        d = cga_next_row((d - 0x30) & 0xffff);
+    }
+
+    hsc_sort();
+    hsc_save(dir);
+    screen_high_scores();
+}
+
+/* 1ac2:1a6f  demo_input_step
+ *
+ * Inside the play loop rather than a routine of its own. The level's animation
+ * script lives in the block reached as segment 0x14a1 and [0x3136] walks it;
+ * [0x3134] counts down to the next step and reloads from [0x3135]. A 0xffff
+ * in the script is not the end but a jump: the word after it is where to
+ * carry on, so a script can loop without being copied.
+ */
+void demo_input_step(void)
+{
+    if (--g_image[ANIM_COUNT] != 0)
+        return;
+    g_image[ANIM_COUNT] = g_image[ANIM_RATE];
+    img_setw(ANIM_PTR, img_w(ANIM_PTR) + 2);
+    unsigned si = img_w(ANIM_PTR);
+    if (img_w(SEG_14A1 + si) == 0xffff)
+        img_setw(ANIM_PTR, img_w(SEG_14A1 + si + 2));
+}
+
+/* 1ac2:3c35  bonus_script
+ *
+ * Movement kind 4 does not wander: it follows a list of steps at [bx+0x0a],
+ * one word per frame. The low byte is a signed horizontal delta - `shl al,1`
+ * tests its sign and `rcr al,1 / neg al` recovers the magnitude - and the
+ * capsule refuses a leftward step that would take it past its own position.
+ * The high byte becomes the y, as `0x79 + ah`.
+ *
+ * The x is clamped to 8..0xb8, which are the same walls everything else uses.
+ */
+int bonus_script(unsigned bx, unsigned *px, unsigned *py)
+{
+    unsigned si = img_w(bx + 0x0a);
+    img_setw(bx + 0x0a, si + 2);
+    unsigned word = img_w(si);
+    unsigned al = word & 0xff, ah = (word >> 8) & 0xff;
+    unsigned cl = g_image[bx + 3];
+
+    if (al & 0x80) {                    /* a leftward step */
+        unsigned mag = (unsigned)(-(int)(signed char)al) & 0xff;
+        if (cl < mag)
+            cl = 8;                     /* it would go through the wall */
+        else
+            cl = (cl + al) & 0xff;
+    } else {
+        cl = (cl + al) & 0xff;
+    }
+    if (cl > 0xb8)
+        cl = 0xb8;
+    if (cl < 8)
+        cl = 8;
+
+    *px = cl;
+    *py = (0x79 + ah) & 0xff;
+    return 1;
 }

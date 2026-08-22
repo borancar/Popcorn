@@ -49,7 +49,6 @@ static void note(const char *name, unsigned off)
 /* --- getting into a game -------------------------------------------- */
 
 /* --- called from the play loop, which is transcribed ------------------ */
-STUB(demo_input_step,     0x1a6f, "advances the recorded-input cursor")
 
 
 
@@ -68,12 +67,6 @@ void entity_unknown(unsigned bx)
 }
 
 
-int bonus_script(unsigned bx, unsigned *px, unsigned *py)
-{
-    note("bonus_script", 0x3c35);
-    (void)bx; (void)px; (void)py;
-    return 1;
-}
 
 /* The player-name boxes return 0xff for "abort", anything else to go on. With
  * no implementation there is nobody to abort, so it reports a start. */

@@ -24,6 +24,7 @@
 #define CODE_BASE   0x1ac20
 
 extern unsigned char *g_image;          /* the whole unpacked load image */
+extern const char *g_dir;               /* the directory the game files are in */
 
 /* Read the game's data out of the player's own POPCORN.EXE. */
 unsigned char *exepack_load(const char *path, size_t *out_len);
@@ -355,7 +356,9 @@ int  bonus_move_up(unsigned *px, unsigned *py);    /* 1ac2:3caf */
 int  bonus_move_down(unsigned *px, unsigned *py);  /* 1ac2:3d3c */
 int  bonus_steer(unsigned bx, unsigned *px, unsigned *py);  /* 1ac2:3bf7 */
 int  bonus_script(unsigned bx, unsigned *px, unsigned *py); /* 1ac2:3c35 */
-void demo_input_step(void);       /* the recorded-input cursor at 0x3134 */
+void demo_input_step(void);       /* 1ac2:1a6f */
+void drop_duplicate_hits(void);   /* 1ac2:27b7 */
+void hsc_bubble(unsigned si, unsigned di); /* 1ac2:4d5d */
 void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(unsigned x, unsigned y);
 unsigned io_ticks(void);
@@ -379,7 +382,9 @@ void screen_game_over(void);      /* 1ac2:0473 */
 void ending_plot(unsigned x, unsigned y);     /* 1ac2:5add */
 void ending_particles_init(void); /* 1ac2:5a43 */
 void ending_particles_tick(void); /* 1ac2:5a56 */
-void screen_end_of_game(void);    /* 1ac2:0d2e */
+void next_player(const char *dir);/* 1ac2:0d2e */
+void screen_results(const char *dir);   /* 1ac2:0ea3 */
+void screen_end_of_game(void);
 void screen_level_done(void);     /* 1ac2:0521 */
 void screen_all_levels_done(void);/* 1ac2:5940 */
 void ending_walk(unsigned bl, unsigned bh);   /* 1ac2:5bb5 */
@@ -556,7 +561,7 @@ int  bonus_move_up(unsigned *px, unsigned *py);    /* 1ac2:3caf */
 int  bonus_move_down(unsigned *px, unsigned *py);  /* 1ac2:3d3c */
 int  bonus_steer(unsigned bx, unsigned *px, unsigned *py);  /* 1ac2:3bf7 */
 int  bonus_script(unsigned bx, unsigned *px, unsigned *py); /* 1ac2:3c35 */
-void demo_input_step(void);       /* the recorded-input cursor at 0x3134 */
+void demo_input_step(void);       /* 1ac2:1a6f */
 void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(unsigned x, unsigned y);
 unsigned io_ticks(void);
@@ -580,7 +585,9 @@ void screen_game_over(void);      /* 1ac2:0473 */
 void ending_plot(unsigned x, unsigned y);     /* 1ac2:5add */
 void ending_particles_init(void); /* 1ac2:5a43 */
 void ending_particles_tick(void); /* 1ac2:5a56 */
-void screen_end_of_game(void);    /* 1ac2:0d2e */
+void next_player(const char *dir);/* 1ac2:0d2e */
+void screen_results(const char *dir);   /* 1ac2:0ea3 */
+void screen_end_of_game(void);
 void screen_level_done(void);     /* 1ac2:0521 */
 void screen_all_levels_done(void);/* 1ac2:5940 */
 void ending_walk(unsigned bl, unsigned bh);   /* 1ac2:5bb5 */

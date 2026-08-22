@@ -304,11 +304,11 @@ def main():
                 if a[k] == b[k]:
                     continue
                 n += 1
-                if n <= 4:
+                if n <= int(os.environ.get("PVLIM", "4")):
                     out.append(f"{label} {k:#0{width}x}: "
                                f"orig {a[k]:#04x} C {b[k]:#04x}")
-            if n > 4:
-                out.append(f"(+{n - 4} more {label})")
+            if n > int(os.environ.get("PVLIM", "4")):
+                out.append(f"(+{n - int(os.environ.get("PVLIM", "4"))} more {label})")
             return out
 
         bad = diffs(want_vram, got_vram, "vram", 6) + \
@@ -329,6 +329,12 @@ def main():
             else:
                 did_work[off] += 1      # a matching answer counts as work
         if bad:
+            if os.environ.get("PVSAVE"):
+                open(os.environ["PVSAVE"], "wb").write(img)
+                open(os.environ["PVSAVE"] + ".after", "wb").write(want_img)
+                open(os.environ["PVSAVE"] + ".vin", "wb").write(vram)
+                open(os.environ["PVSAVE"] + ".vwant", "wb").write(want_vram)
+                open(os.environ["PVSAVE"] + ".vgot", "wb").write(got_vram)
             bad.append("regs " + " ".join(
                 f"{n}={v:04x}" for n, v in zip(REGS, regs)))
         if want_img != img or want_vram != vram:

@@ -322,6 +322,43 @@ class DosMachine:
         if ah == 0x00:
             self.video_modes.append(al)
             self._note(f"INT 10h set video mode {al:#04x}")
+            return
+        if ah in (0x0C, 0x0D):
+            return self._bios_pixel(ah, al)
+        return
+
+    def _bios_pixel(self, ah, al):
+        """INT 10h AH=0Ch/0Dh - one pixel, CX=x, DX=y.
+
+        Popcorn's menu draws its bouncing kernels a pixel at a time through
+        the BIOS: six hundred thousand of these calls in a minute of menu.
+        Bit 7 of AL means XOR, which is how a kernel erases itself without
+        knowing what it was covering.
+        """
+        x = self._reg(UC_X86_REG_CX)
+        y = self._reg(UC_X86_REG_DX)
+        mode = self.video_modes[-1] if self.video_modes else 0x05
+        if mode in (0x04, 0x05):
+            w, bpp = 320, 2
+        elif mode == 0x06:
+            w, bpp = 640, 1
+        else:
+            return                          # text mode: nothing to plot
+        if x >= w or y >= 200:
+            return
+        off = (0x2000 if y & 1 else 0) + (y >> 1) * 80 + (x * bpp) // 8
+        addr = 0xB8000 + off
+        cur = self.uc.mem_read(addr, 1)[0]
+        per = 8 // bpp
+        shift = (per - 1 - (x % per)) * bpp
+        mask = ((1 << bpp) - 1) << shift
+        if ah == 0x0D:
+            self._set(UC_X86_REG_AX, ((self._reg(UC_X86_REG_AX) & 0xFF00)
+                                      | ((cur & mask) >> shift)))
+            return
+        val = (al & ((1 << bpp) - 1)) << shift
+        new = (cur ^ val) if (al & 0x80) else ((cur & ~mask) | val)
+        self.uc.mem_write(addr, bytes([new & 0xFF]))
         return
 
     def _mouse(self):

@@ -187,6 +187,181 @@ static int dispatch(unsigned routine, const unsigned short *r)
     case 0x50bc:
         restore_screen();
         return 1;
+    case 0x0090:
+        speaker_on();
+        return 1;
+    case 0x0097:
+        sound_tick();
+        return 1;
+    case 0x0106:
+        flush_keys();
+        return 1;
+    case 0x055e:
+        entities_clear();
+        return 1;
+    case 0x0735:
+        life_lost();
+        return 1;
+    case 0x09c5:
+        panel_finish();
+        return 1;
+    case 0x0b0b:
+        panel_draw();
+        return 1;
+    case 0x1212:
+        play_frame();
+        return 1;
+    case 0x14b3:
+        build_shifted_sprites();
+        return 1;
+    case 0x164c:
+        game_delay();
+        return 1;
+    case 0x1a4f:
+        game_input();
+        return 1;
+    case 0x1a6f:
+        demo_input_step();
+        return 1;
+    case 0x27b7:
+        drop_duplicate_hits();
+        return 1;
+    case 0x41d4:
+        play_teardown();
+        return 1;
+    case 0x4210:
+        bonus_end_level();
+        return 1;
+    case 0x4878:
+        screen_scroll_up();
+        return 1;
+    case 0x48af:
+        input_and_draw_paddle();
+        return 1;
+    case 0x48ce:
+        level_tally();
+        return 1;
+    case 0x4ae0:
+        employee_enter();
+        return 1;
+    case 0x4b4f:
+        screen_restore();
+        return 1;
+    case 0x4ba9:
+        screen_stash();
+        return 1;
+    case 0x4c13:
+        screen_unstash();
+        return 1;
+    case 0x4d37:
+        hsc_sort();
+        return 1;
+    case 0x4f58:
+        border_animate();
+        return 1;
+    case 0x4f73:
+        border_setup();
+        return 1;
+    case 0x5196:
+        palette_cycle();
+        return 1;
+    case 0x5317:
+        ending_column();
+        return 1;
+    case 0x5a43:
+        ending_particles_init();
+        return 1;
+    case 0x5a56:
+        ending_particles_tick();
+        return 1;
+    case 0x5b80:
+        ending_blobs();
+        return 1;
+    case 0x03d1:
+        install_int09();
+        return 1;
+    case 0x0473:
+        screen_game_over();
+        return 1;
+    case 0x0521:
+        screen_level_done();
+        return 1;
+    case 0x078b:
+        intro_curtain();
+        return 1;
+    case 0x1eb9:
+        level_intro();
+        return 1;
+    case 0x49bc:
+        intro_paddle();
+        return 1;
+    case 0x4a7a:
+        intro_scroll();
+        return 1;
+    case 0x54d6:
+        intro_logo();
+        return 1;
+    case 0x55e5:
+        intro_reveal();
+        return 1;
+    case 0x108c:                        /* score_before(si, di) */
+        g_result = score_before(r[R_SI], r[R_DI]);
+        return 1;
+    case 0x1642:                        /* copy_string_text(si, di) */
+        copy_string_text(r[R_SI], r[R_DI]);
+        return 1;
+    case 0x34c5:                        /* morph_begin(bx, si, dx) */
+        morph_begin(r[R_BX], r[R_SI], r[R_DX]);
+        return 1;
+    case 0x34d7:                        /* morph_step(bx) */
+        morph_step(r[R_BX]);
+        return 1;
+    case 0x3bf7: {                      /* bonus_steer(bx, &x, &y) */
+        unsigned x = 0, y = 0;
+        g_result = bonus_steer(r[R_BX], &x, &y);
+        return 1;
+    }
+    case 0x3c35: {                      /* bonus_script(bx, &x, &y) */
+        unsigned x = 0, y = 0;
+        g_result = bonus_script(r[R_BX], &x, &y);
+        return 1;
+    }
+    case 0x45a1:                        /* ball_after_endgame(si) */
+        g_result = ball_after_endgame(r[R_SI]);
+        return 1;
+    case 0x4d5d:                        /* hsc_bubble(si, di) */
+        hsc_bubble(r[R_SI], r[R_DI]);
+        return 1;
+    case 0x4fa7:                        /* border_step(di) */
+        g_result = border_step(r[R_DI]);
+        return 1;
+    case 0x4fd3:                        /* border_erase(di) */
+        border_erase(r[R_DI]);
+        return 1;
+    case 0x4ff1:                        /* border_draw(di) */
+        border_draw(r[R_DI]);
+        return 1;
+    case 0x5045:                        /* border_row(di) */
+        border_row(r[R_DI]);
+        return 1;
+    case 0x5171:                        /* cheat_match(al) */
+        cheat_match(r[R_AX] & 0xff);
+        return 1;
+    case 0x538d:                        /* tall_sprite(si, di) */
+        tall_sprite(r[R_SI], r[R_DI]);
+        return 1;
+    case 0x59f7:                        /* ending_particle_init(si, ax) */
+        g_result = ending_particle_init(r[R_SI], r[R_AX]);
+        return 1;
+    case 0x5add:                        /* ending_plot(cx, dx) */
+        ending_plot(r[R_CX], r[R_DX]);
+        return 1;
+    case 0x5bb5:                        /* ending_walk(bl, bh) */
+        ending_walk(r[R_BX] & 0xff, (r[R_BX] >> 8) & 0xff);
+        return 1;
+    case 0x5c36:                        /* ending_blob(ax) */
+        ending_blob(r[R_AX]);
+        return 1;
     default:
         return 0;
     }

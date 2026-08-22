@@ -797,12 +797,46 @@ class VgaDos(DosMachine):
         self.uc.mem_write(0x450 + (page & 7) * 2,
                           bytes([col & 0xFF, row & 0xFF]))
 
+    def _bios_pixel(self, ah, al):
+        """INT 10h AH=0Ch write pixel / AH=0Dh read pixel. CX=x, DX=y."""
+        x = self._reg(UC_X86_REG_CX)
+        y = self._reg(UC_X86_REG_DX)
+        mode = self.video_modes[-1] if self.video_modes else 0x05
+        if mode in (0x04, 0x05):
+            bpp = 2
+        elif mode == 0x06:
+            bpp = 1
+        else:
+            return                          # text mode: nothing to plot
+        if x >= (640 if bpp == 1 else 320) or y >= 200:
+            return
+        addr = 0xB8000 + (0x2000 if y & 1 else 0) + (y >> 1) * 80 + \
+            (x * bpp) // 8
+        cur = self.uc.mem_read(addr, 1)[0]
+        per = 8 // bpp
+        shift = (per - 1 - (x % per)) * bpp
+        mask = ((1 << bpp) - 1) << shift
+        if ah == 0x0D:
+            self._set(UC_X86_REG_AX, (self._reg(UC_X86_REG_AX) & 0xFF00)
+                      | ((cur & mask) >> shift))
+            return
+        val = (al & ((1 << bpp) - 1)) << shift
+        self.uc.mem_write(addr, bytes([
+            ((cur ^ val) if (al & 0x80) else ((cur & ~mask) | val)) & 0xFF]))
+
     def _bios_video(self):
         ax = self._reg(UC_X86_REG_AX)
         ah, al = ax >> 8, ax & 0xFF
         bx = self._reg(UC_X86_REG_BX)
         page = (bx >> 8) & 7
         self.int10_fn[ah] += 1
+
+        # AH=0Ch/0Dh: one pixel. Popcorn's menu draws its bouncing kernels
+        # this way, a BIOS call per pixel - which is where the six hundred
+        # thousand INT 10h calls in a minute of menu come from. Bit 7 of AL
+        # means XOR, so a kernel erases itself without knowing what it covered.
+        if ah in (0x0C, 0x0D):
+            return self._bios_pixel(ah, al)
 
         # Cursor position must be real state: Ducks calls 03h to find out where
         # to write, then pokes 0xb8000 itself. Returning nothing made every
