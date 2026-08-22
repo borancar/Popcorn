@@ -1120,7 +1120,6 @@ int play_loop(void)
     }
 
     for (;;) {                          /* one iteration is one frame */
-        io_frame_sync();        /* 1ac2:1a62 - the frame's top */
         img_setw(FRAME_DELAY, img_w(FRAME_DELAY_SET));
         demo_input_step();
 
@@ -1227,6 +1226,13 @@ int play_loop(void)
         sound_tick();
         io_delay_cycles(img_w(FRAME_DELAY) * CYCLES_PER_LOOP);
         game_delay();
+
+        /* 1ac2:1c3f, the `jmp 0x1a62` that closes the frame. The top of the
+         * loop is the wrong place to sync a frame against the emulator: the
+         * serve wait reaches 0x1a62 too, at 0x1a58, every time the action
+         * button is held - and a bot holds it permanently. This is the one
+         * instruction both paths through the frame converge on. */
+        io_frame_sync();
 
         io_present();
         if (!io_pump())

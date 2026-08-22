@@ -18,9 +18,10 @@ Both start from the same state: the emulator plays the menu, and when it
 reaches the play loop at 1ac2:1873 the whole machine is captured and given to
 the port, which resumes from it. Neither side replays the menu twice.
 
-The sync point is **1ac2:1a62**, the top of the play loop's frame - it reloads
-the frame delay from [0x1489], which happens exactly once a frame. The port
-calls io_frame_sync() at the same place.
+The sync point is **1ac2:1c3f**, the `jmp` that closes the frame - the one
+instruction both paths through it converge on. Not 0x1a62, its top: the serve
+wait reaches that too, at 0x1a58, every time the action button is held, and a
+bot holds it permanently.
 
     venv/bin/python sidebyside.py                 # 200 frames, stop on the first difference
     venv/bin/python sidebyside.py --frames 500
@@ -39,7 +40,10 @@ PORT = os.path.join(HERE, "reconstruct", "popcorn")
 
 CODE = 0x1AC20
 PLAY_LOOP = 0x1873                      # where the capture is taken
-FRAME_TOP = 0x1A62                      # the sync point, once a frame
+FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
+#  - and NOT 0x1a62, its top: the serve wait jumps there too, at 0x1a58,
+#    whenever the action button is held, so the top is hit more than once
+#    a frame and the two sides end up compared at different points.
 IMAGE_LEN = 0x208B0
 CGA_SIZE = 0x4000
 
@@ -90,6 +94,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--frames", type=int, default=200)
     ap.add_argument("--cmdline", default="")
+    ap.add_argument("--no-sound", action="store_true",
+                    help="clear cs:[0x84] on both sides before comparing, so "
+                         "the note timer at cs:[0xf5] cannot diverge")
     ap.add_argument("--dump", metavar="DIR",
                     help="write emulator/port/diff PNGs for each "
                          "differing frame")
@@ -137,6 +144,7 @@ def main():
     captured = {}
     frame_hit = {}
     reentries = [0]
+    resuming = [False]
     hits = collections.Counter()
 
     def on_code(uc, address, size, user):
@@ -148,7 +156,7 @@ def main():
             m.press_key(sc, asc, False)
         if off == PLAY_LOOP and captured:
             reentries[0] += 1
-        if captured and off in (0x1AD8, 0x1AF5, 0x1B04, 0x1B4D, 0x1C3F):
+        if captured and off in (0x0097, 0x1AD8, 0x1AF5, 0x1B04, 0x1B4D, 0x1C3F):
             hits[off] += 1
         if off == PLAY_LOOP and not captured:
             captured["regs"] = regs_now()
@@ -156,9 +164,17 @@ def main():
             captured["vram"] = snapshot_vram()
             captured["ticks"] = bios_ticks()
             uc.emu_stop()
-        elif captured and off == FRAME_TOP:
+        elif captured and off == FRAME_END:
+            # emu_stop() leaves IP *at* this instruction, so the next
+            # emu_start runs it again and the hook fires a second time with
+            # no work done in between. Counting those as frames compares the
+            # port's frame N+1 against the emulator's frame N.
+            if resuming[0]:
+                resuming[0] = False
+                return
             frame_hit["img"] = snapshot_image()
             frame_hit["vram"] = snapshot_vram()
+            resuming[0] = True
             uc.emu_stop()
 
     m.uc.hook_add(unicorn.UC_HOOK_CODE, on_code, None, code, code + 0x10000)
@@ -179,6 +195,16 @@ def main():
         print(f"never reached the play loop in {args.enter_seconds:.0f}s")
         return 1
     print(f"in a game after {m._elapsed():.0f}s; handing the state over")
+
+    if args.no_sound:
+        # F9's flag, in the code segment. Written to the emulator's memory and
+        # to the copy the port gets, so both start from the same silence.
+        off = GAME_CODE + 0x84
+        m.uc.mem_write(base + off, b"\x00")
+        img = bytearray(captured["img"])
+        img[off] = 0
+        captured["img"] = bytes(img)
+        print("   sound off on both sides")
 
     state = os.path.join(os.environ.get("TMPDIR", "/tmp"),
                          "popcorn_lockstep.pvs")
