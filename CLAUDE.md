@@ -241,18 +241,39 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 
 | file | what |
 | --- | --- |
-| `unpack_popcorn.py` | EXEPACK recovery by running the stub under Unicorn |
-| `validate.py` | round-trips the result against the stub's own output |
-| `trace_dos.py` | headless DOS/BIOS shim; **read-only** on the host filesystem |
-| `emulation.py` | CGA + SDL window on top of it — the reference implementation |
-| `analyze.py` | recursive-descent map of the code segment |
-| `coverage.py` | records what actually executes, across several menu routes |
-| `autoplay.py` | walks the menu and plays the game, for unattended runs |
-| `dump_data.py` | extracts a data structure and renders it back out |
-| `tools_dis.py` | disassemble a range; `load_image()` is the shared loader |
-| `verify.py` | checks a transcribed routine against the original, on the same call |
-| `compare_screen.py` | diffs the port's screen against the emulator's, byte for byte |
-| `reconstruct/` | the C port: `exepack.c` reads the player's own EXE, `sdl_io.c` is the platform, `game.c` the transcribed routines, `stubs.c` what is not done yet |
+| `CLAUDE.md` | this file: what is known about the program, and the conventions |
+| `STATUS.md` | where the port has got to, what is proven, what is next |
+| **Recovering the executable** ||
+| `unpack_popcorn.py` | EXEPACK recovery by running the stub under Unicorn at segment 0x2000, which is the workaround for the stub's reliance on the 8086's 1 MB wrap |
+| `validate.py` | proves the recovery: round-trips the emitted EXE against the stub's own output, and checks the C decoder agrees |
+| **Emulating it** ||
+| `trace_dos.py` | headless DOS/BIOS shim — INT 21h, 16h, 33h, the IVT, the PSP. **Read-only** on the host filesystem: writes are satisfied from an in-memory overlay |
+| `emulation.py` | `VgaDos` on top of it: CGA modes 4/5/6, ports 0x3d8/0x3d9, retrace on 0x3da, IRQ 1 keyboard, INT 10h pixels, and the SDL window. The reference the port is measured against |
+| `sb.py`, `xms.py` | Sound Blaster and XMS models inherited from Ducks. Popcorn uses neither — it is CGA and PC speaker — but `emulation.py` wires them in and they cost nothing |
+| **Reading the code** ||
+| `analyze.py` | recursive-descent map of the code segment, seeded with the entry point and every handler table the game dispatches through. `--listing` dumps each reachable routine |
+| `tools_dis.py` | disassemble any range; `load_image()` is the loader everything else shares |
+| `coverage.py` | records which bytes actually execute, across several menu routes, into `coverage.bin` |
+| `dump_data.py` | extracts a data structure and renders it back out — the 8x12 font at `0x9020` is the worked example |
+| **Checking the port** ||
+| `verify.py` | the differential harness: captures the machine at a routine's entry, lets the **original** run to its return, runs the C on the same capture, diffs image, video memory and return value |
+| `port_coverage.py` | measures transcription by image offset, counting a routine only when its `1ac2:xxxx` header appears outside `stubs.c` |
+| `compare_screen.py` | diffs the port's `0xb8000` against the emulator's, byte for byte |
+| `autoplay.py` | walks the menu and then keeps the paddle under the ball, for unattended runs. Drives the **mouse**, because the game's mouse input is absolute and lands on the next frame |
+| **The port** ||
+| `reconstruct/Makefile` | builds `reconstruct/popcorn` against SDL3 |
+| `reconstruct/main.c` | argument handling, the load, and the call into `game_main` |
+| `reconstruct/exepack.c` | the EXEPACK decoder in C, byte-identical to the Python one. The port reads the player's own `POPCORN.EXE` at startup |
+| `reconstruct/game.h` | types, the named image offsets, and the backend interface |
+| `reconstruct/game.c` | the transcribed routines — all 179 of them — each carrying the `1ac2:xxxx` offset it was read from |
+| `reconstruct/sdl_io.c` | the platform layer: window, presentation, keyboard, mouse, and the retrace and delay hooks the game paces itself on |
+| `reconstruct/stubs.c` | what is not transcribed. Down to `entity_unknown`, a safety net for a handler address that is in no table |
+| `reconstruct/verify.c` | the other half of `verify.py`: loads a captured state, calls one routine, writes back what it produced |
+| **Not in the repository** ||
+| `popcorn/` | the game itself, excluded by directory and again by file type. Never committed |
+| `popcorn.unpacked.exe` | derived from it, and therefore just as copyrighted. Regenerated, not committed |
+| `debug/`, `*.png` | screenshots and VRAM dumps from `shift+F10` |
+| `venv/`, `coverage.bin` | build and run products |
 
 ### Running the game
 
