@@ -137,18 +137,41 @@ looked like:
 
 ## Open
 
-### A thousand frames of a real game come out byte for byte
+### Twenty thousand frames of a real game come out byte for byte
 
 `sidebyside.py` plays the emulator and the port together on the same driven
 input and compares the whole image and the whole screen after every frame.
-With sound set aside it runs **a thousand frames identical throughout** - not
-a byte of the 133,296-byte image or the 16,384-byte screen differs.
+It runs **20,041 frames identical throughout** - not a byte of the
+133,296-byte image or the 16,384-byte screen differs, sound player included,
+nothing masked but the stack and the three key-state bytes. The run ends
+because the level does, not because anything diverged. That is about five and
+a half minutes of continuous play.
 
 The instruction counts say those frames are real rather than empty: the sound
-tick, the ball's step gate and the entity walk each run exactly a thousand
-times, the frame's closing jump 1,999 (a thousand frames plus the 999
-resumes), and the ball steps on **667** of them - two in three, exactly what
-the `[0x1486] = 3` gate predicts, sustained over the whole run.
+tick, the ball's step gate and the entity walk each run exactly 20,041 times,
+the frame's closing jump 40,081, and the ball steps on **13,365** of them -
+two in three, exactly what the `[0x1486] = 3` gate predicts, held over the
+whole run.
+
+Three bugs had to come out to get there, and each was found by the harness
+rather than by reading:
+
+- **sound_tick read its tunes out of the sprite data.** The tune pointers are
+  offsets into the code segment, because DS is the code segment for the
+  length of the routine. Reading them as image offsets played whatever bitmap
+  happened to be at 0xa.
+- **entity_bonus** mishandled the no-move steer, bounced the wrong ball when
+  more than one was out, and returned instead of falling through into the
+  capsule being consumed.
+- **bonus_move_down looked a whole row out** - `add al, 0xa`, ten pixels
+  below the capsule, not two - and was missing its ending, where a capsule
+  reaching the paddle row is handed to the script at 0x8320 rather than being
+  blocked.
+
+The last of those was found by arithmetic on the PRNG: game_random advances
+[0x33d2] by a constant, so the gap between two states is a call count. It said
+"the emulator is two draws ahead", and logging each draw's caller named
+bonus_steer.
 
 Getting there took two fixes to the harness rather than the port, and both are
 worth remembering because both made it *look* like the port was wrong:
