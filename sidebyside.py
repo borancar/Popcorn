@@ -51,6 +51,11 @@ CGA_W, CGA_H = 320, 200
 CGA_PLANE = 0x2000
 CGA_STRIDE = 80
 PADDLE_X = 0x2E54
+
+# The brick behaviour table at 0x3044, by cell value - so a report can say
+# which brick was hit rather than only that one was.
+BRICKS = {0x28CB: 1, 0x2985: 2, 0x2A3F: 3, 0x3221: 4, 0x2A73: 5, 0x2AB4: 6,
+          0x2AF5: 7, 0x2B36: 8, 0x2B9D: 9, 0x2C59: 10, 0x2D68: 11}
 LEVEL_NUMBER = 0x13CC                   # 0-0x31, for naming snapshots
 
 # A snapshot is everything needed to start a level again: the unmasked image
@@ -251,6 +256,10 @@ def main():
             hits[off] += 1
         if captured and off == 0x1FC1:          # field_backdrop
             draws.append((0x1fc1, 0x1fc1))
+        # the brick handlers, by the cell value that reaches them
+        k = BRICKS.get(off)
+        if captured and k is not None:
+            draws.append((0x8000 | k, 0x8000 | k))
         # play_session's decision points, so the trace can say what the
         # emulator did on a lost life rather than what it did not do.
         if captured and off in (0x0352, 0x036E, 0x034C, 0x0376,
@@ -534,11 +543,22 @@ def main():
                     print(f"    ... and {len(img_bad) - 20} more image bytes")
                     break
             if draws or pdraws:
+                def tag(a, dl):
+                    # Tags live at 0x8000 and above; every return address in
+                    # this code segment is below 0x5e90, so they cannot be
+                    # confused. Masking on 0x1000 did confuse them, and
+                    # reported the spawn gate at 0x1c2c as "brick44".
+                    if a == 0x1fc1:
+                        return "backdrop"
+                    if a >= 0x8000:
+                        return f"brick{a & 0xff}"
+                    return f"{a:#06x}/{dl}"
                 print("    draws this frame - emulator: " +
-                      (", ".join(f"{a:#06x}/{dl}" for a, dl in draws)
-                       or "none"))
+                      (", ".join(tag(a, dl) for a, dl in draws) or "none"))
                 print("                          port: " +
-                      (", ".join(str(dl) for dl in pdraws) or "none"))
+                      (", ".join("backdrop" if d == 0x1fc1
+                                 else f"brick{d & 0xff}" if d >= 0x8000
+                                 else str(d) for d in pdraws) or "none"))
             if vram_bad:
                 rows = collections.Counter()
                 xs = []

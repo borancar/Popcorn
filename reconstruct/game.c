@@ -2133,6 +2133,7 @@ void brick_8(uint32_t slot, uint32_t ball)
 /* The dispatch ball_bricks does through the table at 0x3044. */
 void brick_hit(uint32_t slot, uint32_t cell, uint32_t ball)
 {
+    io_log_random(0x8000 | g_image[cell]);  /* tagged for sidebyside */
     switch (g_image[cell]) {
     case 1:  brick_1(slot, ball); break;
     case 2:  brick_2(slot, ball); break;
