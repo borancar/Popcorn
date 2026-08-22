@@ -2147,7 +2147,10 @@ void brick_hit(uint32_t slot, uint32_t cell, uint32_t ball)
     case 9:  brick_9(slot, ball); break;
     case 10: brick_10(slot, ball); break;
     case 11: brick_11(slot, ball); break;
-    default: break;                     /* 0 and 13 have no handler */
+    case 16: case 17: case 18:
+    case 19: case 20: case 21:
+        brick_animated(slot, ball); break;   /* 1ac2:2ccd */
+    default: break;                     /* 0, 13, 14, 15 have no handler */
     }
 }
 
@@ -3176,6 +3179,7 @@ void entity_call(uint32_t node)
     case 0x37E0: entity_ball_hold(node); break;
     case 0x390D: entity_hatch(node); break;
     case 0x39FA: entity_bonus(node); break;
+    case 0x3ABF: entity_anim_brick(node); break;
     case 0x3AEE: entity_sparkle(node); break;
     case 0x3717: entity_multiball(node); break;
     case 0x3B2A: entity_crumble(node); break;
@@ -6890,4 +6894,76 @@ int32_t cheat_sequence(uint8_t key)
     img_setw(CHEAT_CURSOR, CHEAT_START);
     g_image[CHEAT_LAST] = 0xff;
     return 1;
+}
+
+/* ========================================================================
+ * The animated bricks - cells 16 to 21.
+ *
+ * The brick table at 0x3044 is twenty-two entries long, and its last six all
+ * point here. These cells are not ordinary bricks: they are the pieces of one
+ * larger picture that keeps animating, and the cell's low nibble says which
+ * piece. Hitting one does not clear it - it **adds 8** to the cell, leaving
+ * the nibble alone, and leaves an entity behind that goes on drawing the
+ * piece from the level's animation script.
+ * ===================================================================== */
+#define ANIM_SPRITE_BYTES  32           /* 8 rows of 4, `dx <<= 5` */
+#define ANIM_PIECES        0x3080       /* what each hit piece became */
+
+/* 1ac2:3bac  draw_anim_cell - eight rows of four bytes, copied not XORed,
+ * out of the block reached as segment 0x14a1. */
+void draw_anim_cell(uint32_t si, uint32_t x, uint32_t y)
+{
+    uint32_t di = cga_at(x, y);
+    for (int32_t r = 0; r < 8; r++) {
+        for (int32_t b = 0; b < 4; b++)
+            g_vram[(di + b) & (CGA_SIZE - 1)] =
+                g_image[SEG_14A1 + si + r * 4 + b];
+        di = cga_next_row(di);
+    }
+}
+
+/* 1ac2:3abf  entity_anim_brick
+ *
+ * One piece of the animation, redrawn whenever the script steps - which is
+ * when [0x3134] has come back round to [0x3135]. The frame is the script's
+ * current entry, offset by the piece's number.
+ */
+void entity_anim_brick(uint32_t bx)
+{
+    if (g_image[ANIM_RATE] != g_image[ANIM_COUNT])
+        return;
+    uint32_t si = img_w(SEG_14A1 + img_w(ANIM_PTR))
+                + g_image[bx + 4] * ANIM_SPRITE_BYTES;
+    draw_anim_cell(si, g_image[bx + 2], g_image[bx + 3]);
+}
+
+/* 1ac2:2ccd  brick_animated - cells 16 to 21 */
+void brick_animated(uint32_t slot, uint32_t ball)
+{
+    brick_score(0, 0, 0x0303);
+    g_image[SOUND_REQUEST] = 3;
+    if (ball)
+        g_image[ball + 0x1d]++;
+
+    uint32_t cell = img_w(slot);
+    uint32_t was = g_image[cell];
+    g_image[cell] = (uint8_t)(was + 8);  /* marked, not cleared */
+    uint32_t piece = was & 0x0f;
+
+    /* Remember what this piece turned into, indexed by the new cell value. */
+    uint32_t table = img_w(SEG_14A1 + g_image[LEVEL_NUMBER] * 4);
+    uint32_t frame = (img_w(SEG_14A1 + table)
+                      + (piece << 5)) & 0xffff;
+    img_setw(ANIM_PIECES + ((was + 8) & 0xff) * 2, frame);
+
+    /* Draw it once where the brick was, from the script's current entry. */
+    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
+    draw_anim_cell((img_w(SEG_14A1 + img_w(ANIM_PTR))
+                    + (piece << 5)) & 0xffff, x, y);
+
+    uint32_t si = entity_alloc();
+    img_setw(si + 0, 0x3abf);
+    img_setw(si + 2, img_w(slot + 2));  /* the centre, as one word */
+    g_image[si + 4] = (uint8_t)piece;
+    g_image[LEVEL_CELLS]--;
 }
