@@ -271,7 +271,7 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `verify.py` | the differential harness: captures the machine at a routine's entry, lets the **original** run to its return, runs the C on the same capture, diffs image, video memory and return value |
 | `port_coverage.py` | measures transcription by image offset, counting a routine only when its `1ac2:xxxx` header appears outside `stubs.c` |
 | `compare_screen.py` | diffs the port's `0xb8000` against the emulator's, byte for byte |
-| `autoplay.py` | walks the menu and then keeps the paddle under the ball, for unattended runs. Drives the **mouse**, because the game's mouse input is absolute and lands on the next frame |
+| `autoplay.py` | walks the menu and then plays: keeps the paddle under the ball, collects the capsules worth having, and catches a parachuted ball. Drives the **mouse**, because the game's mouse input is absolute and lands on the next frame. `--port` drives the **C port** instead, through the same lockstep protocol `sidebyside.py` uses, so the deliverable can be watched playing itself |
 | **The port** ||
 | `reconstruct/Makefile` | builds `reconstruct/popcorn` against SDL3 |
 | `reconstruct/main.c` | argument handling, the load, and the call into `game_main` |

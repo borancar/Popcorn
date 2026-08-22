@@ -315,8 +315,13 @@ def main():
             draws.append((0x8000 | k, 0x8000 | k))
         # play_session's decision points, so the trace can say what the
         # emulator did on a lost life rather than what it did not do.
+        # play_loop's four exits, so a report can say *which* one ended the
+        # level rather than only that something did: 0x1a9b the last ball
+        # gone, 0x1aac the bricks gone, 0x1b2b a ball lost inside the walk,
+        # 0x1b3d the last brick broken inside it.
         if captured and off in (0x0352, 0x036E, 0x034C, 0x0376,
-                                0x1EB9, 0x0D2E, 0x0473, 0x0374):
+                                0x1EB9, 0x0D2E, 0x0473, 0x0374,
+                                0x1A9B, 0x1AAC, 0x1B2B, 0x1B3D):
             draws.append((off, 0))
         if captured and off == 0x40C0:          # game_random: who asked?
             sp = m._reg(UC_X86_REG_SP)
@@ -610,8 +615,8 @@ def main():
                 seen.add(key)
                 print(f"    {off:#07x} {what or '(unnamed)':<24s} "
                       f"emulator {a[off]:#04x}  port {b[off]:#04x}")
-                if len(seen) >= 20:
-                    print(f"    ... and {len(img_bad) - 20} more image bytes")
+                if len(seen) >= int(os.environ.get("SBSLIM", "20")):
+                    print(f"    ... and {len(img_bad) - int(os.environ.get("SBSLIM", "20"))} more image bytes")
                     break
             if draws or pdraws:
                 def tag(a, dl):

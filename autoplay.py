@@ -47,6 +47,7 @@ drawn ball to the pixel, `+0x18/19` does not.
 
 Usage:
     python autoplay.py --scale 3                 # play, with a window
+    python autoplay.py --port --scale 3          # watch the **port** play
     python autoplay.py --demo                    # the game's own attract mode
     python autoplay.py --shots 8 --shot-every 5  # unattended capture
     python autoplay.py --no-bot                  # start a game, then hands off
@@ -506,6 +507,207 @@ def parse_route(route):
     return out
 
 
+class PortView:
+    """What Bot needs of a machine, backed by the port's own image.
+
+    The bot reads the game's memory to decide where the paddle goes. Against
+    the emulator that memory is the emulator's; against the port it has to be
+    the **port's**, or the bot is steering by one program while another plays.
+    Bot only writes memory on the keyboard path, which this never uses.
+    """
+
+    load_seg = 0
+
+    def __init__(self):
+        self.img = b""
+        self.uc = self
+        self.mouse_pos = (200, 100)
+        self.mouse_btn = 1
+
+    def mem_read(self, addr, n):
+        return self.img[addr:addr + n]
+
+    def mem_write(self, addr, data):
+        pass
+
+
+def run_port(args):
+    """Play the C port, alone, through the lockstep protocol.
+
+    sidebyside.py runs the port and the emulator together and compares them
+    every frame. This runs only the port, so what is on screen is the
+    deliverable rather than the reference - the thing worth watching when the
+    question is "is the port any good" rather than "do the two agree".
+    """
+    import struct
+    import subprocess
+    import sidebyside as SBS
+    import snapshot as SNAP
+
+    m = VgaDos(args.exe, max_insns=1 << 62, cmdline=args.cmdline)
+    base = m.load_seg * 16
+    code = base + GAME_CODE
+    captured = {}
+
+    if args.resume:
+        lv, fr, _extra = SNAP.restore(m, args.resume)
+        print(f"resumed {os.path.basename(args.resume)}: level {lv}")
+
+    pending = collections.defaultdict(collections.deque)
+    if not args.resume:
+        for off, key, _ in parse_route(ROUTE_PLAY):
+            pending[off].append(key)
+
+    def on_code(uc, address, size, user):
+        off = address - code
+        q = pending.get(off)
+        if q:
+            sc, asc = KEYMAP[q.popleft()]
+            m.press_key(sc, asc, True)
+            m.press_key(sc, asc, False)
+        if off == SBS.PLAY_SESSION and not captured:
+            captured["regs"] = [uc.reg_read(r) & 0xFFFF for r in (
+                UC_X86_REG_AX, UC_X86_REG_BX, UC_X86_REG_CX, UC_X86_REG_DX,
+                UC_X86_REG_SI, UC_X86_REG_DI, UC_X86_REG_BP, UC_X86_REG_ES,
+                UC_X86_REG_DS, UC_X86_REG_EFLAGS)]
+            captured["img"] = bytes(uc.mem_read(base, SBS.IMAGE_LEN))
+            captured["vram"] = bytes(uc.mem_read(0xB8000, SBS.CGA_SIZE))
+            lo, hi = struct.unpack("<HH", uc.mem_read(0x46C, 4))
+            captured["ticks"] = (lo + hi) & 0xFFFF
+            uc.emu_stop()
+
+    m.uc.hook_add(UC_HOOK_CODE, on_code, None, code, code + 0x10000)
+
+    screen = None
+    if not args.headless:
+        pygame.init()
+        pygame.display.set_caption("Popcorn - the port, playing itself")
+        screen = pygame.display.set_mode((SBS.CGA_W * args.scale,
+                                          SBS.CGA_H * args.scale))
+
+    def show():
+        """Whatever is in the machine's video memory, on the window.
+
+        During the handover that is the emulator walking the menu; afterwards
+        the port's own screen is written into the same place. Watching the
+        first is the only thing to look at while it happens - the alternative
+        is half a minute of nothing.
+        """
+        if screen is None:
+            return True
+        surf = make_surface(m)
+        pygame.transform.scale(surf.convert(screen), screen.get_size(), screen)
+        pygame.display.flip()
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT or (ev.type == pygame.KEYDOWN
+                                          and ev.key == pygame.K_ESCAPE):
+                return False
+        return True
+
+    print("walking the menu to hand the port a starting state...")
+    addr = m._reg(UC_X86_REG_CS) * 16 + m._reg(UC_X86_REG_IP)
+    ticks_shown = 0
+    while not captured and m._elapsed() < 120:
+        m.blocked_on_input = False
+        m.uc.emu_start(addr, 0, count=20000)
+        if m.finished:
+            break
+        m.service_keyboard()
+        addr = m._reg(UC_X86_REG_CS) * 16 + m._reg(UC_X86_REG_IP)
+        ticks_shown += 1
+        if ticks_shown % 40 == 0 and not show():
+            return 0
+    if not captured:
+        raise SystemExit("never reached play_session")
+    print("  handed over; the port is playing now")
+
+    state = os.path.join(os.environ.get("TMPDIR", "/tmp"),
+                         "popcorn_autoplay.pvs")
+    with open(state, "wb") as f:
+        f.write(b"PVS2" + struct.pack("<I", SBS.PLAY_SESSION))
+        f.write(struct.pack("<10H", *captured["regs"]))
+        f.write(struct.pack("<I", captured["ticks"]))
+        f.write(struct.pack("<I", len(captured["img"])) + captured["img"])
+        f.write(struct.pack("<I", SBS.CGA_SIZE) + captured["vram"])
+
+    port = subprocess.Popen([SBS.PORT, "--lockstep", state],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+    def read_exact(n):
+        buf = b""
+        while len(buf) < n:
+            chunk = port.stdout.read(n - len(buf))
+            if not chunk:
+                return None
+            buf += chunk
+        return buf
+
+    def port_frame():
+        if read_exact(4) != b"PFRM":
+            return None
+        read_exact(4)
+        n, = struct.unpack("<I", read_exact(4))
+        img = read_exact(n)
+        v, = struct.unpack("<I", read_exact(4))
+        vram = read_exact(v)
+        k, = struct.unpack("<I", read_exact(4))
+        if k:
+            read_exact(k * 2)
+        return img, vram
+
+    view = PortView()
+    bot = Bot(view)
+    clock = pygame.time.Clock()
+
+    frames = 0
+    start = time.time()
+    # The port reads a command **before** it runs a frame, so the first one
+    # has to go out before anything is read back. Reading first deadlocks the
+    # pair: the port waiting for input, this waiting for a frame, and a window
+    # that never gets past black.
+    port.stdin.write(struct.pack("<HHIB3x", view.mouse_pos[0] & 0xFFFF,
+                                 view.mouse_btn & 0xFFFF,
+                                 captured["ticks"], 0))
+    port.stdin.flush()
+    while True:
+        pf = port_frame()
+        if pf is None:
+            print(f"the port stopped after {frames} frames")
+            break
+        view.img, vram = pf
+        frames += 1
+
+        # The port's screen, decoded by the emulator's own CGA renderer: write
+        # its video memory into the idle machine and let make_surface do the
+        # interlace and the palette rather than repeating both here.
+        m.uc.mem_write(0xB8000, vram)
+        if not show():
+            port.kill()
+            return 0
+        if screen is not None:
+            clock.tick(60)
+
+        note = bot.step()
+        if args.status_every and frames % (args.status_every * 40) == 0:
+            print(f"  [port] {frames:6d} frames  level "
+                  f"{view.img[0x13cc]:2d}  lives {view.img[0x13c9]:2d}  "
+                  f"{note}", flush=True)
+        # Nothing here has to match anything, so the tick the PRNG stirs in
+        # just has to advance the way the BIOS one would: 18.2 a second.
+        ticks = int((time.time() - start) * 18.2) & 0xFFFF
+        try:
+            port.stdin.write(struct.pack("<HHIB3x",
+                                         view.mouse_pos[0] & 0xFFFF,
+                                         view.mouse_btn & 0xFFFF, ticks, 0))
+            port.stdin.flush()
+        except BrokenPipeError:
+            break
+        if args.run_seconds and time.time() - start > args.run_seconds:
+            port.kill()
+            break
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -526,6 +728,15 @@ def main():
     ap.add_argument("--shots", type=int, default=0)
     ap.add_argument("--shot-every", type=float, default=5.0)
     ap.add_argument("--shot-dir", default="debug")
+    ap.add_argument("--port", action="store_true",
+                    help="drive the **C port** instead of the emulator, and "
+                         "show its screen. The emulator still boots far enough "
+                         "to hand over a starting state - the lockstep "
+                         "protocol begins at the play loop and the port has no "
+                         "way to reach it on its own - and then stops")
+    ap.add_argument("--resume", metavar="FILE",
+                    help="with --port, start from a snapshot.py snapshot "
+                         "rather than walking the menu")
     ap.add_argument("--headless", action="store_true")
     ap.add_argument("--run-seconds", type=float, default=0.0)
     ap.add_argument("--status-every", type=float, default=5.0)
@@ -533,6 +744,9 @@ def main():
                     help="seconds without a ball in play before the menu route "
                          "is walked again; 0 never restarts")
     args = ap.parse_args()
+
+    if args.port:
+        return run_port(args)
 
     if args.headless:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
