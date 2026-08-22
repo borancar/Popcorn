@@ -47,8 +47,6 @@ static void note(const char *name, unsigned off)
 /* --- the screens behind the function keys ---------------------------- */
 STUB(screen_define_keys,  0x1581, "F5: read three scan codes into 0x2d4f")
 STUB(screen_high_scores,  0x4e1a, "F6: the hall of fame")
-STUB(palette_cycle,       0x5196, "F8: rotate the CGA colour-select register")
-STUB(menu_extra,          0x5171, "drawn each frame unless [0x3f1b] is 1")
 STUB(employee_enter,      0x4ae0, "F10, the `touche speciale pour employes`")
 STUB(employee_leave,      0x4b4f, "and its exit")
 
@@ -56,15 +54,8 @@ STUB(employee_leave,      0x4b4f, "and its exit")
 STUB(level_load_file,     0x08c8, "reads a .PPC level set named on the command line")
 
 /* --- called from the play loop, which is transcribed ------------------ */
-STUB(play_teardown,       0x41d4, "tidies up when a level ends")
 STUB(demo_input_step,     0x1a6f, "advances the recorded-input cursor")
 
-
-void cell_special(unsigned row, unsigned di)
-{
-    note("cell_special", 0x41e5);
-    (void)row; (void)di;
-}
 
 
 /* --- called from play_session, which is transcribed ------------------- */

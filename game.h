@@ -69,7 +69,7 @@ static inline unsigned cga_prev_row(unsigned di)
 
 /* The four colours mode 05h displays on an RGB monitor: the colour-burst-kill
  * bit selects background / cyan / red / white regardless of the palette bit. */
-extern const uint32_t g_palette[4];
+extern uint32_t g_palette[4];
 
 /* --------------------------------------------------------------- input ---
  *
@@ -208,6 +208,13 @@ void arrow_tail(unsigned di);     /* 1ac2:4957 */
 void screen_define_keys(void);    /* 1ac2:1581 */
 void screen_high_scores(void);    /* 1ac2:4e1a */
 void palette_cycle(void);         /* 1ac2:5196 */
+void flush_keys(void);            /* 1ac2:0106 */
+void install_int09(void);         /* 1ac2:03b0 */
+void restore_int09(void);         /* 1ac2:03d1 */
+void input_and_draw_paddle(void); /* 1ac2:48af */
+void cheat_match(unsigned char c);/* 1ac2:5171 */
+void io_cga_mode(unsigned v);
+void io_cga_colour(unsigned v);
 void menu_extra(void);            /* 1ac2:5171 */
 void employee_enter(void);        /* 1ac2:4ae0 */
 void employee_leave(void);        /* 1ac2:4b4f */
@@ -378,6 +385,13 @@ void arrow_tail(unsigned di);     /* 1ac2:4957 */
 void screen_define_keys(void);    /* 1ac2:1581 */
 void screen_high_scores(void);    /* 1ac2:4e1a */
 void palette_cycle(void);         /* 1ac2:5196 */
+void flush_keys(void);            /* 1ac2:0106 */
+void install_int09(void);         /* 1ac2:03b0 */
+void restore_int09(void);         /* 1ac2:03d1 */
+void input_and_draw_paddle(void); /* 1ac2:48af */
+void cheat_match(unsigned char c);/* 1ac2:5171 */
+void io_cga_mode(unsigned v);
+void io_cga_colour(unsigned v);
 void menu_extra(void);            /* 1ac2:5171 */
 void employee_enter(void);        /* 1ac2:4ae0 */
 void employee_leave(void);        /* 1ac2:4b4f */

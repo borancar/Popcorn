@@ -903,8 +903,9 @@ void game_main(const char *dir, unsigned speed)
             default:
                 break;
             }
+            /* Every key also feeds the cheat matcher at 0x5171. */
             if (g_image[0x3f1b] != 1)
-                menu_extra();
+                cheat_match((unsigned char)(key & 0xff));
             io_present();
         }
     }
@@ -4739,4 +4740,117 @@ void menu_arrow(void)
     arrow_tail(ARROW_MOUSE);
     arrow_tail(ARROW_KEYS);
     arrow_head(ARROW_KEYS);
+}
+
+/* ========================================================================
+ * Small routines: the keyboard vector, the cheat matcher, the palette, and
+ * the two disk calls.
+ * ===================================================================== */
+
+/* 1ac2:0106  flush_keys - drain the BIOS buffer with INT 16h until it is
+ * empty. The platform keeps its own queue, so this is that queue. */
+void flush_keys(void)
+{
+    io_flush_keys();
+}
+
+/* 1ac2:03b0 and 1ac2:03d1  install_int09 / restore_int09
+ *
+ * The original hooks INT 09h so it can read make and break codes, which the
+ * BIOS buffer does not report, and takes the hook out again for the menus.
+ * There is no vector table here: the platform layer maintains the same three
+ * bytes at 0x2d4c-0x2d4e from SDL key events, all the time, so both are
+ * recorded and do nothing. See the note on 1ac2:03e3 below.
+ */
+void install_int09(void) { }
+void restore_int09(void) { }
+
+/* 1ac2:03e3  the INT 09h handler itself
+ *
+ * Not called: it is the handler the two above install. Written out because it
+ * is the whole keyboard interface and the platform layer stands in for it.
+ *
+ *   in al,0x60                 the scan code
+ *   in al,0x61 / or al,0x80    acknowledge, then put the port back
+ *   out 0x61,al
+ *   ah = (al <= 0x7f)          make or break
+ *   if al == [0x2d4f]  [0x2d4a] = 0      the last direction, left
+ *   if al == [0x2d50]  [0x2d4a] = 1      or right
+ *   if al == 0xc3      cs:[0x84] ^= 1    F9 released: sound on/off
+ *   if al <= 0x7f      [0x2d49] = al     the last make code
+ *   al &= 0x7f
+ *   repne scasb over the three configured keys at 0x2d4f
+ *   if found          [0x2d4c + cx] = ah
+ *   out 0x20,0x20                        end of interrupt
+ *
+ * The `repne scasb` leaves CX at 2, 1 or 0 for left, right or action, and
+ * `0x2d4c + cx` turns that into 0x2d4e, 0x2d4d or 0x2d4c - so the three state
+ * bytes are in the reverse of the order the scan codes are.
+ */
+
+/* 1ac2:41d4  play_teardown - blank the two indicator columns */
+void play_teardown(void)
+{
+    fill_column(0x1a77, 0);
+    fill_column(0x1a8b, 0);
+}
+
+/* 1ac2:41e5  cell_special
+ *
+ * What a cell of 0x0c draws: four bytes from the block reached as segment
+ * 0xc46, at 0x28f0 + row * 0x30 + column * 4. Not a brick - it is the hole
+ * brick 11 leaves.
+ */
+void cell_special(unsigned row, unsigned di)
+{
+    unsigned col = (di - (LEVEL_CELLS + 8)) % BRICK_COLS;
+    unsigned src = SEG_C46 + 0x28f0 + (row & 0xff) * 0x30 + col * 4;
+    for (int b = 0; b < 4; b++)
+        g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + b];
+}
+
+/* 1ac2:48af  input_and_draw_paddle - read the input and put the paddle where
+ * it now is. The between-levels sequences call this so the paddle keeps
+ * following the player while nothing else is running. */
+void input_and_draw_paddle(void)
+{
+    game_input();
+    draw_paddle(img_w(PADDLE_SPRITES + g_image[PADDLE_KIND] * 4));
+}
+
+/* 1ac2:5171  cheat_match
+ *
+ * One character of a typed cheat. [0x3f1c] walks along the expected string;
+ * a wrong character starts it over at 0x3f0b, and reaching the terminating
+ * 0x0d sets [0x3f1b], which is what the menu tests.
+ */
+void cheat_match(unsigned char c)
+{
+    unsigned bx = img_w(0x3f1c);
+    if (c != g_image[bx]) {
+        img_setw(0x3f1c, 0x3f0b);       /* wrong: back to the beginning */
+        return;
+    }
+    if (g_image[bx] == 0x0d) {
+        g_image[0x3f1b] = 1;            /* the whole word */
+        return;
+    }
+    img_setw(0x3f1c, bx + 1);
+}
+
+/* 1ac2:5196  palette_cycle
+ *
+ * F8. [0x13c8] is the colour-select register and 0x10 is added to it each
+ * press, so it walks the intensity and palette bits; every fourth press it
+ * wraps to zero and the colour-burst bit in the mode register at [0x13c7] is
+ * flipped as well. Both are then written to their ports.
+ */
+void palette_cycle(void)
+{
+    g_image[0x13c8] += 0x10;
+    if (g_image[0x13c8] == 0) {
+        g_image[0x13c7] ^= 4;
+        io_cga_mode(g_image[0x13c7]);
+    }
+    io_cga_colour(g_image[0x13c8]);
 }
