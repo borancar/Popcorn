@@ -369,6 +369,9 @@ void life_lost(void);             /* 1ac2:0735 */
 void entities_clear(void);        /* 1ac2:055e */
 void level_between(void);         /* 1ac2:05f8 */
 void screen_game_over(void);      /* 1ac2:0473 */
+void ending_plot(unsigned x, unsigned y);     /* 1ac2:5add */
+void ending_particles_init(void); /* 1ac2:5a43 */
+void ending_particles_tick(void); /* 1ac2:5a56 */
 void screen_end_of_game(void);    /* 1ac2:0d2e */
 void screen_level_done(void);     /* 1ac2:0521 */
 void screen_all_levels_done(void);/* 1ac2:5940 */
@@ -559,6 +562,9 @@ void life_lost(void);             /* 1ac2:0735 */
 void entities_clear(void);        /* 1ac2:055e */
 void level_between(void);         /* 1ac2:05f8 */
 void screen_game_over(void);      /* 1ac2:0473 */
+void ending_plot(unsigned x, unsigned y);     /* 1ac2:5add */
+void ending_particles_init(void); /* 1ac2:5a43 */
+void ending_particles_tick(void); /* 1ac2:5a56 */
 void screen_end_of_game(void);    /* 1ac2:0d2e */
 void screen_level_done(void);     /* 1ac2:0521 */
 void screen_all_levels_done(void);/* 1ac2:5940 */
