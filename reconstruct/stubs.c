@@ -43,9 +43,6 @@ static void note(const char *name, unsigned off)
     void name(unsigned bx) { note(#name, off); (void)bx; }
 
 /* --- the menu's live decoration ------------------------------------- */
-STUB(menu_particles_init, 0x5476, "80 objects of 16 bytes at 0x148d")
-STUB(menu_particles_tick, 0x53c2, "steps them; called once per menu frame")
-STUB(menu_banner_tick,    0x50df, "the scrolling text on the character's belly")
 STUB(menu_arrow,          0x490d, "moves the arrow between Souris and Clavier")
 
 /* --- the screens behind the function keys ---------------------------- */
@@ -63,7 +60,6 @@ STUB(level_load_file,     0x08c8, "reads a .PPC level set named on the command l
 
 /* --- called from the play loop, which is transcribed ------------------ */
 STUB(play_teardown,       0x41d4, "tidies up when a level ends")
-STUB(bonus_spawn,         0x3d95, "drops a bonus capsule")
 STUB(demo_input_step,     0x1a6f, "advances the recorded-input cursor")
 
 
@@ -76,11 +72,12 @@ void cell_special(unsigned row, unsigned di)
 
 /* --- called from play_session, which is transcribed ------------------- */
 void field_marks_wide(unsigned di) { note("field_marks_wide", 0x0a1d); (void)di; }
+STUB(banner_shift,          0x5140, "shifts the banner one pixel")
+void brick_11_after(unsigned x, unsigned y) { note("brick_11_after", 0x4c4b); (void)x; (void)y; }
 STUB(screen_game_over,      0x0473, "GAME OVER")
 STUB(screen_end_of_game,    0x0d2e, "the hall of fame, and back to the menu")
 STUB(screen_all_levels_done, 0x5940, "finishing all fifty")
 
-void brick_11(unsigned slot, unsigned ball) { note("brick_11", 0x2d68); (void)slot; (void)ball; }
 
 
 /* An entity whose handler has not been transcribed. Doing nothing leaves it in
