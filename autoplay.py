@@ -124,6 +124,29 @@ PARACHUTE = 0x37E0
 P_BALL, P_X, P_Y = 0x02, 0x04, 0x05
 PARACHUTE_BOTTOM = 0xB8    # where it lets go
 PARACHUTE_HALF = 8         # the sprite is 16 wide, so this is its centre
+
+# ------------------------------------------------------------------ the laser
+# Catching a capsule always morphs the paddle - entity_paddle_fx installs
+# whatever 0x2d2d says that kind gives - and only L maps to the laser paddle.
+# So while the laser is held, collecting anything at all throws it away, and
+# the bot refuses every capsule but another L.
+PADDLE_KIND_ADDR = 0x2D39
+LASER_PADDLE = 2
+LASER_CAPSULE = 3          # the L capsule, the one that keeps it
+# shot_xor fires two dots, one under each end of the paddle: at x and at
+# x + 0x13. Either can be aimed at a column.
+SHOT_SPACING = 0x13
+# The brick field, as draw_brick_row lays it out: eight pixels in from the
+# left, twelve columns of sixteen pixels, fourteen rows.
+LEVEL_CELLS = 0x2F18       # 0x2f10 + 8, past the level record's header
+BRICK_LEFT_PX = 8
+BRICK_W_PX = 16
+BRICK_COLS = 12
+BRICK_ROWS = 14
+# Nothing breaks these, so a shot into a column whose lowest brick is one of
+# them is wasted: 4 and 12 both dispatch to 0x3221, which only bounces, and
+# 24-29 are animated bricks that have already been hit.
+INDESTRUCTIBLE = frozenset((4, 12, 24, 25, 26, 27, 28, 29))
 BALL_STEERABLE = (1, 2)    # state; 3 is brick 9's teleport, 4 the parachute
 CATCH_Y = 0xB6             # the first row the paddle can take it on
 CAPSULE_W = 0x0E           # the capsule's own width, from the same test
@@ -140,16 +163,19 @@ CAPSULE_EFFECT = {0: "100 points", 1: "catch", 2: "wider paddle",
                   10: "stops the monsters"}
 # Higher is chased first; below zero is never chased at all.
 #
-# + skips the level, L is the laser and F is the net: the three worth leaving
-# the ball for. V is a life and E widens the paddle, so both rank just under
-# them - they buy survival, which is what the bot is short of. S is refused on
-# instruction; it slows the ball, which is not dangerous, but a slower ball is
-# a longer level.
+# L is top: the laser clears bricks on its own, and it is the only capsule
+# that survives collecting another one. Then + for the level, F for the net,
+# then V and E, which buy survival. S is refused.
+#
+# The paddle kind only goes back to 0 at a level start or a lost life
+# (0x2d39 is written in play_prepare, play_teardown and the morph), so once
+# the laser is held it is held until one of those - provided nothing else is
+# collected, which is what the refusal below is for.
 #
 # 1ac2:31e8 is what S runs, and it decrements the ball's step gate at [0x1486]
 # down to 2: the ball then moves on one frame in two instead of two in three.
 # The comment here used to say "speed up", which had it exactly backwards.
-CAPSULE_WANT = {8: 4, 3: 3, 5: 3, 7: 2, 2: 2,
+CAPSULE_WANT = {3: 5, 8: 4, 5: 3, 7: 2, 2: 2,
                 10: 1, 0: 1, 1: 1, 4: 1, 6: 0,
                 9: -1}
 # How much slack to keep between catching a capsule and being back under the
@@ -243,6 +269,29 @@ class Bot:
             if self.w(bx) == handler:
                 out.append(bx)
             bx = self.w(bx + E_NEXT)
+        return out
+
+    def has_laser(self):
+        return self.rd(PADDLE_KIND_ADDR)[0] == LASER_PADDLE
+
+    def laser_columns(self):
+        """Columns worth shooting at, as the pixel centre of each.
+
+        A shot travels up and meets the **lowest** brick in its column, so a
+        column whose lowest brick is indestructible swallows every shot for
+        nothing. Only the lowest cell decides.
+        """
+        cells = self.rd(LEVEL_CELLS, BRICK_COLS * BRICK_ROWS)
+        out = []
+        for c in range(BRICK_COLS):
+            for r in range(BRICK_ROWS - 1, -1, -1):
+                v = cells[r * BRICK_COLS + c]
+                if not v:
+                    continue
+                if v not in INDESTRUCTIBLE:
+                    out.append(BRICK_LEFT_PX + c * BRICK_W_PX
+                               + BRICK_W_PX // 2)
+                break
         return out
 
     def parachutes(self):
@@ -367,8 +416,16 @@ class Bot:
         # is nothing to come back to.
         margin = LAST_BALL_FRAMES if len(aims) == 1 else SAFETY_FRAMES
         if spare > margin:
+            laser = self.has_laser()
             wanted = [c for c in self.capsules()
                       if c[0] > 0 and c[3] < CATCH_Y]
+            # Holding the laser is worth more than anything a capsule gives,
+            # and there is no way to take one without losing it: every kind
+            # maps to some paddle through 0x2d2d, and only L maps back to the
+            # laser. So while it is held the bot collects nothing else - not
+            # even + or V.
+            if laser:
+                wanted = [c for c in wanted if c[1] == LASER_CAPSULE]
             if wanted:
                 # Best first, and among equals the one that lands soonest.
                 w, kind, cx, cy = max(wanted, key=lambda c: (c[0], c[3]))
@@ -376,6 +433,20 @@ class Bot:
                 note = (f"grab {CAPSULE_LETTER.get(kind, kind)} "
                         f"({CAPSULE_EFFECT.get(kind, '?')}) at {cx},{cy}, "
                         f"{spare}f spare")
+            elif laser:
+                # Nothing to collect and time to spare: put a shot into a
+                # column that still has something breakable at the bottom of
+                # it. The action button is held permanently, so standing in
+                # the right place *is* firing.
+                cols = self.laser_columns()
+                if cols:
+                    near = min(cols, key=lambda c: abs(c - px))
+                    # Either end of the paddle can do it; use whichever is
+                    # less of a move from where the paddle already is.
+                    left = near - SHOT_SPACING
+                    aim = (near if abs(near - px) <= abs(left - px) else left) \
+                        + self.width() // 2
+                    note = f"laser at column {near}, {spare}f spare"
         # See JITTER: a few pixels of wander, held for a while so the aim is
         # steady across one approach rather than shaking every frame.
         if self.held <= 0:
