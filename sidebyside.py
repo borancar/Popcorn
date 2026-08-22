@@ -46,6 +46,7 @@ FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
 #    a frame and the two sides end up compared at different points.
 IMAGE_LEN = 0x208B0
 CGA_SIZE = 0x4000
+PADDLE_X = 0x2E54
 
 # Excluded from the comparison for the same reasons verify.py excludes them:
 # the stack below SP is not a function of anything, and the three key-state
@@ -102,7 +103,15 @@ def name_of(off):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--frames", type=int, default=200)
+    ap.add_argument("--frames", type=int, default=200,
+                    help="0 runs until a comparison fails or you "
+                         "stop it")
+    ap.add_argument("--inject", type=int, default=-1, metavar="N",
+                    help="flip one byte of the port's image at frame N, to "
+                         "prove the comparison can fail")
+    ap.add_argument("--watch", action="store_true",
+                    help="show the port's screen while it runs")
+    ap.add_argument("--scale", type=int, default=3)
     ap.add_argument("--cmdline", default="")
     ap.add_argument("--no-sound", action="store_true",
                     help="clear cs:[0x84] on both sides before comparing, so "
@@ -258,6 +267,41 @@ def main():
         except BrokenPipeError:
             pass
 
+    view = {}
+
+    def watch_open():
+        import numpy as np
+        import pygame
+        pygame.init()
+        pygame.display.set_caption("Popcorn - the port, in lockstep")
+        view["np"] = np
+        view["pygame"] = pygame
+        view["screen"] = pygame.display.set_mode(
+            (CGA_W * args.scale, CGA_H * args.scale))
+        view["surf"] = pygame.Surface((CGA_W, CGA_H))
+        # CGA's interlace, precomputed: which vram byte feeds each cell.
+        view["idx"] = np.array(
+            [[(CGA_PLANE if y & 1 else 0) + (y >> 1) * CGA_STRIDE + x
+              for x in range(CGA_STRIDE)] for y in range(CGA_H)])
+        view["pal"] = np.array([(0, 0, 0), (0x55, 0xff, 0xff),
+                                (0xff, 0x55, 0x55), (0xff, 0xff, 0xff)],
+                               dtype=np.uint8)
+
+    def watch_draw(vram, n):
+        np, pygame = view["np"], view["pygame"]
+        b = np.frombuffer(vram, dtype=np.uint8)[view["idx"]]
+        px = np.stack([(b >> 6) & 3, (b >> 4) & 3, (b >> 2) & 3, b & 3],
+                      axis=-1).reshape(CGA_H, CGA_W)
+        rgb = view["pal"][px]
+        pygame.surfarray.blit_array(view["surf"], rgb.transpose(1, 0, 2))
+        pygame.transform.scale(view["surf"], view["screen"].get_size(),
+                               view["screen"])
+        pygame.display.flip()
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                return 0
+        return 1
+
     def save_screens(ev, pv, n):
         import pygame
         pygame.init()
@@ -299,8 +343,13 @@ def main():
     bot.step()
     port_go(first_mouse(), getattr(m, "mouse_btn", 0), bios_ticks())
 
+    if args.watch:
+        watch_open()
+
     differing, compared = 0, 0
-    for n in range(args.frames):
+    n = -1
+    while args.frames == 0 or n + 1 < args.frames:
+        n += 1
         pf = port_frame()
         if pf is None:
             print(f"the port stopped at frame {n}")
@@ -317,10 +366,22 @@ def main():
             break
         compared = n + 1
 
+        # The whole-buffer compare is a C memcmp; the per-byte walk only
+        # happens when there is something to report. Without this the Python
+        # loops cost more than running both emulators.
+        if n == args.inject:                # prove the check can fail
+            pimg = bytearray(pimg)
+            pimg[PADDLE_X] ^= 0x01
+            pimg = bytes(pimg)
+            print(f"  injected a one-bit change at frame {n}")
+
         a, b = mask(frame_hit["img"]), mask(pimg)
-        img_bad = [i for i in range(IMAGE_LEN) if a[i] != b[i]]
-        vram_bad = [i for i in range(CGA_SIZE)
-                    if frame_hit["vram"][i] != pvram[i]]
+        ev = frame_hit["vram"]
+        if a == b and ev == pvram:
+            img_bad = vram_bad = []
+        else:
+            img_bad = [i for i in range(IMAGE_LEN) if a[i] != b[i]]
+            vram_bad = [i for i in range(CGA_SIZE) if ev[i] != pvram[i]]
 
         if img_bad or vram_bad:
             differing += 1
@@ -361,6 +422,12 @@ def main():
                 port_go(0, 0, 0, stop_it=1)
                 port.wait(timeout=5)
                 return 1
+
+        if args.watch and not watch_draw(pvram, n):
+            print(f"\nwindow closed at frame {n}")
+            break
+        if n and n % 250 == 0:
+            print(f"  {n} frames, still identical", flush=True)
 
         # The bot reads the emulator - the reference - and both are told the
         # same thing.
