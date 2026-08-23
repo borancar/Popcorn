@@ -5311,7 +5311,7 @@ void border_animate(void)
     }
 }
 
-/* 1ac2:5019 and 1ac2:5045  border_row / border_block
+/* 1ac2:5019  border_block, and 1ac2:5045  border_row
  *
  * The top and bottom edges: 0x1a columns of the eight-word sprite side by
  * side, and 0x17 rows of it stacked. Between them they lay the frame the
@@ -5319,17 +5319,36 @@ void border_animate(void)
  */
 void border_row(uint32_t di)
 {
-    for (int32_t n = 0x1a; n > 0; n--, di += 2)
-        border_draw(di);
+    /* 0x17 passes of eight words each, the pattern read from **cs:0x506d** -
+     * the code segment, the bytes immediately after this routine - and DI
+     * carried on down the interlace throughout rather than reset per pass.
+     * What was here before called border_draw 0x1a times, which is neither
+     * the count nor the operation. */
+    for (int32_t n = 0x17; n > 0; n--) {
+        uint32_t si = CS_BASE + 0x506d;
+        for (int32_t r = 0; r < 8; r++, si += 2) {
+            uint32_t w = img_w(si);
+            g_vram[di & (CGA_SIZE - 1)] = (uint8_t)w;
+            g_vram[(di + 1) & (CGA_SIZE - 1)] = (uint8_t)(w >> 8);
+            di = cga_next_row(di);
+        }
+    }
 }
 
 void border_block(uint32_t di)
 {
-    for (int32_t n = 0x17; n > 0; n--)
+    /* 0x1a columns **side by side**: 1ac2:501e pushes DI and 1ac2:503d pops
+     * it, so each pass starts where the last began and steps two bytes
+     * across. 0x5045 is the same eight words with the push/pop taken out and
+     * a count of 0x17, which is what makes one a row of blocks and the other
+     * a column - and is why the two were transcribed into each other. */
+    for (int32_t n = 0x1a; n > 0; n--, di += 2) {
+        uint32_t d = di;
         for (int32_t i = 0; i < 8; i++) {
-            img_vram_setw(di, img_w(BORDER_SPR + i * 2));
-            di = cga_next_row(di);
+            img_vram_setw(d, img_w(BORDER_SPR + i * 2));
+            d = cga_next_row(d);
         }
+    }
 }
 
 /* ========================================================================
@@ -5535,10 +5554,12 @@ void employee_enter(void)
  * fourteen markers started at the top-left corner seven steps apart */
 void border_setup(void)
 {
-    border_row(0);
-    border_row(0x1e00);
-    border_block(0x140);
-    border_block(0x172);
+    /* The other way round from what this used to say: 1ac2:4f75 calls
+     * border_block at 0 and 0x1e00, and border_row at 0x140 and 0x172. */
+    border_block(0);
+    border_block(0x1e00);
+    border_row(0x140);
+    border_row(0x172);
 
     uint32_t di = 0;
     for (int32_t i = 0; i < 0x0e; i++) {
