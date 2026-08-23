@@ -53,6 +53,19 @@ def _routines():
         open(os.path.join(here, "reconstruct", "verify.c")).read()))
     src = open(os.path.join(here, "reconstruct", "game.c")).read()
     names = {}
+    # verify.c's own dispatch is the authority on what a case calls, so take
+    # the name from there first. A comment can describe a routine rather than
+    # name it, and where two entry points share a body - brick_1 and brick_2
+    # are one line each over brick_1_or_2 - the header names the body and the
+    # report then cannot say which of the two differed.
+    vsrc = open(os.path.join(HERE, "reconstruct", "verify.c")).read()
+    for m in re.finditer(r"case 0x([0-9a-fA-F]{4}):(.*?)(?=case 0x|\n    /\*|$)",
+                         vsrc, re.S):
+        body = m.group(2)
+        call = re.search(r"\b([a-z_][a-z0-9_]*)\s*\(", body)
+        if call and call.group(1) not in ("getenv", "fprintf", "if", "for",
+                                          "while", "switch", "return"):
+            names[int(m.group(1), 16)] = call.group(1)
     # Two routines can share one header: "1ac2:5099 / 1ac2:50bc  save_screen /
     # restore_screen". Take those pairwise first.
     for a, b, na, nb in re.findall(
@@ -70,6 +83,22 @@ def _routines():
     # gets a name rather than routine_xxxx. Strict wins where both match.
     for off, name in re.findall(r"1ac2:([0-9a-f]{4})\s+(\w+)", src):
         names.setdefault(int(off, 16), name)
+    # Where a header describes the routine instead of naming it - "1ac2:28cb
+    # brick 1 - one hit and it goes" - the word picked up is prose. Six brick
+    # handlers all came out as "brick", which makes a report ambiguous about
+    # which one differed. If the word is not a function the port defines, take
+    # the name of the first definition under the header instead.
+    defined = set(re.findall(
+        r"^(?:static\s+)?(?:void|int32_t|uint32_t|uint8_t|const char \*)\s*"
+        r"(\w+)\s*\(", src, re.M))
+    for off, name in list(names.items()):
+        if name in defined:
+            continue
+        at = src.find(f"1ac2:{off:04x}")
+        m = re.search(r"^(?:static\s+)?(?:void|int32_t|uint32_t|uint8_t|"
+                      r"const char \*)\s*(\w+)\s*\(", src[at:], re.M)
+        if m:
+            names[off] = m.group(1)
     return {off: names.get(off, f"routine_{off:04x}") for off in sorted(cases)}
 
 
