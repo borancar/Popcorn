@@ -97,5 +97,43 @@ def main():
         print(f"  {e:04x}  {n:5d} b  called by {callers:2d}  {tag}")
 
 
+    unwired(os.path.dirname(os.path.abspath(__file__)))
+
+
+def unwired(here):
+    """Functions the port defines and never calls.
+
+    Transcribing a routine and never wiring it up leaves something that looks
+    finished from the notes and has never run. level_load_file sat like that
+    for months - the .PPC loader was complete and the port had no way to name
+    a file - and employee_enter's message and the sound player's sustain were
+    the same shape. A count is cheap; the three that are meant to be here are
+    named so the fourth stands out.
+    """
+    import re
+    src = open(os.path.join(here, "reconstruct", "game.c")).read()
+    body = src
+    for f in ("verify.c", "lockstep.c", "sdl_io.c", "main.c"):
+        body += open(os.path.join(here, "reconstruct", f)).read()
+    sig = r"^(?:static\s+)?(?:void|int32_t|uint32_t|uint8_t)\s+"
+    defs = re.findall(sig + r"(\w+)\s*\(", src, re.M)
+    expected = {
+        "drive_check": "no disk here; the port opens the file directly",
+        "drive_writable": "likewise",
+        "plot_pixel": "INT 10h AH=0Ch without bit 7; the game only XORs",
+    }
+    out = []
+    for name in sorted(set(defs)):
+        uses = len(re.findall(r"\b" + name + r"\s*\(", body))
+        made = len(re.findall(sig + name + r"\s*\(", src, re.M))
+        if uses - made <= 0:
+            out.append(name)
+    print(f"\n{len(set(defs))} functions in the port, "
+          f"{len(out)} never called:")
+    for n in out:
+        why = expected.get(n)
+        print(f"  {n:24s} {why or '** not accounted for **'}")
+    return [n for n in out if n not in expected]
+
 if __name__ == "__main__":
     main()

@@ -279,7 +279,7 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `dump_data.py` | extracts a data structure and renders it back out — the 8x12 font at `0x9020` is the worked example |
 | **Checking the port** ||
 | `verify.py` | the differential harness: captures the machine at a routine's entry, lets the **original** run to its return, runs the C on the same capture, diffs image, video memory and return value |
-| `port_coverage.py` | measures transcription by image offset, counting a routine only when its `1ac2:xxxx` header appears outside `stubs.c` |
+| `port_coverage.py` | measures transcription by image offset, counting a routine only when its `1ac2:xxxx` header appears outside `stubs.c`. Also lists the functions the port **defines and never calls** - three, all accounted for. A routine transcribed and never wired up looks finished in the notes and has never run, which is how the `.PPC` loader sat complete and unreachable for months |
 | `verify_all.py` | unions several `verify.py` routes - no single one reaches everything - and separates *proven* from *agreed but every call was an early return*. `--summary FILE` writes the coverage table STATUS.md carries |
 | `snapshot.py` | capture and restore the whole machine, so a check can start *at* a screen instead of playing to it. `--poke` fast-forwards; `--resume` chains |
 | `compare_screen.py` | diffs the port's `0xb8000` against the emulator's, byte for byte |
