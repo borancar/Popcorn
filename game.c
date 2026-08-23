@@ -5258,6 +5258,7 @@ void palette_cycle(void)
  * ===================================================================== */
 #define HSC_ENTRY   0x12                /* twelve of name and six of score */
 #define HSC_COUNT     10
+#define HSC_SCRATCH 0x1aef              /* the records hsc_sort sorts */
 #define BORDER_SPR (CS_BASE + 0x506d)   /* eight words, in the code segment */
 #define BORDER_POS (CS_BASE + 0x507d)   /* fourteen positions, likewise */
 
@@ -5294,7 +5295,7 @@ uint32_t hsc_bubble(uint32_t si, uint32_t di)
 /* 1ac2:4d37  hsc_sort - the whole table, once per player who just finished */
 void hsc_sort(void)
 {
-    uint32_t di = 0x3ef6, si = 0x1aef;
+    uint32_t di = 0x3ef6, si = HSC_SCRATCH;
     for (uint32_t n = g_image[PLAYER_COUNT]; n > 0; n--) {
         memcpy(g_image + hsc_bubble(si, di), g_image + si, 0x12);
         si += 0x12;
@@ -6908,19 +6909,51 @@ int32_t next_player(const char *dir)
     return 0;
 }
 
-/* 1ac2:0ea3  screen_results
+/* 1ac2:0ea3  screen_results, and the hall of fame at 1ac2:1053 it ends in
  *
- * With one player there is nothing to compare, so it goes straight to the
- * hall of fame at 0x1053. With more, the field is cleared, the level intro
- * runs on it, and the players are sorted into 0x1aef by score - the same
- * `score_before` the hall of fame uses - and shown on a bar.
+ * With one player there is nothing to compare, so it jumps straight to
+ * 0x1053. With more, the field is cleared, the level intro runs on it, and
+ * the players are sorted into 0x1aef by score - the same `score_before` the
+ * hall of fame uses - and shown on a bar.
+ *
+ * 0x1053 is a **jump** target, not a call, so a map that follows calls counts
+ * its bytes as part of this routine and a coverage figure reads 100% with
+ * none of it written. What it does matters: the scratch at 0x1aef that
+ * `hsc_sort` reads is built here, and with one player it is built *only*
+ * here - the multi-player path jumps to 0x1066 instead, past the copy,
+ * because it has already filled 0x1aef itself. The port had the one-player
+ * branch calling hsc_sort with no copy at all, so it sorted whatever was left
+ * in the scratch and the player's own score never entered the table.
+ *
+ * The tail from 0x1066 is shared by both, and is three more things: the
+ * keyboard handler comes out if it is the one installed, the sort and the
+ * save are **skipped when the demo is the active input** - the attract mode
+ * must not write its score into popcorn.hsc - and the entity list is emptied
+ * before the longjmp back to the menu.
  */
+/* 1ac2:1066 - where both paths meet. */
+static void results_finish(const char *dir)
+{
+    if (img_w(INPUT_ACTIVE) == INPUT_KEYBOARD)
+        restore_int09();            /* 1ac2:106e */
+    /* 1ac2:1071 - the demo does not enter the hall of fame, and above all
+     * does not write popcorn.hsc. */
+    if (img_w(INPUT_ACTIVE) != INPUT_DEMO) {
+        hsc_sort();                 /* 1ac2:1079 */
+        hsc_save(dir);              /* 1ac2:107c */
+    }
+    screen_high_scores();           /* 1ac2:107f */
+    entities_clear();               /* 1ac2:1082 */
+}
+
 void screen_results(const char *dir)
 {
     if (g_image[PLAYER_COUNT] == 1) {
-        hsc_sort();
-        hsc_save(dir);
-        screen_high_scores();
+        /* 1ac2:1053 - the only record's name, then its six score digits. */
+        memcpy(g_image + HSC_SCRATCH, g_image + NAME_TABLE, 12);
+        memcpy(g_image + HSC_SCRATCH + 12,
+               g_image + NAME_TABLE + REC_SCORE, 6);
+        results_finish(dir);
         return;
     }
 
@@ -6928,7 +6961,7 @@ void screen_results(const char *dir)
     level_intro();
 
     /* An insertion sort of the player records into the scratch at 0x1aef. */
-    uint32_t di = 0x1aef, si = NAME_TABLE;
+    uint32_t di = HSC_SCRATCH, si = NAME_TABLE;
     memcpy(g_image + di, g_image + si, 12);
     memcpy(g_image + di + 12, g_image + si + REC_SCORE, 6);
     si += NAME_STRIDE;
@@ -6936,7 +6969,7 @@ void screen_results(const char *dir)
          si += NAME_STRIDE) {
         di += HSC_ENTRY;
         uint32_t at = di;
-        while (at > 0x1aef && score_before(si + REC_SCORE, at - HSC_ENTRY + 12))
+        while (at > HSC_SCRATCH && score_before(si + REC_SCORE, at - HSC_ENTRY + 12))
             at -= HSC_ENTRY;
         memmove(g_image + at + HSC_ENTRY, g_image + at, di - at);
         memcpy(g_image + at, g_image + si, 12);
@@ -6948,14 +6981,32 @@ void screen_results(const char *dir)
         img_vram_setw(0xf2 + i * 2, 0xaaaa);
     uint32_t d = 0x20f2;
     for (uint32_t k = 0; k < g_image[PLAYER_COUNT]; k++) {
-        draw_text(0x1aef + k * HSC_ENTRY, 12, d);
-        draw_text(0x1aef + k * HSC_ENTRY + 12, 6, d + 12 * 2 + 4);
+        draw_text(HSC_SCRATCH + k * HSC_ENTRY, 12, d);
+        draw_text(HSC_SCRATCH + k * HSC_ENTRY + 12, 6, d + 12 * 2 + 4);
         d = cga_next_row((d - 0x30) & 0xffff);
     }
 
-    hsc_sort();
-    hsc_save(dir);
-    screen_high_scores();
+    /* 1ac2:102a - the keyboard handler comes out before the wait, so the
+     * BIOS buffer fills again and INT 16h below has something to read. */
+    if (img_w(INPUT_ACTIVE) == INPUT_KEYBOARD)
+        restore_int09();
+
+    /* 1ac2:1035 - the results stand until a key or until the two nested
+     * counts of 0xc8 run out. */
+    for (int32_t dl = 0xc8; dl > 0; dl--) {
+        for (int32_t n = 0xc8; n > 0; n--) {
+            if (io_key_ready()) {
+                io_get_key();
+                results_finish(dir);
+                return;
+            }
+            game_delay();
+        }
+        io_present();
+        if (!io_pump())
+            return;
+    }
+    results_finish(dir);
 }
 
 /* 1ac2:1a6f  demo_input_step
