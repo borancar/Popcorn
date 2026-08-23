@@ -334,22 +334,30 @@ tag now carries.
 
 A third sync point, `--sync-endgame` on `ball_after_endgame`, reaches the one
 part of the bonus the scroll sync does not: its own ball loop, which is
-otherwise a single indivisible move. That takes the difference to **22 image
-bytes and 10 screen bytes**, and what they say is clear enough. A hundred and
-eight comparisons are identical; at the hundred and ninth the emulator's ball
-is back at the serve position and the port's is still falling through the
-funnel. The emulator's bonus **ended one iteration sooner**.
+otherwise a single indivisible move. It found the two bugs five earlier passes
+over this screen had missed, and they were both about where the ball starts
+and stops:
 
-Which points at the thing the harness cannot check. `ball_after_endgame`'s
-"the level is over" path does not return: it pops its own return address and
-runs the ending, so `verify.py` - which waits for the return address it
-captured - can sample every other path through that routine three hundred
-times and never that one. It is verified identical on the paths that come
-back and unverifiable on the path that does not, and the path that does not
-is the one the two sides disagree about.
+- `1ac2:4518` **sets** the ball's position to `(0x70, 0xb4)` - the live pair at
+  `+0` and the drawn pair at `+2` - and copies eight bytes of sprite record in
+  from `0x48fb`. The C kept whatever position the *level's* ball had ended on,
+  so the bonus's ball started wherever the last one died rather than at the top
+  of the funnel.
+- `1ac2:4738` is `cmp al,0x6c / jb no-bounce`, so the funnel's right wall
+  catches the ball **at** `0x6c`. The C had `x > 0x6c` and it slipped through on
+  the exact pixel.
 
-Closing it wants a harness that can check a routine which never returns -
-the same problem `play_session` has, and worth solving once for both.
+The bonus now runs to completion and the game advances from level 7 to level 8:
+**2,059 aligned comparisons, against 9 before**. What is left is smaller and the
+same shape - the port's ball takes a little longer to reach a chamber, so the
+emulator finishes the screen a window sooner and the port is one level
+transition behind. `verify.py` also still reports a difference when it compares
+the whole screen as a single call, which is a different question from whether
+the screen plays correctly, and neither is claimed as the other.
+
+One lesson worth keeping: **turn one instrument on at a time**. With the scroll
+sync also enabled the same difference surfaced a hundred comparisons later and
+looked like something else entirely.
 
 ### Coverage, as last measured
 
