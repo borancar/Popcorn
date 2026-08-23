@@ -224,6 +224,15 @@ class VgaDos(DosMachine):
         self.scan_queue = deque()
         self.pit_latch_toggle = {}
         self.pit_initial = 0xFFFF
+        # The PC speaker, which this emulator was silent about for the whole
+        # port: PIT channel 2's divisor and the gate at port 0x61 bits 0-1.
+        # The game programs mode 3, writes the divisor low byte then high, and
+        # opens the gate; sound_tick at 1ac2:0097 then rewrites the divisor
+        # per note.
+        self.spk_div = 0
+        self.spk_gate = 0
+        self.spk_playing = None
+        self.spk_chan = None
         self.t0 = time.perf_counter()
         self.palette_writes = 0
         self.int10_fn = Counter()
@@ -355,6 +364,18 @@ class VgaDos(DosMachine):
             self.pit_latch_toggle[(v >> 6) & 3] = 0
         elif port == 0x40:
             self.pit_initial = v | (self.pit_initial & 0xFF00)
+        elif port == 0x42:                    # PIT channel 2: the speaker
+            # Two writes, low byte then high, tracked by the same latch
+            # toggle the reads use. speaker_on at 1ac2:0085 programs mode 3
+            # first, which resets it.
+            t = self.pit_latch_toggle.get(2, 0)
+            self.pit_latch_toggle[2] = 1 - t
+            if t == 0:
+                self.spk_div = (self.spk_div & 0xFF00) | v
+            else:
+                self.spk_div = (self.spk_div & 0x00FF) | (v << 8)
+        elif port == 0x61:                    # the gate, bits 0 and 1
+            self.spk_gate = v & 3
 
     def _seq_write(self, index, v):
         if index == 0x02:                     # map mask: which planes to write
@@ -1105,6 +1126,60 @@ def make_surface(m, font=None, cell=(8, 16)):
     return surf
 
 
+def speaker_update(m):
+    """Play whatever PIT channel 2 and the gate currently say.
+
+    Called once a frame. The tone only changes when the game rewrites the
+    divisor or closes the gate, so this does nothing on most frames - but it
+    has to be driven from outside, because the PC speaker holds a note until
+    it is told otherwise and there is no write to hang the sustain on.
+
+    A looping Sound rather than a queued buffer, for the same reason: a note
+    of ten ticks is about a sixth of a second and outlives any buffer worth
+    generating.
+    """
+    want = m.spk_div if m.spk_gate == 3 and m.spk_div > 1 else 0
+    if want == m.spk_playing:
+        return
+    m.spk_playing = want
+    if m.spk_chan is not None:
+        m.spk_chan.stop()
+        m.spk_chan = None
+    if not want:
+        return
+    init = pygame.mixer.get_init()
+    if not init:
+        # Nothing else opens it: the Sound Blaster path does, and Popcorn is
+        # a PC-speaker game that never touches the card.
+        try:
+            pygame.mixer.init(frequency=22050, size=-16, channels=1,
+                              buffer=512)
+        except pygame.error:
+            m.spk_playing = None        # try again next time
+            return
+        init = pygame.mixer.get_init()
+        if not init:
+            m.spk_playing = None
+            return
+    rate, size, _chans = init
+    hz = 1193182.0 / want
+    period = max(2, int(round(rate / hz)))
+    half = period // 2
+    # One whole period, looped: any join is then at a zero crossing of the
+    # square itself, so there is no click at the loop point.
+    if abs(size) == 8:
+        buf = bytes([0xC0] * half + [0x40] * (period - half)) * 64
+    else:
+        import struct as _s
+        one = _s.pack("<h", 6000) * half + _s.pack("<h", -6000) * (period - half)
+        buf = one * 64
+    try:
+        snd = pygame.mixer.Sound(buffer=buf)
+        m.spk_chan = snd.play(loops=-1)
+    except pygame.error:
+        m.spk_chan = None
+
+
 class AudioSink:
     """Stream the card's PCM to the host speakers via SDL.
 
@@ -1532,6 +1607,7 @@ def main():
         # destination to be exactly the size given, so anything else is a crash
         # on the first frame. native.py has always done it this way.
         pygame.transform.scale(surf, screen.get_size(), screen)
+        speaker_update(m)               # the PC speaker, once a frame
         pygame.display.flip()
         frames += 1
 

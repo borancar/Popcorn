@@ -340,9 +340,7 @@ original shoot.
 
 ### Not yet modelled
 
-- **PC-speaker sound in the emulator.** `emulation.py` is still silent:
-  `sound_tick` at `0x0097` is understood and the ports are modelled, but
-  nothing turns them into audio. The **port** does make sound - see below.
+- **Nothing, on sound.** Both sides play it as of 2026-08-23.
 - **The `.PPC` level format.** `poptab.ppc` is 8,630 bytes and is read whole by
   the loader at `0x08c8`, which is transcribed; the format its contents are in
   is not decoded. The levels being ported are the ones **baked into the
@@ -398,9 +396,13 @@ original shoot.
    **two-player** game, which the bot never plays; `copy_string_text` is in
    `screen_define_keys`, which switches to text mode 01h and is excluded on
    purpose. Both are honest gaps rather than oversights.
-3. **Sound in the emulator.** The port plays it: `io_sound` records the PIT
-   divisor and `io_present` tops the stream up every frame while the note
-   lasts. That top-up is the part worth keeping - `sound_tick` only calls
+3. **Sound.** Both play it now. The port records the PIT divisor in
+   `io_sound` and tops the stream up every frame while the note lasts;
+   `emulation.py` tracks channel 2's divisor across its two `out 0x42` writes
+   and the gate at port 0x61, and `speaker_update` loops a square wave for as
+   long as the note is held. Ninety seconds of play produces 23 distinct
+   tones, every divisor with a low byte of 1 - which is what `out 0x42,1`
+   followed by the note byte gives. That top-up is the part worth keeping - `sound_tick` only calls
    `io_sound` when the note **changes**, since it returns early at `1ac2:00a5`
    while one is being held, so queueing a fixed buffer played the first thirty
    milliseconds of every note and then silence. A note of ten ticks is about a

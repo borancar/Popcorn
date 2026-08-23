@@ -240,6 +240,10 @@ four colours, two bits per pixel, most significant pair leftmost.
 ## Sound
 
 PC speaker: PIT channel 2 (port 0x42) with the gate at port 0x61 bits 0-1.
+Both the port and `emulation.py` play it. The divisor arrives as **two** writes
+to 0x42, low byte then high, and the low byte is always 1 - `sound_tick` does
+`out 0x42,1` then `out 0x42,note`, so the divisor is `(note << 8) | 1` and the
+note byte alone picks the pitch.
 `sound_tick` at `0x0097` walks a table of (divisor, duration) word pairs; the
 tune pointers are at `cs:0xf8` and the enable flag at `cs:0x84`. Not yet
 modelled — the emulator is silent.
