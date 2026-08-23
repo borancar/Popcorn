@@ -82,15 +82,17 @@ def main():
             capture_output=True, text=True)
         tail = [l for l in r.stdout.splitlines() if l.startswith("  FAIL")]
         for l in tail:
-            print(l)
+            print(l, flush=True)
         if not os.path.exists(j):
-            print(f"    (no result: {r.stderr.strip().splitlines()[-1:]})")
+            print(f"    (no result: {r.stderr.strip().splitlines()[-1:]})",
+                  flush=True)
             continue
         runs.append((name, json.load(open(j))))
         d = runs[-1][1]["routines"]
         ok = sum(1 for v in d.values() if v["checked"] and not v["mismatched"])
         print(f"    {ok} agreed, "
-              f"{sum(1 for v in d.values() if v['mismatched'])} differed")
+              f"{sum(1 for v in d.values() if v['mismatched'])} differed",
+              flush=True)
 
     if not runs:
         raise SystemExit("no route produced a result")
@@ -102,9 +104,10 @@ def main():
                        or r[1]["routines"][off]["mismatched"] for r in runs))
         if never_yet:
             print(f"\n--- chasing {len(never_yet)} unreached, "
-                  f"{len(routes)} routes")
+                  f"{len(routes)} routes", flush=True)
             only = ",".join(never_yet)
             for name, extra in routes:
+                print(f"--- {name} (chase)", flush=True)
                 j = os.path.join(out, "chase_" + name.replace(" ", "_")
                                  .replace(":", "-") + ".json")
                 r = subprocess.run(
@@ -114,7 +117,7 @@ def main():
                     capture_output=True, text=True)
                 for l in r.stdout.splitlines():
                     if l.startswith("  FAIL"):
-                        print(l)
+                        print(l, flush=True)
                 if os.path.exists(j):
                     runs.append((name + " (chase)", json.load(open(j))))
 
