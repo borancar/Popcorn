@@ -177,10 +177,15 @@ built has been found without it - with one caveat recorded below.
 **And the sound player is in the comparison now.** `cs:[0xf4]`-`[0xf7]` - the
 request, the note timer and the tune pointer - used to be masked, because one
 side raised a request on a frame the other did not. Run without `--no-sound`,
-the two sides agree on those four bytes for **250,000 frames**. That leaves
-the comparison unmasked except for the stack below SP and the three key-state
-bytes the INT 09h handler maintains, and both of those are excluded for
-reasons about the harness rather than the port. `--no-sound` stays, because
+the two sides agree on those four bytes for **250,000 frames**. The **key-state bytes** at `0x2d4c` came off with it: driven by the same input
+every frame the two sides agree on those as well, and 150,000 frames run clean
+with nothing masked but the stack. `--mask-keys` puts it back for a run that
+drives the keyboard, where they can still part company.
+
+What stays masked is the **stack below SP**, and that one is structural rather
+than stale: the port has no guest stack at all, so the leftovers there are not
+a fact about either program. Unmasked, every byte that differs in twenty
+thousand frames is in `0x1aa8e`-`0x1aa9f` and nowhere else. `--no-sound` stays, because
 narrowing a comparison is still how a divergence gets isolated; nothing needs
 it.
 

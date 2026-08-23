@@ -177,6 +177,17 @@ def main():
     ap.add_argument("--snap-every", type=int, default=250)
     ap.add_argument("--scale", type=int, default=3)
     ap.add_argument("--cmdline", default="")
+    ap.add_argument("--mask-keys", action="store_true",
+                    help="exclude the three key-state bytes at 0x2d4c too. "
+                         "Driven by the same input every frame the two sides "
+                         "agree on them, so this is off by default now; a run "
+                         "that drives the keyboard may still want it")
+    ap.add_argument("--no-mask", action="store_true",
+                    help="compare the stack below SP and the three key-state "
+                         "bytes too. Both are excluded for reasons about the "
+                         "harness rather than the port, and an exclusion "
+                         "added to get past a real bug is easy to leave in "
+                         "place after the bug is gone")
     ap.add_argument("--no-sound", action="store_true",
                     help="clear cs:[0x84] on both sides before comparing, so "
                          "the note timer at cs:[0xf5] cannot diverge")
@@ -621,9 +632,28 @@ def main():
         return p[0] if isinstance(p, tuple) else getattr(m, "mouse_x", 0)
 
     def mask(img):
+        """Blank the bytes that are excluded from the comparison.
+
+        Both exclusions are about the harness rather than the port, and both
+        are worth re-testing now and then: the sound player was masked here
+        for a real bug, the bug was fixed, and the mask outlived it by
+        months. --no-mask takes them off.
+        """
+        if args.no_mask:
+            return img
         b = bytearray(img)
+        # The stack is **structural**: the port has no guest stack at all, so
+        # the leftovers below SP are not a fact about either program. It stays
+        # masked for ever.
         b[STACK_LO:STACK_HI] = bytes(STACK_HI - STACK_LO)
-        b[KEYS_LO:KEYS_HI] = bytes(KEYS_HI - KEYS_LO)
+        # The three key-state bytes are not masked by default any more. They
+        # were, because the INT 09h handler writes them asynchronously on one
+        # side and the platform layer on the other - but driven by the same
+        # input every frame the two agree, over twenty thousand frames with
+        # nothing masked but the stack. --mask-keys puts it back for a run
+        # that drives the keyboard, where they can still part company.
+        if args.mask_keys:
+            b[KEYS_LO:KEYS_HI] = bytes(KEYS_HI - KEYS_LO)
         return bytes(b)
 
     # The port gets its first input before it runs a single instruction, for
