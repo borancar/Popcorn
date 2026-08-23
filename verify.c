@@ -390,6 +390,34 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         g_result = bonus_script(r[R_BX], &x, &y);
         return 1;
     }
+    /* The four directions a falling capsule can step, 1ac2:3447's table.
+     * x is in CL and y in AL, the same as bonus_steer above; what comes back
+     * is the carry - blocked, or took the step.
+     *
+     * The stepped x and y themselves are **not compared**: they go back in
+     * CL and AL and the harness reads one output value, not the register
+     * file. What is compared is the decision, which is the part with the cell
+     * arithmetic in it; the step itself is one `inc` behind that decision. */
+    case 0x3c66: {                      /* bonus_move_right(bx, cl, al) */
+        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        g_result = bonus_move_right(r[R_BX], &x, &y);
+        return 1;
+    }
+    case 0x3caf: {                      /* bonus_move_up */
+        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        g_result = bonus_move_up(r[R_BX], &x, &y);
+        return 1;
+    }
+    case 0x3cf3: {                      /* bonus_move_left */
+        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        g_result = bonus_move_left(r[R_BX], &x, &y);
+        return 1;
+    }
+    case 0x3d3c: {                      /* bonus_move_down */
+        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        g_result = bonus_move_down(r[R_BX], &x, &y);
+        return 1;
+    }
     case 0x45a1:                        /* ball_after_endgame(si) */
         g_result = ball_after_endgame(r[R_SI]);
         return 1;
