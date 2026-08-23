@@ -263,26 +263,34 @@ without on a *larger* set of routes.
 | | routines | |
 | --- | ---: | --- |
 | **transcribed** | | 185 of 185 reachable routines transcribed, 25230 of 25230 bytes (100.0%) |
-| **proven** | 146 | reached, did work, agreed on every route that reached it |
-| shallow | 3 | agreed, but every call was an early return - not proof |
+| **proven** | 155 | reached, did work, agreed on every route that reached it |
+| shallow | 1 | agreed, but every call was an early return - not proof |
 | differing | 1 | entity_paddle_fx |
-| unreached | 8 | no route runs them |
+| unreached | 1 | no route runs them |
 | **dispatched** | 158 | what verify.c can check |
 
-Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@0206:f10, menu.snap +@0206:f6, menu.snap +@0206:f2, menu.snap +@0206:^l,@0206:^a,@0206:^c,@0206:^r,@0206:^a,@0206:^l,@0206:space,@0206:s,@0206:o,@0206:f,@0206:t,@0206:w,@0206:a,@0206:r,@0206:e,@0206:return, cap.snap, level10_f000000.snap, level49_f000000.snap, particles.snap, tall.snap, marks.snap, vlife.snap, play (chase), menu (chase), keyboard (chase), menu.snap +@0206:f8 (chase), menu.snap +@0206:f10 (chase), menu.snap +@0206:f6 (chase), menu.snap +@0206:f2 (chase), menu.snap +@0206:^l,@0206:^a,@0206:^c,@0206:^r,@0206:^a,@0206:^l,@0206:space,@0206:s,@0206:o,@0206:f,@0206:t,@0206:w,@0206:a,@0206:r,@0206:e,@0206:return (chase), cap.snap (chase), level10_f000000.snap (chase), level49_f000000.snap (chase), particles.snap (chase), tall.snap (chase), marks.snap (chase), vlife.snap (chase).
+Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@0206:f10, menu.snap +@0206:f6, menu.snap +@0206:f2, menu.snap +@0206:^l,@0206:^a,@0206:^c,@0206:^r,@0206:^a,@0206:^l,@0206:space,@0206:s,@0206:o,@0206:f,@0206:t,@0206:w,@0206:a,@0206:r,@0206:e,@0206:return, menu.snap +@0206:f2,@1785:p,@1785:o,@1785:p, level10_f000000.snap +@1a62:escape,@1a62:space, cap.snap, level10_f000000.snap, level49_f000000.snap, particles.snap, tall.snap, marks.snap, vlife.snap, ending.snap, twoplayer2.snap, play (chase), menu (chase), keyboard (chase), menu.snap +@0206:f8 (chase), menu.snap +@0206:f10 (chase), menu.snap +@0206:f6 (chase), menu.snap +@0206:f2 (chase), menu.snap +@0206:^l,@0206:^a,@0206:^c,@0206:^r,@0206:^a,@0206:^l,@0206:space,@0206:s,@0206:o,@0206:f,@0206:t,@0206:w,@0206:a,@0206:r,@0206:e,@0206:return (chase), menu.snap +@0206:f2,@1785:p,@1785:o,@1785:p (chase), level10_f000000.snap +@1a62:escape,@1a62:space (chase), cap.snap (chase), level10_f000000.snap (chase), level49_f000000.snap (chase), particles.snap (chase), tall.snap (chase), marks.snap (chase), vlife.snap (chase), ending.snap (chase), twoplayer2.snap (chase).
 
-Two of those figures matter more than the headline. **Shallow** is a routine
-every call to which was an early return: it agreed, and that agreement is not
-proof. Some of them cannot leave that column by being run more: `border_step`
-and `hsc_bubble` change **no memory at all** - their whole answer is the DI
-they return - and `flush_keys` and `restore_int09` are deliberate no-ops in
-the port, because the platform layer owns the keyboard. The first two are
-fixed by comparing the register, which `RETURNS` now does for AH, AX, DX, DI
-and the carry. The second two never can be, and saying so is better than
-leaving them looking like work someone forgot. **Unreached** is the honest limit - a routine no route runs is not
-checked at all, and every bug found on 2026-08-23 was in that column the day
-before. Proven went from 82 to 146 in one session purely by reaching further,
-without anyone reading a line of assembly looking for mistakes.
+**Three routines are not in the 155, and each has a reason:**
+
+- `install_int09` (`0x03d1`) is a deliberate no-op - the platform layer owns
+  the keyboard - so it agrees on every call and can never "do work". It will
+  sit in the shallow column for ever.
+- `entity_paddle_fx` (`0x3386`) differs on **one call in sixty**, the one that
+  fires the end-level bonus. `bonus_end_level` does not return to its caller,
+  so `verify.py` runs the original past the routine and compares it against a C
+  function that stopped. The other fifty-nine agree, and the screen itself is
+  covered by four million frames of lockstep. It stays dispatched: "1 of 60"
+  with a known cause is a better line than a clean sweep bought by dropping the
+  case.
+- `copy_string_text` (`0x1642`) is inside `screen_define_keys`, which switches
+  to text mode 01h. The port has no text renderer, and writing one is a
+  different job from transcribing.
+
+Everything else was reached by finding the trigger: a cheat typed, a key
+pressed during the demo, Esc for the pause, the odds table poked so the rarest
+capsule falls, two players entered with one still in. Proven went from 82 to
+155 in a day without anyone reading a transcription looking for mistakes.
 
 ### Verification coverage is bounded by what a run reaches
 
