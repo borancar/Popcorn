@@ -189,6 +189,20 @@ CAPSULE_WANT = {3: 5, 8: 4, 5: 3, 7: 2, 2: 2,
 # ball. The mouse route is absolute - the paddle is wherever the pointer says
 # on the very next frame - so this is margin against the prediction being
 # wrong, not time spent travelling.
+# ------------------------------------------------------------------- aiming
+# The paddle's two ends choose the bounce. ball_paddle indexes the table at
+# 0x2e2c by how far in from an end the ball lands - 0 to 0x0a - and takes
+# (dy, dx) from it; the left end sends the ball left and the right end right.
+# The middle 0x0b..span-0x0b keeps whatever slope the ball arrived with, which
+# is why a bot that always centres the paddle can only ever return a ball, not
+# place it.
+SLOPE_TOP = 0x2e2c
+SLOPE_N = 11                    # offsets 0..0x0a
+PADDLE_LIP = 3                  # `left = paddle_x - 3` in ball_paddle
+BOUNCE_Y = 0xb5                 # where the ball leaves the paddle
+FIELD_TOP = 6                   # the first scan line of the brick field
+CELL_W, CELL_H = 16, 8
+
 SAFETY_FRAMES = 40
 # A few pixels of wander on the aim point, resampled every so often. Without
 # it the bot returns the ball off the same part of the paddle every time and
@@ -365,6 +379,81 @@ class Bot:
         """
         return self.rd(PADDLE_WIDTH)[0] or PADDLE_W
 
+    def aim_choices(self, bx):
+        """Where to put the paddle to leave at each of the 22 end slopes.
+
+        -> [(paddle_x, dy, dx, dir_x)]. `dir_x` is the game's flag: 1 sends
+        the ball left, 0 right.
+        """
+        width = self.width()
+        span = (width + PADDLE_LIP) & 0xff
+        out = []
+        for off in range(SLOPE_N):
+            w = int.from_bytes(self.rd(SLOPE_TOP + off * 2, 2), "little")
+            dy, dx = w & 0xff, w >> 8
+            if not dy:
+                continue
+            # Left end: off is measured from paddle_x - 3.
+            out.append((bx - off + PADDLE_LIP, dy, dx, 1))
+            # Right end: the same table indexed from the other side.
+            out.append((bx - (span - off) + PADDLE_LIP, dy, dx, 0))
+        return out
+
+    @staticmethod
+    def travel_to(bx, dy, dx, dir_x, ty):
+        """Where a ball leaving (bx, BOUNCE_Y) at this slope crosses row ty.
+
+        The same fold the descending prediction uses: a straight line, then
+        reflected back into the playfield as many times as it takes.
+        """
+        rise = BOUNCE_Y - ty
+        if rise <= 0 or dy == 0:
+            return bx
+        end = bx - rise * dx // dy if dir_x else bx + rise * dx // dy
+        span = WALL_R - WALL_L
+        if span <= 0:
+            return bx
+        k = (end - WALL_L) % (2 * span)
+        return WALL_L + (k if k <= span else 2 * span - k)
+
+    def aim_target(self):
+        """A cell worth placing the ball into, as (x, y) in pixels.
+
+        The lowest breakable cell with nothing directly under it - the ball
+        can only reach a cell from a direction that is clear, and the field is
+        approached from below. Nearest the middle wins, so the aim is a small
+        correction rather than a lunge.
+        """
+        cells = self.rd(LEVEL_CELLS, BRICK_COLS * BRICK_ROWS)
+        best = None
+        for r in range(BRICK_ROWS - 1, -1, -1):
+            for c in range(BRICK_COLS):
+                v = cells[r * BRICK_COLS + c]
+                if not v or v in INDESTRUCTIBLE:
+                    continue
+                if r + 1 < BRICK_ROWS and cells[(r + 1) * BRICK_COLS + c]:
+                    continue            # something under it: not reachable
+                x = BRICK_LEFT_PX + c * CELL_W + CELL_W // 2
+                y = FIELD_TOP + r * CELL_H + CELL_H // 2
+                d = abs(x - 100)
+                if best is None or d < best[0]:
+                    best = (d, x, y)
+            if best:
+                break                   # lowest row that has one wins
+        return None if best is None else (best[1], best[2])
+
+    def aim_at(self, bx, tx, ty):
+        """The paddle x that sends the ball nearest (tx, ty), or None."""
+        lo, hi = self.rd(PADDLE_MIN)[0], self.rd(PADDLE_MAX)[0]
+        best = None
+        for px, dy, dx, dir_x in self.aim_choices(bx):
+            if px < lo or px > hi:
+                continue                # cannot stand there
+            miss = abs(self.travel_to(bx, dy, dx, dir_x, ty) - tx)
+            if best is None or miss < best[0]:
+                best = (miss, px)
+        return None if best is None else best[1]
+
     def capsule_aim(self, cx):
         """Where the paddle's left edge has to be to take a capsule at cx.
 
@@ -484,13 +573,27 @@ class Bot:
                     aim = (near if abs(near - px) <= abs(left - px) else left) \
                         + self.width() // 2
                     note = f"laser at column {near}, {spare}f spare"
+        # Placing the ball rather than merely returning it. Only when there
+        # is exactly one thing to watch and time to spare - the aim puts the
+        # paddle where the ball meets an *end*, and an end is a smaller target
+        # than the middle, so it is not worth the risk with two balls in play.
+        override = None
+        if len(aims) == 1 and spare > SAFETY_FRAMES and not note.startswith("grab"):
+            tgt = self.aim_target()
+            if tgt:
+                override = self.aim_at(aim, tgt[0], tgt[1])
+                if override is not None:
+                    note = f"aim {tgt[0]},{tgt[1]}"
+
         # See JITTER: a few pixels of wander, held for a while so the aim is
         # steady across one approach rather than shaking every frame.
         if self.held <= 0:
             self.wander = self.rng.randint(-self.jitter, self.jitter)
             self.held = JITTER_HOLD
         self.held -= 1
-        want = max(lo, min(hi, aim - self.width() // 2 + self.wander))
+        want = (override if override is not None
+                else aim - self.width() // 2 + self.wander)
+        want = max(lo, min(hi, want))
         # The game reads only CL after `shr cx,1`, so the pointer must stay
         # inside 0..510 for the paddle position to survive the truncation.
         self.m.mouse_pos = (min(510, 2 * want), 100)
@@ -596,7 +699,7 @@ def run_port(args):
         # A snapshot is already inside a level, so play_session will not come
         # round again - the handover point is the frame close instead, which
         # is what the snapshot was taken on. Same choice sidebyside.py makes.
-        _lv, _fr, regs, ticks, img, vram, _x = SNAP.read(args.resume)
+        _lv, _fr, regs, ticks, img, vram, _x, _low = SNAP.read(args.resume)
         captured["regs"] = list(regs[:10])
         captured["img"] = img
         captured["vram"] = vram
