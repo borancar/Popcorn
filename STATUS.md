@@ -462,14 +462,20 @@ original shoot.
 
 ## Next
 
-1. Widen verification coverage. Snapshots exist now, so the job is capturing
-   them at the states a bot does not play into - the attract demo, the keyboard
-   input path, a lost life, the between-level screens - rather than only at the
-   start of a level.
-2. Keep the side-by-side running. It is the only thing that has found a bug in
-   the last three rounds, and each fix buys another stretch of levels.
-3. Sound.
-4. The `.PPC` format, which is what makes the level editor's output playable.
+1. **The last routine that differs.** `bonus_end_level`, and `entity_paddle_fx`
+   because it calls it. The two sides now play the whole end-level bonus
+   together - 2,059 aligned comparisons against 9 - and then leave it by
+   different exits: the emulator finishes the level and the port does not, so
+   the port is one level transition behind with a life still in hand. Five
+   transcription errors have come out of this screen and there is at least one
+   more in it.
+2. **Two routines nothing builds a state for.** `score_before` needs a
+   **two-player** game, which the bot never plays; `copy_string_text` is in
+   `screen_define_keys`, which switches to text mode 01h and is excluded on
+   purpose. Both are honest gaps rather than oversights.
+3. **Sound.** Ports 0x42 and 0x61 are understood and nothing generates audio.
+4. **The `.PPC` format**, which is what makes the level editor's output
+   playable.
 
 ## Deferred
 
