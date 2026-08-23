@@ -301,7 +301,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         ending_particles_tick();
         return 1;
     case 0x5b80:
-        ending_blobs();
+        g_result = ending_blobs();
         return 1;
     case 0x03d1:
         install_int09();
@@ -394,8 +394,9 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x5add:                        /* ending_plot(cx, dx) */
         ending_plot(r[R_CX], r[R_DX]);
         return 1;
-    case 0x5bb5:                        /* ending_walk(bl, bh) */
-        ending_walk(r[R_BX] & 0xff, (r[R_BX] >> 8) & 0xff);
+    case 0x5bb5:                        /* ending_walk(bl, bh, dx) */
+        g_result = ending_walk(r[R_BX] & 0xff, (r[R_BX] >> 8) & 0xff,
+                               r[R_DX]);
         return 1;
     case 0x5c36:                        /* ending_blob(ax) */
         ending_blob(r[R_AX]);

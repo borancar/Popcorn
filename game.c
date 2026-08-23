@@ -5645,29 +5645,39 @@ void ending_blob(uint32_t pos)
     if (ah & 1)
         di += CGA_PLANE;
     di += (ah >> 1) * 0x50;
+    /* The `lodsw` at 1ac2:5c55 reads through **DS**, and the ending leaves DS
+     * at the block the notes call segment 0xc46 rather than at zero. Reading
+     * 0x28d9 as a plain image offset - which is right almost everywhere else
+     * in this program, and is why it was written that way - takes the sprite
+     * from 49KB below where the original takes it. */
     for (int32_t r = 0; r < 8; r++) {
-        g_vram[di & (CGA_SIZE - 1)] ^= g_image[0x28d9 + r * 2];
-        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[0x28d9 + r * 2 + 1];
+        g_vram[di & (CGA_SIZE - 1)] ^= g_image[SEG_C46 + 0x28d9 + r * 2];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^=
+            g_image[SEG_C46 + 0x28d9 + r * 2 + 1];
         di = cga_next_row(di);
     }
 }
 
 /* 1ac2:5b80  ending_blobs
  *
- * The script at 0x289d: a list of packed positions, zero-terminated. Each is
+ * The script at 0xc46:0x289d: a list of packed positions, zero-terminated. Each is
  * drawn and the one before it rubbed out, one per retrace, so a trail of them
  * crawls across the ending screen.
  */
-void ending_blobs(void)
+uint32_t ending_blobs(void)
 {
-    uint32_t si = 0x289d, prev = 0;
+    /* Returns the last position it drew - the original leaves it in DX and
+     * the call site at 1ac2:59ce hands it straight to ending_walk. */
+    /* Through SEG_C46, like everything else the ending touches: DS is that
+     * block for the whole sequence, not zero. */
+    uint32_t si = SEG_C46 + 0x289d, prev = 0;
     for (;;) {
         for (int32_t i = 0; i < 0x0f; i++)
             game_delay();
         uint32_t pos = img_w(si);
         si += 2;
         if (pos == 0)
-            return;
+            return prev;
         io_wait_retrace();
         ending_blob(pos);
         if (prev)
@@ -5675,7 +5685,7 @@ void ending_blobs(void)
         prev = pos;
         io_present();
         if (!io_pump())
-            return;
+            return prev;
     }
 }
 
@@ -5829,15 +5839,19 @@ void ending_particles_tick(void)
  *
  * Move the ending's blob to a target: `bl * 8` gives the column it is heading
  * for and `bh * 8 + 8` the row, and it steps four pixels at a time towards
- * each in turn, XOR-ing itself off and on again at every step. [0x2823] holds
+ * each in turn, XOR-ing itself off and on again at every step. 0xc46:0x2823
+ * holds
  * the target while it works, which is why it is a variable and not a register.
  * ===================================================================== */
-void ending_walk(uint32_t bl, uint32_t bh)
+uint32_t ending_walk(uint32_t bl, uint32_t bh, uint32_t dx)
 {
-    uint32_t dx = img_w(0x2821);        /* the blob's packed position */
+    /* `dx` is a **parameter**, threaded in DX from ending_blobs by the call
+     * site at 1ac2:59c9 - not a variable at 0x2821, which is where this used
+     * to read it from. Modelling a register as memory works right up until
+     * something else is in the register. */
 
     uint32_t target = (0x50 - ((bl << 3) & 0xff)) & 0xff;
-    g_image[0x2823] = (uint8_t)target;
+    g_image[SEG_C46 + 0x2823] = (uint8_t)target;
     while (((dx >> 8) & 0xff) != target) {
         uint32_t next = (dx - 0x400) & 0xffff;   /* `sub ah,4` */
         for (int32_t i = 0; i < 0x0f; i++)
@@ -5849,7 +5863,7 @@ void ending_walk(uint32_t bl, uint32_t bh)
     }
 
     target = (((bh << 3) + 8) & 0xff);
-    g_image[0x2823] = (uint8_t)target;
+    g_image[SEG_C46 + 0x2823] = (uint8_t)target;
     while ((dx & 0xff) != target) {
         uint32_t next = (dx - 4) & 0xffff;       /* `sub al,4` */
         for (int32_t i = 0; i < 0x0f; i++)
@@ -5859,7 +5873,7 @@ void ending_walk(uint32_t bl, uint32_t bh)
         ending_blob(dx);
         dx = next;
     }
-    img_setw(0x2821, dx);
+    return dx;
 }
 
 /* ========================================================================
@@ -5906,8 +5920,7 @@ void screen_all_levels_done(void)
      * key is pressed. */
     for (uint32_t bh = 0; bh != 0x18; bh++)
         for (uint32_t bl = 0x1a; bl > 0; bl--) {
-            ending_blobs();
-            ending_walk(bl, bh);
+            ending_walk(bl, bh, ending_blobs());
         }
     ending_particles_init();
     while (!io_key_ready()) {
