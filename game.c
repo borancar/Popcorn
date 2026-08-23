@@ -1436,7 +1436,7 @@ void draw_brick_row(uint32_t y)
     for (int32_t c = 0; c < BRICK_COLS; c++, si++, di += BRICK_BYTES) {
         uint32_t cell = g_image[si];
         if (cell == 0x0c) {
-            cell_special(row & 0xff, di);
+            cell_special(row & 0xff, c, di);
             continue;
         }
         uint32_t idx = cell * 2;
@@ -5190,10 +5190,14 @@ void play_teardown(void)
  * What a cell of 0x0c draws: four bytes from the block reached as segment
  * 0xc46, at 0x28f0 + row * 0x30 + column * 4. Not a brick - it is the hole
  * brick 11 leaves.
+ *
+ * The column arrives in `cl`; it is not derivable from `di`, which is where
+ * the four bytes go. This read it back out of `di` with the formula for the
+ * *cell index* - `(di - 0x2f18) % 12` on a vram offset - and picked the wrong
+ * four bytes. `di` steps four a column, so it cycled with period three.
  */
-void cell_special(uint32_t row, uint32_t di)
+void cell_special(uint32_t row, uint32_t col, uint32_t di)
 {
-    uint32_t col = (di - (LEVEL_CELLS + 8)) % BRICK_COLS;
     uint32_t src = SEG_C46 + 0x28f0 + (row & 0xff) * 0x30 + col * 4;
     for (int32_t b = 0; b < 4; b++)
         g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + b];
