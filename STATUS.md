@@ -210,11 +210,21 @@ predicts, held over the whole run.
 
 ### What is still open
 
-**`verify.py` disagrees about `bonus_end_level` when it compares the whole
-screen as a single call.** That call reads thousands of inputs and the harness
-can pin one pointer and one keypress, not a stream of them. The lockstep,
-where both sides genuinely get the same input every frame, is clean through
-that screen for four hundred thousand frames. The two are not the same claim.
+**`verify.py` cannot check the end-level bonus at all**, and the reason is
+structural rather than an input problem - which took most of a day to see.
+`1ac2:2da0` throws four words off the stack and the ending's own `ret` lands
+in `play_session`, so the routine never returns to the address the harness
+read off the stack at entry. "Run the original to its return address" therefore
+runs it on through the level change and beyond, and compares that against a C
+function that stopped at the end of the screen. It is out of the dispatch now,
+with the reason written where the case used to be.
+
+`entity_paddle_fx` has the same limit on the one call in sixty that fires the
+bonus, and stays dispatched: the other fifty-nine are worth having, and the
+report says one call in sixty rather than pretending to a clean sweep.
+
+The screen is checked by `sidebyside.py` instead, which does not care where a
+routine returns to.
 
 **A snapshot resume is not equivalent to the run it came from.** The level 5
 divergence that was open for much of 2026-08-23 did not reproduce from a
