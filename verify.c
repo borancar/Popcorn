@@ -111,6 +111,10 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         g_result = game_random(io_ticks(), r[R_DX] & 0xff);
         return 1;
     case 0x51b6: screen_end_of_game(); return 1;
+    /* 1ac2:4ae0 (the boss key) and 1ac2:1581 with its two helpers (redefine
+     * keys) are **not dispatched**, because they are not transcribed: both are
+     * deliberate no-ops in the port. Checking a no-op against the original
+     * would report a decision as a difference. */
     case 0x3abf: entity_anim_brick(r[R_BX]); return 1;
     case 0x3bac: draw_anim_cell(r[R_SI], r[R_CX] & 0xff, r[R_AX] & 0xff);
                  return 1;
@@ -283,10 +287,6 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x48ce:
         level_tally();
         return 1;
-    case 0x1581: screen_define_keys(); return 1;
-    case 0x4ae0:
-        employee_enter();
-        return 1;
     case 0x4b4f:
         screen_restore();
         return 1;
@@ -349,9 +349,6 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         return 1;
     case 0x108c:                        /* score_before(si, di) */
         g_result = score_before(r[R_SI], r[R_DI]);
-        return 1;
-    case 0x1642:                        /* copy_string_text(si, di) */
-        copy_string_text(r[R_SI], r[R_DI]);
         return 1;
     case 0x34c5:                        /* morph_begin(bx, si, dx) */
         morph_begin(r[R_BX], r[R_SI], r[R_DX]);

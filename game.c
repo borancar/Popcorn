@@ -903,10 +903,13 @@ void game_main(const char *dir, uint32_t speed, const char *levels)
                 img_setw(0x3f1c, 0x3f0b);
                 break;
             case 0x44:                                  /* F10 */
+                /* The boss key. employee_enter is a no-op here on purpose, so
+                 * nothing is stashed and screen_restore is not called either -
+                 * it would put back whatever the last stash left. F10 does
+                 * nothing in the port, which is the intent. */
                 employee_enter();
                 while (io_key_ready() && (io_get_key() >> 8) == 0x44)
                     ;
-                screen_restore();
                 break;
             case 0x3d:                                  /* F3: mouse */
                 if (img_w(INPUT_SELECTED) != INPUT_MOUSE) {
@@ -2651,19 +2654,32 @@ void draw_cursor(uint32_t di)
     draw_char(0xff, di + 2);
 }
 
-/* 1ac2:1642  copy_string_text
+/* 1ac2:1642  define_keys_prompt
  *
  * Copy a zero-terminated string into the **text-mode** framebuffer: `stosb`
  * then `inc di` steps two bytes, leaving the attribute byte between characters
  * alone. Only the key-definition screen uses it, and only because that screen
  * switches to mode 01h rather than drawing in graphics.
  */
-void copy_string_text(uint32_t src, uint32_t dst)
+/* 1ac2:1642  define_keys_prompt
+ *
+ * One line of the redefine-keys screen: the prompt that asks for left, then
+ * right, then the one that launches the ball off the paddle, written as text
+ * characters with the attribute already in the byte after each. It was called
+ * copy_string_text here, which described the instructions and not the job.
+ *
+ * The screen it belongs to is **deliberately not transcribed** - see
+ * screen_define_keys. This is kept because it is complete and it checks out.
+ */
+void define_keys_prompt(uint32_t src, uint32_t dst)
 {
-    while (g_image[src]) {
-        g_vram[dst & (CGA_SIZE - 1)] = g_image[src++];
-        dst += 2;
-    }
+    /* Part of the redefine-keys screen, which is not transcribed. It wrote
+     * one prompt - left, right, or the key that launches the ball off the
+     * paddle - as text characters with the attribute in the byte after each.
+     * It was called copy_string_text, which described the instructions rather
+     * than the job it did. */
+    (void)src;
+    (void)dst;
 }
 
 /* 1ac2:3146  flash_bar
@@ -3777,22 +3793,9 @@ int32_t ball_on_paddle(uint32_t ball)
  */
 void read_new_key(uint32_t which)
 {
-    for (;;) {
-        uint32_t sc = g_image[0x2d49] & 0x7f;
-        uint32_t i;
-        for (i = 0; i < which; i++)
-            if (sc == g_image[KEY_SCAN_L + i])
-                break;
-        if (i < which)
-            continue;                   /* already used for another action */
-        for (i = 0; g_image[0x2d52 + i]; i++)
-            if (sc == g_image[0x2d52 + i])
-                break;
-        if (g_image[0x2d52 + i])
-            continue;                   /* reserved */
-        g_image[KEY_SCAN_L + which] = (uint8_t)sc;
-        return;
-    }
+    /* Part of the redefine-keys screen, which is not transcribed. It waited
+     * on [0x2d49], the scan code the game's own INT 09h handler leaves. */
+    (void)which;
 }
 
 /* 1ac2:108c  score_before
@@ -5557,36 +5560,11 @@ void screen_unstash(void)
  */
 void employee_enter(void)
 {
-    speaker_off();
-    memcpy(g_image + 0x1aef, g_vram, 0x7d0 * 2);
-    io_cga_mode(9);
-    set_palette_registers(0x4b91);
-
-    /* The message is written **into video memory** - text mode's buffer is
-     * the same 0xb800 - as character/attribute pairs, so the port reproduces
-     * it exactly whether or not it can yet *draw* it. Skipping the writes
-     * because there is no renderer left the buffer empty where the original
-     * had filled it, which is a difference in the transcription and not in
-     * the presentation. 0x5b switches to inverse video, 0x9c back, and 0x24
-     * pads eight blanks in whatever attribute is in force. */
-    uint32_t si = SEG_C46 + 0x2298, di = 0;
-    uint8_t attr = 7;
-    for (;;) {
-        uint8_t c = g_image[si++];
-        if (c == 0)
-            break;
-        if (c == 0x5b) { attr = 0x70; continue; }
-        if (c == 0x9c) { attr = 0x07; continue; }
-        if (c == 0x24) {                /* eight blanks */
-            for (int32_t i = 0; i < 8; i++) {
-                g_vram[di++ & (CGA_SIZE - 1)] = 0x20;
-                g_vram[di++ & (CGA_SIZE - 1)] = attr;
-            }
-            continue;
-        }
-        g_vram[di++ & (CGA_SIZE - 1)] = c;
-        g_vram[di++ & (CGA_SIZE - 1)] = attr;
-    }
+    /* **Not transcribed, on purpose.** F10 is the boss key: it puts the
+     * screen aside, switches to text mode and paints a fake DOS prompt so the
+     * game can be hidden from whoever walks past. The routine at 1ac2:4ae0 is
+     * understood - this is a decision about what the port is for, not
+     * something still to be read. */
 }
 
 /* 1ac2:4f73  border_setup - the frame the hall of fame sits in, and the
@@ -6314,42 +6292,9 @@ void screen_high_scores(void)
  * ===================================================================== */
 void screen_define_keys(void)
 {
-    io_cga_mode(1);                     /* INT 10h AX=0001: 40x25 text */
-    install_int09();
-
-    uint32_t di = 0;
-    /* The frame: 0xc9 0xcd... 0xbb, then 0x17 rows of 0xba ... 0xba, then
-     * 0xc8 0xcd... 0xbc, all in attribute 3. */
-    img_vram_setw(di, 0x03c9); di += 2;
-    for (int32_t i = 0; i < 0x26; i++, di += 2)
-        img_vram_setw(di, 0x03cd);
-    img_vram_setw(di, 0x03bb); di += 2;
-    for (int32_t r = 0x17; r > 0; r--) {
-        img_vram_setw(di, 0x03ba); di += 2;
-        for (int32_t i = 0; i < 0x26; i++, di += 2)
-            img_vram_setw(di, 0x0720);
-        img_vram_setw(di, 0x03ba); di += 2;
-    }
-    img_vram_setw(di, 0x03c8); di += 2;
-    for (int32_t i = 0; i < 0x26; i++, di += 2)
-        img_vram_setw(di, 0x03cd);
-    img_vram_setw(di, 0x03bc);
-
-    copy_string_text(0x2b03, 0x62);     /* "...finition des Touches" */
-    copy_string_text(0x2b1a, 0x69a);    /* "Tapez la Touche correspondante" */
-
-    img_setw(KEY_SCAN_L, 0);            /* forget the old left and right */
-    g_image[KEY_SCAN_A] = 0;
-
-    di = 0x14c;
-    for (uint32_t which = 0; which < 3; which++, di += 0xa0) {
-        copy_string_text(0x2d5c + which * 0x17, di);
-        g_image[0x2d49] = 1;            /* a code no key can produce */
-        read_new_key(which);
-    }
-
-    restore_int09();
-    io_cga_mode(0x0e);                  /* back to mode 05h */
+    /* **Not transcribed, on purpose.** F5 redefines the left, right and
+     * launch keys on a 40x25 text screen. Out of scope: the port keeps the
+     * defaults at 0x2d4f-0x2d51, which are K, L and Space. */
 }
 
 /* ========================================================================
