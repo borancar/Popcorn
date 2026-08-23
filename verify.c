@@ -257,8 +257,23 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x41d4:
         play_teardown();
         return 1;
-    case 0x2da0: bonus_end_level(); return 1;
-    case 0x4210: bonus_end_level_body(); return 1;
+    /* 1ac2:2da0 and 1ac2:4210 are **not dispatched**, and that is not an
+     * oversight. The bonus does not return to its caller: 0x2da0 throws four
+     * words off the stack and the ending's own `ret` lands in play_session.
+     * verify.py stops the original at the return address it read off the
+     * stack at entry, which this routine never uses - so the original runs on
+     * through the level change and beyond, and is compared against a C
+     * function that stopped at the end of the screen. That reports a
+     * difference of hundreds of bytes for a reason that has nothing to do
+     * with the transcription, and reported one all through 2026-08-23.
+     *
+     * The screen is checked by sidebyside.py instead, which does not care
+     * where a routine returns to: four hundred thousand frames identical,
+     * through this bonus and out the other side into the next level.
+     *
+     * entity_paddle_fx has the same limit on the one call in sixty that fires
+     * the bonus, and is dispatched anyway - the other fifty-nine are worth
+     * having. */
     case 0x4878:
         screen_scroll_up();
         return 1;
