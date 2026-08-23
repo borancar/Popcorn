@@ -135,6 +135,12 @@ def main():
     ap.add_argument("--keyboard", action="store_true",
                     help="play through the keyboard input routine rather than "
                          "the mouse, which is the only way 1ac2:16d2 runs")
+    ap.add_argument("--no-mask-keys", action="store_true",
+                    help="compare the three key-state bytes at 0x2d4c too. "
+                         "They are excluded because an interrupt can land "
+                         "inside a sampled call on the emulator's side and "
+                         "not on the C's - worth re-testing, since the "
+                         "interrupted samples are dropped separately now")
     ap.add_argument("--keys", default="",
                     help="extra @offset:key triggers, comma separated, on top "
                          "of the route - the way to reach a screen that is one "
@@ -342,9 +348,11 @@ def main():
         got = got[:len(img) + 0x4000]
         got_img = bytearray(got[:len(img)])
         got_img[STACK_LO:STACK_HI] = bytes(STACK_HI - STACK_LO)
-        got_img[KEYS_LO:KEYS_HI] = bytes(KEYS_HI - KEYS_LO)
+        if not args.no_mask_keys:
+            got_img[KEYS_LO:KEYS_HI] = bytes(KEYS_HI - KEYS_LO)
         want_img = bytearray(want_img)
-        want_img[KEYS_LO:KEYS_HI] = bytes(KEYS_HI - KEYS_LO)
+        if not args.no_mask_keys:
+            want_img[KEYS_LO:KEYS_HI] = bytes(KEYS_HI - KEYS_LO)
         want_img = bytes(want_img)
         got_img, got_vram = bytes(got_img), got[len(img):]
         checked[off] += 1

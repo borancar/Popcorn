@@ -311,6 +311,12 @@ ones that are DOS or hardware I/O (`hsc_save`, `drive_check`,
 Two kinds of byte are excluded from the comparison, both because they are not a
 function of the routine being checked: the **stack** below SP, and the three
 **key-state bytes** at `0x2d4c`-`0x2d4e` that the INT 09h handler maintains.
+The second was re-tested on 2026-08-23 rather than taken on trust, and it
+earns its place: `--no-mask-keys` on the keyboard route produces three
+failures - `panel_draw`, `blit_xor` and `brick 1`, each differing in exactly
+one of those three bytes and nothing else - which is a key going down inside a
+sampled call, not a transcription. The same mask in `sidebyside.py` did *not*
+earn its place and has been dropped there.
 The original takes interrupts while a sampled call runs and the C takes none,
 so `draw_paddle_shifted` - which never mentions those bytes - differed on one
 call in eleven because a key went down inside it. They are blanked at
