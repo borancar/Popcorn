@@ -576,6 +576,21 @@ like:
 the colour-3 pixels of frame 7 of each kind's table at `0x3385`, which is the
 frame where the capsule is fully open.
 
+**There are two sources, with different odds, and that matters.** A hatch
+(`bonus_release` at `0x39a1`) picks `random(8)` from the table at `0xac60` -
+**eight** of the eleven kinds, and V, I and + are not among them. A **brick 2**
+that breaks outright instead drops one chosen by `bonus_kind`, a weighted pick
+over the cumulative table at `0x33b1`, which can be any of the eleven:
+
+| | R | C | E | L | T | F | I | V | + | S | M |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| /255 | 25 | 38 | 25 | 20 | 20 | 25 | 27 | **7** | **2** | 38 | 28 |
+
+So `+` is **0.8%** of brick-2 capsules and V is 2.7%, and on a level whose
+brick 2s are gone or unreachable neither can appear at all. That is why the
+bot never sees a `+` on level 10 - the wall leaves only hatches - and why
+`extra_life` at `0x318b` is the hardest routine in the game to make run.
+
 ## Conventions
 
 - Addresses are **image offsets** unless written `seg:off`. Every reconstructed
