@@ -5698,19 +5698,40 @@ uint32_t ending_blobs(void)
  */
 void ending_column(void)
 {
-    uint32_t di = 0x34f8, bx = 0xb7a2;
-    for (int32_t n = 8; n > 0; n--, bx += 2) {
-        if (img_w(bx) == 0xffff)
-            return;
-        uint32_t si = img_w(bx), d = di;
+    uint32_t di = 0x34f8;
+    for (int32_t dh = 8; dh > 0; dh--) {
+        /* **bx is reloaded here**, at 1ac2:531c, inside the outer loop - so
+         * every one of the eight columns plays the whole list at 0xb7a2 from
+         * the beginning. Hoisting it out, which is what this used to do, gave
+         * each column one frame of the animation and then ran off the end. */
+        uint32_t bx = 0xb7a2;
+        while (img_w(bx) != 0xffff) {
+            uint32_t si = img_w(bx), d = di;
+            for (int32_t r = 0; r < 0x0f; r++) {
+                for (int32_t b = 0; b < 4; b++)
+                    g_vram[(d + b) & (CGA_SIZE - 1)] = g_image[si + b];
+                si += 5;                /* four copied, one skipped */
+                d = cga_next_row(d);
+            }
+            bx += 2;
+            /* 1ac2:5348 - a hundred delays, watching for a key throughout. */
+            for (int32_t i = 0; i < 0x64; i++) {
+                if (io_key_ready()) {
+                    io_get_key();
+                    return;
+                }
+                game_delay();
+            }
+        }
+        /* The list ran out: blank the column (1ac2:535f). */
+        uint32_t d = di;
         for (int32_t r = 0; r < 0x0f; r++) {
-            g_vram[d & (CGA_SIZE - 1)] = g_image[si];
-            g_vram[(d + 1) & (CGA_SIZE - 1)] = g_image[si + 1];
-            g_vram[(d + 2) & (CGA_SIZE - 1)] = g_image[si + 2];
-            g_vram[(d + 3) & (CGA_SIZE - 1)] = g_image[si + 3];
-            si += 5;
+            for (int32_t b = 0; b < 4; b++)
+                g_vram[(d + b) & (CGA_SIZE - 1)] = 0;
             d = cga_next_row(d);
         }
+        if (dh == 5)
+            di++;                       /* 1ac2:537f, one column a byte over */
         di += 4;
     }
 }
