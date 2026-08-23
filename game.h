@@ -418,6 +418,7 @@ uint32_t io_mouse_x(void);
 uint32_t io_mouse_buttons(void);
 
 extern jmp_buf g_back_to_menu;
+extern jmp_buf g_bonus_done;
 void play_session(void);          /* 1ac2:02f5 */
 void panel_draw(void);            /* 1ac2:0b0b */
 void level_colours(void);         /* 1ac2:044b */
@@ -637,6 +638,7 @@ uint32_t io_mouse_x(void);
 uint32_t io_mouse_buttons(void);
 
 extern jmp_buf g_back_to_menu;
+extern jmp_buf g_bonus_done;
 void play_session(void);          /* 1ac2:02f5 */
 void panel_draw(void);            /* 1ac2:0b0b */
 void level_colours(void);         /* 1ac2:044b */
