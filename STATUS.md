@@ -159,15 +159,15 @@ looked like:
 
 ## Open
 
-### Four hundred thousand frames come out byte for byte, through the bonus
+### Two million frames come out byte for byte
 
 `sidebyside.py` plays the emulator and the port together on the same driven
 input and compares the whole image and the whole screen after every frame.
 With `--from-session` it follows a whole game rather than one level, and it
-now runs **399,750 frames** without a byte differing - through ten levels and,
-for the first time, through the end-level bonus and out the other side. That
-screen alone accounted for six of the bugs found on 2026-08-23; before them
-the two sides parted company on its ninth frame.
+now runs past **2,000,000 frames** without a byte differing, through fourteen
+levels and the end-level bonus. That screen alone accounted for six of the
+bugs found on 2026-08-23; before them the two sides parted company on its
+ninth frame, and before the bot could aim, no run ever got past level 10.
 
 `--snapshots DIR` writes a resumable state at the start of every level and
 `--resume FILE` starts from one, so a divergence hours in is reached in a
@@ -254,13 +254,13 @@ without on a *larger* set of routes.
 | | routines | |
 | --- | ---: | --- |
 | **transcribed** | | 185 of 185 reachable routines transcribed, 25230 of 25230 bytes (100.0%) |
-| **proven** | 140 | reached, did work, agreed on every route that reached it |
-| shallow | 4 | agreed, but every call was an early return - not proof |
-| differing | 3 | bonus_end_level, bonus_end_level_body, entity_paddle_fx |
-| unreached | 13 | no route runs them |
-| **dispatched** | 160 | what verify.c can check |
+| **proven** | 146 | reached, did work, agreed on every route that reached it |
+| shallow | 3 | agreed, but every call was an early return - not proof |
+| differing | 1 | entity_paddle_fx |
+| unreached | 8 | no route runs them |
+| **dispatched** | 158 | what verify.c can check |
 
-Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@0206:f10, menu.snap +@0206:f6, menu.snap +@0206:f2, menu.snap +@0206:^l,@0206:^a,@0206:^c,@0206:^r,@0206:^a,@0206:^l,@0206:space,@0206:s,@0206:o,@0206:f,@0206:t,@0206:w,@0206:a,@0206:r,@0206:e,@0206:return, cap.snap, level10_f000000.snap, level49_f000000.snap, particles.snap, tall.snap, marks.snap, play (chase), menu (chase), keyboard (chase), menu.snap +@0206:f8 (chase), menu.snap +@0206:f10 (chase), menu.snap +@0206:f6 (chase), menu.snap +@0206:f2 (chase), menu.snap +@0206:^l,@0206:^a,@0206:^c,@0206:^r,@0206:^a,@0206:^l,@0206:space,@0206:s,@0206:o,@0206:f,@0206:t,@0206:w,@0206:a,@0206:r,@0206:e,@0206:return (chase), cap.snap (chase), level10_f000000.snap (chase), level49_f000000.snap (chase), particles.snap (chase), tall.snap (chase), marks.snap (chase).
+Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@0206:f10, menu.snap +@0206:f6, menu.snap +@0206:f2, menu.snap +@0206:^l,@0206:^a,@0206:^c,@0206:^r,@0206:^a,@0206:^l,@0206:space,@0206:s,@0206:o,@0206:f,@0206:t,@0206:w,@0206:a,@0206:r,@0206:e,@0206:return, cap.snap, level10_f000000.snap, level49_f000000.snap, particles.snap, tall.snap, marks.snap, vlife.snap, play (chase), menu (chase), keyboard (chase), menu.snap +@0206:f8 (chase), menu.snap +@0206:f10 (chase), menu.snap +@0206:f6 (chase), menu.snap +@0206:f2 (chase), menu.snap +@0206:^l,@0206:^a,@0206:^c,@0206:^r,@0206:^a,@0206:^l,@0206:space,@0206:s,@0206:o,@0206:f,@0206:t,@0206:w,@0206:a,@0206:r,@0206:e,@0206:return (chase), cap.snap (chase), level10_f000000.snap (chase), level49_f000000.snap (chase), particles.snap (chase), tall.snap (chase), marks.snap (chase), vlife.snap (chase).
 
 Two of those figures matter more than the headline. **Shallow** is a routine
 every call to which was an early return: it agreed, and that agreement is not
@@ -272,7 +272,7 @@ fixed by comparing the register, which `RETURNS` now does for AH, AX, DX, DI
 and the carry. The second two never can be, and saying so is better than
 leaving them looking like work someone forgot. **Unreached** is the honest limit - a routine no route runs is not
 checked at all, and every bug found on 2026-08-23 was in that column the day
-before. Proven went from 82 to 141 in one session purely by reaching further,
+before. Proven went from 82 to 146 in one session purely by reaching further,
 without anyone reading a line of assembly looking for mistakes.
 
 ### Verification coverage is bounded by what a run reaches
