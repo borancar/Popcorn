@@ -7,12 +7,43 @@
  * it recovered, which is how the C unpacker is checked against the Python one
  * (they must agree byte for byte; see ../validate.py).
  */
+/* realpath(3), which -std=c99 alone does not declare - and _POSIX_C_SOURCE
+ * is not enough for it on glibc, where it sits behind __USE_XOPEN_EXTENDED.
+ * The high-score directory has to be resolved rather than relative; see
+ * set_game_dir. */
+#define _XOPEN_SOURCE 700
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "game.h"
+
+/* Where the high-score file lives: alongside the executable the data came
+ * from. Both the read and the write have to agree on it, so it is worked out
+ * once and g_dir is what everything uses. */
+static char g_dir_buf[512];
+
+static void set_game_dir(const char *path)
+{
+    if (!path)
+        return;
+    /* **Resolved**, so it is the same directory whatever the working
+     * directory is. The candidates are relative - "../popcorn/popcorn.exe"
+     * finds the game from reconstruct/ and "popcorn/popcorn.exe" from the
+     * repository root - and a relative answer means the high-score file
+     * follows the shell around instead of staying with the game. */
+    char *abs = realpath(path, NULL);
+    snprintf(g_dir_buf, sizeof g_dir_buf, "%s", abs ? abs : path);
+    free(abs);
+    char *slash = strrchr(g_dir_buf, '/');
+    if (slash)
+        slash[1] = 0;
+    else
+        g_dir_buf[0] = 0;
+    g_dir = g_dir_buf;
+}
 
 static const char *find_exe(void)
 {
@@ -83,6 +114,9 @@ int32_t main(int32_t argc, char **argv)
     /* Lockstep brings its own image, in the state the emulator handed over,
      * and must put nothing but frames on stdout. */
     if (lockstep) {
+        /* Even here: the game still saves high scores, and without this it
+         * saved them into whatever directory the driver was started from. */
+        set_game_dir(find_exe());
         io_lockstep_extra_sync(extra_sync);
         return lockstep_main(lockstep);
     }
@@ -134,15 +168,20 @@ int32_t main(int32_t argc, char **argv)
             break;
     }
     /* The game directory, for the high-score file: alongside the executable
-     * the data came from. */
-    char dir[512];
-    snprintf(dir, sizeof dir, "%s", path);
-    char *slash = strrchr(dir, '/');
-    if (slash)
-        slash[1] = 0;
-    else
-        dir[0] = 0;
-    game_main(dir, speed, levels);
+     * the data came from.
+     *
+     * **Static, and g_dir points at it.** load_high_scores was given this and
+     * hsc_save was given g_dir, which nothing ever assigned - so the port read
+     * the file next to POPCORN.EXE and wrote one into whatever directory it
+     * happened to be started from. Run `./popcorn` from reconstruct/ and it
+     * read ../popcorn/popcorn.hsc and wrote reconstruct/popcorn.hsc, so a
+     * score set in one session was gone by the next and the table never grew
+     * past what shipped in the image. */
+    set_game_dir(path);
+    if (getenv("POPCORN_TRACE_STUBS"))
+        fprintf(stderr, "popcorn: high scores in %s%s\n",
+                g_dir, (const char *)(g_image + 0x141c));
+    game_main(g_dir, speed, levels);
     io_shutdown();
     free(g_image);
     return 0;
