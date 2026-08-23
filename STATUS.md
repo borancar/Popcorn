@@ -3,7 +3,7 @@
 Where the port has got to, what is proven, and what is next.
 Facts about the program live in [CLAUDE.md](CLAUDE.md).
 
-Updated 2026-08-22.
+Updated 2026-08-23.
 
 ## Done
 

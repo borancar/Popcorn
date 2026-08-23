@@ -83,11 +83,17 @@ $PY snapshot.py "$D/vlife.snap" --resume "$D/level.snap" \
 # and the hall-of-fame walk with two entries to order rather than one. The
 # player table is 0x11b bytes a player at 0x344f: copying player 1's record
 # gives player 2 one the game made, and only the name, the score and the lives
-# are then changed. 0x3f09 says who is still in.
+# are then changed.
+#
+# Both counters matter and only one is obvious: 0x3f08 is how many players
+# were entered, 0x3f09 how many are still in. next_player hands over while
+# 0x3f09 is more than one and runs the hall of fame only when it reaches the
+# last, so this needs 2 and 1. With both, score_before runs - and it has no
+# other way in, since it exists to order two players' scores.
 $PY snapshot.py "$D/twoplayer.snap" --resume "$D/level10.snap" --seconds 2 \
     --copy 0x356a=0x344f:0x11b \
     --poke-str "0x356a=     AL     " --poke-str 0x357a=001000 \
-    --poke 0x3576=0 --poke 0x3f09=1
+    --poke 0x3576=0 --poke 0x3f08=2 --poke 0x3f09=1
 
 # A field with holes in it. Cell 0x0c is not a brick - it is what brick 11
 # leaves behind - so nothing reaches the three routines that draw it unless a
