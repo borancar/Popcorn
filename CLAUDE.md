@@ -295,6 +295,28 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `debug/`, `*.png` | screenshots and VRAM dumps from `shift+F10` |
 | `venv/`, `coverage.bin` | build and run products |
 
+### Reaching a screen to check it
+
+Most of what was wrong in this port was in code no run had ever executed, so
+the useful skill is getting a routine to run at all. Three things do it:
+
+- **`snapshot.py --at OFFSET`** lands the machine on a routine and stops.
+  `endgame_curtain` opens with 7,200 delay iterations, so a verify run from
+  the bonus never reached `ending_column` in two minutes of emulated time; a
+  snapshot taken *at* `0x538d` made it a sixty-second check.
+- **`--poke`** fast-forwards rather than fakes: clearing the brick count at
+  `0x2f10` is what the play loop watches for, so the game runs its own
+  level-done path from there. Poking level 48 and clearing it is how the port
+  came to play level 49.
+- **`verify.py --keys`** presses from a resumed state. `screen_stash` and
+  `screen_unstash` are the pause: `1ac2:1669` tests for `ax == 0x11b`, which
+  is Esc, and nothing else calls them. `--keys @1a62:escape,@1a62:space`
+  checks both in forty seconds.
+
+And **`verify_all.py --chase`**: a routine whose caller is being sampled is
+never sampled itself, so a plain pass reports as unchecked a great many
+routines it ran straight past.
+
 ### Running the game
 
 ```sh
