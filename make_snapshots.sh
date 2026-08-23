@@ -89,6 +89,26 @@ $PY snapshot.py "$D/twoplayer.snap" --resume "$D/level10.snap" --seconds 2 \
     --poke-str "0x356a=     AL     " --poke-str 0x357a=001000 \
     --poke 0x3576=0 --poke 0x3f09=1
 
+# A field with holes in it. Cell 0x0c is not a brick - it is what brick 11
+# leaves behind - so nothing reaches the three routines that draw it unless a
+# level containing one is played. Poking 0x0c into the *table* rather than the
+# live copy at 0x2f18 is what makes it survive: play_session refreshes the copy
+# from the table every level, so a poke into the copy is gone by the intro.
+# Levels 9 to 12 are done because which one loads next depends on the seed.
+#
+# This reaches cell_special, cell_hole_draw, panel_reveal, panel_finish and
+# field_marks_wide - five routines no route had ever run.
+HOLES=""
+for lv in 9 10 11 12; do
+    b=$((0xc46c + lv * 176 + 8))
+    for i in 0 1 2 3 12 13 24 25 36 37 48 49; do
+        HOLES="$HOLES --poke $((b + i))=0x0c"
+    done
+done
+# shellcheck disable=SC2086
+$PY snapshot.py "$D/holes.snap" --resume "$D/level10.snap" --seconds 3 \
+    $HOLES --poke 0x2f10=0
+
 # A life about to be lost: no balls left in play.
 $PY snapshot.py "$D/lastball.snap" --resume "$D/level.snap" \
     --seconds 2 --poke 0x2e73=0

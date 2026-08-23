@@ -111,6 +111,20 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         g_result = game_random(io_ticks(), r[R_DX] & 0xff);
         return 1;
     case 0x51b6: screen_end_of_game(); return 1;
+    /* Never dispatched before, so never checked once. Each is a routine the
+     * port has and the harness had no way to ask about; the argument
+     * registers are read off the routine's own first few instructions. */
+    case 0x0a1d: field_marks_wide(r[R_DI], (r[R_CX] >> 8) & 0xff); return 1;
+    case 0x3200: bonus_stop_monsters(); return 1;
+    case 0x41e5: cell_special(r[R_AX] & 0xff, r[R_CX] & 0xff, r[R_DI]);
+                 return 1;
+    case 0x4b7a: set_palette_registers(r[R_SI]); return 1;
+    case 0x4c4b: brick_11_after(r[R_CX] & 0xff, r[R_AX] & 0xff); return 1;
+    case 0x4cc1: cell_hole_draw(r[R_CX] & 0xff, r[R_AX] & 0xff); return 1;
+    /* 0x4e1a, the high-score screen, is left out: it returns on a key, and
+     * the C reads the port's keyboard while the original reads the
+     * emulator's. The two would return after different numbers of border
+     * steps and the difference would be the harness, not the port. */
     /* 1ac2:4ae0 (the boss key) and 1ac2:1581 with its two helpers (redefine
      * keys) are **not dispatched**, because they are not transcribed: both are
      * deliberate no-ops in the port. Checking a no-op against the original

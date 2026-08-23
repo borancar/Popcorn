@@ -42,4 +42,5 @@ venv/bin/python verify_all.py --chase --summary "$OUT" \
     --snapshot "$D/lastball.snap" \
     --snapshot "$D/ending.snap" \
     --snapshot "$D/particles.snap" \
-    --snapshot "$D/twoplayer.snap"
+    --snapshot "$D/twoplayer.snap" \
+    --snapshot "$D/holes.snap"

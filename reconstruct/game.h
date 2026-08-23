@@ -425,7 +425,7 @@ void level_colours(void);         /* 1ac2:044b */
 void level_intro(void);           /* 1ac2:1eb9 */
 void draw_brick_row(uint32_t y);  /* 1ac2:2034 */
 void draw_sprite_20x6(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:20b9 */
-void cell_special(uint32_t row, uint32_t di);   /* 1ac2:41e5 */
+void cell_special(uint32_t row, uint32_t col, uint32_t di); /* 1ac2:41e5 */
 void field_backdrop(uint32_t y);  /* 1ac2:1fc1 */
 void life_lost(void);             /* 1ac2:0735 */
 void entities_clear(void);        /* 1ac2:055e */
@@ -645,7 +645,7 @@ void level_colours(void);         /* 1ac2:044b */
 void level_intro(void);           /* 1ac2:1eb9 */
 void draw_brick_row(uint32_t y);  /* 1ac2:2034 */
 void draw_sprite_20x6(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:20b9 */
-void cell_special(uint32_t row, uint32_t di);   /* 1ac2:41e5 */
+void cell_special(uint32_t row, uint32_t col, uint32_t di); /* 1ac2:41e5 */
 void field_backdrop(uint32_t y);  /* 1ac2:1fc1 */
 void life_lost(void);             /* 1ac2:0735 */
 void entities_clear(void);        /* 1ac2:055e */
