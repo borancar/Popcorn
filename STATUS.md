@@ -283,9 +283,17 @@ Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@020
   covered by four million frames of lockstep. It stays dispatched: "1 of 60"
   with a known cause is a better line than a clean sweep bought by dropping the
   case.
-- `copy_string_text` (`0x1642`) is inside `screen_define_keys`, which switches
-  to text mode 01h. The port has no text renderer, and writing one is a
-  different job from transcribing.
+- `copy_string_text` (`0x1642`) **is** verified - three calls, identical, by
+  pressing F5. It had been written off as needing the text renderer the port
+  does not have, which is the same mistake `employee_enter` was: not having a
+  renderer stops the screen being *drawn*, and has nothing to do with whether
+  the character and attribute bytes it writes into 0xb800 can be compared.
+  They can.
+- `screen_define_keys` (`0x1581`) itself is dispatched and still unreached. It
+  waits for three key redefinitions, and `read_new_key` at `0x1614` polls
+  `[0x2d49]` - the scan code the game's own INT 09h handler leaves - rather
+  than the BIOS buffer, so feeding it means delivering three IRQ 1s inside one
+  sampled call, which has not worked inside a sampling window yet.
 
 Everything else was reached by finding the trigger: a cheat typed, a key
 pressed during the demo, Esc for the pause, the odds table poked so the rarest

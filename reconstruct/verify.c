@@ -283,6 +283,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x48ce:
         level_tally();
         return 1;
+    case 0x1581: screen_define_keys(); return 1;
     case 0x4ae0:
         employee_enter();
         return 1;
