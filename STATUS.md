@@ -445,8 +445,9 @@ original shoot.
 
 ### Not yet modelled
 
-- **PC-speaker sound.** Ports 0x42 and 0x61 are understood (`sound_tick` at
-  `0x0097`) but nothing generates audio yet.
+- **PC-speaker sound in the emulator.** `emulation.py` is still silent:
+  `sound_tick` at `0x0097` is understood and the ports are modelled, but
+  nothing turns them into audio. The **port** does make sound - see below.
 - **The `.PPC` level format.** `poptab.ppc` is 8,630 bytes and is read whole by
   the loader at `0x08c8`, which is transcribed; the format its contents are in
   is not decoded. The levels being ported are the ones **baked into the
@@ -494,7 +495,13 @@ original shoot.
    **two-player** game, which the bot never plays; `copy_string_text` is in
    `screen_define_keys`, which switches to text mode 01h and is excluded on
    purpose. Both are honest gaps rather than oversights.
-3. **Sound.** Ports 0x42 and 0x61 are understood and nothing generates audio.
+3. **Sound in the emulator.** The port plays it: `io_sound` records the PIT
+   divisor and `io_present` tops the stream up every frame while the note
+   lasts. That top-up is the part worth keeping - `sound_tick` only calls
+   `io_sound` when the note **changes**, since it returns early at `1ac2:00a5`
+   while one is being held, so queueing a fixed buffer played the first thirty
+   milliseconds of every note and then silence. A note of ten ticks is about a
+   sixth of a second. `emulation.py` is still silent.
 4. **The `.PPC` format**, which is what makes the level editor's output
    playable.
 

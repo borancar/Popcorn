@@ -44,6 +44,7 @@ static uint32_t retraces;
 static SDL_Renderer *ren;
 static SDL_Texture *tex;
 static SDL_AudioStream *audio;
+static void sound_top_up(void);
 static int32_t win_scale = 3;
 static int32_t quit_requested;
 static uint64_t next_present_ns;
@@ -175,6 +176,7 @@ void io_present(void)
     if (io_lockstep())
         return;
     presented++;
+    sound_top_up();
     uint64_t now = SDL_GetTicksNS();
     if (now < next_present_ns)
         return;
@@ -619,23 +621,57 @@ int32_t io_pump(void)
     return !quit_requested;
 }
 
+/* The PC speaker holds a note until it is told otherwise, and so must this.
+ *
+ * sound_tick only calls io_sound when the **note changes** - it returns early
+ * at 1ac2:00a5 while the current one is still being held - so queueing a
+ * fixed buffer here played the first thirty milliseconds of every note and
+ * then silence. A note of ten ticks is about a sixth of a second.
+ *
+ * So io_sound only records the tone, and io_present tops the stream up every
+ * frame while it lasts. tone_phase carries across the top-ups: restarting the
+ * waveform at zero each time puts a click at every frame boundary.
+ */
+#define SND_RATE   22050
+static uint32_t tone_phase;
+
 void io_sound(uint32_t divisor)
 {
-    if (!audio || divisor == tone_divisor)
-        return;
+    if (divisor != tone_divisor)
+        tone_phase = 0;
     tone_divisor = divisor;
+}
+
+/* Keep about 60ms queued, so a late frame does not leave a gap. */
+static void sound_top_up(void)
+{
+    if (!audio)
+        return;
+    if (!tone_divisor) {
+        tone_phase = 0;
+        return;
+    }
+    int32_t queued = SDL_GetAudioStreamQueued(audio);
+    if (queued < 0)
+        queued = 0;
+    int32_t want = SND_RATE * 60 / 1000 * (int32_t)sizeof(int16_t);
+    if (queued >= want)
+        return;
+
     /* PIT channel 2 counts down from the divisor at 1.193182 MHz, and the
      * speaker sees the square wave that produces. */
-    if (!divisor)
-        return;
-    double hz = 1193182.0 / (double)divisor;
-    const int32_t rate = 22050, ms = 30;
-    int32_t n = rate * ms / 1000;
-    static int16_t buf[22050 / 1000 * 40];
-    double period = rate / hz;
-    for (int32_t i = 0; i < n && i < (int32_t)(sizeof buf / sizeof *buf); i++)
-        buf[i] = (i / (period / 2.0) - (int32_t)(i / (period / 2.0)) < 0.5)
-                     ? 6000 : -6000;
+    double period = (double)SND_RATE / (1193182.0 / (double)tone_divisor);
+    if (period < 2.0)
+        period = 2.0;
+    int32_t n = (want - queued) / (int32_t)sizeof(int16_t);
+    static int16_t buf[SND_RATE / 1000 * 80];
+    if (n > (int32_t)(sizeof buf / sizeof *buf))
+        n = (int32_t)(sizeof buf / sizeof *buf);
+    for (int32_t i = 0; i < n; i++) {
+        double t = (double)(tone_phase + (uint32_t)i) / (period / 2.0);
+        buf[i] = (t - (double)(int64_t)t < 0.5) ? 6000 : -6000;
+    }
+    tone_phase += (uint32_t)n;
     SDL_PutAudioStreamData(audio, buf, (int32_t)(n * sizeof *buf));
 }
 
