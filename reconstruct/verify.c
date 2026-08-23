@@ -377,6 +377,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x4ff1:                        /* border_draw(di) */
         border_draw(r[R_DI]);
         return 1;
+    case 0x5019: border_block(r[R_DI]); return 1;
     case 0x5045:                        /* border_row(di) */
         border_row(r[R_DI]);
         return 1;

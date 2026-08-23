@@ -39,6 +39,13 @@ def main():
                     help="run from every .snap in this directory as well")
     ap.add_argument("--skip-base", action="store_true",
                     help="only run the snapshots")
+    ap.add_argument("--chase", action="store_true",
+                    help="after the main pass, run every route again with "
+                         "--only set to whatever is still unreached. A routine "
+                         "whose caller is being sampled is never sampled "
+                         "itself - the harness will not re-enter - so the "
+                         "first pass reports as unchecked a great many "
+                         "routines it in fact ran straight past")
     ap.add_argument("--summary", metavar="FILE",
                     help="write the coverage figures as a markdown block, so "
                          "STATUS.md can carry a number that was measured "
@@ -87,6 +94,29 @@ def main():
 
     if not runs:
         raise SystemExit("no route produced a result")
+
+    if args.chase:
+        never_yet = sorted(
+            off for off in runs[0][1]["routines"]
+            if not any(r[1]["routines"][off]["checked"]
+                       or r[1]["routines"][off]["mismatched"] for r in runs))
+        if never_yet:
+            print(f"\n--- chasing {len(never_yet)} unreached, "
+                  f"{len(routes)} routes")
+            only = ",".join(never_yet)
+            for name, extra in routes:
+                j = os.path.join(out, "chase_" + name.replace(" ", "_")
+                                 .replace(":", "-") + ".json")
+                r = subprocess.run(
+                    [PY, os.path.join(HERE, "verify.py"),
+                     "--seconds", str(args.seconds), "--json", j,
+                     "--only", only] + extra,
+                    capture_output=True, text=True)
+                for l in r.stdout.splitlines():
+                    if l.startswith("  FAIL"):
+                        print(l)
+                if os.path.exists(j):
+                    runs.append((name + " (chase)", json.load(open(j))))
 
     every = {}
     for name, d in runs:
