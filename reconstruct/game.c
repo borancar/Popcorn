@@ -5792,18 +5792,27 @@ void ending_plot(uint32_t x, uint32_t y)
     for (int32_t i = 0; i < 4; i++) {
         g_vram[d & (CGA_SIZE - 1)] ^= (uint8_t)img_w(si + i * 2);
         g_vram[(d + 1) & (CGA_SIZE - 1)] ^= (uint8_t)(img_w(si + i * 2) >> 8);
-        d = (i & 1) ? (d - 0x1fb0) & 0xffff : (d + CGA_PLANE) & 0xffff;
+        /* Just cga_next_row. The original writes the four rows out twice,
+         * once for an even start (+0x2000, -0x1fb0, +0x2000 at 1ac2:5b15)
+         * and once for an odd one (-0x1fb0, +0x2000, -0x1fb0 at 1ac2:5b65),
+         * which reads like two different steppings and is one. Hard-coding
+         * the even pattern drew every odd-row particle a row out. */
+        d = cga_next_row(d);
     }
 }
 
 /* 1ac2:5a43  ending_particles_init - every record launched from the lower
  * starting point */
-void ending_particles_init(void)
+void ending_particles_init(uint32_t ax)
 {
     uint32_t n = img_w(PARTICLE_COUNT);
-    uint32_t ax = 0;
     for (uint32_t i = 0; i < n; i++)
         ax = ending_particle_init(PARTICLES + i * 0x10, ax);
+    /* 1ac2:5a43 has no `ret` of its own: it **falls through** into
+     * ending_particles_tick at 1ac2:5a56, so the first pass over the
+     * particles is part of setting them up. Treating the two as separate
+     * routines left the screen a frame behind from the start. */
+    ending_particles_tick();
 }
 
 /* 1ac2:5a56  ending_particles_tick - menu_particles_tick with ending_plot in
@@ -5922,7 +5931,13 @@ void screen_all_levels_done(void)
         for (uint32_t bl = 0x1a; bl > 0; bl--) {
             ending_walk(bl, bh, ending_blobs());
         }
-    ending_particles_init();
+    /* 0x2509 is not a constant anyone chose: 1ac2:59dd calls restore_int09
+     * immediately before this, which is `mov ax, 0x2509 / int 21h`, and the
+     * ending's first particle is seeded from whatever AX happens to hold. The
+     * C's restore_int09 is a no-op - the platform layer owns the keyboard -
+     * so the value has to be written down here or the ending starts from a
+     * different seed than the original's. */
+    ending_particles_init(0x2509);
     while (!io_key_ready()) {
         ending_particles_tick();
         io_present();

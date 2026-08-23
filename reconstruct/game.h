@@ -430,7 +430,7 @@ void entities_clear(void);        /* 1ac2:055e */
 void level_between(void);         /* 1ac2:05f8 */
 void screen_game_over(void);      /* 1ac2:0473 */
 void ending_plot(uint32_t x, uint32_t y);     /* 1ac2:5add */
-void ending_particles_init(void); /* 1ac2:5a43 */
+void ending_particles_init(uint32_t ax); /* 1ac2:5a43 */
 void ending_particles_tick(void); /* 1ac2:5a56 */
 int32_t next_player(const char *dir);/* 1ac2:0d2e */
 void screen_results(const char *dir);   /* 1ac2:0ea3 */
@@ -648,7 +648,7 @@ void entities_clear(void);        /* 1ac2:055e */
 void level_between(void);         /* 1ac2:05f8 */
 void screen_game_over(void);      /* 1ac2:0473 */
 void ending_plot(uint32_t x, uint32_t y);     /* 1ac2:5add */
-void ending_particles_init(void); /* 1ac2:5a43 */
+void ending_particles_init(uint32_t ax); /* 1ac2:5a43 */
 void ending_particles_tick(void); /* 1ac2:5a56 */
 int32_t next_player(const char *dir);/* 1ac2:0d2e */
 void screen_results(const char *dir);   /* 1ac2:0ea3 */
