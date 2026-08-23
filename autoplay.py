@@ -498,13 +498,44 @@ class Bot:
         return f"{px:3d}->{want:3d} {note}"
 
 
+# Shifted letters, as `@0206:^l`. The emulator's KEYMAP has no shift state -
+# it maps a key straight to one scan code and one ASCII - but the game reads
+# the ASCII the BIOS gives it, so injecting the upper-case byte with the same
+# scan code is exactly what shift+L produces. Needed to type anything with a
+# capital in it: the cheat at 0x3f0b is "LACRAL software".
+SHIFTED = {}
+
+
+def _shifted_key(name):
+    base = getattr(pygame, f"K_{name.lower()}", None)
+    if base is None or base not in KEYMAP:
+        return None
+    pseudo = 0x40000 + base
+    if pseudo not in KEYMAP:
+        scan, asc = KEYMAP[base]
+        KEYMAP[pseudo] = (scan, ord(chr(asc).upper()))
+    return pseudo
+
+
 def parse_route(route):
-    """Turn `@off:key` strings into (offset, key, release) triggers."""
+    """Turn `@off:key` strings into (offset, key, release) triggers.
+
+    `^x` is shift+x - the same scan code with the upper-case ASCII.
+    """
     out = []
     for item in route:
         when, _, name = item.partition(":")
         release = name.startswith("-")
         name = name.lstrip("-")
+        if name.startswith("^"):
+            key = _shifted_key(name[1:])
+            if key is None:
+                raise SystemExit(f"no scan code for shift+{name[1:]!r}")
+            if not when.startswith("@"):
+                raise SystemExit(f"route entries must be @offset:key, "
+                                 f"got {item!r}")
+            out.append((int(when[1:], 16), key, release))
+            continue
         key = next((k for k in (getattr(pygame, f"K_{n}", None)
                                 for n in (name.lower(), name.upper()))
                     if k is not None), None)

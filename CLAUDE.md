@@ -295,6 +295,20 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `debug/`, `*.png` | screenshots and VRAM dumps from `shift+F10` |
 | `venv/`, `coverage.bin` | build and run products |
 
+### The cheat
+
+Typing **`LACRAL software`** and Enter **at the main menu** sets `[0x3f1b]`,
+which is the no-lives-lost flag: `play_session` skips its `dec [0x13c9]` at
+`1ac2:0363` and `ball_after_endgame` skips handing a life back at `1ac2:462c`.
+The string is at `0x3f0b`, `cheat_match` at `0x5171` walks it a key at a time,
+and every key pressed at the menu is fed to it. It is the authors' own company
+name, and it is not the F10 "touche spéciale pour employés" the readme
+mentions - that is a separate screen.
+
+Typing it needs a shift, which the emulator's `KEYMAP` has no state for, so
+the route syntax takes `^l` for shift+L: the same scan code with the
+upper-case ASCII, which is what the BIOS would hand the game.
+
 ### Reaching a screen to check it
 
 Most of what was wrong in this port was in code no run had ever executed, so
