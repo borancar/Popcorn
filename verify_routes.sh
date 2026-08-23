@@ -26,7 +26,19 @@ CHEAT='@0206:^l,@0206:^a,@0206:^c,@0206:^r,@0206:^a,@0206:^l,@0206:space'
 CHEAT="$CHEAT,@0206:s,@0206:o,@0206:f,@0206:t,@0206:w,@0206:a,@0206:r,@0206:e"
 CHEAT="$CHEAT,@0206:return"
 
+# Fail now rather than forty minutes in. A route whose file is missing runs
+# anyway and reports every routine as unreached, which reads as a coverage
+# result rather than as a typo.
+for f in menu level level10 level49 ending capsule tall particles marks \
+         vlife twoplayer holes lastball; do
+    [ -f "$D/$f.snap" ] || {
+        echo "missing $D/$f.snap - run make_snapshots.sh $D first" >&2
+        exit 1
+    }
+done
+
 venv/bin/python verify_all.py --chase --summary "$OUT" \
+    --snapshot "$D/level.snap" \
     --snapshot "$D/menu.snap=@0206:f8" \
     --snapshot "$D/menu.snap=@0206:f6" \
     --snapshot "$D/menu.snap=@0206:f2" \
