@@ -159,205 +159,45 @@ looked like:
 
 ## Open
 
-### Four hundred thousand frames come out byte for byte
+### Four hundred thousand frames come out byte for byte, through the bonus
 
 `sidebyside.py` plays the emulator and the port together on the same driven
 input and compares the whole image and the whole screen after every frame.
-With `--from-session` it follows a whole game rather than one level, and it now
-runs past **390,000 frames** without a single byte differing - not a byte of
-the 133,296-byte image or the 16,384-byte screen, sound player included,
-nothing masked but the stack and the three key-state bytes. That is around two
-hours of continuous play, through eleven levels, and the run had not stopped
-when this was written.
+With `--from-session` it follows a whole game rather than one level, and it
+now runs **399,750 frames** without a byte differing - through ten levels and,
+for the first time, through the end-level bonus and out the other side. That
+screen alone accounted for six of the bugs found on 2026-08-23; before them
+the two sides parted company on its ninth frame.
 
 `--snapshots DIR` writes a resumable state at the start of every level and
-`--resume FILE` starts from one, so a divergence two hours in is reached in a
-couple of minutes rather than replayed. Nothing since the harness was built has
-been found without it.
-
-Five bugs came out along the way, each found by the harness rather than by
-reading:
-
-- **sound_tick read its tunes out of the sprite data.** The tune pointers are
-  offsets into the code segment, because DS is the code segment for the
-  length of the routine. Reading them as image offsets played whatever bitmap
-  happened to be at 0xa.
-- **entity_bonus** mishandled the no-move steer, bounced the wrong ball when
-  more than one was out, and returned instead of falling through into the
-  capsule being consumed.
-- **bonus_move_down looked a whole row out** - `add al, 0xa`, ten pixels
-  below the capsule, not two - and was missing its ending, where a capsule
-  reaching the paddle row is handed to the script at 0x8320 rather than being
-  blocked.
-- **The animated bricks were not transcribed at all**, because the routine
-  that runs them is reached only through an entity node. Level 7 is where the
-  first of them is, and the port passed through cells the original turned into
-  a running picture.
-- **The brick table has thirty entries, not twenty-two.** Entries 24 to 29 -
-  an animated brick that has already been hit - all point back at the solid
-  handler, so hitting one again bounces the ball and does nothing else. The
-  port had no case for those values and fell through, so the ball passed where
-  the original bounced.
-
-The last of those is the one worth remembering, because the harness reported it
-as a **disagreement about which brick** and both sides were right. The
-emulator's tag names the routine the dispatch reaches; the port's named the
-cell value; and 4, 12 and 24 to 29 all share one routine. Two bytes differed -
-a ball's bounce counter and a sound timer - for a difference of naming on top
-of a real bug underneath it. The port now canonicalises its tag, which also
-removes the same false report for cell 12.
-
-The table length was itself the second thing to be measured wrong the same way.
-`analyze.py --tables` audits every dispatch table and every word the code calls
-through, and it missed this one because the length was **hand-written**. A
-count you supply is not a count you checked; the fix was to read entries until
-they stop being code addresses. It now reports "every dispatch target is
-mapped" over thirty entries rather than twenty-two.
-
-Earlier, two fixes to the harness rather than the port, both of which made it
-*look* like the port was wrong:
-
-- **1ac2:1a62 is not once a frame.** It is the top of the frame, but the serve
-  wait reaches it too, at 0x1a58, whenever the action button is held - and a
-  bot holds it permanently. The sync point is 1ac2:1c3f, the `jmp` that closes
-  the frame, which is the one instruction both paths converge on.
-- **`emu_stop()` leaves IP on the instruction it stopped at**, so the next
-  `emu_start` ran it again and the hook fired a second time with no work in
-  between. Four "frames" over one real one, comparing the port's frame N+1
-  against the emulator's frame N.
+`--resume FILE` starts from one, so a divergence hours in is reached in a
+couple of minutes rather than replayed. Almost nothing since the harness was
+built has been found without it - with one caveat recorded below.
 
 The instruction counts say those frames are real rather than empty: the sound
 tick, the ball's step gate and the entity walk each run once a frame and the
 ball steps on two in three of them, exactly what the `[0x1486] = 3` gate
 predicts, held over the whole run.
 
-What is still set aside is the sound player's state at cs:[0xf4]-[0xf7] - the
-request, the note timer and the tune pointer. One side raises a sound request
-on a frame the other does not; because the request is both set and consumed
-inside a single frame, that block is the only place it shows, and with sound
-off none of it reaches the screen. Masking the timer alone simply moved the
-first difference onto the pointer, which is the same divergence a byte later.
+### What is still open
 
-### The screens a bot never reached were the ones with the bugs in
+**`verify.py` disagrees about `bonus_end_level` when it compares the whole
+screen as a single call.** That call reads thousands of inputs and the harness
+can pin one pointer and one keypress, not a stream of them. The lockstep,
+where both sides genuinely get the same input every frame, is clean through
+that screen for four hundred thousand frames. The two are not the same claim.
 
-Nothing had ever run the `+` capsule's end-of-level screen. `verify_all`
-listed `bonus_end_level` unreached, and the frame comparison only got there
-once the bot started collecting capsules deliberately. It had **five**
-transcription errors in it, and the routines it calls had two more:
-
-- The wall closing in copied its rows the wrong way and never advanced:
-  `rep movsw` at `1ac2:4282` has SI on the band's row and DI one row below,
-  and the C's `di = cga_prev_row(cga_next_row(di))` is the identity.
-- The banner has two fixed rows before the level's cells, not one.
-- Each level row is three banner rows - the cells twice, then a blank - and
-  `si` walks **up** the level, not down.
-- Three whole blocks were missing after the cells: seven more fixed rows, the
-  funnel, and the mouth opening at `1ac2:44bd` whose two masks go on
-  **crossed**, because the word is loaded little-endian and the mask written
-  the other way round.
-- `screen_scroll_up` read `mov cx, 7` - the `rep movsw` **word count** - as a
-  row count and the `0x6f` row count as a pass count, so it scrolled seven
-  rows a hundred and eleven times and drew the paddle a hundred and eleven
-  times, where the original scrolls a hundred and eleven rows once.
-- `ball_after_endgame`'s chamber test was inverted: `1ac2:45da` bounces the
-  ball when x is **outside** `0x60..0x6b`, and the C bounced it when it was
-  inside - in the gap, which is where it is supposed to go down and on. So
-  the ball bounced off the opening and fell through the funnel wall.
-
-Three of those were only findable after the harness stopped agreeing for
-reasons that were not evidence, which is the recurring lesson here:
-
-- **Return values were compared for three routines and none by flag.** Every
-  routine that answers in the **carry** - `ball_redraw`, `ball_on_paddle`, and
-  `play_loop` reads `jae` after each - could return the opposite decision and
-  still be reported identical.
-- **The pointer was never carried across.** `game_input` reads the mouse, and
-  every between-level screen calls it through `input_and_draw_paddle`, so the
-  C put the paddle wherever the checking process's pointer happened to be.
-  `input_and_draw_paddle` differed on exactly half its calls and
-  `screen_scroll_up` inherited it. The state file carries the emulator's
-  pointer now, the same way it already carried the BIOS tick count.
-- **`bonus_end_level` has two entry points**, `1ac2:2da0` and `1ac2:4210`, and
-  the C merged them - so the harness, which enters at the second, was
-  comparing a version that also tears the play loop down against one that
-  does not.
-
-### The port has finished the last level
-
-On 2026-08-23 the C port played **level 49, the last of the fifty, to
-completion**: 168 bricks of cell 11 and nothing else, from 158 down to 0, and
-then `screen_all_levels_done` at `1ac2:5940` - the one place the game reaches
-after the fiftieth level is cleared. The port says so itself now, because that
-screen has no frame sync and a lockstep driver blocked while it runs cannot
-tell "finished" from "hung".
-
-Two honest qualifications. The port was **placed** at level 49 rather than
-walking there: a snapshot poked onto level 48 and cleared, so `play_session`
-loads level 49 the way it normally would. And it cannot yet walk there - it
-stalls on level 10, whose row of cell 3 hardens into indestructible 4s and
-walls the top of the field off, so a bot that survives indefinitely still
-never clears it.
-
-Getting there found the bug that would have stopped it. `brick_11` at
-`1ac2:2d68` scores, sounds, turns the cell to 0x0c and draws, and **never
-touches the ball** - no `inc [di+0x1d]`, no bp anywhere in it. The C routed it
-through `brick_common`, which zeroes the bounce counter, so the
-every-0x23-bounces slope shuffle fired at a different moment. On any other
-level that is one brick in a mixed field; on level 49 it is every brick. The
-two sides disagreed on the level's 189th frame and ran fifty-one thousand
-frames together once it was fixed.
-
-### What is still open on the end-level bonus
-
-`bonus_end_level` is the last routine that differs, and the two that differ
-with it - `entity_paddle_fx` and `screen_game_over` - only do so because they
-call it. Five transcription errors have come out of it and it still differs.
-
-`--sync-scroll` was built to get further: `io_frame_sync` is only reached at
-the frame close in `play_loop`, so a screen with a loop of its own is one
-indivisible step to the driver, which can then say the two sides differ
-*afterwards* and nothing about where. Taking `screen_scroll_up` as a second
-comparison point turns the bonus into fifty steps instead of one, and the
-difference it reports drops from 2,889 screen bytes to 284.
-
-Those 284 **are** a real difference, and it took two fixes to be able to say
-so. The `resuming` flag that skips the hook's re-fire after `emu_stop`
-remembered only *that* the emulator had stopped, not *where*, so with a second
-sync point a genuine stop at the other address was swallowed as if it were the
-re-fire. And the first desync check written for this compared the port's sync
-count against the driver's window count - which always agree, because every
-window consumes exactly one port frame. It looked like a safeguard and could
-not fail, which is the trap this file keeps recording.
-
-What can fail is comparing the *kind* of point each side stopped at, which the
-tag now carries.
-
-A third sync point, `--sync-endgame` on `ball_after_endgame`, reaches the one
-part of the bonus the scroll sync does not: its own ball loop, which is
-otherwise a single indivisible move. It found the two bugs five earlier passes
-over this screen had missed, and they were both about where the ball starts
-and stops:
-
-- `1ac2:4518` **sets** the ball's position to `(0x70, 0xb4)` - the live pair at
-  `+0` and the drawn pair at `+2` - and copies eight bytes of sprite record in
-  from `0x48fb`. The C kept whatever position the *level's* ball had ended on,
-  so the bonus's ball started wherever the last one died rather than at the top
-  of the funnel.
-- `1ac2:4738` is `cmp al,0x6c / jb no-bounce`, so the funnel's right wall
-  catches the ball **at** `0x6c`. The C had `x > 0x6c` and it slipped through on
-  the exact pixel.
-
-The bonus now runs to completion and the game advances from level 7 to level 8:
-**2,059 aligned comparisons, against 9 before**. What is left is smaller and the
-same shape - the port's ball takes a little longer to reach a chamber, so the
-emulator finishes the screen a window sooner and the port is one level
-transition behind. `verify.py` also still reports a difference when it compares
-the whole screen as a single call, which is a different question from whether
-the screen plays correctly, and neither is claimed as the other.
-
-One lesson worth keeping: **turn one instrument on at a time**. With the scroll
-sync also enabled the same difference surfaced a hundred comparisons later and
-looked like something else entirely.
+**A snapshot resume is not equivalent to the run it came from.** The level 5
+divergence that was open for much of 2026-08-23 did not reproduce from a
+snapshot taken *one frame before it*, while two full runs from the menu
+stopped at the same frame with the same bytes. It turned out the resumed run
+took the bonus's **other ending** and agreed by luck - so the reproduction was
+not evidence, and reading it as one nearly closed a bug that was still there.
+Low memory is captured now (the vector table and BIOS data area, neither of
+which is inside the load image) and it was not the cause. What is left to
+suspect: the emulator's own attributes - retrace phase, key and scan queues,
+CGA registers - and the port's C stack, which a resume rebuilds from
+`play_session`'s `goto retry` rather than restoring.
 
 ### Coverage, as last measured
 
