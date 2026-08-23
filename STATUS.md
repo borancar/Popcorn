@@ -108,7 +108,7 @@ the picture goes on moving after you have broken it.
 `0x3abf` was invisible to the recursive-descent map because **nothing calls
 it**: it is only ever stored into an entity node's handler slot, so its bytes
 were being counted as the tail of `entity_bonus`. Seeding it explicitly is what
-took the count from 179 to 185.
+took the reachable-routine count from 179 to 185.
 
 Before that, `0d2e`, where a player's turn ends. Each player's whole
 state lives in a 0x11b-byte record — lives, level, score, their copy of the
@@ -324,8 +324,8 @@ already inside; asking for the callee on its own found it in one run.
 
 ### Verification coverage is bounded by what a run reaches
 
-A ten-minute play route verifies **82 routines byte-identical with nothing
-failing**. Every failure that stood in this list for most of a session turned
+A ten-minute play route verifies **87 routines byte-identical with nothing
+failing**, which is half of them: the rest are not reachable by playing. Every failure that stood in this list for most of a session turned
 out to be the harness rather than the port:
 
 - **1ac2:1a4f and 1ac2:1a6f are not routines.** 0x1a4f is a call site,
@@ -344,10 +344,12 @@ here. `verify.py --menu` and `--keyboard` exist
 because the attract demo and the keyboard input path are not reachable from a
 route that starts a game with the mouse.
 
-Fourteen dispatched routines are reached by none of the three: `draw_run`,
-`demo_start`, `draw_paddle_raw`, `brick_11`, six entity handlers around
-`0x365e`-`0x37e0`, `cells_restore`, and the menu arrow's two halves. They need
-game states a bot does not play into.
+The routines the three base routes miss need game states a bot does not play
+into - the ending, a capsule of a particular kind falling, a second player out
+of lives, a field with a hole in it. Naming them here went stale as fast as it
+was written, because each one that got a snapshot stopped being an example.
+The table above is the count, and `verify.py` prints the current list at the
+end of every run.
 
 The honest limit is that **a routine no run reaches is unproven**, and
 `verify.py` prints that list rather than quietly omitting it. Snapshots are the
