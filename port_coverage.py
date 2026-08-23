@@ -117,8 +117,16 @@ def noops():
     and counting them either way - as done, or as work remaining - says
     something untrue. They come out of both sides of the figure instead.
 
-    Detected rather than listed, so emptying a routine and forgetting to say
-    so here cannot happen.
+    What identifies one is the **claim**, not the empty body. install_int09
+    and restore_int09 are `void f(void) { }` too, and they are not in this
+    category at all: the keyboard they installed is implemented, by the
+    platform layer, just not in that function. An empty body says where the
+    code is not; only the comment says whether that is the point.
+
+    So the phrase is what is looked for, and the empty body is the
+    corroboration - if a routine claims not to be transcribed and has
+    statements in it, the claim has gone stale and this raises rather than
+    quietly believing it.
     """
     import re
     src = open(os.path.join(SRC, "game.c")).read()
@@ -130,10 +138,16 @@ def noops():
                       src[m.end():], re.M | re.S)
         if not d:
             continue
+        lead = re.match(r"\s*/\*.*?\*/", d.group(1), re.S)
+        if not lead or "not transcribed" not in lead.group(0).lower():
+            continue
         body = re.sub(r"/\*.*?\*/", "", d.group(1), flags=re.S)
         body = re.sub(r"\(void\)\s*\w+\s*;", "", body)
-        if not body.strip():
-            out[off] = name
+        if body.strip():
+            raise SystemExit(
+                f"{name} ({off:#06x}) says it is not transcribed and has "
+                f"code in it: {body.strip().splitlines()[0]!r}")
+        out[off] = name
     return out
 
 
