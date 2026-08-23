@@ -295,7 +295,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         ending_column();
         return 1;
     case 0x5a43:
-        ending_particles_init();
+        ending_particles_init(r[R_AX]);
         return 1;
     case 0x5a56:
         ending_particles_tick();
