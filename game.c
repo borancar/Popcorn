@@ -3790,6 +3790,8 @@ int32_t ball_on_paddle(uint32_t ball)
  * The key-definition screen: wait for a scan code that is not already one of
  * the `bl` keys defined so far, and not one of the four the game keeps for
  * itself at 0x2d52. Then store it as key number `bl`.
+ *
+ * Not transcribed - see screen_define_keys.
  */
 void read_new_key(uint32_t which)
 {
@@ -6286,9 +6288,9 @@ void screen_high_scores(void)
  * or reserved at 0x2d52. [0x2d49] is set to 1 first so the handler has
  * something to compare against that cannot match.
  *
- * The box and the prompts are transcribed; drawing them needs a text renderer,
- * which the port has not got, so what a player sees here is a blank screen
- * with the keys still being read. That is the whole of what is missing.
+ * **Not transcribed, on purpose**, along with 0x1614 and 0x1642. This is a
+ * decision about what the port is for rather than something still to be read:
+ * the port keeps the defaults at 0x2d4f-0x2d51, which are K, L and Space.
  * ===================================================================== */
 void screen_define_keys(void)
 {
