@@ -32,6 +32,7 @@
  * brick where the original decided to remove it, and the only difference was
  * the seed.
  */
+#include <setjmp.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -474,7 +475,15 @@ int32_t verify_main(const char *in_path, const char *out_path)
     }
     fclose(f);
 
-    if (!dispatch(routine, regs)) {
+    /* bonus_effect's level-ending case abandons the play loop by longjmp, the
+     * way 1ac2:2da0 abandons it by throwing four words off the stack. In the
+     * game that lands in play_session; here there is no play_session, and an
+     * unarmed longjmp is undefined behaviour - it crashed the checker rather
+     * than reporting anything. Arming it makes the routine's effect complete
+     * at the jump, which is what it is. */
+    if (setjmp(g_bonus_done) != 0) {
+        /* fall through to writing the result out */
+    } else if (!dispatch(routine, regs)) {
         fprintf(stderr, "no C routine for %#x\n", routine);
         return 2;                       /* distinct from a mismatch */
     }

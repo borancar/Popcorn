@@ -1282,6 +1282,15 @@ frames:
 
 jmp_buf g_back_to_menu;
 
+/* Where the end-level bonus lands. 1ac2:2da0 throws four words off the stack
+ * before jumping into the
+ * end-level bonus: the frames of bonus_effect, morph_finish, entity_paddle_fx
+ * and the entity walk that reached them. The bonus never returns to any of
+ * those - its own `ret`, after the ending has run, lands back in play_session
+ * as if play_loop had returned. Returning normally instead, which is what the
+ * port did, left the play loop running the level the bonus had just finished. */
+jmp_buf g_bonus_done;
+
 /* Set with g_resume_at_frame_top when the lockstep harness resumes from a
  * snapshot: everything above the retry loop has happened already in the state
  * being restored, and the first play_loop resumes mid-frame. Without this a
@@ -1322,7 +1331,14 @@ void play_session(void)
             level_intro();                      /* 1ac2:1eb9 */
 retry:
             for (;;) {
-                int32_t lost = play_loop();
+                /* The bonus lands here rather than unwinding through the
+                 * entity walk - see g_bonus_done - and it arrives as a level
+                 * **completed**, carry clear. Watching [0x2f10] settles it:
+                 * the emulator advances the level without the brick count
+                 * ever reaching zero, which only the `jae 0x376` at 1ac2:0357
+                 * does. Arriving as a lost life instead cost a life and
+                 * replayed the level. */
+                int32_t lost = setjmp(g_bonus_done) ? 0 : play_loop();
                 speaker_off();
                 if (!lost)
                     goto level_done;
@@ -4047,7 +4063,9 @@ void bonus_effect(uint32_t kind)
     case 5: bonus_net(); break;
     case 6: bonus_reverse(); break;
     case 7: extra_life(); break;
-    case 8: bonus_end_level(); break;
+    case 8:
+        bonus_end_level();
+        longjmp(g_bonus_done, 1);       /* 1ac2:2da0's four pops */
     case 9: bonus_slower_ball(); break;
     case 10: bonus_stop_monsters(); break;
     /* The table has a twelfth word, 0x2e55, but it points into the middle of
