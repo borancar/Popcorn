@@ -6453,8 +6453,12 @@ int32_t ball_after_endgame(uint32_t ball)
             endgame_curtain();
             return 1;
         }
-        /* Between the chambers: the sides of the funnel at x 0x60 and 0x6c. */
-        if (x <= 0x60 || x > 0x6c) {
+        /* Between the chambers: the sides of the funnel at x 0x60 and 0x6c.
+         * 1ac2:4738 is `cmp al,0x6c / jb no-bounce`, so the right wall
+         * catches the ball at 0x6c itself, not one past it. With `>` the ball
+         * slipped through on the exact pixel - two thousand steps into the
+         * funnel before the two sides noticed. */
+        if (x <= 0x60 || x >= 0x6c) {
             b[B_DIR_X] = (x <= 0x60) ? 0 : 1;
             b[B_ACC_X] = 1;
             b[B_ACC_Y] = 0;
@@ -6674,6 +6678,14 @@ void bonus_end_level_body(void)
     /* And a fresh ball, played until ball_after_endgame says the level is
      * over. */
     uint8_t *b = g_image + BALLS;
+    /* 1ac2:4518. Two things the transcription left out, and they are why the
+     * bonus's ball started wherever the level's had ended rather than at the
+     * top of the funnel: eight bytes of sprite record copied in from 0x48fb,
+     * and the position **set** to (0x70, 0xb4) - both the live pair at +0 and
+     * the drawn pair at +2. */
+    memcpy(g_image + BALLS + 4, g_image + 0x48fb, 8);
+    b[B_X] = b[0x02] = 0x70;
+    b[B_Y] = b[0x03] = 0xb4;
     b[B_DY] = 1;
     b[B_DX] = 2;
     b[B_DIR_X] = 0;
