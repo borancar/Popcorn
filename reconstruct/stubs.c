@@ -1,10 +1,16 @@
 /*
- * Routines the port has not transcribed yet.
+ * What is not transcribed. There is one thing left in it.
  *
- * Each is here so the game can run around it, and each says what it is and
- * where to read it. They are **not** substitutes: a stub does nothing, and the
- * screen or the behaviour it was responsible for is simply absent. STATUS.md
- * keeps the running count, and this file shrinks as they land.
+ * This file was the to-do list: a routine the port could not yet run got a
+ * stub here so the game could go around it, and the screen it was responsible
+ * for was simply absent. Every one of them has landed, so what remains is not
+ * a gap - it is a safety net for an entity handler at an address that is in no
+ * table, which should never fire.
+ *
+ * The two screens the port deliberately does not have - the boss key and
+ * redefine-keys - are **not** here. They are no-ops in game.c with a comment
+ * saying why, because they are decisions rather than work outstanding, and
+ * putting them here would make port_coverage.py report them as missing.
  *
  * A stub is never silently correct - `POPCORN_TRACE_STUBS=1` in the
  * environment prints each one the first time it is reached, so "that screen is
@@ -42,20 +48,6 @@ static void note(const char *name, uint32_t off)
 /* The same, for a handler that takes its node. */
 #define STUB2(name, off) \
     void name(uint32_t bx) { note(#name, off); (void)bx; }
-
-/* --- the menu's live decoration ------------------------------------- */
-
-/* --- the screens behind the function keys ---------------------------- */
-
-/* --- getting into a game -------------------------------------------- */
-
-/* --- called from the play loop, which is transcribed ------------------ */
-
-
-
-/* --- called from play_session, which is transcribed ------------------- */
-
-
 
 /* An entity whose handler has not been transcribed. Doing nothing leaves it in
  * the list for ever, so it is unlinked - the animation is lost but the list
