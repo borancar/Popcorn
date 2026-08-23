@@ -174,6 +174,20 @@ the two sides parted company on its ninth frame.
 couple of minutes rather than replayed. Almost nothing since the harness was
 built has been found without it - with one caveat recorded below.
 
+**And the levels a bot never reached are compared now too.** `sweep_levels.sh`
+pokes the level *before* the one wanted and clears it, so `play_session` loads
+the wanted one normally, and the comparison starts from that level's own
+beginning. Twenty-two levels across the back half of the game - 11, 12, 13,
+14, 15, 17, 19, 20, 22, 24, 26, 28, 31, 33, 36, 38, 41, 43, 46, 47, 48 and 49
+- each run four thousand frames identical.
+
+That is worth recording as a result rather than as an absence. Before it,
+every frame-for-frame number this file has ever quoted covered levels 0 to 10,
+because that is as far as a bot that could only return the ball ever got. The
+deep levels use cells and combinations the early ones do not - 49 is 168 cells
+of value 11 and nothing else - and the whole lesson of 2026-08-23 is that
+untested code is where the bugs are.
+
 The instruction counts say those frames are real rather than empty: the sound
 tick, the ball's step gate and the entity walk each run once a frame and the
 ball steps on two in three of them, exactly what the `[0x1486] = 3` gate
