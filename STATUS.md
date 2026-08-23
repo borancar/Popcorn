@@ -196,8 +196,9 @@ fifty of the built-in levels** have now been compared frame for frame - 0 to
 10 by playing to them, 11 to 49 by sweeping - and every one is identical.
 
 The shipped sets are swept the same way, from a snapshot of a `--cmdline
-poptab` run so the table in the snapshot is POPTAB's: levels 9, 16, 23, 30,
-37, 44 and 49 of that set, 2,500 frames each, all identical.
+poptab` run so the table in the snapshot is POPTAB's. **All fifty of POPTAB's
+levels** are compared as well, and identical - so between the built-in table
+and the shipped one, a hundred levels have been checked frame for frame.
 
 That is worth recording as a result rather than as an absence. Before it,
 every frame-for-frame number this file has ever quoted covered levels 0 to 10,
