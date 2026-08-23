@@ -413,6 +413,7 @@ void io_mouse_warp(uint32_t x, uint32_t y);
 uint32_t io_ticks(void);
 void io_set_ticks(uint32_t t);
 void io_pin_mouse(uint32_t x, uint32_t buttons);
+void io_pin_key(uint32_t k);
 uint32_t io_mouse_x(void);
 uint32_t io_mouse_buttons(void);
 
@@ -631,6 +632,7 @@ void io_mouse_warp(uint32_t x, uint32_t y);
 uint32_t io_ticks(void);
 void io_set_ticks(uint32_t t);
 void io_pin_mouse(uint32_t x, uint32_t buttons);
+void io_pin_key(uint32_t k);
 uint32_t io_mouse_x(void);
 uint32_t io_mouse_buttons(void);
 

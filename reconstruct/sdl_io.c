@@ -301,8 +301,27 @@ uint32_t io_ticks(void)
     return (uint32_t)(SDL_GetTicks() * 182 / 10000);   /* 18.2 Hz */
 }
 
+/* The key the emulator had waiting, pinned for a verification run.
+ *
+ * A routine that reads the BIOS buffer - input_demo hands whatever it finds
+ * to the cheat matcher - takes a different branch when this process's queue
+ * is empty and the emulator's was not. Same argument as the pointer and the
+ * tick count: the harness has to hand over what the original saw, or it
+ * reports a difference in the input as a difference in the transcription.
+ */
+static int32_t key_pinned;
+static uint32_t pinned_key;
+
+void io_pin_key(uint32_t k)
+{
+    key_pinned = 1;
+    pinned_key = k;
+}
+
 int32_t io_key_ready(void)
 {
+    if (key_pinned)
+        return pinned_key != 0;
     if (io_lockstep())
         return 0;
     return key_head != key_tail;
@@ -310,6 +329,11 @@ int32_t io_key_ready(void)
 
 uint32_t io_get_key(void)
 {
+    if (key_pinned) {
+        uint32_t k = pinned_key;
+        pinned_key = 0;                 /* the buffer had one, not a stream */
+        return k;
+    }
     if (key_head == key_tail)
         return 0;
     uint32_t k = key_q[key_head];

@@ -288,13 +288,18 @@ def main():
             sp = uc.reg_read(UC_X86_REG_SP)
             ss = uc.reg_read(UC_X86_REG_SS)
             ret = struct.unpack("<H", uc.mem_read(ss * 16 + sp, 2))[0]
+            # The key the BIOS buffer holds **now**, not when the routine
+            # returns - by then it has been read and the buffer is empty,
+            # which is the whole difference input_demo was reporting.
+            kb = getattr(m, "key_buf", None)
+            pk = (((kb[0][0] & 0xFF) << 8) | (kb[0][1] & 0xFF)) if kb else 0
             inside[0] = (off, uc.reg_read(UC_X86_REG_CS) * 16 + ret,
-                         (regs_now(), snapshot(), bios_ticks()),
+                         (regs_now(), snapshot(), bios_ticks(), pk),
                          m.guest_dispatch[9])
 
     def compare(off, before, want_img, want_vram, want_ax, want_cf=0,
                 want_dx=0):
-        regs, (img, vram), ticks = before
+        regs, (img, vram), ticks = before[0], before[1], before[2]
         with tempfile.TemporaryDirectory() as d:
             si = os.path.join(d, "in.pvs")
             so = os.path.join(d, "out.bin")
@@ -308,8 +313,14 @@ def main():
                 # so without this every routine that calls it puts the paddle
                 # somewhere the original never did.
                 mx, _my = getattr(m, "mouse_pos", (320, 100))
-                f.write(struct.pack("<HH", mx & 0xFFFF,
-                                    getattr(m, "mouse_btn", 0) & 0xFFFF))
+                # ... and the key the BIOS buffer had waiting. A routine that
+                # reads it - input_demo hands whatever it finds to the cheat
+                # matcher - takes a different branch when the C's queue is
+                # empty and the emulator's was not, and reports it as a
+                # difference in the transcription.
+                f.write(struct.pack("<HHH", mx & 0xFFFF,
+                                    getattr(m, "mouse_btn", 0) & 0xFFFF,
+                                    before[3]))
             r = subprocess.run([PORT, "--verify", si, so],
                                capture_output=True, text=True)
             if r.returncode == 2:

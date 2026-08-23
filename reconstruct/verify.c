@@ -21,7 +21,7 @@
  *
  *     "PVS2"  u32 routine  u16 regs[10]  u32 ticks
  *             u32 image_len  image  u32 vram_len  vram
- *             [u16 mouse_x  u16 buttons]
+ *             [u16 mouse_x  u16 buttons  u16 pending_key]
  *
  * with regs in the order ax bx cx dx si di bp es ds flags.
  *
@@ -465,10 +465,12 @@ int32_t verify_main(const char *in_path, const char *out_path)
     /* Optional trailing pair: the pointer the emulator had. Older state files
      * stop after the vram and simply do not pin it. */
     {
-        uint8_t mb[4];
-        if (fread(mb, 1, sizeof mb, f) == sizeof mb)
+        uint8_t mb[6];
+        if (fread(mb, 1, sizeof mb, f) == sizeof mb) {
             io_pin_mouse((uint32_t)(mb[0] | mb[1] << 8),
                          (uint32_t)(mb[2] | mb[3] << 8));
+            io_pin_key((uint32_t)(mb[4] | mb[5] << 8));
+        }
     }
     fclose(f);
 
