@@ -617,6 +617,26 @@ brick 2s are gone or unreachable neither can appear at all. That is why the
 bot never sees a `+` on level 10 - the wall leaves only hatches - and why
 `extra_life` at `0x318b` is the hardest routine in the game to make run.
 
+## Two screens the port deliberately does not have
+
+Both are understood and neither is transcribed. They are **no-ops with a
+comment**, not gaps waiting to be filled, and they are out of `verify.c`'s
+dispatch because comparing a no-op against the original reports a decision as
+a difference.
+
+- **F10, `employee_enter` at `1ac2:4ae0`.** The boss key: it stashes the
+  screen, switches to text mode and paints a fake DOS prompt so the game can
+  be hidden from whoever walks past. The port's F10 does nothing, and its
+  caller skips `screen_restore` too - with nothing stashed there is nothing to
+  put back.
+- **F5, `screen_define_keys` at `1ac2:1581`**, with `read_new_key` (`0x1614`)
+  and the prompt writer at `0x1642`. Redefining left, right and the key that
+  launches the ball off the paddle, on a 40x25 text screen. The port keeps the
+  defaults at `0x2d4f`-`0x2d51`: K, L and Space.
+
+`0x1642` was called `copy_string_text` here, which described the instructions
+it runs rather than the job it does. It writes one of those three prompts.
+
 ## Conventions
 
 - Addresses are **image offsets** unless written `seg:off`. Every reconstructed
