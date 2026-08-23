@@ -334,6 +334,11 @@ the useful skill is getting a routine to run at all. Three things do it:
   table - the comparison is as honest as any other, the rare path is just
   guaranteed. Four calls, identical.
 
+- **`sweep_levels.sh`** compares any level without playing to it: it pokes
+  the level *before* the one wanted and clears it, so `play_session` loads the
+  wanted one normally. Most of the game had never been compared at all,
+  because the bot could not get there.
+
 And **`verify_all.py --chase`**: a routine whose caller is being sampled is
 never sampled itself, so a plain pass reports as unchecked a great many
 routines it ran straight past.
