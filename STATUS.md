@@ -295,6 +295,18 @@ Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@020
   image diff says exactly that: the level number and the lives advanced on one
   side only. It stays dispatched: "1 of 11" with a known cause is a better line
   than a clean sweep bought by dropping the case.
+
+  One attempt at fixing it is worth recording, because it was half right.
+  `0x2da0` pops four words and jumps to `0x4210`, so the address that body
+  will eventually return to is readable when `0x2da0` is entered - the pops
+  leave `SP` eight above where the CALL left it. Stopping the original there
+  **does** stop the level advancing: `[0x13cc]` came out of the diff. But the
+  lives came out one *lower* than the C's, which is `play_session`'s
+  `dec [0x13c9]` at `1ac2:0363` having already run, and the score higher. So
+  the original lands somewhere past that, and `0x4210` does not end in the
+  plain `ret` the four pops imply - it is a long routine full of jumps. The
+  landing point has to be found rather than assumed, and until it is this is
+  not a fix. Reverted.
 - `cell_hole_draw` (`0x4cc1`) is reported unreached, and it is not. From the
   cleared level the between-level screen that draws a hole is minutes of
   emulated time away, further than the sweep gives any one route; a
