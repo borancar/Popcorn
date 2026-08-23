@@ -174,6 +174,16 @@ the two sides parted company on its ninth frame.
 couple of minutes rather than replayed. Almost nothing since the harness was
 built has been found without it - with one caveat recorded below.
 
+**And the sound player is in the comparison now.** `cs:[0xf4]`-`[0xf7]` - the
+request, the note timer and the tune pointer - used to be masked, because one
+side raised a request on a frame the other did not. Run without `--no-sound`,
+the two sides agree on those four bytes for **250,000 frames**. That leaves
+the comparison unmasked except for the stack below SP and the three key-state
+bytes the INT 09h handler maintains, and both of those are excluded for
+reasons about the harness rather than the port. `--no-sound` stays, because
+narrowing a comparison is still how a divergence gets isolated; nothing needs
+it.
+
 **And the levels a bot never reached are compared now too.** `sweep_levels.sh`
 pokes the level *before* the one wanted and clears it, so `play_session` loads
 the wanted one normally, and the comparison starts from that level's own
