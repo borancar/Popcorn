@@ -226,17 +226,21 @@ report says one call in sixty rather than pretending to a clean sweep.
 The screen is checked by `sidebyside.py` instead, which does not care where a
 routine returns to.
 
-**A snapshot resume is not equivalent to the run it came from.** The level 5
-divergence that was open for much of 2026-08-23 did not reproduce from a
-snapshot taken *one frame before it*, while two full runs from the menu
-stopped at the same frame with the same bytes. It turned out the resumed run
-took the bonus's **other ending** and agreed by luck - so the reproduction was
-not evidence, and reading it as one nearly closed a bug that was still there.
-Low memory is captured now (the vector table and BIOS data area, neither of
-which is inside the load image) and it was not the cause. What is left to
-suspect: the emulator's own attributes - retrace phase, key and scan queues,
-CGA registers - and the port's C stack, which a resume rebuilds from
-`play_session`'s `goto retry` rather than restoring.
+**A snapshot resume is equivalent to the run it came from - now.** It was not,
+for most of 2026-08-23: the level 5 divergence did not reproduce from a
+snapshot taken *one frame before it*, while two full runs from the menu stopped
+at the same frame with the same bytes. The cause turned out to be the bug
+itself. The bonus has two endings that return to different places, the port was
+guessing which, and the resumed run happened to take the other one and agree.
+So the clean reproduction was never evidence, and reading it as one nearly
+closed a bug that was still there.
+
+With that fixed, a resume tracks: from the level 3 snapshot of a full run, the
+resumed run reaches level 4 at relative frame 39,131 where the original reached
+it at 39,133 - two frames, which is the resume's own counting rather than its
+behaviour. Low memory is captured too now (the vector table and the BIOS data
+area, neither of which is inside the load image), which was a real gap even
+though it was not this one.
 
 ### Coverage, as last measured
 
