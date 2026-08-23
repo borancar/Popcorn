@@ -469,7 +469,13 @@ original shoot.
    it, and they are different questions:
 
    - A full run from the menu diverges at frame 120,291 on level 5, with the
-     **port** a level ahead this time rather than behind. Not diagnosed.
+     **port** a level ahead this time rather than behind - and it does **not
+     reproduce**: resuming from that level's own snapshot, 6,753 frames
+     earlier, runs 9,000 frames clean. So the snapshots do not capture
+     everything a long run depends on, and that is a limit on the harness
+     rather than a fact about the port. Worth knowing before trusting a
+     reproduction that comes back clean: it is evidence about the resumed run,
+     not about the original one.
    -  still disagrees when it compares the whole screen as a
      **single call**. That call reads thousands of inputs, and the harness can
      pin one pointer and one keypress, not a stream of them; the lockstep,
