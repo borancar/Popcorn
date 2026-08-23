@@ -50,6 +50,7 @@ FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
 # fifty, and a difference gets a row number instead of a shrug.
 SCROLL_UP = 0x4878
 BALL_ENDGAME = 0x45A1                   # --sync-endgame, once a ball step
+RESULTS_WAIT = 0x1037                   # --sync-results, once a wait pass
 #  - and NOT 0x1a62, its top: the serve wait jumps there too, at 0x1a58,
 #    whenever the action button is held, so the top is hit more than once
 #    a frame and the two sides end up compared at different points.
@@ -129,6 +130,12 @@ def main():
     ap.add_argument("--frames", type=int, default=200,
                     help="0 runs until a comparison fails or you "
                          "stop it")
+    ap.add_argument("--sync-results", action="store_true",
+                    help="also compare the results screen after a game over - "
+                         "the two-player bar and the wait that follows it. "
+                         "io_frame_sync lives in the play loop, so by the time "
+                         "that screen is drawn there is nothing comparing the "
+                         "two sides at all; this is 1ac2:1037, its wait")
     ap.add_argument("--sync-endgame", action="store_true",
                     help="also compare at every ball_after_endgame, which is "
                          "once per step of the end-level bonus's own ball "
@@ -377,7 +384,8 @@ def main():
             uc.emu_stop()
         elif captured and (off == FRAME_END
                            or (args.sync_scroll and off == SCROLL_UP)
-                           or (args.sync_endgame and off == BALL_ENDGAME)):
+                           or (args.sync_endgame and off == BALL_ENDGAME)
+                           or (args.sync_results and off == RESULTS_WAIT)):
             # emu_stop() leaves IP *at* this instruction, so the next
             # emu_start runs it again and the hook fires a second time with
             # no work done in between. Counting those as frames compares the
@@ -488,7 +496,9 @@ def main():
                             + (["--lockstep-sync-scroll"]
                                if args.sync_scroll else [])
                             + (["--lockstep-sync-endgame"]
-                               if args.sync_endgame else []),
+                               if args.sync_endgame else [])
+                            + (["--lockstep-sync-results"]
+                               if args.sync_results else []),
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             bufsize=0)
 

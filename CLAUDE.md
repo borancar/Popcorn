@@ -287,6 +287,7 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `make_snapshots.sh` | builds the standard set of states the sweep runs from. Every one is reached by a rule - the routine only that state runs - not by a frame number someone watched go by |
 | `verify_routes.sh` | the sweep itself: every route, unioned, `--chase`, and the summary written where STATUS.md can carry a measured number rather than a remembered one |
 | `compare_screen.py` | diffs the port's `0xb8000` against the emulator's, byte for byte |
+| `sidebyside.py --sync-*` | `io_frame_sync` lives in the **play loop**, so everything outside it - the level intros, the results screen, the hall of fame - is compared by nothing at all. `--sync-scroll`, `--sync-endgame` and `--sync-results` add a sync point to one of those screens. Two real bugs lived on the results screen for months because no run could see it |
 | `autoplay.py` | walks the menu and then plays: keeps the paddle under the ball, collects the capsules worth having, and catches a parachuted ball. Drives the **mouse**, because the game's mouse input is absolute and lands on the next frame. `--port` drives the **C port** instead, through the same lockstep protocol `sidebyside.py` uses, so the deliverable can be watched playing itself |
 | **The port** ||
 | `reconstruct/Makefile` | builds `reconstruct/popcorn` against SDL3 |

@@ -6984,14 +6984,58 @@ void screen_results(const char *dir)
         memcpy(g_image + at + 12, g_image + si + REC_SCORE, 6);
     }
 
-    /* The bar the names go on, then the table itself. */
-    for (int32_t i = 0; i < 0x18; i++)
+    /* 1ac2:0f02 - the CLASSEMENT panel. The port had a sketch of this: the
+     * top bar, then both players written one scan line apart with no heading,
+     * no rule and no panel behind them, which put two names on one line over
+     * a black field. What follows is the original's own sequence.
+     *
+     * The panel is drawn with `draw_run(' ', n)`: glyph 0 is not blank, it is
+     * a solid block of colour 2, so a run of spaces *is* the red ground the
+     * text sits on. HSC_LINE is the step from one text line to the next. */
+    for (int32_t i = 0; i < 0x18; i++)              /* 1ac2:0f08 */
         img_vram_setw(0xf2 + i * 2, 0xaaaa);
+
     uint32_t d = 0x20f2;
-    for (uint32_t k = 0; k < g_image[PLAYER_COUNT]; k++) {
-        draw_text(HSC_SCRATCH + k * HSC_ENTRY, 12, d);
-        draw_text(HSC_SCRATCH + k * HSC_ENTRY + 12, 6, d + 12 * 2 + 4);
-        d = cga_next_row((d - 0x30) & 0xffff);
+    d = draw_run(' ', 0x18, d);                     /* 1ac2:0f1a */
+
+    d = (d + HSC_LINE) & 0xffff;                    /* the heading */
+    d = draw_run(' ', 7, d);
+    for (const char *p2 = "CLASSEMENT"; *p2; p2++, d = (d + 2) & 0xffff)
+        draw_char((uint8_t)*p2, d);
+    d = draw_run(' ', 7, d);                        /* 1ac2:0f6e */
+
+    d = (d + HSC_LINE) & 0xffff;                    /* 1ac2:0f79, the rule */
+    d = draw_run(' ', 5, d);
+    d = draw_run('-', 0x0e, d);
+    d = draw_run(' ', 5, d);
+
+    d = (d + HSC_LINE) & 0xffff;                    /* 1ac2:0f92, a blank */
+    d = draw_run(' ', 0x18, d);
+
+    d = (d + HSC_LINE) & 0xffff;                    /* 1ac2:0f99 */
+
+    uint32_t rec = HSC_SCRATCH;                     /* 1ac2:0fa4, per player */
+    for (uint32_t k = g_image[PLAYER_COUNT]; k > 0; k--) {
+        d = draw_run(' ', 2, d);
+        d = draw_text(rec, 0x0c, d);
+        d = draw_run(' ', 2, d);
+        d = draw_text(rec + 0x0c, 6, d);
+        d = draw_run(' ', 2, d);
+        rec += HSC_ENTRY;
+        /* 1ac2:0fca - two scan lines of bar between the rows. */
+        d = (d + HSC_LINE) & 0xffff;
+        for (int32_t r = 0; r < 2; r++) {
+            for (int32_t i = 0; i < 0x18; i++)
+                img_vram_setw((d + i * 2) & 0xffff, 0xaaaa);
+            d = cga_next_row(d);
+        }
+    }
+
+    /* 1ac2:1006 - the rest of the panel, down to the bottom bar at 0x1f42. */
+    while ((d & 0xffff) != 0x1f42) {
+        for (int32_t i = 0; i < 0x18; i++)
+            img_vram_setw((d + i * 2) & 0xffff, 0xaaaa);
+        d = cga_next_row(d);
     }
 
     /* 1ac2:102a - the keyboard handler comes out before the wait, so the
@@ -7002,6 +7046,13 @@ void screen_results(const char *dir)
     /* 1ac2:1035 - the results stand until a key or until the two nested
      * counts of 0xc8 run out. */
     for (int32_t dl = 0xc8; dl > 0; dl--) {
+        /* 1ac2:1037, the outer pass. Nothing else in this screen is a frame:
+         * the whole of it - the cleared field, the intro over it, the bar and
+         * the names - is drawn before the wait begins, so one comparison here
+         * covers all of it and the rest cover anything that moves. Without
+         * it the results screen cannot be compared at all: io_frame_sync
+         * lives in the play loop, and by here the play loop is over. */
+        io_frame_sync_extra(SYNC_RESULTS);
         for (int32_t n = 0xc8; n > 0; n--) {
             if (io_key_ready()) {
                 io_get_key();

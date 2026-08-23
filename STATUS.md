@@ -385,6 +385,30 @@ starts. Input is otherwise scripted by code offset (`@13d2:return` fires the
 first time execution reaches `0x13d2`), which is reproducible where a timed
 script tuned on one run missed on the next.
 
+### The screens outside the play loop were compared by nothing
+
+`io_frame_sync` is called from one place: the play loop's frame close at
+`1ac2:1c3f`. Everything the game draws outside that loop - the level intros,
+the game-over sequence, the two-player results screen, the hall of fame - has
+never been in a frame-by-frame comparison, and `verify.py` cannot reach most
+of it either because those routines return on a key or do not return at all.
+
+That is where the bugs were. Three found in one sitting, all reported by
+someone playing rather than by any check here:
+
+- `1ac2:1053`, the hall of fame's own copy into the scratch `hsc_sort` reads,
+  **not transcribed at all** - it is a jump target, so the byte map counted it
+  as part of `screen_results` and the figure stayed at 100%.
+- `name_field`'s centring shift ran the wrong way and blanked every name.
+- the two-player CLASSEMENT screen was a sketch: the top bar, then both
+  players one scan line apart, with no heading, no rule and no panel behind
+  them. The original draws the panel with `draw_run(' ', n)` - glyph 0 is a
+  solid block of colour 2, so a run of spaces *is* the red ground.
+
+`--sync-results` closes the results screen: `1ac2:1037`, its wait, once a
+pass. Two hundred comparisons, identical. The level intros and the hall of
+fame are still uncompared, and the same trick would close them.
+
 ### The nineteen that are not dispatched, and why
 
 `port_coverage.py --verified` counts against `verify.c`'s dispatch table,

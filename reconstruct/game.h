@@ -216,6 +216,7 @@ void io_set_grab(int32_t on);
 #ifndef SYNC_SCROLL
 #define SYNC_SCROLL   1                 /* screen_scroll_up, once a row */
 #define SYNC_ENDGAME  2                 /* ball_after_endgame, once a step */
+#define SYNC_RESULTS  4                 /* screen_results' wait, once a pass */
 #endif
 void io_frame_sync_extra(int32_t which);
 void io_lockstep_extra_sync(int32_t mask);
@@ -449,6 +450,7 @@ void io_set_grab(int32_t on);
 #ifndef SYNC_SCROLL
 #define SYNC_SCROLL   1                 /* screen_scroll_up, once a row */
 #define SYNC_ENDGAME  2                 /* ball_after_endgame, once a step */
+#define SYNC_RESULTS  4                 /* screen_results' wait, once a pass */
 #endif
 void io_frame_sync_extra(int32_t which);
 void io_lockstep_extra_sync(int32_t mask);
