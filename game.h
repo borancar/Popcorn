@@ -407,7 +407,7 @@ int32_t  bonus_steer(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3bf7 */
 int32_t  bonus_script(uint32_t bx, uint32_t *px, uint32_t *py); /* 1ac2:3c35 */
 void demo_input_step(void);       /* 1ac2:1a6f */
 void drop_duplicate_hits(void);   /* 1ac2:27b7 */
-void hsc_bubble(uint32_t si, uint32_t di); /* 1ac2:4d5d */
+uint32_t hsc_bubble(uint32_t si, uint32_t di); /* 1ac2:4d5d */
 void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(uint32_t x, uint32_t y);
 uint32_t io_ticks(void);
