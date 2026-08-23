@@ -81,10 +81,17 @@ Two things about the ball structure cost a debugging round each:
 
 ### Every reachable routine is transcribed
 
-**185 of 185, all 25,230 bytes.** `port_coverage.py` measures it by the image
+**181 of 181, all 24,916 bytes.** `port_coverage.py` measures it by the image
 offset each routine carries, not by counting functions: a routine counts only
 when its `1ac2:xxxx` header appears somewhere that is not `stubs.c`, so a stub
 renamed to look finished does not move the number.
+
+Four routines are out of both sides of that figure, not counted as done and
+not counted as remaining: the boss key and the redefine-keys screen, 314 bytes
+between them. They are no-ops with a comment saying why. `port_coverage.py`
+finds them by looking for a body with no statements in it rather than by
+carrying a list, so emptying a routine and forgetting to say so is not
+possible.
 
 `reconstruct/stubs.c` is down to `entity_unknown`, which is a safety net for a
 handler address that is not in any table. It should never fire.
@@ -295,6 +302,26 @@ pressed during the demo, Esc for the pause, the odds table poked so the rarest
 capsule falls, two players entered with one still in. Proven went from 82 to
 155 in a day without anyone reading a transcription looking for mistakes.
 
+**Ten routines had never been dispatched at all**, and asking about them found
+a real bug. `cell_special` draws what a cell of `0x0c` shows - the hole brick
+11 leaves. The column arrives in `cl`; the C read it back out of `di`, the
+destination, using the formula for the *cell index*: `(di - 0x2f18) % 12` on a
+vram offset. `di` steps four bytes a column, so the column it computed cycled
+with period three and it copied the wrong four bytes. Putting the old line
+back: 14 of 34 calls differ. With the column passed in: 20 of 20 identical.
+
+Four million frames of lockstep had never caught it, and could not have. No
+level in the built-in table contains a `0x0c` cell - the value only appears at
+runtime, after a brick 11 breaks - and the routine that draws it at a level
+intro reads the level *table*. It is `POPGEN`'s levels that can hold one, so
+the path was unreachable in everything the port had ever played.
+
+Reaching the other nine took states nothing had built. Brick 11 exists in
+quantity only on level 49, which is 168 of them and nothing else.
+`field_marks_wide` could not be sampled while `panel_finish` was being
+sampled, because the harness will not re-enter a routine whose caller it is
+already inside; asking for the callee on its own found it in one run.
+
 ### Verification coverage is bounded by what a run reaches
 
 A ten-minute play route verifies **82 routines byte-identical with nothing
@@ -332,11 +359,27 @@ starts. Input is otherwise scripted by code offset (`@13d2:return` fires the
 first time execution reaches `0x13d2`), which is reproducible where a timed
 script tuned on one run missed on the next.
 
-A few routines cannot be checked this way at all and are excluded on purpose:
-the ones that never return normally (`play_session` leaves by longjmp), the
-ones that are DOS or hardware I/O (`hsc_save`, `drive_check`,
-`read_speed_setting`), and `screen_define_keys`, which switches to text mode
-01h - the port has no text renderer.
+### The nineteen that are not dispatched, and why
+
+`port_coverage.py --verified` counts against `verify.c`'s dispatch table,
+which is the honest question: *which transcribed routine has never once been
+run against the original?* It used to count against `verify.py`'s `RETURNS`
+dict, which only lists routines that return something, so it answered a
+question nobody had asked and put the figure at 9 of 185.
+
+162 of 181 can be asked for. The nineteen that cannot fall into five groups,
+and none of them is "not got round to yet":
+
+| | why |
+| --- | --- |
+| `game_main` `0x0113`, `play_loop` `0x1873`, `bonus_end_level` `0x2da0` | **never return normally.** `play_session` leaves by longjmp and `bonus_end_level` throws four words off the stack. The harness reads `[SP]` as a return address and lets the original run to it; for these that address is somebody else's frame |
+| `level_load_file` `0x08c8`, `load_high_scores` `0x4d96`, `hsc_save` `0x4dbb`, `drive_check` `0x4dea`, `drive_writable` `0x4e04`, `next_player` `0x0d2e` | **DOS file I/O.** The original talks to INT 21h and the port opens the file itself |
+| `install_int09` `0x03b0`, the INT 09h handler `0x03e3`, `input_mouse` `0x1654`, `input_keyboard` `0x16d2`, `read_speed_setting` `0x5680` | **the platform layer owns these.** The port's keyboard is SDL's, and `read_speed_setting` reads interrupt vector 0x68 |
+| `screen_player_names` `0x10de`, `name_field` `0x13b8`, `screen_high_scores` `0x4e1a` | **return on a key.** The C reads the port's keyboard and the original the emulator's, so the two return at different moments and the difference would be the harness |
+| `speaker_on` / `speaker_off` `0x0085`, `screen_all_levels_done` `0x5940` | port writes and a screen that changes `DS`. The speaker pair writes no memory at all, so a check would compare nothing and pass whatever they did |
+
+A check that cannot fail is worth nothing, which is why the speaker pair is
+left out rather than dispatched for the count.
 
 Two kinds of byte are excluded from the comparison, both because they are not a
 function of the routine being checked: the **stack** below SP, and the three
