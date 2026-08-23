@@ -233,7 +233,7 @@ void int09_handler(uint32_t scan);                      /* 1ac2:03e3 */
 int32_t  drive_check(void);                                 /* 1ac2:4dea */
 int32_t  drive_writable(void);                              /* 1ac2:4e04 */
 #define LAST_DIR 0x2d4a
-void game_main(const char *dir, uint32_t speed);
+void game_main(const char *dir, uint32_t speed, const char *levels);
 
 /* --------------------------------------------------------- not yet done ---
  * Implemented as no-ops in stubs.c; see the note at the top of that file.
@@ -466,7 +466,7 @@ void int09_handler(uint32_t scan);                      /* 1ac2:03e3 */
 int32_t  drive_check(void);                                 /* 1ac2:4dea */
 int32_t  drive_writable(void);                              /* 1ac2:4e04 */
 #define LAST_DIR 0x2d4a
-void game_main(const char *dir, uint32_t speed);
+void game_main(const char *dir, uint32_t speed, const char *levels);
 
 /* --------------------------------------------------------- not yet done ---
  * Implemented as no-ops in stubs.c; see the note at the top of that file.
