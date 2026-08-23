@@ -327,6 +327,13 @@ the useful skill is getting a routine to run at all. Three things do it:
   is Esc, and nothing else calls them. `--keys @1a62:escape,@1a62:space`
   checks both in forty seconds.
 
+- **Poke the odds, not just the state.** `extra_life` is 7/255 of a
+  brick-2 capsule, which is why no run had ever reached it. Zeroing the
+  cumulative weights at `0x33b1` up to V's entry makes `bonus_kind` return it
+  every time, and since the poke is in the snapshot *both* sides see the same
+  table - the comparison is as honest as any other, the rare path is just
+  guaranteed. Four calls, identical.
+
 And **`verify_all.py --chase`**: a routine whose caller is being sampled is
 never sampled itself, so a plain pass reports as unchecked a great many
 routines it ran straight past.
