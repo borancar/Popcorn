@@ -254,6 +254,13 @@ def main():
             # exactly what happened to the one at frame 33,166.
             blob = json.dumps(bot.getstate()).encode()
             f.write(struct.pack("<I", len(blob)) + blob)
+            # And **low memory**: the interrupt vector table and the BIOS data
+            # area, neither of which is inside the load image. The game
+            # installs its own INT 09h for play and takes it out again for the
+            # menus, so a resume that boots fresh and overwrites only the image
+            # has the BIOS handler where the running game had the game's.
+            low = bytes(m.uc.mem_read(0, 0x500))
+            f.write(b"LOWM" + struct.pack("<I", len(low)) + low)
 
     def read_snapshot(path):
         d = open(path, "rb").read()
@@ -267,12 +274,17 @@ def main():
         img = d[o:o + ilen]; o += ilen
         vlen, = struct.unpack_from("<I", d, o); o += 4
         vram = d[o:o + vlen]; o += vlen
-        extra = None
+        extra = low = None
         if o + 4 <= len(d):
             elen, = struct.unpack_from("<I", d, o); o += 4
             if elen and o + elen <= len(d):
                 extra = json.loads(d[o:o + elen])
-        return level, frame, regs, ticks, img, vram, extra
+                o += elen
+        if d[o:o + 4] == b"LOWM":
+            o += 4
+            llen, = struct.unpack_from("<I", d, o); o += 4
+            low = d[o:o + llen]
+        return level, frame, regs, ticks, img, vram, extra, low
 
     pending = {}
     for off, key, _ in parse_route(ROUTE_PLAY):
@@ -404,8 +416,10 @@ def main():
         m.service_keyboard()
 
     if args.resume:
-        lv, fr, regs, ticks, img, vram, extra = read_snapshot(args.resume)
+        lv, fr, regs, ticks, img, vram, extra, low = read_snapshot(args.resume)
         bot.setstate(extra)
+        if low:
+            m.uc.mem_write(0, low)
         m.uc.mem_write(base, img)
         m.uc.mem_write(0xB8000, vram)
         for reg, val in zip(REGS_ALL, regs):

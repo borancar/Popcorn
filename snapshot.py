@@ -87,11 +87,20 @@ def write(m, path, level=None, frame=0, extra=None):
         if extra is not None:
             blob = json.dumps(extra).encode()
             f.write(struct.pack("<I", len(blob)) + blob)
+        else:
+            f.write(struct.pack("<I", 0))
+        # Low memory: the interrupt vector table and the BIOS data area,
+        # neither of which is inside the load image. The game installs its own
+        # INT 09h for play and takes it out again for the menus, so a resume
+        # that boots fresh and overwrites only the image has the BIOS handler
+        # where the running game had the game's.
+        low = bytes(m.uc.mem_read(0, 0x500))
+        f.write(b"LOWM" + struct.pack("<I", len(low)) + low)
     return path
 
 
 def read(path):
-    """-> (level, frame, regs, ticks, image, vram, extra)"""
+    """-> (level, frame, regs, ticks, image, vram, extra, low)"""
     d = open(path, "rb").read()
     if d[:4] != SNAP_MAGIC:
         raise SystemExit(f"{path}: not a snapshot")
@@ -103,22 +112,29 @@ def read(path):
     img = d[o:o + ilen]; o += ilen
     vlen, = struct.unpack_from("<I", d, o); o += 4
     vram = d[o:o + vlen]; o += vlen
-    extra = None
+    extra = low = None
     if o + 4 <= len(d):
         elen, = struct.unpack_from("<I", d, o); o += 4
         if elen and o + elen <= len(d):
             extra = json.loads(d[o:o + elen])
-    return level, frame, regs, ticks, img, vram, extra
+            o += elen
+    if d[o:o + 4] == b"LOWM":
+        o += 4
+        llen, = struct.unpack_from("<I", d, o); o += 4
+        low = d[o:o + llen]
+    return level, frame, regs, ticks, img, vram, extra, low
 
 
 def restore(m, path):
     """Put one back, registers and all. -> (level, frame, extra)"""
-    level, frame, regs, ticks, img, vram, extra = read(path)
+    level, frame, regs, ticks, img, vram, extra, low = read(path)
     m.uc.mem_write(m.load_seg * 16, img)
     m.uc.mem_write(0xB8000, vram)
     for r, v in zip(_regs(m.uc), regs):
         m.uc.reg_write(r, v)
     m.uc.mem_write(0x46C, struct.pack("<I", ticks))
+    if low:
+        m.uc.mem_write(0, low)
     return level, frame, extra
 
 

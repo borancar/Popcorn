@@ -478,9 +478,17 @@ original shoot.
    - A full run from the menu diverges at frame 120,291 on level 5, with the
      **port** a level ahead this time rather than behind - and it does **not
      reproduce**: resuming from that level's own snapshot, 6,753 frames
-     earlier, runs 9,000 frames clean. So the snapshots do not capture
-     everything a long run depends on, and that is a limit on the harness
-     rather than a fact about the port. Worth knowing before trusting a
+     earlier, runs 9,000 frames clean - and so does a resume from **one frame
+     before it**. The full run itself is deterministic: a second one from the
+     menu stops at the same frame with the same bytes. So the snapshots do not
+     capture everything, and it is not accumulation over a long run - it is
+     something the resume gets wrong immediately. Low memory has been ruled
+     out (the vector table and BIOS data area are captured now, and it changes
+     nothing), which leaves the emulator's own attributes - the retrace phase,
+     the key and scan queues, the CGA registers - and the port's C stack,
+     which a resume rebuilds from `play_session`'s `goto retry` rather than
+     restoring. That is a limit on the harness rather than a fact about the
+     port. Worth knowing before trusting a
      reproduction that comes back clean: it is evidence about the resumed run,
      not about the original one.
    -  still disagrees when it compares the whole screen as a
