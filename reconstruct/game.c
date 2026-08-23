@@ -5212,8 +5212,11 @@ void palette_cycle(void)
 /* 1ac2:4d5d  hsc_bubble - one pass of the sort, from the bottom up.
  * `scasb` compares a name's six score digits against the entry above it and
  * swaps the whole nine-word record when the lower one is bigger. */
-void hsc_bubble(uint32_t si, uint32_t di)
+uint32_t hsc_bubble(uint32_t si, uint32_t di)
 {
+    /* Returns where the new record belongs. hsc_sort's `rep movsw` at
+     * 1ac2:4d4c runs **before** its `pop di`, so the destination is whatever
+     * DI this leaves - not the 0x3ef6 it started from. */
     si += 0x0c;
     di += 0x0c;
     for (int32_t n = 0x0a; n > 0; n--) {
@@ -5225,10 +5228,15 @@ void hsc_bubble(uint32_t si, uint32_t di)
             }
         }
         if (!higher)
-            return;
+            return di - 0x0c;           /* 1ac2:4d78 */
         memmove(g_image + di - 0x0c, g_image + di - 0x1e, 0x12);
-        di -= 0x18;
+        /* 1ac2:4d8a is `sub di, 0x18`, but on a DI the `rep movsw` has just
+         * advanced by 0x12 - so the step from the top of the loop is 0x12,
+         * not 0x18. Taking the instruction at face value moved the window six
+         * bytes too far each pass and shifted the wrong record. */
+        di -= 0x12;
     }
+    return di - 0x0c;                   /* 1ac2:4d92 */
 }
 
 /* 1ac2:4d37  hsc_sort - the whole table, once per player who just finished */
@@ -5236,8 +5244,7 @@ void hsc_sort(void)
 {
     uint32_t di = 0x3ef6, si = 0x1aef;
     for (uint32_t n = g_image[PLAYER_COUNT]; n > 0; n--) {
-        hsc_bubble(si, di);
-        memcpy(g_image + di, g_image + si, 0x12);
+        memcpy(g_image + hsc_bubble(si, di), g_image + si, 0x12);
         si += 0x12;
     }
 }
