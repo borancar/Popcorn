@@ -360,19 +360,19 @@ rather than remembered, and re-running it is how it should be updated.
 | | routines | |
 | --- | ---: | --- |
 | **transcribed** | | 185 of 185 reachable routines transcribed, 25230 of 25230 bytes (100.0%) |
-| **proven** | 101 | reached, did work, agreed on every route that reached it |
+| **proven** | 111 | reached, did work, agreed on every route that reached it |
 | shallow | 5 | agreed, but every call was an early return - not proof |
 | differing | 3 | bonus_end_level, entity_paddle_fx, screen_game_over |
 | unreached | 40 | no route runs them |
-| **dispatched** | 149 | what verify.c can check |
+| **dispatched** | 159 | what verify.c can check |
 
-Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@0206:f10, menu.snap +@0206:f6, menu.snap +@0206:f2, cleared.snap, cap.snap, level06_f153048.snap.
+Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@0206:f10, menu.snap +@0206:f6, menu.snap +@0206:f2, cap.snap, level06_f153048.snap, level10_f000000.snap, level49_f000000.snap.
 
 Two of those figures matter more than the headline. **Shallow** is a routine
 every call to which was an early return: it agreed, and that agreement is not
 proof. **Unreached** is the honest limit - a routine no route runs is not
 checked at all, and every bug found on 2026-08-23 was in that column the day
-before. Proven went from 82 to 101 in one session purely by reaching further,
+before. Proven went from 82 to 111 in one session purely by reaching further,
 without anyone reading a line of assembly looking for mistakes.
 
 ### Verification coverage is bounded by what a run reaches
