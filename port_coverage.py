@@ -10,7 +10,7 @@ appears in one of the port's source files and it is *not* in stubs.c.
 Usage:
     python port_coverage.py                # the summary and what is left
     python port_coverage.py --by-size      # biggest first, to pick the next
-    python port_coverage.py --verified     # cross-check against verify.py
+    python port_coverage.py --verified     # cross-check against verify.c
 """
 import argparse
 import os
@@ -75,14 +75,22 @@ def main():
 
     tb = sum(sizes[e] for e in done_r)
     total = sum(sizes.values())
-    print(f"{len(done_r)} of {len(sizes)} reachable routines transcribed, "
-          f"{tb} of {total} bytes ({100.0 * tb / total:.1f}%)")
+    skip = noops()
+    nr = {e for e in done_r if e in skip}
+    nb = sum(sizes[e] for e in nr)
+    print(f"{len(done_r) - len(nr)} of {len(sizes) - len(nr)} routines the "
+          f"port is meant to have, {tb - nb} of {total - nb} bytes "
+          f"({100.0 * (tb - nb) / (total - nb):.1f}%)")
+    if nr:
+        print(f"\n{len(nr)} deliberately not transcribed, {nb} bytes:")
+        for e in sorted(nr):
+            print(f"  {e:04x}  {sizes[e]:5d} b  {skip[e]}")
 
     if a.verified:
-        v = open(os.path.join(HERE, "verify.py")).read()
-        checked = {int(m, 16) for m in re.findall(r"0x([0-9A-Fa-f]{4}): \"", v)}
-        unver = sorted(e for e in done_r if e not in checked)
-        print(f"{len(done_r & checked)} of those are byte-checked; "
+        v = open(os.path.join(SRC, "verify.c")).read()
+        checked = {int(m, 16) for m in re.findall(r"case 0x([0-9A-Fa-f]{4}):", v)}
+        unver = sorted(e for e in done_r - set(skip) if e not in checked)
+        print(f"{len((done_r - set(skip)) & checked)} can be byte-checked; "
               f"{len(unver)} are not:")
         for e in unver:
             print(f"  {e:04x}  {sizes[e]:5d} b")
@@ -98,6 +106,35 @@ def main():
 
 
     unwired(os.path.dirname(os.path.abspath(__file__)))
+
+
+def noops():
+    """Routines the port has on purpose left empty.
+
+    A no-op still carries its `1ac2:xxxx` header, so the transcription count
+    would keep claiming it. That is the wrong claim to make: F10's boss key
+    and F5's redefine-keys screen are decisions about what the port is for,
+    and counting them either way - as done, or as work remaining - says
+    something untrue. They come out of both sides of the figure instead.
+
+    Detected rather than listed, so emptying a routine and forgetting to say
+    so here cannot happen.
+    """
+    import re
+    src = open(os.path.join(SRC, "game.c")).read()
+    out = {}
+    head = re.compile(r"^(?:/\*|\s\*)\s*1ac2:([0-9a-f]{4})\s+(\w+)", re.M)
+    for m in head.finditer(src):
+        off, name = int(m.group(1), 16), m.group(2)
+        d = re.search(r"^\w[^\n]*\b" + name + r"\s*\([^\n]*\n\{\n(.*?)^\}",
+                      src[m.end():], re.M | re.S)
+        if not d:
+            continue
+        body = re.sub(r"/\*.*?\*/", "", d.group(1), flags=re.S)
+        body = re.sub(r"\(void\)\s*\w+\s*;", "", body)
+        if not body.strip():
+            out[off] = name
+    return out
 
 
 def unwired(here):
@@ -121,6 +158,8 @@ def unwired(here):
         "drive_check": "no disk here; the port opens the file directly",
         "drive_writable": "likewise",
         "plot_pixel": "INT 10h AH=0Ch without bit 7; the game only XORs",
+        "read_new_key": "the redefine-keys screen, deliberately not ported",
+        "define_keys_prompt": "likewise",
     }
     out = []
     for name in sorted(set(defs)):

@@ -125,8 +125,10 @@ convention every note and every reconstructed routine here uses.
 | `0x2d4f` | **left** key scan code (default `0x24`, K) |
 | `0x2d50` | **right** key scan code (default `0x25`, L) |
 | `0x2d51` | **action** key scan code (default `0x39`, Space) |
-| `0x344f` | player-name table, `0x11b` bytes per player |
+| `0x344f` | player-name table, `0x11b` bytes per player: the name at `+0`, the lives at `+0x0c`, the score as ASCII digits at `+0x10` |
 | `0x3f08` | players entered so far |
+| `0x3f09` | how many are still in - it reaching zero is what ends the game |
+| `0x33b1` | the capsule odds: eleven cumulative weights out of 255, walked by `bonus_kind` |
 | `0x2d40` | paddle repeat counter, counts down to the next allowed step |
 | `0x2d4b` | paddle repeat divider; decremented while a key is held, so the paddle accelerates |
 | `0x2e54` | **paddle x**, the left edge in pixels |

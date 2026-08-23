@@ -159,14 +159,29 @@ def main():
     ap.add_argument("--resume", metavar="FILE",
                     help="start from an existing snapshot instead of from "
                          "boot, so a state can be reached in stages")
+    ap.add_argument("--copy", action="append", default=[],
+                    metavar="DST=SRC:LEN",
+                    help="copy a block of the image over itself before "
+                         "writing. The player table at 0x344f is 0x11b bytes "
+                         "a player, so --copy 0x356a=0x344f:0x11b gives a "
+                         "second player a record that is the shape the game "
+                         "made rather than one invented here")
+    ap.add_argument("--poke-str", action="append", default=[],
+                    metavar="ADDR=TEXT",
+                    help="write text, for the fields that hold ASCII - a "
+                         "player's name at +0, its score as digits at +0x10")
     ap.add_argument("--poke", action="append", default=[],
                     metavar="ADDR=VALUE",
-                    help="write a byte into the image before capturing. This "
-                         "fast-forwards the game rather than playing it: "
-                         "--poke 0x2f10=1 leaves one brick, so the next hit "
-                         "clears the level and everything a level transition "
-                         "runs becomes reachable in seconds. The state is the "
-                         "game's own, only sooner")
+                    help="write a byte into the image as the snapshot is "
+                         "**written**, which is after the run, not before it. "
+                         "So a poke seeds whatever resumes from the file; it "
+                         "does not steer the capture, and combining it with "
+                         "--at means stopping somewhere the poke then takes "
+                         "effect from. It fast-forwards the game rather than "
+                         "faking it: --poke 0x2f10=1 leaves one brick, so the "
+                         "next hit clears the level and everything a level "
+                         "transition runs becomes reachable in seconds. The "
+                         "state is the game's own, only sooner")
     ap.add_argument("--cmdline", default="")
     args = ap.parse_args()
 
@@ -226,6 +241,18 @@ def main():
         addr, val = int(where, 0), int(what, 0)
         m.uc.mem_write(m.load_seg * 16 + addr, bytes([val & 0xFF]))
         print(f"  poked {addr:#07x} = {val:#04x}")
+    for spec in args.copy:
+        dst, _, rest = spec.partition("=")
+        src, _, ln = rest.partition(":")
+        d, o, n = int(dst, 0), int(src, 0), int(ln, 0)
+        buf = bytes(m.uc.mem_read(m.load_seg * 16 + o, n))
+        m.uc.mem_write(m.load_seg * 16 + d, buf)
+        print(f"  copied {n} bytes {o:#07x} -> {d:#07x}")
+    for spec in args.poke_str:
+        where, _, text = spec.partition("=")
+        addr = int(where, 0)
+        m.uc.mem_write(m.load_seg * 16 + addr, text.encode("latin-1"))
+        print(f"  poked {addr:#07x} = {text!r}")
     write(m, args.path)
     lv = m.uc.mem_read(m.load_seg * 16 + LEVEL_NUMBER, 1)[0]
     where = f"at {want:#06x}" if want is not None else \
