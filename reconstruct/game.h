@@ -295,7 +295,7 @@ void field_marks(void);           /* 1ac2:0598 */
 void field_marks_wide(uint32_t di, uint32_t rows);  /* 1ac2:0a1d */
 uint32_t ending_particle_init(uint32_t si, uint32_t ax_in); /* 1ac2:59f7 */
 void ending_blob(uint32_t pos);   /* 1ac2:5c36 */
-void ending_blobs(void);          /* 1ac2:5b80 */
+uint32_t ending_blobs(void);          /* 1ac2:5b80 */
 void ending_column(void);         /* 1ac2:5317 */
 
 /* A word into the framebuffer, wrapping like the 16-bit offset it is. */
@@ -437,7 +437,7 @@ void screen_results(const char *dir);   /* 1ac2:0ea3 */
 void screen_end_of_game(void);
 void screen_level_done(void);     /* 1ac2:0521 */
 void screen_all_levels_done(void);/* 1ac2:5940 */
-void ending_walk(uint32_t bl, uint32_t bh);   /* 1ac2:5bb5 */
+uint32_t ending_walk(uint32_t bl, uint32_t bh, uint32_t dx); /* 1ac2:5bb5 */
 void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
 void sound_tick(void);                                  /* 1ac2:0097 */
@@ -526,7 +526,7 @@ void field_marks(void);           /* 1ac2:0598 */
 void field_marks_wide(uint32_t di, uint32_t rows);  /* 1ac2:0a1d */
 uint32_t ending_particle_init(uint32_t si, uint32_t ax_in); /* 1ac2:59f7 */
 void ending_blob(uint32_t pos);   /* 1ac2:5c36 */
-void ending_blobs(void);          /* 1ac2:5b80 */
+uint32_t ending_blobs(void);          /* 1ac2:5b80 */
 void ending_column(void);         /* 1ac2:5317 */
 
 void panel_finish(void);          /* 1ac2:09c5 */
@@ -655,7 +655,7 @@ void screen_results(const char *dir);   /* 1ac2:0ea3 */
 void screen_end_of_game(void);
 void screen_level_done(void);     /* 1ac2:0521 */
 void screen_all_levels_done(void);/* 1ac2:5940 */
-void ending_walk(uint32_t bl, uint32_t bh);   /* 1ac2:5bb5 */
+uint32_t ending_walk(uint32_t bl, uint32_t bh, uint32_t dx); /* 1ac2:5bb5 */
 
 int32_t verify_main(const char *in_path, const char *out_path);
 

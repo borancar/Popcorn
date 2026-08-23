@@ -53,8 +53,14 @@ Shipped files, in `popcorn/` (never committed):
 - **zero** `push bp; mov bp,sp` sequences in 23,696 bytes of code
 - no C runtime at all — the entry point copies the PSP command tail and starts
   working
-- one code segment, one flat data area, `DS = 0` throughout, data addressed as
-  absolute offsets (`mov byte ptr [0x2d4f], al`)
+- one code segment, one flat data area, `DS = 0` **almost** throughout, data
+  addressed as absolute offsets (`mov byte ptr [0x2d4f], al`). The exception is
+  the ending: `screen_all_levels_done` sets `DS = 0xc46` and leaves it there,
+  so `ending_blob`, `ending_blobs` and `ending_walk` reach `0x28d9`, `0x289d`
+  and `0x2823` **through that segment**. Reading them as plain image offsets
+  is right everywhere else in the program and wrong there, which is exactly
+  the kind of mistake a convention invites - it took a register dump to see
+  it, because the code looks identical either way
 - arguments in registers, threaded across calls (`dl` as a row counter, `bx`
   as a width, `si`/`di` as cursors)
 - flags poked into the code segment itself (`cs:[0x84]`, the sound-enable bit,

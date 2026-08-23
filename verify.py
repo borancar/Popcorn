@@ -97,6 +97,12 @@ RETURNS = {
     # inverse. Labelling it "ncf" like ball_redraw reported every call wrong,
     # which is at least the failure mode a wrong check should have.
     0x2E1E: "cf",                       # ball_on_paddle
+    # And two that answer in **DX**: ending_blobs leaves the last position it
+    # drew there and the call site at 1ac2:59ce hands it straight to
+    # ending_walk, which returns its own. A register is as much an answer as a
+    # return value, and comparing memory alone passes both whatever they say.
+    0x5B80: "dx",                       # ending_blobs
+    0x5BB5: "dx",                       # ending_walk
 }
 
 
@@ -263,8 +269,9 @@ def main():
                 # The flags at the `ret`, because for several routines the
                 # answer is the carry rather than anything in memory.
                 cf = uc.reg_read(UC_X86_REG_EFLAGS) & 1
+                dxr = uc.reg_read(UC_X86_REG_DX) & 0xFFFF
                 compare(inside[0][0], inside[0][2], want_img, want_vram,
-                        ax, cf)
+                        ax, cf, dxr)
                 inside[0] = None
             return
 
@@ -285,7 +292,8 @@ def main():
                          (regs_now(), snapshot(), bios_ticks()),
                          m.guest_dispatch[9])
 
-    def compare(off, before, want_img, want_vram, want_ax, want_cf=0):
+    def compare(off, before, want_img, want_vram, want_ax, want_cf=0,
+                want_dx=0):
         regs, (img, vram), ticks = before
         with tempfile.TemporaryDirectory() as d:
             si = os.path.join(d, "in.pvs")
@@ -348,7 +356,8 @@ def main():
             # wrong.
             want_val = ((want_ax >> 8) if which == "ah" else
                         want_cf if which == "cf" else
-                        (want_cf ^ 1) if which == "ncf" else want_ax)
+                        (want_cf ^ 1) if which == "ncf" else
+                        want_dx if which == "dx" else want_ax)
             if want_val != got_val:
                 bad.append(f"returned {which}: orig {want_val:#06x} "
                            f"C {got_val:#06x}")
