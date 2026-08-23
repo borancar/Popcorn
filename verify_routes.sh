@@ -30,7 +30,7 @@ CHEAT="$CHEAT,@0206:return"
 # anyway and reports every routine as unreached, which reads as a coverage
 # result rather than as a typo.
 for f in menu level level10 level49 ending capsule tall particles marks \
-         vlife twoplayer holes lastball; do
+         vlife twoplayer cleared holes lastball; do
     [ -f "$D/$f.snap" ] || {
         echo "missing $D/$f.snap - run make_snapshots.sh $D first" >&2
         exit 1
@@ -55,4 +55,5 @@ venv/bin/python verify_all.py --chase --summary "$OUT" \
     --snapshot "$D/ending.snap" \
     --snapshot "$D/particles.snap" \
     --snapshot "$D/twoplayer.snap" \
+    --snapshot "$D/cleared.snap" \
     --snapshot "$D/holes.snap"

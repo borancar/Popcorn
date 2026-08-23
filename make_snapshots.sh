@@ -112,8 +112,14 @@ for lv in 9 10 11 12; do
     done
 done
 # shellcheck disable=SC2086
-$PY snapshot.py "$D/holes.snap" --resume "$D/level10.snap" --seconds 3 \
+$PY snapshot.py "$D/cleared.snap" --resume "$D/level10.snap" --seconds 3 \
     $HOLES --poke 0x2f10=0
+# ...and then on to the between-level screen itself, 1ac2:05f8, which is the
+# only thing that draws a hole. From the clear it is minutes of emulated time
+# away - further than the sweep gives a route, so the union called it unreached
+# while a longer run found twenty calls of it agreeing.
+$PY snapshot.py "$D/holes.snap" --resume "$D/cleared.snap" --at 0x05f8 \
+    --seconds 400
 
 # A life about to be lost: no balls left in play.
 $PY snapshot.py "$D/lastball.snap" --resume "$D/level.snap" \
