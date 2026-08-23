@@ -4490,11 +4490,19 @@ int32_t name_field(uint32_t di, uint8_t *abort)
         g_image[si] = ' ';
         draw_char(' ', di);
     }
+    /* 1ac2:145e - one place right per pass, and the walk is **downwards**:
+     * `mov al,[si] / mov [si+1],al / dec si`, eleven times from rec+0x0a.
+     * Going up instead copies each byte onto the one just written, so the
+     * whole name becomes twelve copies of the byte before it and two passes
+     * leave it blank - which is what a five-letter name got, since its
+     * shift is three. The space then goes at rec+0, not rec-1: after the
+     * eleven steps `si` is rec-1 and the store is `[si+1]`. */
     uint32_t base = NAME_TABLE + (g_image[NAME_INDEX] - '1') * NAME_STRIDE + 0x0a;
-    for (uint32_t n = 0; n < shift; n++) {
-        for (int32_t k = 0x0b; k >= 0; k--)
-            g_image[base - k + 1] = g_image[base - k];
-        g_image[base - 0x0b] = ' ';
+    for (uint32_t n = shift; n > 0; n--) {
+        uint32_t si2 = base;
+        for (int32_t k = 0x0b; k > 0; k--, si2--)
+            g_image[si2 + 1] = g_image[si2];
+        g_image[si2 + 1] = ' ';          /* 1ac2:146b */
     }
     return 0;
 }
