@@ -293,9 +293,9 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `reconstruct/main.c` | argument handling, the load, and the call into `game_main` |
 | `reconstruct/exepack.c` | the EXEPACK decoder in C, byte-identical to the Python one. The port reads the player's own `POPCORN.EXE` at startup |
 | `reconstruct/game.h` | types, the named image offsets, and the backend interface |
-| `reconstruct/game.c` | the transcribed routines — all 179 of them — each carrying the `1ac2:xxxx` offset it was read from |
+| `reconstruct/game.c` | the transcribed routines — all 181 of them — each carrying the `1ac2:xxxx` offset it was read from. Four more are here as no-ops with a comment saying why, and are counted as neither done nor outstanding |
 | `reconstruct/sdl_io.c` | the platform layer: window, presentation, keyboard, mouse, and the retrace and delay hooks the game paces itself on |
-| `reconstruct/stubs.c` | what is not transcribed. Down to `entity_unknown`, a safety net for a handler address that is in no table |
+| `reconstruct/stubs.c` | down to `entity_unknown`, a safety net for a handler address that is in no table. It was the to-do list and everything on it has landed; the two screens the port deliberately does not have are no-ops in `game.c`, not stubs here |
 | `reconstruct/verify.c` | the other half of `verify.py`: loads a captured state, calls one routine, writes back what it produced |
 | **Not in the repository** ||
 | `popcorn/` | the game itself, excluded by directory and again by file type. Never committed |
