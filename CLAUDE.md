@@ -343,6 +343,14 @@ the useful skill is getting a routine to run at all. Three things do it:
   wanted one normally. Most of the game had never been compared at all,
   because the bot could not get there.
 
+- **Two counters decide a two-player game**, and only one of them is obvious.
+  `[0x3f08]` is how many players were entered and `[0x3f09]` how many are
+  still in. `next_player` hands over to the next player while `[0x3f09]` is
+  more than one and runs the hall of fame only when it reaches the last, so a
+  hand-built two-player game over needs `0x3f08 = 2` **and** `0x3f09 = 1`.
+  With both, `score_before` and `hsc_sort` run - and `score_before` has no
+  other way in, since it exists to order two players' scores.
+
 And **`verify_all.py --chase`**: a routine whose caller is being sampled is
 never sampled itself, so a plain pass reports as unchecked a great many
 routines it ran straight past.

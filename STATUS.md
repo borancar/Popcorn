@@ -394,16 +394,7 @@ original shoot.
    the C says so outright, and why it is worth writing down that the original
    is relying on an accident here.
 
-2. **Two routines nothing builds a state for.**
-
-   `score_before` at `0x108c` is only called with **two or more players**:
-   `next_player` walks the extra players' records into the hall of fame and
-   compares scores as it goes. Two names can be entered - the route
-   `@13d2:b,o,t,return, @13d2:a,l,return, @13d2:return` leaves `[0x3f08] = 2`
-   with "BOT" and "AL" in the table - but that route does not reach the play
-   loop inside two hundred seconds of emulated time, so there is no way yet to
-   get from two players to the game over the routine needs. Not a mystery,
-   just unfinished.
+2. **One routine nothing builds a state for.**
 
    `copy_string_text` at `0x1642` is inside `screen_define_keys`, which
    switches to text mode 01h. Excluded on purpose: the port has no text
