@@ -103,6 +103,12 @@ RETURNS = {
     # return value, and comparing memory alone passes both whatever they say.
     0x5B80: "dx",                       # ending_blobs
     0x5BB5: "dx",                       # ending_walk
+    # border_step changes **no memory at all** - its whole answer is the DI it
+    # returns - so it could never stop being "shallow" however often it ran.
+    # A routine whose result is a register is not proved by comparing memory,
+    # it is only left alone by it.
+    0x4FA7: "di",                       # border_step
+    0x4D5D: "di",                       # hsc_bubble: where the record goes
 }
 
 
@@ -270,8 +276,9 @@ def main():
                 # answer is the carry rather than anything in memory.
                 cf = uc.reg_read(UC_X86_REG_EFLAGS) & 1
                 dxr = uc.reg_read(UC_X86_REG_DX) & 0xFFFF
+                dir_ = uc.reg_read(UC_X86_REG_DI) & 0xFFFF
                 compare(inside[0][0], inside[0][2], want_img, want_vram,
-                        ax, cf, dxr)
+                        ax, cf, dxr, dir_)
                 inside[0] = None
             return
 
@@ -298,7 +305,7 @@ def main():
                          m.guest_dispatch[9])
 
     def compare(off, before, want_img, want_vram, want_ax, want_cf=0,
-                want_dx=0):
+                want_dx=0, want_di=0):
         regs, (img, vram), ticks = before[0], before[1], before[2]
         with tempfile.TemporaryDirectory() as d:
             si = os.path.join(d, "in.pvs")
@@ -368,7 +375,8 @@ def main():
             want_val = ((want_ax >> 8) if which == "ah" else
                         want_cf if which == "cf" else
                         (want_cf ^ 1) if which == "ncf" else
-                        want_dx if which == "dx" else want_ax)
+                        want_dx if which == "dx" else
+                        want_di if which == "di" else want_ax)
             if want_val != got_val:
                 bad.append(f"returned {which}: orig {want_val:#06x} "
                            f"C {got_val:#06x}")

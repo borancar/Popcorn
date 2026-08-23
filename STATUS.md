@@ -385,7 +385,13 @@ Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@020
 
 Two of those figures matter more than the headline. **Shallow** is a routine
 every call to which was an early return: it agreed, and that agreement is not
-proof. **Unreached** is the honest limit - a routine no route runs is not
+proof. Some of them cannot leave that column by being run more: `border_step`
+and `hsc_bubble` change **no memory at all** - their whole answer is the DI
+they return - and `flush_keys` and `restore_int09` are deliberate no-ops in
+the port, because the platform layer owns the keyboard. The first two are
+fixed by comparing the register, which `RETURNS` now does for AH, AX, DX, DI
+and the carry. The second two never can be, and saying so is better than
+leaving them looking like work someone forgot. **Unreached** is the honest limit - a routine no route runs is not
 checked at all, and every bug found on 2026-08-23 was in that column the day
 before. Proven went from 82 to 141 in one session purely by reaching further,
 without anyone reading a line of assembly looking for mistakes.
