@@ -196,6 +196,10 @@ beginning. Twenty-two levels across the back half of the game - 11, 12, 13,
 14, 15, 17, 19, 20, 22, 24, 26, 28, 31, 33, 36, 38, 41, 43, 46, 47, 48 and 49
 - each run four thousand frames identical.
 
+The shipped sets are swept the same way, from a snapshot of a `--cmdline
+poptab` run so the table in the snapshot is POPTAB's: levels 9, 16, 23, 30,
+37, 44 and 49 of that set, 2,500 frames each, all identical.
+
 That is worth recording as a result rather than as an absence. Before it,
 every frame-for-frame number this file has ever quoted covered levels 0 to 10,
 because that is as far as a bot that could only return the ball ever got. The
