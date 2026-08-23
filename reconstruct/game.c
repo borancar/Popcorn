@@ -831,9 +831,28 @@ static void menu_redraw(void)
     img_setw(BANNER_PTR, 0x3f1e);
 }
 
-void game_main(const char *dir, uint32_t speed)
+void game_main(const char *dir, uint32_t speed, const char *levels)
 {
     read_speed_setting(speed);
+    /* `POPCORN POPTAB` loads POPTAB.PPC over the built-in table. The original
+     * builds the name from the PSP command tail at 1ac2:0157 - copy it to
+     * 0x1428, skip a leading dot, and append ".PPC" unless it already has an
+     * extension - and calls the loader at 1ac2:0187 before anything is drawn.
+     * Reading the tail is the machine's job and is not transcribed, so the
+     * name is built here from --cmdline. */
+    if (levels && *levels) {
+        char *name = (char *)(g_image + 0x1428);
+        size_t n = 0;
+        while (levels[n] && n < 60) {
+            name[n] = levels[n];
+            n++;
+        }
+        name[n] = 0;
+        if (!strchr(name, '.'))
+            memcpy(name + n, ".PPC", 5);
+        if (!level_load_file(dir))
+            return;                     /* the original exits to DOS */
+    }
     img_setw(INPUT_SELECTED, INPUT_KEYBOARD);
     g_image[0x3f1b] = 0;
     g_image[SOUND_ON] = 1;
@@ -6153,6 +6172,18 @@ int32_t level_load_file(const char *dir)
     snprintf(path, sizeof path, "%s%s", dir ? dir : "",
              (const char *)(g_image + 0x1428));
     FILE *f = fopen(path, "rb");
+    if (!f) {
+        /* DOS filesystems did not care about case and this one does. The tail
+         * arrives upper-cased, as DOS gave it; the file on disk is whatever
+         * the player named it. */
+        char lower[512];
+        size_t n = 0;
+        for (; path[n] && n < sizeof lower - 1; n++)
+            lower[n] = (char)((path[n] >= 'A' && path[n] <= 'Z')
+                              ? path[n] + 32 : path[n]);
+        lower[n] = 0;
+        f = fopen(lower, "rb");
+    }
     if (!f) {
         fputs("****** Fichier des Tableaux non trouve ******\n", stderr);
         return 0;

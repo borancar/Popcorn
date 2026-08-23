@@ -341,10 +341,7 @@ original shoot.
 ### Not yet modelled
 
 - **Nothing, on sound.** Both sides play it as of 2026-08-23.
-- **The `.PPC` level format.** `poptab.ppc` is 8,630 bytes and is read whole by
-  the loader at `0x08c8`, which is transcribed; the format its contents are in
-  is not decoded. The levels being ported are the ones **baked into the
-  executable**, which is what running with no command tail uses.
+- **Nothing, on `.PPC`.** The shipped level sets load and play; see above.
 - **`popspeed.exe` and `popgen.exe`.** Neither is examined.
 
 ### Not started
@@ -407,8 +404,16 @@ original shoot.
    while one is being held, so queueing a fixed buffer played the first thirty
    milliseconds of every note and then silence. A note of ten ticks is about a
    sixth of a second. `emulation.py` is still silent.
-4. **The `.PPC` format**, which is what makes the level editor's output
-   playable.
+4. **`.PPC` levels are playable now.** `reconstruct/popcorn --cmdline poptab`
+   loads `POPTAB.PPC` over the built-in table, the way `POPCORN POPTAB` does:
+   0x21b6 bytes into the block reached as segment 0xc46, six bytes in, valid
+   when the file's own six-byte header repeats. The loader was transcribed
+   long ago and had simply never been called - the port had no way to name a
+   file. Reading the PSP tail is the machine's job and is not transcribed, so
+   `--cmdline` builds the name at 0x1428 the way 1ac2:0157 does.
+
+   The shipped set is fifty levels the port had never played, and it runs
+   130,000 frames identical.
 
 ## Deferred
 

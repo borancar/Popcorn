@@ -42,6 +42,7 @@ int32_t main(int32_t argc, char **argv)
     const char *shot = NULL;
     const char *vram = NULL;
     const char *keys = NULL;
+    const char *levels = NULL;          /* --cmdline, as in POPCORN POPTAB */
     const char *lockstep = NULL;
     int32_t extra_sync = 0;
     for (int32_t i = 1; i < argc; i++) {
@@ -67,6 +68,8 @@ int32_t main(int32_t argc, char **argv)
             vram = argv[++i];
         else if (!strcmp(argv[i], "--keys") && i + 1 < argc)
             keys = argv[++i];
+        else if (!strcmp(argv[i], "--cmdline") && i + 1 < argc)
+            levels = argv[++i];
         else {
             fprintf(stderr, "usage: %s [--scale N] [--dump-image FILE]\n"
                             "       %s --verify STATE-IN RESULT-OUT\n",
@@ -137,7 +140,7 @@ int32_t main(int32_t argc, char **argv)
         slash[1] = 0;
     else
         dir[0] = 0;
-    game_main(dir, speed);
+    game_main(dir, speed, levels);
     io_shutdown();
     free(g_image);
     return 0;
