@@ -92,6 +92,10 @@ RETURNS = {
     # returning the sense play_loop tests: `if (!ball_redraw(...))` takes the
     # loss, and the original takes it on carry set, so C == !CF.
     0x2827: "ncf",                      # ball_redraw: clear means keep going
+    # The capsule steppers end `clc; ret` when they took the step and
+    # `stc; ret` when something was in the way, and the C returns 1 for the
+    # step - so C == !CF, the same sense as ball_redraw.
+    0x3C66: "ncf", 0x3CAF: "ncf", 0x3CF3: "ncf", 0x3D3C: "ncf",
     # play_loop skips the ball on `jae` after this one - CF clear - and the C
     # skips when it returns 0, so here the C matches the carry rather than its
     # inverse. Labelling it "ncf" like ball_redraw reported every call wrong,

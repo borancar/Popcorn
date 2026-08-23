@@ -2963,6 +2963,7 @@ static uint32_t cell_index(uint32_t y, uint32_t x)
     return LEVEL_CELLS + 8 + row + (row >> 1) + ((x >> 4) & 0x0f);
 }
 
+/* 1ac2:3c66  bonus_move_right */
 int32_t bonus_move_right(uint32_t bx, uint32_t *px, uint32_t *py)
 {
     (void)bx;
@@ -2978,6 +2979,7 @@ int32_t bonus_move_right(uint32_t bx, uint32_t *px, uint32_t *py)
     return 1;
 }
 
+/* 1ac2:3cf3  bonus_move_left */
 int32_t bonus_move_left(uint32_t bx, uint32_t *px, uint32_t *py)
 {
     (void)bx;
@@ -2993,6 +2995,7 @@ int32_t bonus_move_left(uint32_t bx, uint32_t *px, uint32_t *py)
     return 1;
 }
 
+/* 1ac2:3caf  bonus_move_up */
 int32_t bonus_move_up(uint32_t bx, uint32_t *px, uint32_t *py)
 {
     (void)bx;
@@ -3020,6 +3023,7 @@ int32_t bonus_move_up(uint32_t bx, uint32_t *px, uint32_t *py)
  * in the port where the original found a brick and picked a new direction -
  * two random() draws that never happened, and every draw after that offset.
  */
+/* 1ac2:3d3c  bonus_move_down */
 int32_t bonus_move_down(uint32_t bx, uint32_t *px, uint32_t *py)
 {
     uint32_t y = *py, x = *px;
