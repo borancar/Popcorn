@@ -189,12 +189,11 @@ thousand frames is in `0x1aa8e`-`0x1aa9f` and nowhere else. `--no-sound` stays, 
 narrowing a comparison is still how a divergence gets isolated; nothing needs
 it.
 
-**And the levels a bot never reached are compared now too.** `sweep_levels.sh`
-pokes the level *before* the one wanted and clears it, so `play_session` loads
-the wanted one normally, and the comparison starts from that level's own
-beginning. Twenty-two levels across the back half of the game - 11, 12, 13,
-14, 15, 17, 19, 20, 22, 24, 26, 28, 31, 33, 36, 38, 41, 43, 46, 47, 48 and 49
-- each run four thousand frames identical.
+**And every level is compared now.** `sweep_levels.sh` pokes the level
+*before* the one wanted and clears it, so `play_session` loads the wanted one
+normally, and the comparison starts from that level's own beginning. **All
+fifty of the built-in levels** have now been compared frame for frame - 0 to
+10 by playing to them, 11 to 49 by sweeping - and every one is identical.
 
 The shipped sets are swept the same way, from a snapshot of a `--cmdline
 poptab` run so the table in the snapshot is POPTAB's: levels 9, 16, 23, 30,
