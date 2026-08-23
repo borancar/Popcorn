@@ -291,7 +291,7 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `autoplay.py` | walks the menu and then plays: keeps the paddle under the ball, collects the capsules worth having, and catches a parachuted ball. Drives the **mouse**, because the game's mouse input is absolute and lands on the next frame. `--port` drives the **C port** instead, through the same lockstep protocol `sidebyside.py` uses, so the deliverable can be watched playing itself |
 | **The port** ||
 | `reconstruct/Makefile` | builds `reconstruct/popcorn` against SDL3 |
-| `reconstruct/main.c` | argument handling, the load, and the call into `game_main` |
+| `reconstruct/main.c` | argument handling, the load, and the call into `game_main`. Also where the high-score file lives: **beside the port binary**, from `/proc/self/exe`, not beside `POPCORN.EXE`. The original saves to the current directory; the port would then read and write different files depending on where it was started, and the game directory is the player's own copy which the port has no business writing into |
 | `reconstruct/exepack.c` | the EXEPACK decoder in C, byte-identical to the Python one. The port reads the player's own `POPCORN.EXE` at startup |
 | `reconstruct/game.h` | types, the named image offsets, and the backend interface |
 | `reconstruct/game.c` | the transcribed routines — all 181 of them — each carrying the `1ac2:xxxx` offset it was read from. Four more are here as no-ops with a comment saying why, and are counted as neither done nor outstanding |

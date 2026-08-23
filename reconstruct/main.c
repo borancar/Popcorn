@@ -17,26 +17,37 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "game.h"
 
-/* Where the high-score file lives: alongside the executable the data came
- * from. Both the read and the write have to agree on it, so it is worked out
- * once and g_dir is what everything uses. */
+/* Where the high-score file lives: **beside this binary**, not beside
+ * POPCORN.EXE. The game directory holds the player's own copy of the game and
+ * the port has no business writing into it; popcorn.hsc there has not been
+ * touched since 1996 and can stay that way.
+ *
+ * Both the read and the write have to agree, so it is worked out once and
+ * g_dir is what everything uses - including lockstep, which used to return
+ * before this ran and dropped a popcorn.hsc wherever the driver started.
+ *
+ * /proc/self/exe rather than argv[0]: it is right whether the port was found
+ * on PATH, run through a symlink, or started with a relative name from
+ * somewhere else. argv[0] resolved is the fallback for anywhere without it. */
 static char g_dir_buf[512];
 
-static void set_game_dir(const char *path)
+static void set_game_dir(const char *argv0)
 {
-    if (!path)
-        return;
-    /* **Resolved**, so it is the same directory whatever the working
-     * directory is. The candidates are relative - "../popcorn/popcorn.exe"
-     * finds the game from reconstruct/ and "popcorn/popcorn.exe" from the
-     * repository root - and a relative answer means the high-score file
-     * follows the shell around instead of staying with the game. */
-    char *abs = realpath(path, NULL);
-    snprintf(g_dir_buf, sizeof g_dir_buf, "%s", abs ? abs : path);
-    free(abs);
+    char buf[512];
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof buf - 1);
+    if (n > 0) {
+        buf[n] = 0;
+        snprintf(g_dir_buf, sizeof g_dir_buf, "%s", buf);
+    } else {
+        char *abs = argv0 ? realpath(argv0, NULL) : NULL;
+        snprintf(g_dir_buf, sizeof g_dir_buf, "%s",
+                 abs ? abs : (argv0 ? argv0 : ""));
+        free(abs);
+    }
     char *slash = strrchr(g_dir_buf, '/');
     if (slash)
         slash[1] = 0;
@@ -116,7 +127,7 @@ int32_t main(int32_t argc, char **argv)
     if (lockstep) {
         /* Even here: the game still saves high scores, and without this it
          * saved them into whatever directory the driver was started from. */
-        set_game_dir(find_exe());
+        set_game_dir(argv[0]);
         io_lockstep_extra_sync(extra_sync);
         return lockstep_main(lockstep);
     }
@@ -177,7 +188,7 @@ int32_t main(int32_t argc, char **argv)
      * read ../popcorn/popcorn.hsc and wrote reconstruct/popcorn.hsc, so a
      * score set in one session was gone by the next and the table never grew
      * past what shipped in the image. */
-    set_game_dir(path);
+    set_game_dir(argv[0]);
     if (getenv("POPCORN_TRACE_STUBS"))
         fprintf(stderr, "popcorn: high scores in %s%s\n",
                 g_dir, (const char *)(g_image + 0x141c));
