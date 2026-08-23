@@ -375,13 +375,13 @@ without on a *larger* set of routes.
 | | routines | |
 | --- | ---: | --- |
 | **transcribed** | | 185 of 185 reachable routines transcribed, 25230 of 25230 bytes (100.0%) |
-| **proven** | 141 | reached, did work, agreed on every route that reached it |
-| shallow | 6 | agreed, but every call was an early return - not proof |
-| differing | 2 | bonus_end_level, entity_paddle_fx |
-| unreached | 11 | no route runs them |
+| **proven** | 137 | reached, did work, agreed on every route that reached it |
+| shallow | 8 | agreed, but every call was an early return - not proof |
+| differing | 3 | bonus_end_level, bonus_end_level_body, entity_paddle_fx |
+| unreached | 12 | no route runs them |
 | **dispatched** | 160 | what verify.c can check |
 
-Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@0206:f10, menu.snap +@0206:f6, menu.snap +@0206:f2, cap.snap, level10_f000000.snap, level49_f000000.snap, particles.snap, tall.snap, ending.snap, play (chase), menu (chase), keyboard (chase), menu.snap +@0206:f8 (chase), menu.snap +@0206:f10 (chase), menu.snap +@0206:f6 (chase), menu.snap +@0206:f2 (chase), cap.snap (chase), level10_f000000.snap (chase), level49_f000000.snap (chase), particles.snap (chase), tall.snap (chase), ending.snap (chase).
+Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@0206:f10, menu.snap +@0206:f6, menu.snap +@0206:f2, cap.snap, level10_f000000.snap, level49_f000000.snap, particles.snap, tall.snap, marks.snap, play (chase), menu (chase), keyboard (chase), menu.snap +@0206:f8 (chase), menu.snap +@0206:f10 (chase), menu.snap +@0206:f6 (chase), menu.snap +@0206:f2 (chase), cap.snap (chase), level10_f000000.snap (chase), level49_f000000.snap (chase), particles.snap (chase), tall.snap (chase), marks.snap (chase).
 
 Two of those figures matter more than the headline. **Shallow** is a routine
 every call to which was an early return: it agreed, and that agreement is not
@@ -462,13 +462,28 @@ original shoot.
 
 ## Next
 
-1. **The last routine that differs.** `bonus_end_level`, and `entity_paddle_fx`
-   because it calls it. The two sides now play the whole end-level bonus
-   together - 2,059 aligned comparisons against 9 - and then leave it by
-   different exits: the emulator finishes the level and the port does not, so
-   the port is one level transition behind with a life still in hand. Five
-   transcription errors have come out of this screen and there is at least one
-   more in it.
+1. **The end-level bonus, still.** Five transcription errors and one
+   structural one have come out of it, and the two sides now play the whole
+   screen together and into the next level: **9,000 frames identical** from
+   , against 9 at the start of the day. Two things are still open on
+   it, and they are different questions:
+
+   - A full run from the menu diverges at frame 120,291 on level 5, with the
+     **port** a level ahead this time rather than behind. Not diagnosed.
+   -  still disagrees when it compares the whole screen as a
+     **single call**. That call reads thousands of inputs, and the harness can
+     pin one pointer and one keypress, not a stream of them; the lockstep,
+     where both sides genuinely get the same input every frame, is clean. The
+     two are not the same claim and the smaller number is not the better one.
+
+   The carry the bonus returns on is worth knowing about: 
+   branches on it at , and **nothing sets it deliberately**. There
+   is no  or  on either exit from  - the flag is
+   whatever the last arithmetic left, which on the ordinary path is the
+    in  and so zero, a completed level. That is why
+   the C says so outright, and why it is worth writing down that the original
+   is relying on an accident here.
+
 2. **Two routines nothing builds a state for.** `score_before` needs a
    **two-player** game, which the bot never plays; `copy_string_text` is in
    `screen_define_keys`, which switches to text mode 01h and is excluded on
