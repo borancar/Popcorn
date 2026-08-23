@@ -375,13 +375,13 @@ without on a *larger* set of routes.
 | | routines | |
 | --- | ---: | --- |
 | **transcribed** | | 185 of 185 reachable routines transcribed, 25230 of 25230 bytes (100.0%) |
-| **proven** | 137 | reached, did work, agreed on every route that reached it |
-| shallow | 8 | agreed, but every call was an early return - not proof |
+| **proven** | 140 | reached, did work, agreed on every route that reached it |
+| shallow | 4 | agreed, but every call was an early return - not proof |
 | differing | 3 | bonus_end_level, bonus_end_level_body, entity_paddle_fx |
-| unreached | 12 | no route runs them |
+| unreached | 13 | no route runs them |
 | **dispatched** | 160 | what verify.c can check |
 
-Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@0206:f10, menu.snap +@0206:f6, menu.snap +@0206:f2, cap.snap, level10_f000000.snap, level49_f000000.snap, particles.snap, tall.snap, marks.snap, play (chase), menu (chase), keyboard (chase), menu.snap +@0206:f8 (chase), menu.snap +@0206:f10 (chase), menu.snap +@0206:f6 (chase), menu.snap +@0206:f2 (chase), cap.snap (chase), level10_f000000.snap (chase), level49_f000000.snap (chase), particles.snap (chase), tall.snap (chase), marks.snap (chase).
+Routes in this union: play, menu, keyboard, menu.snap +@0206:f8, menu.snap +@0206:f10, menu.snap +@0206:f6, menu.snap +@0206:f2, menu.snap +@0206:^l,@0206:^a,@0206:^c,@0206:^r,@0206:^a,@0206:^l,@0206:space,@0206:s,@0206:o,@0206:f,@0206:t,@0206:w,@0206:a,@0206:r,@0206:e,@0206:return, cap.snap, level10_f000000.snap, level49_f000000.snap, particles.snap, tall.snap, marks.snap, play (chase), menu (chase), keyboard (chase), menu.snap +@0206:f8 (chase), menu.snap +@0206:f10 (chase), menu.snap +@0206:f6 (chase), menu.snap +@0206:f2 (chase), menu.snap +@0206:^l,@0206:^a,@0206:^c,@0206:^r,@0206:^a,@0206:^l,@0206:space,@0206:s,@0206:o,@0206:f,@0206:t,@0206:w,@0206:a,@0206:r,@0206:e,@0206:return (chase), cap.snap (chase), level10_f000000.snap (chase), level49_f000000.snap (chase), particles.snap (chase), tall.snap (chase), marks.snap (chase).
 
 Two of those figures matter more than the headline. **Shallow** is a routine
 every call to which was an early return: it agreed, and that agreement is not
