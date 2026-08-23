@@ -412,8 +412,10 @@ original shoot.
    file. Reading the PSP tail is the machine's job and is not transcribed, so
    `--cmdline` builds the name at 0x1428 the way 1ac2:0157 does.
 
-   The shipped set is fifty levels the port had never played, and it runs
-   130,000 frames identical.
+   Both shipped sets work - `poptab` and `ltf`, 8,630 bytes each - and a
+   name that is not there prints the original's own message and stops.
+   `poptab` is fifty levels the port had never played and runs 170,000 frames
+   identical against the emulator; `ltf` is another fifty and runs 20,000.
 
 ## Deferred
 

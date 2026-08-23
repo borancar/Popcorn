@@ -502,9 +502,11 @@ The geometry is not a guess. At twelve wide the first level reads as four bands
 of two solid rows alternating between cell values 2 and 1, which is exactly
 what the game draws; at any other width it is diagonal nonsense.
 
-`POPGEN.EXE` writes `.PPC` files of the same shape - `poptab.ppc` is 8,630
-bytes against the built-in table's 8,800 - but the loader at `0x08c8` has not
-been read yet, and the port uses the built-in table.
+`POPGEN.EXE` writes `.PPC` files of the same shape - both shipped ones are
+8,630 bytes against the built-in table's 8,800. The loader at `0x08c8` reads
+`0x21b6` bytes into the block at segment `0xc46`, six bytes in, and calls the
+file valid when its own six-byte header repeats. `reconstruct/popcorn
+--cmdline poptab` plays them, as does `emulation.py --cmdline poptab`.
 
 ## The font
 
