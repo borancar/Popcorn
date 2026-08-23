@@ -1338,7 +1338,8 @@ retry:
                  * ever reaching zero, which only the `jae 0x376` at 1ac2:0357
                  * does. Arriving as a lost life instead cost a life and
                  * replayed the level. */
-                int32_t lost = setjmp(g_bonus_done) ? 0 : play_loop();
+                int32_t jumped = setjmp(g_bonus_done);
+                int32_t lost = jumped ? (jumped == 2) : play_loop();
                 speaker_off();
                 if (!lost)
                     goto level_done;
@@ -4064,8 +4065,9 @@ void bonus_effect(uint32_t kind)
     case 6: bonus_reverse(); break;
     case 7: extra_life(); break;
     case 8:
-        bonus_end_level();
-        longjmp(g_bonus_done, 1);       /* 1ac2:2da0's four pops */
+        /* 1 if the level is done, 2 if a life went with it - see
+         * ball_after_endgame's two endings. */
+        longjmp(g_bonus_done, bonus_end_level());
     case 9: bonus_slower_ball(); break;
     case 10: bonus_stop_monsters(); break;
     /* The table has a twelfth word, 0x2e55, but it points into the middle of
@@ -6544,7 +6546,8 @@ int32_t ball_after_endgame(uint32_t ball)
             /* No `[0x2f0c] = 0x75` here: 1ac2:4791 goes straight from the
              * tally to the curtain. That write belongs to the *other* ending,
              * at 1ac2:4630, and so does the free life - the two chambers do
-             * not finish the level the same way. */
+             * not finish the level the same way, and **1 says so**: the level
+             * is done. See the floor ending below for why that matters. */
             endgame_curtain();
             return 1;
         }
@@ -6577,7 +6580,13 @@ int32_t ball_after_endgame(uint32_t ball)
         g_image[LIVES]++;               /* a free life, unless cheating */
     g_image[SWEEP_Y] = 0x75;
     endgame_curtain();
-    return 1;
+    /* **2**: this ending arrives back in play_session as a *lost life*, not a
+     * completed level. That is not a guess about the carry - it is what the
+     * free life two lines up is for. play_session decrements at 1ac2:0363 on
+     * the lost-life path and this hands one back at 1ac2:462c to cancel it,
+     * which would be pointless on the path that does not decrement. The upper
+     * chamber returns 1 and has no such line. */
+    return 2;
 }
 
 /* ========================================================================
@@ -6642,13 +6651,13 @@ static void banner_blank(void)
  * thrown off the stack, then a jump into 1ac2:4210. Splitting them matters
  * for verification - the harness enters at 0x4210, and a version that also
  * tears the play loop down is not the same routine. */
-void bonus_end_level(void)
+int32_t bonus_end_level(void)
 {
     play_teardown();                    /* 1ac2:2da0 */
-    bonus_end_level_body();             /* 1ac2:4210 */
+    return bonus_end_level_body();      /* 1ac2:4210 */
 }
 
-void bonus_end_level_body(void)
+int32_t bonus_end_level_body(void)
 {
     speaker_off();
     life_lost();
@@ -6695,7 +6704,7 @@ void bonus_end_level_body(void)
         bp = cga_next_row(bp);
         io_present();
         if (!io_pump())
-            return;
+            return 1;
     }
 
     /* The banner. **Two** fixed rows, 0x2b39 then 0x2b6d, each scrolled in
@@ -6795,8 +6804,9 @@ void bonus_end_level_body(void)
         input_and_draw_paddle();
         ball_step(BALLS);
         ball_redraw(BALLS);
-        if (ball_after_endgame(BALLS))
-            return;
+        int32_t how = ball_after_endgame(BALLS);
+        if (how)
+            return how;
         for (int32_t i = 0; i < 4; i++) {
             sound_tick();
             for (int32_t k = 0; k < 9; k++)
@@ -6804,7 +6814,7 @@ void bonus_end_level_body(void)
         }
         io_present();
         if (!io_pump())
-            return;
+            return 1;
     }
 }
 
