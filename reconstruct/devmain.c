@@ -6,6 +6,9 @@
  * the deliverable's command line stays a fact about the deliverable rather
  * than a place where debugging options accumulate.
  *
+ *   --level N            start a game on level N (0-49) instead of the
+ *                        first, so what goes wrong deep in the game can be
+ *                        watched without playing to it
  *   --autoplay [SEED]    play by itself, through the mouse - the same bot
  *                        autoplay.py drives the port with, but without the
  *                        Python process, the emulator beside it and the pipe
@@ -78,11 +81,16 @@ int32_t main(int32_t argc, char **argv)
                 seed = (uint32_t)strtoul(argv[++i], NULL, 10);
             autoplay_enable(seed);
         }
+        else if (!strcmp(argv[i], "--level") && i + 1 < argc) {
+            int32_t n = atoi(argv[++i]);
+            g_start_level = n < 0 ? 0 : n > 0x31 ? 0x31 : n;
+        }
         else if (!strcmp(argv[i], "--cmdline") && i + 1 < argc)
             levels = argv[++i];
         else {
             fprintf(stderr,
-                    "usage: %s [--autoplay [SEED]] [--cmdline NAME]\n"
+                    "usage: %s [--autoplay [SEED]] [--level N] "
+                    "[--cmdline NAME]\n"
                     "       %s [--scale N] [--speed N]\n"
                     "       %s [--run-ms N] [--shot FILE] [--dump-vram FILE]\n"
                     "       %s [--dump-image FILE] [--keys SCAN@MS,...]\n"

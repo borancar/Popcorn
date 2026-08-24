@@ -1465,6 +1465,11 @@ int32_t g_resume_in_session;
  * screen is most interesting. This rejoins where the longjmp would have. */
 int32_t g_resume_in_bonus;
 
+/* popcorn-dev --level N: which level a game starts on, or -1 for the first,
+ * which is what the game does. Watching what goes wrong on level 34 should
+ * not mean playing thirty-three levels to reach it. */
+int32_t g_start_level = -1;
+
 void play_session(void)
 {
     if (g_resume_in_session) {
@@ -1485,6 +1490,13 @@ void play_session(void)
     uint32_t lv = game_random(io_ticks(), 0x1e);
     if (img_w(INPUT_ACTIVE) != 0x1785)
         lv = 0;
+    /* popcorn-dev --level N. The draw above still happens: it is one of the
+     * PRNG's callers and skipping it would shift every number the rest of the
+     * game takes, so a level started this way would not be the level that is
+     * played normally. Overriding the result afterwards leaves the sequence
+     * exactly where the game put it. */
+    if (g_start_level >= 0)
+        lv = (uint32_t)g_start_level;
     g_image[LEVEL_NUMBER] = (uint8_t)lv;
     img_setw(LEVEL_SRC, lv * LEVEL_BYTES + LEVEL_TABLE);
     panel_draw();
