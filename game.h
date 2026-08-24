@@ -422,6 +422,11 @@ void io_mouse_warp(uint32_t x, uint32_t y);
 uint32_t io_ticks(void);
 void io_set_ticks(uint32_t t);
 void io_pin_mouse(uint32_t x, uint32_t buttons);
+/* The bot, in autoplay.c. --autoplay on popcorn-dev; it plays through
+ * io_pin_mouse, which is the same door lockstep uses. */
+void autoplay_enable(uint32_t seed);
+int32_t autoplay_on(void);
+void autoplay_step(void);
 void io_pin_key(uint32_t k);
 uint32_t io_mouse_x(void);
 uint32_t io_mouse_buttons(void);
@@ -643,6 +648,11 @@ void io_mouse_warp(uint32_t x, uint32_t y);
 uint32_t io_ticks(void);
 void io_set_ticks(uint32_t t);
 void io_pin_mouse(uint32_t x, uint32_t buttons);
+/* The bot, in autoplay.c. --autoplay on popcorn-dev; it plays through
+ * io_pin_mouse, which is the same door lockstep uses. */
+void autoplay_enable(uint32_t seed);
+int32_t autoplay_on(void);
+void autoplay_step(void);
 void io_pin_key(uint32_t k);
 uint32_t io_mouse_x(void);
 uint32_t io_mouse_buttons(void);
