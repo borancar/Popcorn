@@ -18,7 +18,7 @@ is reference rather than working context and it was crowding this file out.
 | [docs/video-and-sound.md](docs/video-and-sound.md) | CGA mode 05h and its palette, the 8x12 font, the PC speaker |
 | [docs/utilities.md](docs/utilities.md) | POPSPEED, and the cheat typed at the menu |
 | [docs/the-game.md](docs/the-game.md) | what Popcorn is, its menu keys, and what kind of program the binary turned out to be |
-| [docs/original-readme.md](docs/original-readme.md) | `popcorn.doc`, the authors' own readme, decoded from CP850 to UTF-8 |
+| [reconstruct/popcorn.doc](reconstruct/popcorn.doc) | the authors' own readme - the primary source for the licence, the speed range and the menu keys |
 
 Put a new fact about the program in `docs/`. Put a new fact about working on
 it here.

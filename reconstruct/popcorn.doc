@@ -1,30 +1,30 @@
 
 (C) 1988                                                LACAZE Christophe
-                                                        RAYNAL Fr‚d‚rick
- ÉÍÍÍÍÍÍÍ» ÉÍÍÍÍÍÍÍ» ÉÍÍÍÍÍÍÍ»
- º ÉÍÍÍ» º º ÉÍÍÍ» º º ÉÍÍÍ» º
- º ÈÍÍÍ¼ º º º   º º º ÈÍÍÍ¼ º
- º ÉÍÍÍÍÍ¼ º º   º º º ÉÍÍÍÍÍ¼
- º º       º ÈÍÍÍ¼ º º º
- ÈÍ¼       ÈÍÍÍÍÍÍÍ¼ ÈÍ¼   ÉÍÍÍÍÍÍÍ» ÉÍÍÍÍÍÍÍ» ÉÍÍÍÍÍÍÍ» ÉÍÍÍÍÍÍÍ»
-                           º ÉÍÍÍÍÍ¼ º ÉÍÍÍ» º º ÉÍÍÍÍÍ¼ º ÉÍÍÍ» º
-                           º º       º º   º º º º       º º   º º
-                           º º       º º   º º º º       º º   º º
-                           º ÈÍÍÍÍÍ» º ÈÍÍÍ¼ º º º       º º   º º
-                           ÈÍÍÍÍÍÍÍ¼ ÈÍÍÍÍÍÍÍ¼ ÈÍ¼       ÈÍ¼   ÈÍ¼
+                                                        RAYNAL FrÃ©dÃ©rick
+ â•”â•â•â•â•â•â•â•â•— â•”â•â•â•â•â•â•â•â•— â•”â•â•â•â•â•â•â•â•—
+ â•‘ â•”â•â•â•â•— â•‘ â•‘ â•”â•â•â•â•— â•‘ â•‘ â•”â•â•â•â•— â•‘
+ â•‘ â•šâ•â•â•â• â•‘ â•‘ â•‘   â•‘ â•‘ â•‘ â•šâ•â•â•â• â•‘
+ â•‘ â•”â•â•â•â•â•â• â•‘ â•‘   â•‘ â•‘ â•‘ â•”â•â•â•â•â•â•
+ â•‘ â•‘       â•‘ â•šâ•â•â•â• â•‘ â•‘ â•‘
+ â•šâ•â•       â•šâ•â•â•â•â•â•â•â• â•šâ•â•   â•”â•â•â•â•â•â•â•â•— â•”â•â•â•â•â•â•â•â•— â•”â•â•â•â•â•â•â•â•— â•”â•â•â•â•â•â•â•â•—
+                           â•‘ â•”â•â•â•â•â•â• â•‘ â•”â•â•â•â•— â•‘ â•‘ â•”â•â•â•â•â•â• â•‘ â•”â•â•â•â•— â•‘
+                           â•‘ â•‘       â•‘ â•‘   â•‘ â•‘ â•‘ â•‘       â•‘ â•‘   â•‘ â•‘
+                           â•‘ â•‘       â•‘ â•‘   â•‘ â•‘ â•‘ â•‘       â•‘ â•‘   â•‘ â•‘
+                           â•‘ â•šâ•â•â•â•â•â•— â•‘ â•šâ•â•â•â• â•‘ â•‘ â•‘       â•‘ â•‘   â•‘ â•‘
+                           â•šâ•â•â•â•â•â•â•â• â•šâ•â•â•â•â•â•â•â• â•šâ•â•       â•šâ•â•   â•šâ•â•
 
                     est un Logiciel
 
-        Ü     ÜÜÜÜÜ ÜÜÜÜÜ ÜÜÜÜÜ ÜÜÜÜÜ Ü
-        Û     ÜÜÜÜÛ Û     Û     ÜÜÜÜÛ Û
-        ÛÜÜÜÜ ÛÜÜÜÛ ÛÜÜÜÜ Û     ÛÜÜÜÛ ÛÜÜÜÜ
-        ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄsoftwareÄÄÄÄÄÄÄ
+        â–„     â–„â–„â–„â–„â–„ â–„â–„â–„â–„â–„ â–„â–„â–„â–„â–„ â–„â–„â–„â–„â–„ â–„
+        â–ˆ     â–„â–„â–„â–„â–ˆ â–ˆ     â–ˆ     â–„â–„â–„â–„â–ˆ â–ˆ
+        â–ˆâ–„â–„â–„â–„ â–ˆâ–„â–„â–„â–ˆ â–ˆâ–„â–„â–„â–„ â–ˆ     â–ˆâ–„â–„â–„â–ˆ â–ˆâ–„â–„â–„â–„
+        â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€softwareâ”€â”€â”€â”€â”€â”€â”€
 
 
 
 
         Ce programme fait parti du domaine public. Il ne doit
-servir … aucune fin commerciale sans accord pr‚alable de
+servir Ã  aucune fin commerciale sans accord prÃ©alable de
 l'auteur.
 
         Cette disquette doit contenir les fichiers suivants:
@@ -33,61 +33,61 @@ l'auteur.
     - POPCORN.EXE  : Le jeu.
     - POPCORN.HSC  : Le fichier des High Scores.
     - POPSPEED.EXE : Adaptateur de Vitesse.
-    - POPGEN.EXE   : Un g‚n‚rateur de Tableaux pour le jeu.
+    - POPGEN.EXE   : Un gÃ©nÃ©rateur de Tableaux pour le jeu.
     - POPTAB.PPC   : Le jeu de Tableaux d'origine modifiable avec POPGEN.
 
-POPCORN: Pour lancer ce jeu, tapez POPCORN puis <ÄÙ:RETURN>
+POPCORN: Pour lancer ce jeu, tapez POPCORN puis <â”€â”˜:RETURN>
 
         Ce jeu ne fonctionne qu'avec une carte CGA.
         Vous pouvez jouer au clavier ou avec n'importe quelle
 souris compatible MICROSOFT (Dans ce cas n'oubliez pas de lancer
-le DRIVER, en g‚n‚ral MOUSE.COM).
+le DRIVER, en gÃ©nÃ©ral MOUSE.COM).
 
-        D'origine, la vitesse est pr‚vue pour un PC avec un 8086
-cadenc‚ … 8 Mhz. Si votre PC ne tourne pas … la mˆme vitesse,
-vous aurez s–rement besoin de l'utilitaire POPSPEED qui vous
-permettra de r‚gler la vitesse du Jeu. Par d‚faut, la vitesse du
-jeu correspond … un r‚glage de POPSPEED … la valeur 110. Pour
+        D'origine, la vitesse est prÃ©vue pour un PC avec un 8086
+cadencÃ© Ã  8 Mhz. Si votre PC ne tourne pas Ã  la mÃªme vitesse,
+vous aurez sÃ»rement besoin de l'utilitaire POPSPEED qui vous
+permettra de rÃ©gler la vitesse du Jeu. Par dÃ©faut, la vitesse du
+jeu correspond Ã  un rÃ©glage de POPSPEED Ã  la valeur 110. Pour
 modifier la valeur, tapez avant le lancement de POPCORN,
 
-        POPSPEED valeur puis <ÄÙ:RETURN> o— valeur est comprise
+        POPSPEED valeur puis <â”€â”˜:RETURN> oÃ¹ valeur est comprise
 entre 0 et 30000. Plus la valeur est faible, plus la vitesse est
-rapide. (Remarque: Cet utilitaire ne modifie pas la vitesse r‚elle
-de l'ordinateur mais m‚morise la valeur donn‚e.)
+rapide. (Remarque: Cet utilitaire ne modifie pas la vitesse rÃ©elle
+de l'ordinateur mais mÃ©morise la valeur donnÃ©e.)
 
-        Faites plusieurs essais pour d‚terminer la valeur qui vous
-convient le mieux. Vous pourrez ensuite cr‚er un fichier BATCH qui
-ex‚cutera automatiquement POPSPEED avec la bonne valeur avant de
+        Faites plusieurs essais pour dÃ©terminer la valeur qui vous
+convient le mieux. Vous pourrez ensuite crÃ©er un fichier BATCH qui
+exÃ©cutera automatiquement POPSPEED avec la bonne valeur avant de
 lancer le jeu.
 
-Comment cr‚er le fichier Batch:
-1ø) Tapez COPY CON: POPCORN.BAT puis <RETURN>
+Comment crÃ©er le fichier Batch:
+1Â°) Tapez COPY CON: POPCORN.BAT puis <RETURN>
 
-2ø) Tapez cette suite d'instructions:
+2Â°) Tapez cette suite d'instructions:
         SPEED votre valeur      <RETURN>
         POPCORN %1              <RETURN>
         <Ctrl>Z                 <RETURN>
 
-3ø) Une fois cette suite d'instructions tap‚e, le fichier
-POPCORN.BAT doit ˆtre pr‚sent sur sur la disquette du jeu.
+3Â°) Une fois cette suite d'instructions tapÃ©e, le fichier
+POPCORN.BAT doit Ãªtre prÃ©sent sur sur la disquette du jeu.
 
 Rappels des Touches de Fonction:
         - F1  : Jouer.
-        - F2  : Lance la D‚monstration.
-        - F3  : S‚lectionne le mode de d‚placement avec la Souris.
-        - F4  : S‚lectionne le mode de d‚placement avec le Clavier.
-        - F5  : D‚finition du Clavier.
+        - F2  : Lance la DÃ©monstration.
+        - F3  : SÃ©lectionne le mode de dÃ©placement avec la Souris.
+        - F4  : SÃ©lectionne le mode de dÃ©placement avec le Clavier.
+        - F5  : DÃ©finition du Clavier.
         - F6  : Visualisation de la Table des High Scores.
-        - F8  : S‚l‚ctionne une Palette de Couleur.
+        - F8  : SÃ©lÃ©ctionne une Palette de Couleur.
         - F9  : Son on/off.
-        - F10 : Touche sp‚ciale pour employ‚s.
-        - Esc : Retourne au DOS si vous ˆtes au Menu.
-                Passe en pause si vous ˆtes dans le jeu.
+        - F10 : Touche spÃ©ciale pour employÃ©s.
+        - Esc : Retourne au DOS si vous Ãªtes au Menu.
+                Passe en pause si vous Ãªtes dans le jeu.
 
-        Si vous d‚sirez fabriquer ou ‚diter de nouveaux tableaux pour
-POPCORN, lancez alors le Programme POPGEN. Ce programme g‚n‚re des
+        Si vous dÃ©sirez fabriquer ou Ã©diter de nouveaux tableaux pour
+POPCORN, lancez alors le Programme POPGEN. Ce programme gÃ©nÃ©re des
 Fichiers tableaux (avec l'extension .PPC). Par exemple, vous venez de
-cr‚er une s‚rie de tableaux que vous avez appel‚e :
+crÃ©er une sÃ©rie de tableaux que vous avez appelÃ©e :
  POPTAB.PPC
 
         Pour pouvoir jouer avec ces nouveaux tableaux, lancez le
@@ -96,21 +96,21 @@ jeu en tapant: POPCORN POPTAB puis <RETURN>
 
 COMMENT DONNER CE JEU A VOS AMIS ?
 
-(Car, bien s–r, il est permis, mˆme recommand‚, voire oblig‚ de
-DONNER ce super jeu … un maximum de vos relations. )
- La disquette n'est pas prot‚g‚e, donc vous pouvez utiliser la
+(Car, bien sÃ»r, il est permis, mÃªme recommandÃ©, voire obligÃ© de
+DONNER ce super jeu Ã  un maximum de vos relations. )
+ La disquette n'est pas protÃ©gÃ©e, donc vous pouvez utiliser la
 commande COPY A:*.* B: ( ou C: si vous avez un disque dur)
  ou faire une copie de disquette avec DISKCOPY A: A: .
 
-        Nous esp‚rons que vous nous ferez part de vos remarques,
-suggestions, f‚licitations ou insultes concernant ce jeu … :
+        Nous espÃ©rons que vous nous ferez part de vos remarques,
+suggestions, fÃ©licitations ou insultes concernant ce jeu Ã  :
 
         M. LACAZE et RAYNAL
            VIDEOMATIQUE
-        5 rue de CarbonniŠres
+        5 rue de CarbonniÃ¨res
         19100 BRIVE LA GAILLARDE
 
-ou, si vous poss‚dez un Minitel :
+ou, si vous possÃ©dez un Minitel :
 
         dans les Boites aux Lettres de : CAZOU ou SHIFT sur le
 serveur pas comme les autres POP au 55.74.42.71     (8 voies,24/24h)
@@ -118,5 +118,4 @@ serveur pas comme les autres POP au 55.74.42.71     (8 voies,24/24h)
 
 
 
-                        A bient“t ...
-
+                        A bientÃ´t ...
