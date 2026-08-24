@@ -47,6 +47,7 @@ BONUS_BODY = 0x4210                     # the end-of-level bonus, --from-bonus
 # The ending animation, --sync-curtain: the curtain's pass and panel_finish's.
 CURTAIN = (0x467F, 0x09D1)
 ENDING = (0x596C, 0x59C0, 0x59E3)       # after level 49, --sync-ending
+INTRO = (0x1EC4, 0x1EE0, 0x1F13)        # the level intro, --sync-intro
 FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
 # The opt-in second sync point, --sync-scroll. screen_scroll_up is called once
 # per scrolled row by every screen that has a loop of its own, so taking it as
@@ -142,6 +143,11 @@ def main():
                          "only way it is a regression rather than a wait. "
                          "Pair it with --sync-endgame, which is what compares "
                          "the ball inside it")
+    ap.add_argument("--sync-intro", action="store_true",
+                    help="also compare the level intro, 1ac2:1ec4, 1ac2:1ee0 "
+                         "and 1ac2:1f13 a pass. It runs before the play loop "
+                         "starts, so io_frame_sync has not begun and none of "
+                         "it is compared by anything")
     ap.add_argument("--sync-ending", action="store_true",
                     help="also compare the sequence after the fiftieth level "
                          "is cleared, 1ac2:596c a pass. screen_all_levels_done "
@@ -412,7 +418,8 @@ def main():
                            or (args.sync_endgame and off == BALL_ENDGAME)
                            or (args.sync_results and off == RESULTS_WAIT)
                            or (args.sync_curtain and off in CURTAIN)
-                           or (args.sync_ending and off in ENDING)):
+                           or (args.sync_ending and off in ENDING)
+                           or (args.sync_intro and off in INTRO)):
             # emu_stop() leaves IP *at* this instruction, so the next
             # emu_start runs it again and the hook fires a second time with
             # no work done in between. Counting those as frames compares the

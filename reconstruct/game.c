@@ -1666,6 +1666,10 @@ void level_intro(void)
     /* The panel scrolls up, a fresh row feeding in at the bottom. */
     uint32_t si = 0x6d9f;
     for (int32_t bl = 8; bl > 0; bl--) {
+        /* 1ac2:1ec4. The intro runs *before* the play loop, so io_frame_sync
+         * has not started and none of this is compared by anything - the same
+         * gap the ending and the results screen were in. */
+        io_frame_sync_extra(SYNC_INTRO);
         scroll_up_band();               /* 1ac2:2109 */
         for (int32_t i = 0; i < 0x18 * 2; i++)
             g_vram[(0x3ef2 + i) & (CGA_SIZE - 1)] = g_image[si + i];
@@ -1677,6 +1681,7 @@ void level_intro(void)
     }
     si = 0x6d36;
     for (int32_t bl = 0x13; bl > 0; bl--) {
+        io_frame_sync_extra(SYNC_INTRO);        /* 1ac2:1ee0 */
         scroll_up_band();
         for (int32_t i = 0; i < 5; i++)
             g_vram[(0x3f08 + i) & (CGA_SIZE - 1)] = g_image[si + i];
@@ -1694,6 +1699,7 @@ void level_intro(void)
 
     /* Up the screen, laying the backdrop over what was there. */
     while (g_image[SWEEP_Y] != 0x0c) {
+        io_frame_sync_extra(SYNC_INTRO);        /* 1ac2:1f13 */
         field_backdrop((g_image[SWEEP_Y] - 7) & 0xff);
         for (uint32_t k = 0; k < 4; k++) {
             uint32_t st = SWEEP_STATE + k * 4;
