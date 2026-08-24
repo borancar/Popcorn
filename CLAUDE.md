@@ -65,6 +65,7 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | **Emulating it** ||
 | `trace_dos.py` | headless DOS/BIOS shim — INT 21h, 16h, 33h, the IVT, the PSP. **Read-only** on the host filesystem: writes are satisfied from an in-memory overlay |
 | `emulation.py` | `VgaDos` on top of it: CGA modes 4/5/6, ports 0x3d8/0x3d9, retrace on 0x3da, IRQ 1 keyboard, INT 10h pixels, and the SDL window. The reference the port is measured against |
+| `drive.py` | drives **any** DOS program under the emulator by key, feeding the next one when the guest has drained the buffer and come back for more. `emulation.py --keys` times against the wall clock, which is right for the game and wrong for a program that sits waiting: the emulator's speed varies with what the guest is doing, so the same script reaches POPGEN's editor on one run and misses it on the next. `@tag` in the key list saves a screenshot, so a run documents itself, and `--dump` writes the guest's low 256K - press one key, dump, diff against a run that pressed nothing, and the byte that differs is what that key writes. That is how POPGEN's palette was measured |
 | `sb.py`, `xms.py` | Sound Blaster and XMS models inherited from Ducks. Popcorn uses neither — it is CGA and PC speaker — but `emulation.py` wires them in and they cost nothing |
 | **Reading the code** ||
 | `analyze.py` | recursive-descent map of the code segment, seeded with the entry point and every handler table the game dispatches through. `--listing` dumps each reachable routine |

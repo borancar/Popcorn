@@ -91,6 +91,11 @@ Measured, not read off the swatches: POPGEN keeps the level's cells at
 **`0x2cef`**, twelve by fourteen, so pressing a key and diffing its memory
 against a run that pressed nothing says exactly what that key does.
 
+```sh
+venv/bin/python drive.py --exe popcorn/popgen.exe \
+    --keys right,return,f1,right,f2,right,f4 --dump /tmp/pg.bin
+```
+
 | key | cell | and so, in the game |
 | --- | ---: | --- |
 | F1 | 1 | 20 points and gone |
