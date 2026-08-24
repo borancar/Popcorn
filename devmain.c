@@ -6,6 +6,8 @@
  * the deliverable's command line stays a fact about the deliverable rather
  * than a place where debugging options accumulate.
  *
+ *   --resume FILE        start from a snapshot.py capture, played by the
+ *                        port itself rather than by a driver
  *   --level N            start a game on level N (0-49) instead of the
  *                        first, so what goes wrong deep in the game can be
  *                        watched without playing to it
@@ -33,8 +35,85 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <setjmp.h>
 
 #include "game.h"
+
+/* Resume a snapshot.py capture directly, without a driver.
+ *
+ * The lockstep protocol can already start the port anywhere, but it drives
+ * the mouse - so a state reached through it is played by whatever is at the
+ * other end of the pipe, never by the port's own bot. The states worth
+ * watching are exactly the ones that are hard to reach: the end-of-level
+ * bonus needs a + capsule, 2 chances in 255 and never from a hatch.
+ *
+ *     popcorn-dev --autoplay --resume bonus.snap
+ *
+ * PSNP: the magic, the level and frame, fourteen registers, the tick count,
+ * then the image and the screen with their lengths. CS and IP are among the
+ * registers, which is what says where to rejoin - the same three places
+ * lockstep knows, since they are the same three routines. */
+static int32_t rd32le(FILE *f, uint32_t *out)
+{
+    uint8_t b[4];
+    if (fread(b, 1, 4, f) != 4)
+        return 0;
+    *out = b[0] | b[1] << 8 | b[2] << 16 | (uint32_t)b[3] << 24;
+    return 1;
+}
+
+static int32_t resume_snapshot(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        perror(path);
+        return 1;
+    }
+    char magic[4];
+    uint32_t level, frame, ticks, len;
+    uint8_t regs[28];                   /* 14 words */
+    if (fread(magic, 1, 4, f) != 4 || memcmp(magic, "PSNP", 4) ||
+        !rd32le(f, &level) || !rd32le(f, &frame) ||
+        fread(regs, 1, sizeof regs, f) != sizeof regs ||
+        !rd32le(f, &ticks) || !rd32le(f, &len)) {
+        fprintf(stderr, "%s: not a snapshot\n", path);
+        fclose(f);
+        return 1;
+    }
+    g_image = malloc(len);
+    if (!g_image || fread(g_image, 1, len, f) != len) {
+        fprintf(stderr, "%s: truncated image\n", path);
+        fclose(f);
+        return 1;
+    }
+    uint32_t vlen;
+    if (!rd32le(f, &vlen) || vlen != CGA_SIZE ||
+        fread(g_vram, 1, CGA_SIZE, f) != CGA_SIZE) {
+        fprintf(stderr, "%s: truncated screen\n", path);
+        fclose(f);
+        return 1;
+    }
+    fclose(f);
+    io_set_ticks(ticks);
+
+    /* Where to rejoin comes from the **game's own variables**, not from the
+     * captured CS:IP. The registers are where the emulator happened to be
+     * stopped, which is an accident of how the capture was taken; [0x13cc],
+     * [0x13ca], [0x13c9] and the cells at 0x2f18 are what the situation *is*,
+     * and they are in the image. Snapshots are taken at level boundaries, so
+     * rejoining play_session's level loop puts the game where the capture
+     * was - and does it the same way lockstep's own resume does, which is the
+     * path that has four million compared frames behind it. */
+    (void)regs;
+    printf("popcorn: %s -> level %u, lives %u, score %.6s\n",
+           path, level, g_image[0x13c9], (const char *)(g_image + 0x13cd));
+
+    g_resume_at_frame_top = 1;
+    g_resume_in_session = 1;
+    if (setjmp(g_back_to_menu) == 0)
+        play_session();
+    return 0;
+}
 
 int32_t main(int32_t argc, char **argv)
 {
@@ -47,6 +126,7 @@ int32_t main(int32_t argc, char **argv)
     const char *keys = NULL;
     const char *levels = NULL;          /* --cmdline, as in POPCORN POPTAB */
     const char *lockstep = NULL;
+    const char *resume = NULL;
     int32_t extra_sync = 0;
     for (int32_t i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--lockstep") && i + 1 < argc)
@@ -85,6 +165,8 @@ int32_t main(int32_t argc, char **argv)
                 seed = (uint32_t)strtoul(argv[++i], NULL, 10);
             autoplay_enable(seed);
         }
+        else if (!strcmp(argv[i], "--resume") && i + 1 < argc)
+            resume = argv[++i];
         else if (!strcmp(argv[i], "--level") && i + 1 < argc) {
             int32_t n = atoi(argv[++i]);
             g_start_level = n < 0 ? 0 : n > 0x31 ? 0x31 : n;
@@ -114,6 +196,16 @@ int32_t main(int32_t argc, char **argv)
     if (lockstep) {
             io_lockstep_extra_sync(extra_sync);
         return lockstep_main(lockstep);
+    }
+
+    if (resume) {
+        /* The capture carries the image, so POPCORN.EXE is not needed. */
+        if (!io_init(scale))
+            return 1;
+        io_set_deadline(run_ms, shot, vram);
+        int32_t r = resume_snapshot(resume);
+        io_shutdown();
+        return r;
     }
 
     size_t len = popcorn_load_image();
