@@ -60,6 +60,46 @@ written literally and says why.
 Every integer is a `stdint` one. `int16_t` says "this truncation is the
 `imul`'s"; `short` only says "some signed type".
 
+## Where it deviates from the original
+
+Three places, deliberately, and this is the whole list.
+
+**The play loop runs on a clock, not on the original's busy-waits.** The
+original paces itself with `mov cx,N / loop $`, about 24,500 cycles to a frame,
+which is **326 Hz** at the 8 MHz its readme names. Reproducing those as sleeps
+made the game's speed a property of the host's scheduler rather than of the
+game, so the loop runs on a fixed 326 Hz tick against an absolute clock
+instead, and the screen is presented on the CGA refresh.
+
+The rate is measured rather than guessed - every instruction of a frame hooked
+under the emulator and costed from the iAPX 86/88 manual's table, which lands
+within two Hz whether the paddle is moving or still and on a different level,
+because three-quarters of the frame is `loop $` at exactly 17 cycles a turn.
+It is an upper bound: the manual's timings exclude instruction fetch, and a
+real 8086 empties its prefetch queue on every branch.
+
+Getting there needed one non-obvious thing. `FRAME_DELAY` is 0x1f4 empty loops
+reloaded every frame, and `draw_paddle_shifted` takes 0x1f3 of them *back* if
+the paddle actually moved: the 500 **is** the author's estimate of what
+redrawing the paddle costs, and the delay is there to make the moved and still
+branches take the same time. A port that redraws the paddle in native code for
+free only ever runs the cheap branch, and comes out about twice too fast. One
+consequence of pacing on a clock is that every frame now costs the same, where
+the original's was only approximately so - it sped up a little when the paddle
+sat still.
+
+**`POPSPEED`'s setting no longer reaches the game.** Its whole job was to trim
+the busy-wait the play loop paced itself on, and the play loop does not pace on
+it any more. `popspeed.exe` still ships, and `game_delay` still runs at the
+readme's default of 110 everywhere outside the play loop - the intro, the level
+transitions, the ending.
+
+**Two screens are not transcribed.** F10 is the boss key, which paints a fake
+DOS prompt over the game; under a window of its own it protects nobody, so it
+does nothing. F5 redefines left, right and launch on a text screen; the port
+keeps the defaults, **K**, **L** and space. Both are understood, and are no-ops
+with a comment rather than gaps.
+
 ## How it is known to be right
 
 It is not asserted, it is measured. The port runs beside an emulator running

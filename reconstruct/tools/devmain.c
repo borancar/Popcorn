@@ -16,7 +16,7 @@
  *                        Python process, the emulator beside it and the pipe
  *   --cmdline NAME       the level file, as `popcorn NAME` takes it
  *   --scale N            window scale
- *   --speed N            as if POPSPEED had been run with N
+ *   --play-hz N          play-loop rate; 326 is the measured original
  *   --run-ms N           stop after N milliseconds of wall clock
  *   --shot FILE          write the screen there when the deadline is reached
  *   --dump-vram FILE     likewise, the raw 0xb8000 aperture
@@ -119,7 +119,6 @@ int32_t main(int32_t argc, char **argv)
 {
     const char *dump = NULL;
     int32_t scale = 3;
-    uint32_t speed = 0;          /* as if POPSPEED had never been run */
     uint32_t run_ms = 0;
     const char *shot = NULL;
     const char *vram = NULL;
@@ -149,8 +148,8 @@ int32_t main(int32_t argc, char **argv)
             dump = argv[++i];
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc)
             scale = atoi(argv[++i]);
-        else if (!strcmp(argv[i], "--speed") && i + 1 < argc)
-            speed = (uint32_t)atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--play-hz") && i + 1 < argc)
+            g_play_hz = (uint32_t)atoi(argv[++i]);
         else if (!strcmp(argv[i], "--run-ms") && i + 1 < argc)
             run_ms = (uint32_t)atoi(argv[++i]);
         else if (!strcmp(argv[i], "--shot") && i + 1 < argc)
@@ -177,7 +176,7 @@ int32_t main(int32_t argc, char **argv)
             fprintf(stderr,
                     "usage: %s [--autoplay [SEED]] [--level N] "
                     "[--cmdline NAME]\n"
-                    "       %s [--scale N] [--speed N]\n"
+                    "       %s [--scale N] [--play-hz N]\n"
                     "       %s [--run-ms N] [--shot FILE] [--dump-vram FILE]\n"
                     "       %s [--dump-image FILE] [--keys SCAN@MS,...]\n"
                     "       %s --verify STATE-IN RESULT-OUT\n"
@@ -242,7 +241,7 @@ int32_t main(int32_t argc, char **argv)
     if (getenv("POPCORN_TRACE_STUBS"))
         fprintf(stderr, "popcorn: high scores in %s%s\n",
                 g_dir, (const char *)(g_image + 0x141c));
-    game_main(g_dir, speed, levels);
+    game_main(g_dir, levels);
     io_shutdown();
     free(g_image);
     return 0;

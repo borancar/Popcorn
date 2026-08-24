@@ -180,6 +180,8 @@ int32_t  io_pump(void);                    /* poll input; 0 means quit */
 void io_wait_retrace(void);            /* what `in al,0x3da` / test 8 did */
 void io_sound(uint32_t divisor);       /* PIT channel 2; 0 silences */
 void io_delay_cycles(uint32_t cycles); /* what the busy-wait at 0x164c cost */
+void io_frame_pace(void);              /* one play-loop frame, against the 60 Hz screen */
+extern uint32_t g_play_hz;             /* measured play-loop rate, 326 Hz */
 int32_t  io_key_ready(void);               /* INT 16h AH=01 */
 uint32_t io_get_key(void);             /* INT 16h AH=00: scan<<8 | ascii */
 void io_flush_keys(void);
@@ -245,7 +247,7 @@ void int09_handler(uint32_t scan);                      /* 1ac2:03e3 */
 int32_t  drive_check(void);                                 /* 1ac2:4dea */
 int32_t  drive_writable(void);                              /* 1ac2:4e04 */
 #define LAST_DIR 0x2d4a
-void game_main(const char *dir, uint32_t speed, const char *levels);
+void game_main(const char *dir, const char *levels);
 
 /* --------------------------------------------------------- not yet done ---
  * Implemented as no-ops in stubs.c; see the note at the top of that file.
@@ -342,10 +344,10 @@ void xor_sprite_16xn(uint32_t x, uint32_t y, uint32_t src, uint32_t rows); /* 1a
 void brick_1(uint32_t slot, uint32_t ball);     /* 1ac2:28cb */
 void brick_2(uint32_t slot, uint32_t ball);     /* 1ac2:2985 */
 void brick_3(uint32_t slot, uint32_t ball);     /* 1ac2:2a3f */
-void brick_solid(uint32_t slot, uint32_t ball);
+void brick_solid(uint32_t slot, uint32_t ball);       /* 1ac2:3221 */
 void brick_animated(uint32_t slot, uint32_t ball);   /* 1ac2:2ccd */
 void entity_anim_brick(uint32_t bx);                 /* 1ac2:3abf */
-void draw_anim_cell(uint32_t si, uint32_t x, uint32_t y); /* 1ac2:3bac */ /* 1ac2:3221 */
+void draw_anim_cell(uint32_t si, uint32_t x, uint32_t y); /* 1ac2:3bac */
 void brick_5(uint32_t slot, uint32_t ball);     /* 1ac2:2a73 */
 void brick_6(uint32_t slot, uint32_t ball);     /* 1ac2:2ab4 */
 void brick_7(uint32_t slot, uint32_t ball);     /* 1ac2:2af5 */
@@ -423,235 +425,6 @@ int32_t  bonus_script(uint32_t bx, uint32_t *px, uint32_t *py); /* 1ac2:3c35 */
 void demo_input_step(void);       /* 1ac2:1a6f */
 void drop_duplicate_hits(void);   /* 1ac2:27b7 */
 uint32_t hsc_bubble(uint32_t si, uint32_t di); /* 1ac2:4d5d */
-void game_input(void);            /* calls whichever routine [0x2d45] names */
-void io_mouse_warp(uint32_t x, uint32_t y);
-uint32_t io_ticks(void);
-void io_set_ticks(uint32_t t);
-void io_pin_mouse(uint32_t x, uint32_t buttons);
-/* The bot, in autoplay.c. --autoplay on popcorn-dev; it plays through
- * io_pin_mouse, which is the same door lockstep uses. */
-void autoplay_enable(uint32_t seed);
-int32_t autoplay_on(void);
-void autoplay_step(void);
-void io_pin_key(uint32_t k);
-uint32_t io_mouse_x(void);
-uint32_t io_mouse_buttons(void);
-
-extern jmp_buf g_back_to_menu;
-extern jmp_buf g_bonus_done;
-void play_session(void);          /* 1ac2:02f5 */
-void panel_draw(void);            /* 1ac2:0b0b */
-void level_colours(void);         /* 1ac2:044b */
-void level_intro(void);           /* 1ac2:1eb9 */
-uint32_t draw_brick_row(uint32_t y);  /* 1ac2:2034 */
-void draw_sprite_20x6(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:20b9 */
-void cell_special(uint32_t row, uint32_t col, uint32_t di); /* 1ac2:41e5 */
-void field_backdrop(uint32_t y);  /* 1ac2:1fc1 */
-void life_lost(void);             /* 1ac2:0735 */
-void entities_clear(void);        /* 1ac2:055e */
-void level_between(void);         /* 1ac2:05f8 */
-void screen_game_over(void);      /* 1ac2:0473 */
-void ending_plot(uint32_t x, uint32_t y);     /* 1ac2:5add */
-void ending_particles_init(uint32_t ax); /* 1ac2:5a43 */
-void ending_particles_tick(void); /* 1ac2:5a56 */
-int32_t next_player(const char *dir);/* 1ac2:0d2e */
-void screen_results(const char *dir);   /* 1ac2:0ea3 */
-void screen_end_of_game(void);
-void screen_level_done(void);     /* 1ac2:0521 */
-void screen_all_levels_done(void);/* 1ac2:5940 */
-uint32_t ending_walk(uint32_t bl, uint32_t bh, uint32_t dx); /* 1ac2:5bb5 */
-void speaker_on(void);                                  /* 1ac2:0085 */
-void speaker_off(void);                                 /* 1ac2:0090 */
-void sound_tick(void);                                  /* 1ac2:0097 */
-void io_set_grab(int32_t on);
-/* Opt-in lockstep sync points, one bit each, for comparing inside a screen
- * that has a loop of its own and so reaches io_frame_sync not at all. */
-#ifndef SYNC_SCROLL
-#define SYNC_SCROLL   1                 /* screen_scroll_up, once a row */
-#define SYNC_ENDGAME  2                 /* ball_after_endgame, once a step */
-#define SYNC_RESULTS  4                 /* screen_results' wait, once a pass */
-#define SYNC_CURTAIN  8                 /* the ending animation, once a pass */
-#define SYNC_ENDING  16                 /* after level 49, once a pass */
-#define SYNC_INTRO   32                 /* the level intro, once a pass */
-#endif
-void io_frame_sync_extra(int32_t which);
-void io_lockstep_extra_sync(int32_t mask);
-int32_t io_grabbed(void);
-void game_delay(void);                                  /* 1ac2:164c */
-void read_speed_setting(uint32_t speed);                /* 1ac2:5680 */
-void build_shifted_sprites(void);                       /* 1ac2:14b3 */
-void load_high_scores(const char *dir);                 /* 1ac2:4d96 */
-void intro_curtain(void);                               /* 1ac2:078b */
-void intro_logo(void);                                  /* 1ac2:54d6 */
-void intro_reveal(void);                                /* 1ac2:55e5 */
-void intro_scroll(void);                                /* 1ac2:4a7a */
-void intro_paddle(void);                                /* 1ac2:49bc */
-void int09_handler(uint32_t scan);                      /* 1ac2:03e3 */
-int32_t  drive_check(void);                                 /* 1ac2:4dea */
-int32_t  drive_writable(void);                              /* 1ac2:4e04 */
-#define LAST_DIR 0x2d4a
-void game_main(const char *dir, uint32_t speed, const char *levels);
-
-/* --------------------------------------------------------- not yet done ---
- * Implemented as no-ops in stubs.c; see the note at the top of that file.
- */
-void menu_particles_init(uint32_t ax_in);   /* 1ac2:5476 */
-void plot_pixel(uint32_t x, uint32_t y, uint32_t colour);
-void plot_pixel_xor(uint32_t x, uint32_t y, uint32_t colour);
-void menu_particles_tick(void);   /* 1ac2:53c2 */
-void menu_banner_tick(void);      /* 1ac2:50df */
-void banner_shift(void);          /* 1ac2:5140 */
-void brick_11_after(uint32_t x, uint32_t y);  /* 1ac2:4c4b */
-uint32_t particle_random(uint32_t ax, uint32_t ticks, uint32_t limit); /* 1ac2:5448 */
-uint32_t particle_init(uint32_t si, uint32_t ax_in);  /* 1ac2:548a */
-#define PARTICLES 0x148d
-void menu_arrow(void);            /* 1ac2:490d */
-void arrow_head(uint32_t di);     /* 1ac2:492f */
-void arrow_tail(uint32_t di);     /* 1ac2:4957 */
-void screen_define_keys(void);    /* 1ac2:1581 */
-void screen_high_scores(void);    /* 1ac2:4e1a */
-void hsc_sort(void);              /* 1ac2:4d37 */
-void hsc_save(const char *dir);   /* 1ac2:4dbb */
-void border_draw(uint32_t di);    /* 1ac2:4ff1 */
-void border_erase(uint32_t di);   /* 1ac2:4fd3 */
-uint32_t border_step(uint32_t di);/* 1ac2:4fa7 */
-void border_animate(void);        /* 1ac2:4f58 */
-void border_row(uint32_t di);     /* 1ac2:5019 */
-void border_block(uint32_t di);   /* 1ac2:5045 */
-void palette_cycle(void);         /* 1ac2:5196 */
-void flush_keys(void);            /* 1ac2:0106 */
-void install_int09(void);         /* 1ac2:03b0 */
-void restore_int09(void);         /* 1ac2:03d1 */
-void input_and_draw_paddle(void); /* 1ac2:48af */
-void cheat_match(uint8_t c);/* 1ac2:5171 */
-void io_cga_mode(uint32_t v);
-void io_cga_colour(uint32_t v);
-void menu_extra(void);            /* 1ac2:5171 */
-void employee_enter(void);        /* 1ac2:4ae0 */
-void cell_hole_draw(uint32_t x, uint32_t y);  /* 1ac2:4cc1 */
-void screen_unstash(void);        /* 1ac2:4c13 */
-void border_setup(void);          /* 1ac2:4f73 */
-int32_t  tall_sprite(uint32_t *si, uint32_t di);   /* 1ac2:538d */
-void screen_scroll_up(void);      /* 1ac2:4878 */
-void level_tally(void);           /* 1ac2:48ce */
-void screen_stash(void);          /* 1ac2:4ba9 */
-void screen_restore(void);        /* 1ac2:4b4f */
-void demo_start(void);
-void input_demo(void);            /* 1ac2:1785 */
-int32_t  cheat_sequence(uint8_t key); /* 1ac2:58b3 */            /* 1ac2:1509 */
-void play_prepare(void);          /* 1ac2:0cc5 */
-
-int32_t  level_load_file(const char *dir);  /* 1ac2:08c8 */
-void set_palette_registers(uint32_t table);  /* 1ac2:4b7a */
-uint8_t screen_player_names(void);  /* 1ac2:10de */
-int32_t  name_field(uint32_t di, uint8_t *abort); /* 1ac2:13b8 */
-void play_frame(void);            /* 1ac2:1212 */
-uint32_t frame_band(uint32_t di, uint32_t fill);  /* 1ac2:1354 */
-void panel_reveal(void);          /* 1ac2:0911 */
-void field_marks(void);           /* 1ac2:0598 */
-void field_marks_wide(uint32_t di, uint32_t rows);  /* 1ac2:0a1d */
-uint32_t ending_particle_init(uint32_t si, uint32_t ax_in); /* 1ac2:59f7 */
-void ending_blob(uint32_t pos);   /* 1ac2:5c36 */
-uint32_t ending_blobs(void);          /* 1ac2:5b80 */
-void ending_column(void);         /* 1ac2:5317 */
-
-void panel_finish(void);          /* 1ac2:09c5 */
-
-/* Called by play_loop; the ones still empty live in stubs.c too. */
-int32_t  play_loop(void);             /* 1ac2:1873 - transcribed */
-uint32_t draw_text(uint32_t src, uint32_t count, uint32_t di);  /* 1ac2:10d1 */
-void level_draw(void);            /* 1ac2:1c4f */
-void walker_draw(uint32_t x);     /* 1ac2:1e50 */
-void walker_step(uint32_t x);     /* 1ac2:1e23 */
-void ball_draw(uint32_t sprite, uint32_t x, uint32_t y);    /* 1ac2:2881 */
-int32_t  ball_redraw(uint32_t ball);  /* 1ac2:2827 */
-int32_t  ball_on_paddle(uint32_t ball); /* 1ac2:2e1e */
-void read_new_key(uint32_t which);  /* 1ac2:1614 */
-int32_t  score_before(uint32_t si, uint32_t di); /* 1ac2:108c */
-void ball_after(uint32_t ball);   /* 1ac2:247f */
-int32_t  ball_after_endgame(uint32_t ball);  /* 1ac2:45a1 */
-void ball_bricks(uint32_t ball);  /* 1ac2:254d */
-void brick_hit(uint32_t slot, uint32_t cell, uint32_t ball);
-void xor_sprite_16xn(uint32_t x, uint32_t y, uint32_t src, uint32_t rows); /* 1ac2:40f2 */
-void brick_1(uint32_t slot, uint32_t ball);     /* 1ac2:28cb */
-void brick_2(uint32_t slot, uint32_t ball);     /* 1ac2:2985 */
-void brick_3(uint32_t slot, uint32_t ball);     /* 1ac2:2a3f */
-void brick_solid(uint32_t slot, uint32_t ball); /* 1ac2:3221 */
-void brick_5(uint32_t slot, uint32_t ball);     /* 1ac2:2a73 */
-void brick_6(uint32_t slot, uint32_t ball);     /* 1ac2:2ab4 */
-void brick_7(uint32_t slot, uint32_t ball);     /* 1ac2:2af5 */
-void brick_8(uint32_t slot, uint32_t ball);     /* 1ac2:2b36 */
-void brick_9(uint32_t slot, uint32_t ball);     /* 1ac2:2b9d */
-void entity_soften(uint32_t bx);      /* 1ac2:365e */
-void entity_repeat(uint32_t bx);      /* 1ac2:366f */
-void entity_plain(uint32_t bx);       /* 1ac2:3696 */
-void entity_ball_arrive(uint32_t bx); /* 1ac2:36a1 */
-void entity_cells_timer(uint32_t bx); /* 1ac2:36f6 */
-void brick_10(uint32_t slot, uint32_t ball);    /* 1ac2:2c59 */
-void brick_11(uint32_t slot, uint32_t ball);    /* 1ac2:2d68 */
-void xor_sprite_16x7(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:3b64 */
-void score_add(void);             /* 1ac2:413d */
-void extra_life(void);            /* 1ac2:318b */
-void fill_column(uint32_t di, uint32_t value);  /* 1ac2:41b1 */
-void bonus_points(void);          /* 1ac2:2daa */
-void bonus_catch(void);           /* 1ac2:2def */
-void bonus_laser(void);           /* 1ac2:2e03 */
-void bonus_multiball(void);       /* 1ac2:2e16 */
-void bonus_wider_paddle(void);         /* 1ac2:3231 */
-void bonus_net(void);             /* 1ac2:3119 */
-void bonus_reverse(void);         /* 1ac2:315b */
-void bonus_slower_ball(void);     /* 1ac2:31e8 */
-void bonus_stop_monsters(void);   /* 1ac2:3200 */
-int32_t bonus_end_level(void);    /* 1ac2:2da0 */
-int32_t bonus_end_level_body(void); /* 1ac2:4210 */
-void bonus_effect(uint32_t kind);
-void scroll_up_band(void);        /* 1ac2:2109 */
-void scroll_down_band(void);      /* 1ac2:2148 */
-void draw_paddle_raw(uint32_t src);      /* 1ac2:22a9 */
-void draw_paddle_shifted(uint32_t src);  /* 1ac2:2187 */
-void ball_paddle(uint32_t ball);  /* 1ac2:2316 */
-void laser_fire(void);            /* 1ac2:2ee3 */
-void probe_cell_at(uint32_t x, uint32_t y, uint32_t slot); /* 1ac2:2755 */
-void play_teardown(void);         /* 1ac2:41d4 */
-void entity_call(uint32_t node);  /* the call at 1ac2:1b5e */
-void entity_capsule(uint32_t bx);   /* 1ac2:3273 */
-void entity_paddle_fx(uint32_t bx); /* 1ac2:3386 */
-void morph_begin(uint32_t bx, uint32_t table, uint32_t kind); /* 1ac2:34c5 */
-void morph_step(uint32_t bx);       /* 1ac2:34d7 */
-void entity_popup(uint32_t bx);     /* 1ac2:3561 */
-void entity_capsule_frames(uint32_t bx, uint32_t table);
-void entity_ball_hold(uint32_t bx); /* 1ac2:37e0 */
-void ball_place(uint32_t ball, uint32_t x, uint32_t y);
-void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny); /* 1ac2:3df1 */
-uint32_t pixel_xor(uint32_t x, uint32_t y);        /* 1ac2:30dd */
-void shot_xor(uint32_t x, uint32_t y);             /* 1ac2:306b */
-void bonus_hits_ball(uint32_t bx, uint32_t ball);  /* 1ac2:3f20 */
-void entity_bonus(uint32_t bx);     /* 1ac2:39fa */
-void entity_unknown(uint32_t bx);
-void entity_multiball(uint32_t bx);  /* 1ac2:3717 */
-void entity_unlink(uint32_t node);/* 1ac2:3257 */
-uint32_t entity_alloc(void);      /* 1ac2:3232 */
-uint32_t draw_run(uint8_t c, uint32_t count, uint32_t di); /* 1ac2:10c5 */
-void draw_cursor(uint32_t di);    /* 1ac2:14a7 */
-void define_keys_prompt(uint32_t src, uint32_t dst);            /* 1ac2:1642 */
-void flash_bar(uint32_t pattern); /* 1ac2:3146 */
-void cell_set_three(uint32_t node);/* 1ac2:3668 */
-void cells_restore(void);         /* 1ac2:36fb */
-
-void bonus_spawn(void);           /* 1ac2:3d95 */
-void xor_sprite_20x16(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:406a */
-void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src);/* 1ac2:3f4f */
-void entity_sparkle(uint32_t bx); /* 1ac2:3aee */
-void entity_crumble(uint32_t bx); /* 1ac2:3b2a */
-void entity_hatch(uint32_t bx);   /* 1ac2:390d */
-void bonus_release(uint32_t bx);  /* 1ac2:39a1 */
-int32_t  bonus_move_right(uint32_t bx, uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
-int32_t  bonus_move_left(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */
-int32_t  bonus_move_up(uint32_t bx, uint32_t *px, uint32_t *py);    /* 1ac2:3caf */
-int32_t  bonus_move_down(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3d3c */
-int32_t  bonus_steer(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3bf7 */
-int32_t  bonus_script(uint32_t bx, uint32_t *px, uint32_t *py); /* 1ac2:3c35 */
-void demo_input_step(void);       /* 1ac2:1a6f */
 void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(uint32_t x, uint32_t y);
 uint32_t io_ticks(void);

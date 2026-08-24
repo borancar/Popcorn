@@ -202,6 +202,68 @@ static void keep_alive(void)
     io_pump();
 }
 
+/* One play-loop frame, paced against the **CGA refresh** rather than against
+ * a busy-wait.
+ *
+ * The original spends `mov cx,N / loop $` here with N from POPSPEED, which is
+ * how it was made to run at the same speed on a faster PC. Emulating that
+ * means sleeping for what the loop would have cost, and a sleep of a quarter
+ * of a millisecond is at the mercy of the scheduler's granularity - so the
+ * game's speed became a property of the host rather than of the game.
+ *
+ * The rate to hold it at is **measured**, by `cycles.py`: run the original
+ * under the emulator, hook every instruction, and sum the iAPX 86/88 manual's
+ * cycle costs over a play-loop frame. That comes to about 24,500 cycles, or
+ * 326 Hz at the 8 MHz the readme names - and it lands within two Hz whether
+ * the paddle is moving or still, and on a different level:
+ *
+ *     level 10, bot moving the paddle    24541 cy   326.0 Hz
+ *     level 10, paddle still             24537 cy   326.0 Hz
+ *     level 1                            24419 cy   327.6 Hz
+ *
+ * It is worth saying why that is trustworthy rather than another guess:
+ * three-quarters of the frame is the `loop $` busy-waits, which are exactly
+ * 17 cycles a turn, so only the remaining quarter carries any modelling at
+ * all. What the manual's table leaves out is instruction fetch - a real 8086
+ * empties its prefetch queue on every branch - so the true machine is
+ * somewhat slower than this and 326 is an upper bound. `cycles.py --stall`
+ * says by how much for a given assumption.
+ *
+ * 326 Hz is 5.43 refreshes, so this is a rate rather than a count of ticks
+ * per refresh. The tick runs on an absolute clock and cannot drift, which is
+ * the whole complaint against the busy-wait it replaces: a sleep of a quarter
+ * of a millisecond was at the mercy of the scheduler, so the game's speed had
+ * become a property of the host. The screen is still presented on the
+ * refresh, by io_present.
+ *
+ * `popcorn-dev --play-hz N` sets it, for hearing what a different assumption
+ * about the stall sounds like. */
+uint32_t g_play_hz = 326;
+
+void io_frame_pace(void)
+{
+    static uint64_t next_tick_ns;
+
+    if (io_lockstep() || g_play_hz == 0)
+        return;
+    keep_alive();
+    uint64_t now = SDL_GetTicksNS();
+    uint64_t period = SDL_NS_PER_SECOND / g_play_hz;
+    if (next_tick_ns > now) {
+        SDL_DelayNS(next_tick_ns - now);
+    } else if (now - next_tick_ns > SDL_NS_PER_SECOND / 4) {
+        next_tick_ns = now;                 /* a quarter second behind: the
+                                             * window was dragged or the game
+                                             * did something long. Give up the
+                                             * debt rather than sprint. */
+    }
+    /* Anything smaller than that is the sleep overshooting - tens of
+     * microseconds against a three-millisecond period - and is made up by the
+     * next tick sleeping less, not thrown away. Resetting to `now` every time
+     * cost 4% of the rate. */
+    next_tick_ns += period;
+}
+
 void io_delay_cycles(uint32_t cycles)
 {
     if (io_lockstep())
