@@ -1380,6 +1380,14 @@ jmp_buf g_bonus_done;
  * resumed run cannot follow a lost life into life_lost and level_intro, so
  * any divergence that lives there is unreachable from a snapshot. */
 int32_t g_resume_in_session;
+/* Resume *inside* the end-of-level bonus. The bonus is the one screen that
+ * cannot be played into reliably - it needs a + capsule, and + is 2 chances in
+ * 255 of a brick-2 capsule and never comes out of a hatch - so it is captured
+ * at 1ac2:4210 and injected. Running the body alone is not enough: the bonus
+ * *returns into play_session*, and a port that stops when it ends is somewhere
+ * the emulator never is, which reads as a divergence at exactly the moment the
+ * screen is most interesting. This rejoins where the longjmp would have. */
+int32_t g_resume_in_bonus;
 
 void play_session(void)
 {
@@ -1422,7 +1430,13 @@ retry:
                  * does. Arriving as a lost life instead cost a life and
                  * replayed the level. */
                 int32_t jumped = setjmp(g_bonus_done);
-                int32_t lost = jumped ? (jumped == 2) : play_loop();
+                int32_t lost;
+                if (!jumped && g_resume_in_bonus) {
+                    g_resume_in_bonus = 0;
+                    lost = bonus_end_level_body() == 2;
+                } else {
+                    lost = jumped ? (jumped == 2) : play_loop();
+                }
                 speaker_off();
                 if (!lost)
                     goto level_done;
@@ -4846,6 +4860,7 @@ void panel_finish(void)
         di = di > CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
         for (int32_t i = 0; i < 0x147; i++)
             game_delay();
+        io_frame_sync_extra(SYNC_CURTAIN);      /* 1ac2:09d1 */
         io_present();
         if (!io_pump())
             return;
@@ -6555,6 +6570,7 @@ static void endgame_curtain(void)
         for (int32_t i = 0; i < 0x0f; i++)
             game_delay();
         g_image[SWEEP_Y]--;
+        io_frame_sync_extra(SYNC_CURTAIN);      /* 1ac2:467f */
         io_present();
         if (!io_pump())
             return;
