@@ -3,6 +3,24 @@
 Everything needed to pick this up cold. Progress and what is next live in
 [STATUS.md](STATUS.md); this file is the facts about the program.
 
+## Where the facts are
+
+This file is how to *work on* the port: what the binary is, the tools, the
+conventions, and the traps that change what you do. What the program **is** -
+its addresses, its data formats, its structures - lives in `docs/`, because it
+is reference rather than working context and it was crowding this file out.
+
+| | |
+| --- | --- |
+| [docs/memory-map.md](docs/memory-map.md) | the load image, every data and code address identified, the INT 09h handler, and how the EXEPACK recovery works |
+| [docs/level-format.md](docs/level-format.md) | the 176-byte level record, the `.PPC` file, the cell values, the animated bricks |
+| [docs/entities.md](docs/entities.md) | the entity chain, the ball structure, the capsules, the parachute, and a slip in the original's brick collision |
+| [docs/video-and-sound.md](docs/video-and-sound.md) | CGA mode 05h and its palette, the 8x12 font, the PC speaker |
+| [docs/utilities.md](docs/utilities.md) | POPSPEED, and the cheat typed at the menu |
+
+Put a new fact about the program in `docs/`. Put a new fact about working on
+it here.
+
 ## The goal
 
 Port **Popcorn** (Christophe Lacaze / Frédérick Raynal, LACRAL software, 1988)
@@ -39,42 +57,10 @@ An Arkanoid clone. CGA only, keyboard or Microsoft-compatible mouse. French.
 | Esc | menu → DOS; in game → pause |
 
 Level sets are `.PPC` files made with the shipped `POPGEN.EXE`; `POPCORN POPTAB`
-loads `POPTAB.PPC`. `POPSPEED.EXE` sets the game speed for machines faster than
-an 8 MHz 8086 (default 110, lower is faster).
-
-### What POPSPEED actually does
-
-It calculates nothing. It parses a decimal number and stores it verbatim as a
-loop count, in 620 bytes:
-
-- the PSP command tail is copied to `0000:0x24b`, `si` set past the length
-  byte and the one space it assumes;
-- **more than five digits is refused, and exactly five is compared against the
-  string at `0x246` - which is `"65534"`, not the 30000 its own message
-  advertises.** One to four digits are not range-checked at all, so the
-  reachable range is 0-65534 rather than the documented 0-30000;
-- the parse is `ax = 10^(digits-1)` by repeated `mul`, then digit by digit
-  `bx += digit * place; place /= 10`. Sixteen-bit throughout - only `ax` of
-  `mul`'s result is used - which is why the cap sits just under 0x10000;
-- `INT 21h AX=2568h` sets **interrupt vector 0x68** to `ds:dx` with `ds` = 0,
-  so the number lands in the *offset* word at `0000:01a0` and the segment is
-  zero. No file, no environment variable: a spare interrupt slot used as a
-  two-byte notepad, which is why the startup disk reads looked load-bearing
-  and were not.
-
-`read_speed_setting` at `0x5680` reads it back with `AH=35h`, subtracts one,
-and patches the result into the `mov cx, N` of the busy-wait at `0x164c`. The
-number *is* the loop count - hence lower is faster. 1 means "as fast as
-possible" and puts a `ret` over the delay; 0 means POPSPEED was never run and
-the default 0x6f applies, which is the readme's 110 after the decrement.
-
-`inc bx` at `0x6d` is dead on both paths: `dx` already holds the value and
-`bx` is never read again.
-
-Shipped files. The working copy in `popcorn/` is not committed; the same
-files are committed in `reconstruct/`, beside the port that reads them:
-`popcorn.exe`, `popcorn.doc`, `popcorn.hsc` (high scores), `popspeed.exe`,
-`popgen.exe`, `poptab.ppc`, `ltf.ppc`, and two batch files.
+loads `POPTAB.PPC` - the format is in
+[docs/level-format.md](docs/level-format.md). `POPSPEED.EXE` sets the game
+speed for machines faster than an 8 MHz 8086, and does less than its name
+suggests: [docs/utilities.md](docs/utilities.md).
 
 ## What the binary is
 
@@ -98,187 +84,6 @@ files are committed in `reconstruct/`, beside the port that reads them:
 
 That makes the port easier than a compiled one: there are no compiler idioms to
 reverse, and every instruction is a decision someone made.
-
-### It is EXEPACK-compressed
-
-`popcorn.exe` is 103,848 bytes on disk and expands to 133,296. The MZ header
-carries **zero** relocations and an entry point 16 bytes from the end of the
-file — both belong to the unpacker stub. `unpack_popcorn.py` recovers it:
-
-```sh
-venv/bin/python unpack_popcorn.py     # -> popcorn.unpacked.exe
-venv/bin/python validate.py           # round-trips it against the stub
-```
-
-EXEPACK header (16-byte variant, no `skip_len`): `real_cs:ip = 1ac2:0113`,
-`real_ss:sp = 1aa2:0200`, `dest_len = 0x208b` paragraphs, `exepack_size =
-0x178`. 35 relocations, agreed on by two independent readings — the stub's own
-table, and a diff of two unpacks at different load segments.
-
-**The unpack relies on the 8086 wrapping addresses at 1 MB.** The stub walks its
-pointers downwards and renormalises with `or si,0xfff0`, which drives the
-segment register below zero; on real hardware the address wraps, in Unicorn's
-flat memory it escapes to 0x10eea1 and the stub prints "Packed file is corrupt".
-Loading at segment 0x2000 instead of the 0x110 DOS would pick keeps the segment
-non-negative and sidesteps it. The image is normalised back to segment 0 before
-being written out.
-
-## Layout of the unpacked image
-
-Linear offsets into `popcorn.unpacked.exe`'s load image, which is the address
-convention every note and every reconstructed routine here uses.
-
-| range | what |
-| --- | --- |
-| `0x00000`-`0x1ac20` | data: sprites, fonts, level tables, strings, buffers |
-| `0x1ac20`-`0x208b0` | **the code**, one segment `0x1ac2`, 23,696 bytes |
-
-`DS = 0` for the whole program, so a data reference `[0x2d4f]` is image offset
-`0x2d4f`, and a code address `1ac2:03e3` is image offset `0x1b003`.
-
-### Data addresses identified so far
-
-| offset | what |
-| --- | --- |
-| `0x13a0` | PSP command tail, copied there at startup |
-| `0x1405` | saved `SP` for the return-to-menu longjmp |
-| `0x1428` | level filename being built (`<tail>.PPC`) |
-| `0x13e9` | which player-name box is being edited, ASCII `'1'`.. |
-| `0x2d41` | saved BIOS INT 09h vector (offset, then segment at `0x2d43`) |
-| `0x2d45` | current screen handler pointer |
-| `0x2d47` | selected input handler: `0x16d2` = keyboard, `0x1654` = mouse |
-| `0x2d49` | last make scan code seen by the INT 09h handler |
-| `0x2d4a` | last direction: 0 = left, 1 = right |
-| `0x2d4c` | action key held |
-| `0x2d4d` | right key held |
-| `0x2d4e` | left key held |
-| `0x2d4f` | **left** key scan code (default `0x24`, K) |
-| `0x2d50` | **right** key scan code (default `0x25`, L) |
-| `0x2d51` | **action** key scan code (default `0x39`, Space) |
-| `0x344f` | player-name table, `0x11b` bytes per player: the name at `+0`, the lives at `+0x0c`, the score as ASCII digits at `+0x10` |
-| `0x3f08` | players entered so far |
-| `0x3f09` | how many are still in - it reaching zero is what ends the game |
-| `0x33b1` | the capsule odds: eleven cumulative weights out of 255, walked by `bonus_kind` |
-| `0x2d40` | paddle repeat counter, counts down to the next allowed step |
-| `0x2d4b` | paddle repeat divider; decremented while a key is held, so the paddle accelerates |
-| `0x2e54` | **paddle x**, the left edge in pixels |
-| `0x2d3e` | lowest paddle position (8) |
-| `0x2d3f` | highest paddle position (172) |
-| `0x2ea1` | **ball pool**: four entries of `0x1e` bytes |
-| `0x3138` | head node of the entity list; its `+0x0c` link is `0x3144` |
-| `0x3142` | previous-node cursor, for unlinking |
-| `0x3144` | first entity link; `0xffff` terminates the chain |
-| `0x3146` | entity node pool, stride `0x0e` |
-| `0x313a` | "remove me" flag an entity handler sets |
-| `0x33d2` | PRNG state, advanced by `0x5ec5` per call |
-| `0x3164` | ten words the PRNG folds in |
-| `0x9020` | **font**: 40 glyphs of 8x12, 24 bytes each |
-| `0x2f10` | the level being played: an 8-byte header then 12x14 cells |
-| `0x3044` | brick behaviour table, **thirty** words indexed by cell value |
-| `0x3080` | what each hit animated brick became, indexed by the new cell value |
-| `0x3134`, `0x3135` | the animation script's counter and its reload |
-| `0x3136` | the animation script pointer, into the block at segment `0x14a1` |
-| `0x13c9` | lives |
-| `0x13ca` | offset of the current level in the table |
-| `0x13cc` | level number, 0-0x31 |
-| `0x13cd` | the score, as eight ASCII digits |
-| `0x13d5` | the player's name, 12 characters |
-| `0x1487` | **the frame delay**, reloaded from `0x1489` every frame |
-| `0x1485`, `0x1486` | how often the ball is allowed to step, and the limit |
-| `0x2d0d` | four (paddle sprite base, width) pairs: 27, 39, laser, catch |
-| `0x2d2d` | capsule kind -> paddle kind, eleven bytes |
-| `0x2d39` | the paddle kind in play |
-| `0x2d3a` | the paddle's live **width**, which the morphs change |
-| `0x3385` | capsule frame tables, by kind - the letters are drawn here |
-| `0xac60` | the eight capsules a hatch can release: (sprite, flags) |
-| `0x2e73` | clear when the last ball is lost |
-| `0x4903` | the paddle sprites: four sets of four pre-shifted 7x44 images |
-| `0xc46c` | **the level table**: fifty records of 176 bytes |
-| `0x10250` | 32,000-byte backup of the CGA screen (`0xc46:0x3df0`) |
-
-### Code addresses identified so far
-
-Segment-relative (add `0x1ac20` for the image offset).
-
-| offset | what |
-| --- | --- |
-| `0x0085` | `speaker_on` — PIT ch2 to mode 3, gate and data bits on |
-| `0x0090` | `speaker_off` |
-| `0x0097` | `sound_tick` — steps the current tune, writes PIT ch2 |
-| `0x0106` | `flush_keys` — drain the BIOS INT 16h buffer |
-| `0x0113` | **entry point**; startup, then the main menu loop at `0x0206` |
-| `0x03b0` | `install_int09` — save the BIOS vector, install `0x03e3` |
-| `0x03d1` | `restore_int09` |
-| `0x03e3` | the INT 09h handler (see below) |
-| `0x02d4` | F1: the play path |
-| `0x10de` | the player-name boxes |
-| `0x13b8` | one name field, via INT 21h AH=07h |
-| `0x164c` | `delay` — `push cx; mov cx,N; loop $; pop cx`, N patched by POPSPEED |
-| `0x1654` | mouse input handler |
-| `0x16d2` | keyboard input handler |
-| `0x5099` | `save_screen` — 0xb800 both halves to `0xc46:0x3df0` |
-| `0x50bc` | `restore_screen` |
-| `0x0c64` | `draw_char` — one 8x12 glyph to `ES:DI`, stepping the interlace |
-| `0x1873` | **the play loop**: serve, entity walk, ball stepping, collision |
-| `0x169f` | `input_mouse` tail: `paddle = clamp(mouse x / 2)`, buttons = action |
-| `0x172f` | `input_keyboard` tail: one pixel per repeat tick |
-| `0x27d7` | `ball_step` — the Bresenham stepper |
-| `0x3257` | unlink an entity from the list |
-| `0x40c0` | `random` — BIOS ticks, ten words at `0x3164`, and an LCG at `0x33d2`; returns `AH = value % DL` |
-| `0x1c4f` | the level intro: the border, the lives, and a figure walking the paddle row |
-| `0x1e50` | one 12x7 sprite, shifted to a pixel x and XORed in at the paddle row |
-| `0x2281` | `blit_xor` - seven rows of eleven bytes, XORed |
-| `0x22de` | `paddle_row_offsets` - seven CGA offsets from an x |
-| `0x2f5` | `play_session` - a whole game, level by level |
-| `0x5680` | `read_speed_setting` - POPSPEED's value, out of **interrupt vector 0x68** |
-| `0x14b3` | `build_shifted_sprites` - generates three of every four sprite phases at startup |
-| `0x5630` | the screen blit: waits on 0x3da bit 3, then `rep movsb` per row |
-| `0x2ccd` | `brick_animated` - cells 16-21, the pieces of a running picture |
-| `0x3abf` | the entity that keeps one of those pieces animating |
-| `0x3bac` | `draw_anim_cell` - eight rows of four bytes, copied not XORed |
-
-### The INT 09h handler, `0x03e3`
-
-It does **not** chain to the BIOS, so the INT 16h buffer stops filling while it
-is installed. The game therefore installs it for play and takes it out again for
-the menus, and anything feeding keys in has to follow that. It:
-
-- reads port 0x60, acknowledges via port 0x61 (set bit 7, restore)
-- sets `ah` = 1 for a make, 0 for a break
-- notes the direction at `0x2d4a` if the code matches the left or right key
-- toggles the sound-enable flag `cs:[0x84]` on scan code `0xc3` (F9 break)
-- stores the make code at `0x2d49`
-- `repne scasb` over the three configured keys and stores the make/break flag
-  into `0x2d4c + cx` — so left lands at `0x2d4e`, right at `0x2d4d`, action at
-  `0x2d4c`
-- EOI to port 0x20, `iret`
-
-## Video
-
-CGA **mode 05h**, set once with INT 10h AX=0005 and never changed. 320x200,
-four colours, two bits per pixel, most significant pair leftmost.
-
-- Memory at `0xb8000`, **interlaced**: even scan lines from offset 0, odd from
-  offset `0x2000`, 80 bytes to a row either way. The game's own row-stepping
-  idiom is visible all over the code:
-  `cmp di,0x2000; jb +; sub di,0x1fb0; jmp ++; +: add di,0x2000`.
-- Mode 05h sets the colour-burst-kill bit in the mode-control register, which on
-  an RGB monitor selects the third, often-forgotten four-colour palette:
-  **background / cyan / red / white**. That is what the game is drawn in.
-- The game never writes 0x3d8 itself, so the BIOS defaults for mode 05h are what
-  matter. F8 cycles the colour-select register, 0x3d9.
-- It waits on port 0x3da bit 3 (vertical retrace) around its blits.
-
-## Sound
-
-PC speaker: PIT channel 2 (port 0x42) with the gate at port 0x61 bits 0-1.
-Both the port and `emulation.py` play it. The divisor arrives as **two** writes
-to 0x42, low byte then high, and the low byte is always 1 - `sound_tick` does
-`out 0x42,1` then `out 0x42,note`, so the divisor is `(note << 8) | 1` and the
-note byte alone picks the pitch.
-`sound_tick` at `0x0097` walks a table of (divisor, duration) word pairs; the
-tune pointers are at `cs:0xf8` and the enable flag at `cs:0x84`. Not yet
-modelled — the emulator is silent.
 
 ## The tools
 
@@ -335,20 +140,6 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `popcorn.unpacked.exe` | derived from it, and therefore just as copyrighted. Regenerated, not committed |
 | `debug/`, `*.png` | screenshots and VRAM dumps from `shift+F10` |
 | `venv/`, `coverage.bin` | build and run products |
-
-### The cheat
-
-Typing **`LACRAL software`** and Enter **at the main menu** sets `[0x3f1b]`,
-which is the no-lives-lost flag: `play_session` skips its `dec [0x13c9]` at
-`1ac2:0363` and `ball_after_endgame` skips handing a life back at `1ac2:462c`.
-The string is at `0x3f0b`, `cheat_match` at `0x5171` walks it a key at a time,
-and every key pressed at the menu is fed to it. It is the authors' own company
-name, and it is not the F10 "touche spéciale pour employés" the readme
-mentions - that is a separate screen.
-
-Typing it needs a shift, which the emulator's `KEYMAP` has no state for, so
-the route syntax takes `^l` for shift+L: the same scan code with the
-upper-case ASCII, which is what the BIOS would hand the game.
 
 ### Reaching a screen to check it
 
@@ -460,263 +251,6 @@ The program is stated in its own readme to be public domain
 ("Ce programme fait parti du domaine public"), but that is the authors' word
 about their own distribution, not a licence grant we can re-publish under, so
 nothing of it is redistributed here.
-
-## The entity system
-
-The play loop at `0x1873` walks a **linked list** and calls each node's handler:
-
-```
-1b4d  mov word [0x3142], 0x3138   ; the previous-node cursor, at the head
-1b53  mov bx, [0x3144]            ; the first link
-1b57  cmp bx, 0xffff / je done
-1b5d  push bx / call word ptr [bx] / pop bx
-1b61  cmp byte [0x313a], 0        ; did the handler ask to be removed?
-1b68  mov [0x3142], bx / mov bx, [bx+0xc] / jmp 1b57
-1b71  mov cx, [bx+0xc] / call 0x3257 / mov bx, cx / jmp 1b57
-```
-
-So a node is `+0x00` its per-frame handler and `+0x0c` the next link, the pool
-is at `0x3146` with stride `0x0e`, and `0xffff` ends the chain. **Nothing that
-follows control flow can reach a handler**, which is why static reachability
-stopped at 62.4%; walking the list while the game played found eight of them
-(`0x3273`, `0x3386`, `0x3561`, `0x3717`, `0x390d`, `0x39fa`, `0x3aee`,
-`0x3b2a`) and took it to 76.9%.
-
-The node layout, as far as `0x39fa` (a ball's handler) reads it:
-
-| offset | what |
-| --- | --- |
-| `+0x00` | the per-frame handler — **and it is rewritten in place**, so a node is a small state machine |
-| `+0x04`, `+0x05` | two bytes passed to the draw call as `cl` and `al`; position, most likely |
-| `+0x06` | a pointer to a pointer to the sprite |
-| `+0x08` | flags; the low nibble is the kind |
-| `+0x0c` | the next link |
-
-`0x39fa` is worth reading whole, because it independently confirms the ball
-structure: on a bounce it sets the anchor from the live position with one
-`mov ax,[di] / mov [di+0x18],ax`, zeroes the accumulators at `+0x1a`, flips
-both direction flags, and picks a fresh slope with two `random(7) + 1` into
-`+0x16` and `+0x17`. It also writes `cs:[0xf4] = 6` to start a sound, and
-replaces its own handler with `0x3aee`. `[0x33d4]` carries the collision result
-the step produced.
-
-## A slip in the original, at `1ac2:267d`
-
-`ball_bricks` decides how a ball leaves a brick from which of its four corners
-were inside one. The slots are four words at `0x2e89`, `0x2e8d`, `0x2e91`,
-`0x2e95`, and the direction table follows at `0x2e99`.
-
-With two corners hit and the **first** one clear, the tree at `0x2676` asks
-whether the second is set and then tests **`[0x2e99]`** - one slot too far,
-which is `HIT_DIRS[0]`, and that word is a constant zero. So the both-axes
-bounce is unreachable from that branch and the ball always takes the x-only
-one at `0x26b3`. The three neighbouring tests all read real slots, so this
-looks like an offset written four too high.
-
-It has to be reproduced. Reading slot 3 there instead sends a ball that clips
-two corners in the wrong direction, and it took eleven thousand frames of a
-level 6 game for the two to disagree about anything.
-
-## The ball structure
-
-Four entries of `0x1e` bytes at `0x2ea1`, stepped by `ball_step` at `0x27d7`.
-
-| offset | what |
-| --- | --- |
-| `+0x00`, `+0x01` | **the live position**, in pixels |
-| `+0x14`, `+0x15` | direction flags; non-zero negates that axis (`+0x15` set = moving up) |
-| `+0x16`, `+0x17` | the slope, stored **(dy, dx)** |
-| `+0x18`, `+0x19` | the anchor: where the current straight segment began |
-| `+0x1a`, `+0x1b` | Bresenham accumulators, counting away from the anchor |
-| `+0x1c` | state: 0 idle, 1-2 in play |
-
-Two traps, each of which cost a debugging round:
-
-- **`+0x18`/`+0x19` is not the position.** It is the anchor, and it does not
-  move again until the next bounce. The live position is `+0x00`/`+0x01`, which
-  matches the drawn sprite to the pixel.
-- **The slope pair is stored (dy, dx).** Both branches of the stepper come out
-  as `x_offset / y_offset = [+0x17] / [+0x16]`. Reading it the other way round
-  makes a predicted landing point wrong by the square of the slope.
-
-## The level format
-
-Fifty levels of 176 bytes at image `0xc46c` - the block the program reaches as
-segment `0xc46`. `play_session` copies one at a time to `0x2f10`, and the play
-loop watches the first byte of that copy to know when the level is cleared.
-
-| offset | what |
-| --- | --- |
-| `+0x00` | **brick count**: the non-zero cells **except values 3 and 9**. Exact on all 148 records there are - the fifty built in and the forty-nine in each shipped `.PPC` |
-| `+0x01` | how many teleport cells this level has, 0 to 6 |
-| `+0x02` | their cell indices, `[+0x01]` of them, six bytes of room |
-| `+0x08` | the cells: **12 columns by 14 rows**, one byte each - 168 bytes, so a record is 8 + 168 = 176 |
-
-A 3 hardens into a 4 that nothing breaks, and a 9 is the teleport rather than
-something to clear, so neither counts towards finishing the level. The other
-values do, the six animated pieces included. Only 1, 2, 3, 5, 6, 7, 8, 9, 10,
-11 and 16-21 ever appear in a stored level; 4, 12 and 24-29 are values the game
-writes at run time.
-
-`brick_9` turns **every** cell in that list to 4 when the ball hits one of
-them, so it cannot fall straight into another, and the entity at `0x36fb` puts
-them all back to 9 afterwards. The list is there so neither has to scan the
-field.
-
-### `.PPC` files
-
-Exactly **8,630 bytes** (`0x21b6`), and the shape is the header the game
-already has plus the table it already has:
-
-| offset | what |
-| --- | --- |
-| `+0x0000` | six bytes: `4c 41 43 52 41 4c`, **`LACRAL`** |
-| `+0x0006` | **forty-nine** records of 176 bytes, 8,624 in all |
-
-`level_load_file` at `1ac2:08c8` opens the name at `0x1428`, reads all
-`0x21b6` bytes to `0xc46:0x0006`, and checks the signature. The destination is
-what makes the format make sense: the built-in table starts at `0xc46:0x000c`,
-so the six signature bytes land in the twelve bytes *before* it and the records
-land exactly on it. The file is the table with a label glued to its front.
-
-**Forty-nine, not fifty.** `0x21b6 - 6` is 8,624, which is 49 x 176, and the
-built-in table is 50 x 176. So a `.PPC` replaces levels 0 to 48 and the
-fiftieth is whatever was built in - the last level cannot be replaced by a
-level set.
-
-**The signature check is weaker than it looks.** `1ac2:08f0` is `repne cmpsb`
-over six bytes, comparing `0xc46:0x0000` - the game's own copy of `LACRAL`,
-which the read at offset 6 does not touch - against the file's first six.
-`repne` repeats while ZF is *clear*, so it stops at the first byte that
-**matches**: one byte in six agreeing is enough to pass. `repe` (`f3` rather
-than `f2`) would have meant all six. A file beginning with `L` is accepted
-whatever follows it.
-
-Both shipped sets, `POPTAB.PPC` and `LTF.PPC`, are exactly this and both carry
-a real `LACRAL`.
-
-### The animated bricks
-
-Cell values 16 to 21 are not bricks but the six pieces of one picture, and nine
-of the fifty levels use them - 7, 9, 20, 23, 30, 34, 39, 42 and 45, always all
-six together. Hitting one runs `0x2ccd`, which **adds eight** to the cell
-rather than clearing it, draws the piece from the level's animation script, and
-leaves an entity running `0x3abf` behind; that entity redraws the piece every
-time the script steps, so the picture goes on moving after it has been broken.
-Hitting the marked cell again lands on table entries 24 to 29, which all point
-back at the solid handler: it bounces and nothing more.
-
-`0x3abf` is reachable only through an entity node - **nothing calls it** - so
-anything following control flow will count its bytes as the tail of whatever
-routine precedes it.
-
-The geometry is not a guess. At twelve wide the first level reads as four bands
-of two solid rows alternating between cell values 2 and 1, which is exactly
-what the game draws; at any other width it is diagonal nonsense.
-
-`POPGEN.EXE` writes `.PPC` files - see above for the format. `reconstruct/popcorn
---cmdline poptab` plays them, as does `emulation.py --cmdline poptab`.
-
-## The font
-
-`draw_char` at `0x0c64` maps a character to a glyph index — `' '` to 0, `'-'`
-to `0x0b`, `':'` to `0x26`, `0xff` to `0x27`, `'0'`-`'9'` to `al - 0x2f`,
-`'A'`-`'Z'` to `al - 0x35` — multiplies by 24 and indexes a table at `0x9020`.
-Each glyph is 12 rows of one word: **8x12 at two bits per pixel**. The
-destination steps the CGA interlace and backs `DI` up two bytes each row to
-stay in one column.
-
-Glyph 0, what a space maps to, is **not blank**: it is a solid block of colour
-2, which is how the game paints the red bars its headings sit on.
-`dump_data.py font` renders the sheet, which is the check — a wrong stride is
-obvious at a glance and invisible in a hex dump. This is the score-panel font;
-the menu uses a second, larger one that has not been located yet.
-
-## Level 10, and why a surviving bot is not a winning one
-
-Level 10 is worth reading as a piece of design, because it is where an
-autoplayer stops. Row 8 is **twelve cells of value 3**, and `brick_3` hardens a
-3 into a 4 that nothing breaks - so the moment the ball touches that row the
-top of the field is walled off for good, and 41 of the level's 77 bricks are
-behind it.
-
-The ball is served below the wall, so the top is unreachable by playing. Nor
-does a `+` capsule save it: `bonus_release` picks one of **eight** kinds from
-the table at `0xac60`, and `+` and V are not among them - a hatch never drops
-either. What is left is the **9 at row 12, column 8**, reachable through the
-one gap at row 11 column 8: brick 9 takes the ball away and puts it back
-somewhere else, which is how a player gets above the wall.
-
-The port is not wrong here. Every brick handler the level uses - 1, 2, 3, 4,
-9, 10 - verifies identical on it. It is the bot that cannot aim at a
-one-cell gap, and that is a different problem from transcription.
-
-## The parachute
-
-**Brick 10** - cell value 10, the red block with the white grid - does not
-just break. `0x2c59` puts the ball into **state 4** and allocates an entity
-running `0x37e0` which carries it down the screen under a parachute, a pixel a
-frame, from where the brick was to `y = 0xb8`. Then it lets go: the ball comes
-back **upwards if the safety net is up**, and otherwise it is lost.
-
-The paddle can catch it. `entity_ball_hold` runs the carrier through
-`bonus_update` at `0x3df1`, the same collision a falling capsule uses, so the
-paddle, another ball or the laser all release it early - `[0x33d4]` says
-which. The catch window is the capsule one: `y <= 0xbe && y + 0x0f >= 0xb8`,
-and the sprite spans `x..x+0x0f`.
-
-The trap for anything reading the game's state is that **a held ball's own
-`+0x00`/`+0x01` stop moving**. The position on screen is the carrier's `+4`
-and `+5`; the ball array says the ball is still where the brick was. A bot
-that only reads the ball array does not see the parachute at all.
-
-Brick 9 (`0x2b9d`) is the same idea with state 3: the ball is taken away and
-put back somewhere else.
-
-## The capsules
-
-Eight of the eleven kinds can come out of a hatch (the table at `0xac60`);
-`bonus_release` at `0x39a1` picks one. A falling capsule is an **entity running
-`0x3273`** with `+2` x, `+3` y and `+4` its kind - it is in no table, so the
-only way to find one is to walk the entity list. Caught, it rewrites its own
-handler to `0x3386` and the paddle morphs; the effect fires when the morph
-finishes, out of the table at `0x33bc`.
-
-The letters are French, and two of them are the opposite of what they look
-like:
-
-| kind | letter | what it does |
-| --- | --- | --- |
-| 0 | R | a hundred points, and it **cancels the net** and the stopped-monsters state. The trap of the set: it undoes an F |
-| 1 | C | the paddle catches the ball |
-| 2 | E | **the wider paddle** - 39 pixels against 27. The effect routine at `0x3231` is empty; the widening is the morph, through `0x2d2d` |
-| 3 | L | the laser |
-| 4 | T | more balls |
-| 5 | F | *filet*, the safety net across the bottom |
-| 6 | I | every ball reverses vertically |
-| 7 | V | *vie*, an extra life |
-| 8 | + | the level is over |
-| 9 | S | **the ball moves less often** - `0x31e8` counts `[0x1486]` *down* to 2, so two frames in three becomes one in two |
-| 10 | M | **the monsters stop** - no hatch opens while its timer runs. It does not slow the game down |
-
-`dump_data.py` will not render these; the letters were read by printing only
-the colour-3 pixels of frame 7 of each kind's table at `0x3385`, which is the
-frame where the capsule is fully open.
-
-**There are two sources, with different odds, and that matters.** A hatch
-(`bonus_release` at `0x39a1`) picks `random(8)` from the table at `0xac60` -
-**eight** of the eleven kinds, and V, I and + are not among them. A **brick 2**
-that breaks outright instead drops one chosen by `bonus_kind`, a weighted pick
-over the cumulative table at `0x33b1`, which can be any of the eleven:
-
-| | R | C | E | L | T | F | I | V | + | S | M |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| /255 | 25 | 38 | 25 | 20 | 20 | 25 | 27 | **7** | **2** | 38 | 28 |
-
-So `+` is **0.8%** of brick-2 capsules and V is 2.7%, and on a level whose
-brick 2s are gone or unreachable neither can appear at all. That is why the
-bot never sees a `+` on level 10 - the wall leaves only hatches - and why
-`extra_life` at `0x318b` is the hardest routine in the game to make run.
 
 ## Two screens the port deliberately does not have
 

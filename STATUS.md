@@ -1,7 +1,8 @@
 # Status
 
 Where the port has got to, what is proven, and what is next.
-Facts about the program live in [CLAUDE.md](CLAUDE.md).
+Facts about the program live in [docs/](docs/README.md); how to work on the
+port lives in [CLAUDE.md](CLAUDE.md).
 
 Updated 2026-08-23.
 
