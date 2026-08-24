@@ -547,10 +547,53 @@ loop watches the first byte of that copy to know when the level is cleared.
 
 | offset | what |
 | --- | --- |
-| `+0x00` | **brick count** - checked against the non-zero cells of four levels and exact every time |
-| `+0x01` | a second count, used by `0x36fb` |
-| `+0x02` | a short list `0x36fb` walks, `[+0x01]` entries long |
-| `+0x08` | the cells: **12 columns by 14 rows**, one byte each |
+| `+0x00` | **brick count**: the non-zero cells **except values 3 and 9**. Exact on all 148 records there are - the fifty built in and the forty-nine in each shipped `.PPC` |
+| `+0x01` | how many teleport cells this level has, 0 to 6 |
+| `+0x02` | their cell indices, `[+0x01]` of them, six bytes of room |
+| `+0x08` | the cells: **12 columns by 14 rows**, one byte each - 168 bytes, so a record is 8 + 168 = 176 |
+
+A 3 hardens into a 4 that nothing breaks, and a 9 is the teleport rather than
+something to clear, so neither counts towards finishing the level. The other
+values do, the six animated pieces included. Only 1, 2, 3, 5, 6, 7, 8, 9, 10,
+11 and 16-21 ever appear in a stored level; 4, 12 and 24-29 are values the game
+writes at run time.
+
+`brick_9` turns **every** cell in that list to 4 when the ball hits one of
+them, so it cannot fall straight into another, and the entity at `0x36fb` puts
+them all back to 9 afterwards. The list is there so neither has to scan the
+field.
+
+### `.PPC` files
+
+Exactly **8,630 bytes** (`0x21b6`), and the shape is the header the game
+already has plus the table it already has:
+
+| offset | what |
+| --- | --- |
+| `+0x0000` | six bytes: `4c 41 43 52 41 4c`, **`LACRAL`** |
+| `+0x0006` | **forty-nine** records of 176 bytes, 8,624 in all |
+
+`level_load_file` at `1ac2:08c8` opens the name at `0x1428`, reads all
+`0x21b6` bytes to `0xc46:0x0006`, and checks the signature. The destination is
+what makes the format make sense: the built-in table starts at `0xc46:0x000c`,
+so the six signature bytes land in the twelve bytes *before* it and the records
+land exactly on it. The file is the table with a label glued to its front.
+
+**Forty-nine, not fifty.** `0x21b6 - 6` is 8,624, which is 49 x 176, and the
+built-in table is 50 x 176. So a `.PPC` replaces levels 0 to 48 and the
+fiftieth is whatever was built in - the last level cannot be replaced by a
+level set.
+
+**The signature check is weaker than it looks.** `1ac2:08f0` is `repne cmpsb`
+over six bytes, comparing `0xc46:0x0000` - the game's own copy of `LACRAL`,
+which the read at offset 6 does not touch - against the file's first six.
+`repne` repeats while ZF is *clear*, so it stops at the first byte that
+**matches**: one byte in six agreeing is enough to pass. `repe` (`f3` rather
+than `f2`) would have meant all six. A file beginning with `L` is accepted
+whatever follows it.
+
+Both shipped sets, `POPTAB.PPC` and `LTF.PPC`, are exactly this and both carry
+a real `LACRAL`.
 
 ### The animated bricks
 
@@ -571,10 +614,7 @@ The geometry is not a guess. At twelve wide the first level reads as four bands
 of two solid rows alternating between cell values 2 and 1, which is exactly
 what the game draws; at any other width it is diagonal nonsense.
 
-`POPGEN.EXE` writes `.PPC` files of the same shape - both shipped ones are
-8,630 bytes against the built-in table's 8,800. The loader at `0x08c8` reads
-`0x21b6` bytes into the block at segment `0xc46`, six bytes in, and calls the
-file valid when its own six-byte header repeats. `reconstruct/popcorn
+`POPGEN.EXE` writes `.PPC` files - see above for the format. `reconstruct/popcorn
 --cmdline poptab` plays them, as does `emulation.py --cmdline poptab`.
 
 ## The font
