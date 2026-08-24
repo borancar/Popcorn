@@ -6159,6 +6159,18 @@ void screen_all_levels_done(void)
 
     uint32_t bp = 0x3ef2;
     for (uint32_t bh = 1; bh != 0x5c; bh++) {
+        /* 1ac2:596c, the **top** of the pass - before the band is drawn, not
+         * after. Without a sync here this screen has none at all: a lockstep
+         * driver is blocked while it runs and cannot tell "finished" from
+         * "hung", and the sequence after the fiftieth level is compared by
+         * nothing. Its routines are each checked; that is not the animation
+         * being right.
+         *
+         * Placing it after the copy instead put the port one pass ahead of
+         * the emulator and reported nine pixels of red along the bottom scan
+         * line that were only the band this side had already drawn. A sync
+         * has to sit where the offset it is matched against sits. */
+        io_frame_sync_extra(SYNC_ENDING);
         uint32_t di = bp, si = SEG_C46 + 0x7c70;
         io_wait_retrace();
         for (uint32_t r = 0; r < bh; r++) {
@@ -6170,22 +6182,33 @@ void screen_all_levels_done(void)
         bp = cga_prev_row(bp);
         for (int32_t i = 0; i < 5; i++)
             game_delay();
-        /* 1ac2:596c, once a pass. Without it this screen has no sync at all -
-         * a lockstep driver is blocked while it runs and cannot tell
-         * "finished" from "hung", and the sequence after the fiftieth level
-         * is compared by nothing. The routines it calls are each checked;
-         * that is not the same as the animation being right. */
-        io_frame_sync_extra(SYNC_ENDING);
         io_present();
         if (!io_pump())
             return;
     }
-    /* Then the blobs walk a 0x18 by `bl` grid, and the kernels run until a
-     * key is pressed. */
-    for (uint32_t bh = 0; bh != 0x18; bh++)
-        for (uint32_t bl = 0x1a; bl > 0; bl--) {
-            ending_walk(bl, bh, ending_blobs());
+    /* 1ac2:59bb - the blobs walk, and it is a **script**, not a grid.
+     *
+     * `mov si, 0x2825` sits *before* the outer loop, so si walks continuously
+     * across all 0x18 passes rather than restarting; each pass is `mov bl, 5`
+     * - five steps, not 0x1a - and each step reads one byte with `lodsb` and
+     * **skips** when it is zero (1ac2:59c5). The port had five times the steps
+     * it should, ran every one of them, and never read the script at all.
+     *
+     * The `push si` either side of ending_blobs is not decoration: 1ac2:5b80
+     * opens `mov si, 0x289d` and walks off with it.
+     *
+     * The script is at 0xc46:0x2825 - this whole screen runs with DS there,
+     * which is what 0x2823, 0x289d and 0x28d9 are reached through as well. */
+    uint32_t walk = SEG_C46 + 0x2825;
+    for (uint32_t bh = 0; bh != 0x18; bh++) {
+        io_frame_sync_extra(SYNC_ENDING);       /* 1ac2:59c0, the pass */
+        for (uint32_t bl = 5; bl > 0; bl--) {
+            if (!g_image[walk++])               /* 1ac2:59c2, lodsb */
+                continue;
+            uint32_t blobs = ending_blobs();    /* 1ac2:59c9 */
+            ending_walk(bl, bh, blobs);         /* 1ac2:59ce */
         }
+    }
     /* 0x2509 is not a constant anyone chose: 1ac2:59dd calls restore_int09
      * immediately before this, which is `mov ax, 0x2509 / int 21h`, and the
      * ending's first particle is seeded from whatever AX happens to hold. The
