@@ -874,7 +874,7 @@ size_t popcorn_load_image(void)
 static void menu_redraw(void)
 {
     speaker_off();
-    io_flush_keys();
+    flush_keys();                   /* 1ac2:0106 */
     restore_screen();
     if (img_w(INPUT_SELECTED) != INPUT_KEYBOARD)
         menu_arrow();
@@ -1274,7 +1274,7 @@ int32_t play_loop(void)
     b[0x1c + BALL_STRIDE * 2] = 0;      /* +0x58: ball 2 idle */
     ball_draw(BALLS + B_SPRITE, b[0x00], b[0x01]);
 
-    io_flush_keys();
+    flush_keys();                   /* 1ac2:0106 */
 
     /* Wait for the action key, or two thousand ticks, before serving. */
     if (img_w(INPUT_ACTIVE) != 0x1785) {
@@ -4705,7 +4705,7 @@ uint8_t screen_player_names(void)
 {
     g_image[PLAYER_COUNT] = 0;
     play_frame();                       /* 1ac2:1212 - the surround */
-    io_flush_keys();
+    flush_keys();                   /* 1ac2:0106 */
 
     uint32_t di = 0x142;
     for (;;) {

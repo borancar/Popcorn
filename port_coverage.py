@@ -164,7 +164,13 @@ def unwired(here):
     import re
     src = open(os.path.join(here, "reconstruct", "game.c")).read()
     body = src
-    for f in ("verify.c", "lockstep.c", "sdl_io.c", "main.c"):
+    # **Not verify.c.** Its dispatch calls everything it can check, so a
+    # routine only the harness can reach counts as called and looks wired.
+    # screen_stash and screen_unstash sat like that: transcribed, dispatched,
+    # agreeing - and unreachable from the game, because the key poll that
+    # leads to them was not transcribed. Esc did nothing in a level for
+    # months and this said the port was complete.
+    for f in ("lockstep.c", "sdl_io.c", "main.c", "devmain.c", "autoplay.c"):
         body += open(os.path.join(here, "reconstruct", f)).read()
     sig = r"^(?:static\s+)?(?:void|int32_t|uint32_t|uint8_t)\s+"
     defs = re.findall(sig + r"(\w+)\s*\(", src, re.M)
@@ -182,7 +188,7 @@ def unwired(here):
         if uses - made <= 0:
             out.append(name)
     print(f"\n{len(set(defs))} functions in the port, "
-          f"{len(out)} never called:")
+          f"{len(out)} the game never calls:")
     for n in out:
         why = expected.get(n)
         print(f"  {n:24s} {why or '** not accounted for **'}")
