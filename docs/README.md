@@ -14,7 +14,7 @@ about it.
 | [level-format.md](level-format.md) | the 176-byte level record, the `.PPC` file, the cell values, the animated bricks, and why level 10 stops a bot |
 | [entities.md](entities.md) | the entity chain, the ball structure, the capsules, the parachute, and a slip in the original's brick collision |
 | [video-and-sound.md](video-and-sound.md) | CGA mode 05h and its palette, the 8x12 font, the PC speaker |
-| [utilities.md](utilities.md) | POPSPEED, and the cheat typed at the menu |
+| [utilities.md](utilities.md) | POPSPEED, POPGEN and its level editor, and the cheat typed at the menu |
 | [the-game.md](the-game.md) | what Popcorn is, its menu keys, and what kind of program the binary turned out to be |
 | [../reconstruct/popcorn.doc](../reconstruct/popcorn.doc) | the authors' own readme - the primary source for the licence, the speed range and the menu keys |
 
