@@ -6,6 +6,9 @@
  * the deliverable's command line stays a fact about the deliverable rather
  * than a place where debugging options accumulate.
  *
+ *   --autoplay [SEED]    play by itself, through the mouse - the same bot
+ *                        autoplay.py drives the port with, but without the
+ *                        Python process, the emulator beside it and the pipe
  *   --cmdline NAME       the level file, as `popcorn NAME` takes it
  *   --scale N            window scale
  *   --speed N            as if POPSPEED had been run with N
@@ -67,18 +70,26 @@ int32_t main(int32_t argc, char **argv)
             vram = argv[++i];
         else if (!strcmp(argv[i], "--keys") && i + 1 < argc)
             keys = argv[++i];
+        else if (!strcmp(argv[i], "--autoplay")) {
+            uint32_t seed = 0;
+            if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9')
+                seed = (uint32_t)strtoul(argv[++i], NULL, 10);
+            autoplay_enable(seed);
+        }
         else if (!strcmp(argv[i], "--cmdline") && i + 1 < argc)
             levels = argv[++i];
         else {
             fprintf(stderr,
-                    "usage: %s [--cmdline NAME] [--scale N] [--speed N]\n"
+                    "usage: %s [--autoplay [SEED]] [--cmdline NAME]\n"
+                    "       %s [--scale N] [--speed N]\n"
                     "       %s [--run-ms N] [--shot FILE] [--dump-vram FILE]\n"
                     "       %s [--dump-image FILE] [--keys SCAN@MS,...]\n"
                     "       %s --verify STATE-IN RESULT-OUT\n"
                     "       %s --lockstep STATE [--lockstep-sync-...]\n"
                     "\n"
                     "To play, use popcorn.\n",
-                    argv[0], argv[0], argv[0], argv[0], argv[0]);
+                    argv[0], argv[0], argv[0], argv[0], argv[0],
+                    argv[0]);
             return 2;
         }
     }

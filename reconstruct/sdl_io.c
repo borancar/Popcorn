@@ -265,8 +265,18 @@ void io_mouse_warp(uint32_t x, uint32_t y)
                               y * (float)win_scale);
 }
 
+static void autoplay_tick(void)
+{
+    static uint32_t last = 0xffffffffu;
+    if (!autoplay_on() || last == presented)
+        return;
+    last = presented;
+    autoplay_step();
+}
+
 uint32_t io_mouse_x(void)
 {
+    autoplay_tick();
     if (mouse_pinned)
         return pinned_x;
     if (io_lockstep())
@@ -275,6 +285,7 @@ uint32_t io_mouse_x(void)
 }
 uint32_t io_mouse_buttons(void)
 {
+    autoplay_tick();
     if (mouse_pinned)
         return pinned_btn;
     if (io_lockstep())

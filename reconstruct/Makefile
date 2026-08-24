@@ -21,7 +21,7 @@ LDLIBS  += $(shell pkg-config --libs sdl3) -lm
 #   popcorn-dev  the same game with the flags the harness drives it by:
 #                --lockstep, --verify, --shot, --keys and the rest. Every
 #                tool here runs this one.
-COMMON = exepack.o sdl_io.o game.o verify.o lockstep.o stubs.o
+COMMON = exepack.o sdl_io.o game.o verify.o lockstep.o stubs.o autoplay.o
 BIN    = popcorn
 DEVBIN = popcorn-dev
 

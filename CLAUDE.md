@@ -293,6 +293,7 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `reconstruct/Makefile` | builds `reconstruct/popcorn` against SDL3 |
 | `reconstruct/main.c` | **`popcorn`**: the game, with the command line the original has and no other - `popcorn` or `popcorn POPTAB`. That command line is part of what the port is, so nothing else is allowed to accumulate in it |
 | `reconstruct/devmain.c` | **`popcorn-dev`**: the same game with the flags that exist to *check* it - `--lockstep`, `--verify`, `--shot`, `--keys`, `--cmdline`, `--dump-image`. Every tool here runs this one |
+| `reconstruct/autoplay.c` | the bot, in C: `popcorn-dev --autoplay`. The same decisions `autoplay.py` makes, without the Python process, the emulator beside it and the pipe. It plays through `io_pin_mouse`, the door lockstep already uses, and reads the image without writing to it. It takes the paddle only - getting into a game is still F1 |
 | `reconstruct/exepack.c` | the EXEPACK decoder in C, byte-identical to the Python one. The port reads the player's own `POPCORN.EXE` at startup |
 | `reconstruct/game.h` | types, the named image offsets, and the backend interface |
 | `reconstruct/game.c` | the transcribed routines — all 181 of them — each carrying the `1ac2:xxxx` offset it was read from. Four more are here as no-ops with a comment saying why, and are counted as neither done nor outstanding |
