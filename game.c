@@ -6784,6 +6784,11 @@ int32_t ball_after_endgame(uint32_t ball)
             speaker_off();
             ball_draw(BALLS + 4, g_image[BALLS], g_image[BALLS + 1]);
             for (uint32_t si = 0x6abe; img_w(si) != 0xffff; si += 2) {
+                /* 1ac2:4769. The stretch between the ball reaching the
+                 * chamber and the curtain starting had no sync of its own,
+                 * so it was the one part of the transition still compared by
+                 * nothing - and it is where the level is still on screen. */
+                io_frame_sync_extra(SYNC_CURTAIN);
                 for (int32_t i = 0; i < 0x147; i++)
                     game_delay();
                 xor_sprite_16x7(0x60, 0x38, img_w(si - 2));
