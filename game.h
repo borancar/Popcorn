@@ -226,6 +226,7 @@ void io_set_grab(int32_t on);
 #define SYNC_ENDGAME  2                 /* ball_after_endgame, once a step */
 #define SYNC_RESULTS  4                 /* screen_results' wait, once a pass */
 #define SYNC_CURTAIN  8                 /* the ending animation, once a pass */
+#define SYNC_ENDING  16                 /* after level 49, once a pass */
 #endif
 void io_frame_sync_extra(int32_t which);
 void io_lockstep_extra_sync(int32_t mask);
@@ -468,6 +469,7 @@ void io_set_grab(int32_t on);
 #define SYNC_ENDGAME  2                 /* ball_after_endgame, once a step */
 #define SYNC_RESULTS  4                 /* screen_results' wait, once a pass */
 #define SYNC_CURTAIN  8                 /* the ending animation, once a pass */
+#define SYNC_ENDING  16                 /* after level 49, once a pass */
 #endif
 void io_frame_sync_extra(int32_t which);
 void io_lockstep_extra_sync(int32_t mask);

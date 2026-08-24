@@ -59,6 +59,8 @@ int32_t main(int32_t argc, char **argv)
             extra_sync |= SYNC_RESULTS;
         else if (!strcmp(argv[i], "--lockstep-sync-curtain"))
             extra_sync |= SYNC_CURTAIN;
+        else if (!strcmp(argv[i], "--lockstep-sync-ending"))
+            extra_sync |= SYNC_ENDING;
         else if (!strcmp(argv[i], "--verify") && i + 2 < argc)
             return verify_main(argv[i + 1], argv[i + 2]);
         else if (!strcmp(argv[i], "--dump-image") && i + 1 < argc)
