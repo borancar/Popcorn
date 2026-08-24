@@ -48,6 +48,7 @@ BONUS_BODY = 0x4210                     # the end-of-level bonus, --from-bonus
 CURTAIN = (0x467F, 0x09D1)
 ENDING = (0x596C, 0x59C0, 0x59E3)       # after level 49, --sync-ending
 INTRO = (0x1EC4, 0x1EE0, 0x1F13)        # the level intro, --sync-intro
+
 FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
 # The opt-in second sync point, --sync-scroll. screen_scroll_up is called once
 # per scrolled row by every screen that has a loop of its own, so taking it as
@@ -56,6 +57,23 @@ FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
 SCROLL_UP = 0x4878
 BALL_ENDGAME = 0x45A1                   # --sync-endgame, once a ball step
 RESULTS_WAIT = 0x1037                   # --sync-results, once a wait pass
+
+# Every extra sync point, and the kind the port tags it with - SYNC_SCROLL 1,
+# SYNC_ENDGAME 2, SYNC_RESULTS 4, SYNC_CURTAIN 8, SYNC_ENDING 16,
+# SYNC_INTRO 32, from game.h.
+#
+# This used to be `1 if off == SCROLL_UP else 2` over those two offsets alone,
+# and every kind added afterwards stopped the emulator here while tagging
+# nothing. The port tags all of them, so the check below saw a tag on one side
+# and none on the other and reported the two as standing in different places -
+# at every single one. --sync-curtain looked like the whole curtain differing
+# and was really the driver not knowing the word for it.
+SYNC_KIND = {SCROLL_UP: 1, BALL_ENDGAME: 2, RESULTS_WAIT: 4}
+SYNC_KIND.update({o: 8 for o in CURTAIN})
+SYNC_KIND.update({o: 16 for o in ENDING})
+SYNC_KIND.update({o: 32 for o in INTRO})
+SYNC_NAME = {1: "scroll", 2: "endgame", 4: "results",
+             8: "curtain", 16: "ending", 32: "intro"}
 #  - and NOT 0x1a62, its top: the serve wait jumps there too, at 0x1a58,
 #    whenever the action button is held, so the top is hit more than once
 #    a frame and the two sides end up compared at different points.
@@ -435,11 +453,11 @@ def main():
             if resuming[0] == off:
                 resuming[0] = None
                 return
-            if off in (SCROLL_UP, BALL_ENDGAME):
+            if off in SYNC_KIND:
                 # Tagged here rather than where the offset is first seen: the
                 # skip above runs before it, so tagging earlier reported a
                 # scroll in the window *after* the one that stopped at it.
-                draws.append((0x9100 | (1 if off == SCROLL_UP else 2),
+                draws.append((0x9100 | SYNC_KIND[off],
                               0))       # matches the port's tag
             frame_hit["img"] = snapshot_image()
             frame_hit["vram"] = snapshot_vram()
@@ -771,14 +789,16 @@ def main():
         # port frame, so those always agree, which made the check look like a
         # safeguard while being unable to fail. The tag says which sync point
         # each side stopped at, and that can disagree.
-        if args.sync_scroll or args.sync_endgame:
-            emu_scroll = any(t & 0xff00 == 0x9100 for t, _ in draws)
-            port_scroll = any(t & 0xff00 == 0x9100 for t in pdraws)
-            if emu_scroll != port_scroll:
+        if any((args.sync_scroll, args.sync_endgame, args.sync_results,
+                args.sync_curtain, args.sync_ending, args.sync_intro)):
+            def where(tags):
+                k = [t & 0xff for t in tags if t & 0xff00 == 0x9100]
+                return SYNC_NAME.get(k[0], "?") if k else "a frame close"
+            emu_at = where([t for t, _ in draws])
+            port_at = where(pdraws)
+            if emu_at != port_at:
                 print(f"\n*** out of step at comparison {n}: the emulator "
-                      f"stopped at {'a scroll' if emu_scroll else 'a frame '
-                      'close'} and the port at "
-                      f"{'a scroll' if port_scroll else 'a frame close'}. "
+                      f"stopped at {emu_at} and the port at {port_at}. "
                       f"Everything compared from here is two different "
                       f"moments, not two different results.")
                 if not args.keep_going:
@@ -824,7 +844,7 @@ def main():
                     if a == 0x1fc1:
                         return "backdrop"
                     if a & 0xff00 == 0x9100:
-                        return ("sync:scroll" if a & 1 else "sync:endgame")
+                        return "sync:" + SYNC_NAME.get(a & 0xff, "?")
                     if a >= 0x9000:
                         return ("exit:no-balls", "exit:no-bricks",
                                 "exit:ball-lost",

@@ -1721,8 +1721,6 @@ void level_intro(void)
      * here - `mov cx,3` and down to -1 - which is not the same order as the
      * sweep up, and shows: they trail the reveal instead of leading it. */
     while (g_image[SWEEP_Y] != 0xb3) {
-        /* 1ac2:467f, the **top** of the pass - before the row is drawn. */
-        io_frame_sync_extra(SYNC_CURTAIN);
         uint32_t y = (g_image[SWEEP_Y] - 6) & 0xff;
         draw_brick_row(y);              /* 1ac2:2034 */
         field_backdrop((y + 1) & 0xff); /* 1ac2:1fc1 */
@@ -6684,6 +6682,13 @@ static void endgame_curtain(void)
 
     uint32_t bp = 0x3130;
     for (uint32_t ah = 0x70; ah > 0; ah--) {
+        /* 1ac2:467f, the top of the pass. This sync spent a while in
+         * level_intro's reveal loop instead - a different routine in a
+         * different screen - so the two sides fired it a different number of
+         * times and every comparison after the first was a mismatched pair.
+         * Which read as "the whole curtain differs" and was really "this is
+         * not the curtain". */
+        io_frame_sync_extra(SYNC_CURTAIN);
         uint32_t d = bp;
         for (int32_t r = 7; r > 0; r--) {
             uint32_t s = cga_next_row(d);
