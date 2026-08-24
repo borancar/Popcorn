@@ -5,6 +5,10 @@
 *.hsc
 *.bat
 
+# The README's screenshots are ours - the port's own output, not the game's
+# data - so they come back from the repository-wide *.png rule.
+!screenshots/*.png
+
 # Build output.
 *.o
 popcorn

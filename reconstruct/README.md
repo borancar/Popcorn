@@ -8,6 +8,16 @@ the address in the original it was read from. It builds and plays:
 make && ./popcorn
 ```
 
+<p>
+<img src="screenshots/menu.png" width="320" alt="Popcorn's menu, drawn by the port">
+<img src="screenshots/level-1.png" width="320" alt="The first level in play, the bot on the paddle">
+</p>
+
+Both are the port's own output, captured from it with `popcorn-dev --shot`: the
+menu it draws at startup, and the first level in play. The name in the panel is
+the bot's - `popcorn-dev --autoplay` plays the game by itself, which is how the
+port gets watched without a person at the paddle.
+
 **The game is here**, because its authors put it in the public domain. From
 `popcorn.doc`, in their own words:
 
