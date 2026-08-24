@@ -1721,6 +1721,8 @@ void level_intro(void)
      * here - `mov cx,3` and down to -1 - which is not the same order as the
      * sweep up, and shows: they trail the reveal instead of leading it. */
     while (g_image[SWEEP_Y] != 0xb3) {
+        /* 1ac2:467f, the **top** of the pass - before the row is drawn. */
+        io_frame_sync_extra(SYNC_CURTAIN);
         uint32_t y = (g_image[SWEEP_Y] - 6) & 0xff;
         draw_brick_row(y);              /* 1ac2:2034 */
         field_backdrop((y + 1) & 0xff); /* 1ac2:1fc1 */
@@ -4943,6 +4945,9 @@ void panel_finish(void)
 {
     uint32_t di = 0x1cc0;
     for (int32_t pass = 0; pass < 6; pass++) {
+        /* 1ac2:09d1, the **top** of the pass. After the drawing instead puts
+         * this side a pass ahead - the same slip the ending sync had. */
+        io_frame_sync_extra(SYNC_CURTAIN);
         uint32_t d = di;
         field_marks_wide(d, pass);
         d = (d - 0x7d0) & 0xffff;
@@ -4954,7 +4959,6 @@ void panel_finish(void)
         di = di > CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
         for (int32_t i = 0; i < 0x147; i++)
             game_delay();
-        io_frame_sync_extra(SYNC_CURTAIN);      /* 1ac2:09d1 */
         io_present();
         if (!io_pump())
             return;
@@ -6700,7 +6704,6 @@ static void endgame_curtain(void)
         for (int32_t i = 0; i < 0x0f; i++)
             game_delay();
         g_image[SWEEP_Y]--;
-        io_frame_sync_extra(SYNC_CURTAIN);      /* 1ac2:467f */
         io_present();
         if (!io_pump())
             return;
@@ -6869,7 +6872,24 @@ int32_t bonus_end_level(void)
     return bonus_end_level_body();      /* 1ac2:4210 */
 }
 
+/* Harness only, and not the game's state: nothing in the original knows it
+ * is "in the bonus", because nothing needs to. The bot does - the field in
+ * here is a funnel and the cells still hold a level's worth of bricks that
+ * are neither drawn nor reachable, so its usual aim sends the ball at a brick
+ * that is not there. */
+int32_t g_in_bonus;
+
+static int32_t bonus_end_level_run(void);
+
 int32_t bonus_end_level_body(void)
+{
+    g_in_bonus = 1;
+    int32_t how = bonus_end_level_run();
+    g_in_bonus = 0;
+    return how;
+}
+
+static int32_t bonus_end_level_run(void)
 {
     speaker_off();
     life_lost();

@@ -268,6 +268,12 @@ void io_mouse_warp(uint32_t x, uint32_t y)
 static void autoplay_tick(void)
 {
     static uint32_t last = 0xffffffffu;
+    /* Never under lockstep. The pinned mouse is read *before* the lockstep
+     * one, so a run with both would have the port playing itself while the
+     * driver believed it was in control - and the comparison would be two
+     * different games rather than two views of one. */
+    if (io_lockstep())
+        return;
     if (!autoplay_on() || last == presented)
         return;
     last = presented;
