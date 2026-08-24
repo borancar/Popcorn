@@ -6671,7 +6671,7 @@ void screen_end_of_game(void)
 /* Both endings play the same animation: a two-word cap at 0x1198, then 0x70
  * passes that scroll a 26-word band up seven rows, lay a fresh cap, and draw
  * one more row of the brick field as [0x2f0c] counts down. */
-static void endgame_curtain(void)
+static void endgame_curtain(int32_t cells)
 {
     uint32_t di = 0x1198;
     img_vram_setw(di, 0xffff);
@@ -6715,7 +6715,20 @@ static void endgame_curtain(void)
         /* 1ac2:46dc caps at whatever DI the call left, which is the end of
          * the brick row. Capping the caller's own DI + 2 instead put it at
          * the band's second byte and left the row's end uncapped. */
-        d = draw_brick_row(g_image[SWEEP_Y]);       /* 1ac2:46d6 */
+        /* 1ac2:46d6, and it is `push ds / mov ds, bp` first. BP is the data
+         * segment on one way out of the bonus and **not** on the other:
+         * 1ac2:4636, on the floor path, is `mov bp, ds`, and the chamber path
+         * at 1ac2:4794 never loads it. So the same call reads the level's
+         * cells on one ending and something that is not the cells on the
+         * other - which is why a completed level's transition is black where
+         * a lost one shows the level behind it.
+         *
+         * Matched to what the original *does* rather than to a number: what
+         * BP carries on that path is not established here, only that it is
+         * not the data segment. A register dump at 1ac2:46ce would settle it,
+         * the way one settled DS = 0xc46 in the ending. */
+        if (cells)
+            d = draw_brick_row(g_image[SWEEP_Y]);   /* 1ac2:46d6 */
         g_vram[d & (CGA_SIZE - 1)] = 0x0d;
         g_vram[(d + 1) & (CGA_SIZE - 1)] = (uint8_t)cap;
 
@@ -6782,7 +6795,7 @@ int32_t ball_after_endgame(uint32_t ball)
              * at 1ac2:4630, and so does the free life - the two chambers do
              * not finish the level the same way, and **1 says so**: the level
              * is done. See the floor ending below for why that matters. */
-            endgame_curtain();
+            endgame_curtain(0);         /* 1ac2:4794 leaves BP alone */
             return 1;
         }
         /* Between the chambers: the sides of the funnel at x 0x60 and 0x6c.
@@ -6813,7 +6826,7 @@ int32_t ball_after_endgame(uint32_t ball)
     if (g_image[0x3f1b] != 1)
         g_image[LIVES]++;               /* a free life, unless cheating */
     g_image[SWEEP_Y] = 0x75;
-    endgame_curtain();
+    endgame_curtain(1);                 /* 1ac2:4636 put DS in BP */
     /* **2**: this ending arrives back in play_session as a *lost life*, not a
      * completed level. That is not a guess about the carry - it is what the
      * free life two lines up is for. play_session decrements at 1ac2:0363 on
