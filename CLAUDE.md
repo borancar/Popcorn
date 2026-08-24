@@ -680,8 +680,7 @@ it runs rather than the job it does. It writes one of those three prompts.
   This is a port of 16-bit assembly, where every value has a width the
   original depended on - `int16_t` says "this truncation is the `imul`'s" in a
   way `short` does not, and a bare `int` says nothing at all. `char` stays
-  `char` for actual strings. `reconstruct/tostdint.py` did the conversion and
-  is comment-aware, because "the compare is unsigned" is prose.
+  `char` for actual strings.
 - The C port is **structured C that reads as a game**, not transliterated
   register-shuffling — checked against the emulator rather than assumed. If a
   routine genuinely cannot be written honestly as structured C, write it
