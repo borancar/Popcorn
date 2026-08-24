@@ -45,7 +45,7 @@ PLAY_LOOP = 0x1873                      # one level
 PLAY_SESSION = 0x02F5                   # a whole game, with --from-session
 BONUS_BODY = 0x4210                     # the end-of-level bonus, --from-bonus
 # The ending animation, --sync-curtain: the curtain's pass and panel_finish's.
-CURTAIN = (0x467F, 0x09D1)
+CURTAIN = (0x467F, 0x09D1, 0x4769)
 ENDING = (0x596C, 0x59C0, 0x59E3)       # after level 49, --sync-ending
 INTRO = (0x1EC4, 0x1EE0, 0x1F13)        # the level intro, --sync-intro
 
