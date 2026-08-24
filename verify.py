@@ -39,7 +39,7 @@ PORT = os.path.join(HERE, "reconstruct", "popcorn-dev")
 # Every routine the C side implements, with what it is and how far into a
 # session it is first reached. Keep in step with dispatch() in verify.c.
 def _routines():
-    """Every routine `reconstruct/verify.c` can dispatch, named from game.c.
+    """Every routine `reconstruct/tools/verify.c` can dispatch, named from game.c.
 
     Kept out of a hand-written list on purpose. There used to be one here, it
     fell behind the dispatch table by fifty-seven routines, and the runs that
@@ -50,15 +50,15 @@ def _routines():
     here = os.path.dirname(os.path.abspath(__file__))
     cases = set(int(m, 16) for m in re.findall(
         r"case 0x([0-9a-f]{4}):",
-        open(os.path.join(here, "reconstruct", "verify.c")).read()))
-    src = open(os.path.join(here, "reconstruct", "game.c")).read()
+        open(os.path.join(here, "reconstruct", "tools", "verify.c")).read()))
+    src = open(os.path.join(here, "reconstruct", "src", "game.c")).read()
     names = {}
     # verify.c's own dispatch is the authority on what a case calls, so take
     # the name from there first. A comment can describe a routine rather than
     # name it, and where two entry points share a body - brick_1 and brick_2
     # are one line each over brick_1_or_2 - the header names the body and the
     # report then cannot say which of the two differed.
-    vsrc = open(os.path.join(HERE, "reconstruct", "verify.c")).read()
+    vsrc = open(os.path.join(HERE, "reconstruct", "tools", "verify.c")).read()
     for m in re.finditer(r"case 0x([0-9a-fA-F]{4}):(.*?)(?=case 0x|\n    /\*|$)",
                          vsrc, re.S):
         body = m.group(2)

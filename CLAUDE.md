@@ -292,15 +292,15 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `autoplay.py` | walks the menu and then plays: keeps the paddle under the ball, collects the capsules worth having, and catches a parachuted ball. Drives the **mouse**, because the game's mouse input is absolute and lands on the next frame. `--port` drives the **C port** instead, through the same lockstep protocol `sidebyside.py` uses, so the deliverable can be watched playing itself |
 | **The port** ||
 | `reconstruct/Makefile` | builds `reconstruct/popcorn` against SDL3 |
-| `reconstruct/main.c` | **`popcorn`**: the game, with the command line the original has and no other - `popcorn` or `popcorn POPTAB`. That command line is part of what the port is, so nothing else is allowed to accumulate in it |
-| `reconstruct/devmain.c` | **`popcorn-dev`**: the same game with the flags that exist to *check* it - `--lockstep`, `--verify`, `--shot`, `--keys`, `--cmdline`, `--dump-image`. Every tool here runs this one |
-| `reconstruct/autoplay.c` | the bot, in C: `popcorn-dev --autoplay`. The same decisions `autoplay.py` makes, without the Python process, the emulator beside it and the pipe. It plays through `io_pin_mouse`, the door lockstep already uses, and reads the image without writing to it. It takes the paddle only - getting into a game is still F1 |
-| `reconstruct/exepack.c` | the EXEPACK decoder in C, byte-identical to the Python one. The port reads the player's own `POPCORN.EXE` at startup |
-| `reconstruct/game.h` | types, the named image offsets, and the backend interface |
-| `reconstruct/game.c` | the transcribed routines — all 181 of them — each carrying the `1ac2:xxxx` offset it was read from. Four more are here as no-ops with a comment saying why, and are counted as neither done nor outstanding |
-| `reconstruct/sdl_io.c` | the platform layer: window, presentation, keyboard, mouse, and the retrace and delay hooks the game paces itself on |
-| `reconstruct/stubs.c` | down to `entity_unknown`, a safety net for a handler address that is in no table. It was the to-do list and everything on it has landed; the two screens the port deliberately does not have are no-ops in `game.c`, not stubs here |
-| `reconstruct/verify.c` | the other half of `verify.py`: loads a captured state, calls one routine, writes back what it produced |
+| `reconstruct/src/main.c` | **`popcorn`**: the game, with the command line the original has and no other - `popcorn` or `popcorn POPTAB`. That command line is part of what the port is, so nothing else is allowed to accumulate in it |
+| `reconstruct/tools/devmain.c` | **`popcorn-dev`**: the same game with the flags that exist to *check* it - `--lockstep`, `--verify`, `--shot`, `--keys`, `--cmdline`, `--dump-image`. Every tool here runs this one |
+| `reconstruct/tools/autoplay.c` | the bot, in C: `popcorn-dev --autoplay`. The same decisions `autoplay.py` makes, without the Python process, the emulator beside it and the pipe. It plays through `io_pin_mouse`, the door lockstep already uses, and reads the image without writing to it. It takes the paddle only - getting into a game is still F1 |
+| `reconstruct/src/exepack.c` | the EXEPACK decoder in C, byte-identical to the Python one. The port reads the player's own `POPCORN.EXE` at startup |
+| `reconstruct/src/game.h` | types, the named image offsets, and the backend interface |
+| `reconstruct/src/game.c` | the transcribed routines — all 181 of them — each carrying the `1ac2:xxxx` offset it was read from. Four more are here as no-ops with a comment saying why, and are counted as neither done nor outstanding |
+| `reconstruct/src/sdl_io.c` | the platform layer: window, presentation, keyboard, mouse, and the retrace and delay hooks the game paces itself on |
+| `reconstruct/src/stubs.c` | down to `entity_unknown`, a safety net for a handler address that is in no table. It was the to-do list and everything on it has landed; the two screens the port deliberately does not have are no-ops in `game.c`, not stubs here |
+| `reconstruct/tools/verify.c` | the other half of `verify.py`: loads a captured state, calls one routine, writes back what it produced |
 | **Not in the repository** ||
 | `popcorn/` | the working copy the Python tools read, not committed. The committed copy is in `reconstruct/`, which is what the split repository publishes |
 | `popcorn.unpacked.exe` | derived from it, and therefore just as copyrighted. Regenerated, not committed |

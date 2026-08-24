@@ -37,12 +37,11 @@ STUB_MARK = re.compile(r"1ac2:([0-9a-f]{4})")
 def port_markers():
     """Offsets claimed by the port, and separately those only stubbed."""
     done, stubbed = set(), set()
-    for name in sorted(os.listdir(SRC)):
-        if not name.endswith((".c", ".h")):
-            continue
-        if name.endswith(".h"):
-            continue                    # declarations, not implementations
-        text = open(os.path.join(SRC, name)).read()
+    for root, _dirs, names in os.walk(SRC):
+      for name in sorted(names):
+        if not name.endswith(".c"):
+            continue                    # .h is declarations, not code
+        text = open(os.path.join(root, name)).read()
         if name == "stubs.c":
             stubbed |= {int(m, 16) for m in STUB_MARK.findall(text)}
         else:
@@ -87,7 +86,7 @@ def main():
             print(f"  {e:04x}  {sizes[e]:5d} b  {skip[e]}")
 
     if a.verified:
-        v = open(os.path.join(SRC, "verify.c")).read()
+        v = open(os.path.join(SRC, "tools", "verify.c")).read()
         checked = {int(m, 16) for m in re.findall(r"case 0x([0-9A-Fa-f]{4}):", v)}
         unver = sorted(e for e in done_r - set(skip) if e not in checked)
         print(f"{len((done_r - set(skip)) & checked)} can be byte-checked; "
@@ -129,7 +128,7 @@ def noops():
     quietly believing it.
     """
     import re
-    src = open(os.path.join(SRC, "game.c")).read()
+    src = open(os.path.join(SRC, "src", "game.c")).read()
     out = {}
     head = re.compile(r"^(?:/\*|\s\*)\s*1ac2:([0-9a-f]{4})\s+(\w+)", re.M)
     for m in head.finditer(src):
@@ -162,7 +161,7 @@ def unwired(here):
     named so the fourth stands out.
     """
     import re
-    src = open(os.path.join(here, "reconstruct", "game.c")).read()
+    src = open(os.path.join(here, "reconstruct", "src", "game.c")).read()
     body = src
     # **Not verify.c.** Its dispatch calls everything it can check, so a
     # routine only the harness can reach counts as called and looks wired.
@@ -170,8 +169,10 @@ def unwired(here):
     # agreeing - and unreachable from the game, because the key poll that
     # leads to them was not transcribed. Esc did nothing in a level for
     # months and this said the port was complete.
-    for f in ("lockstep.c", "sdl_io.c", "main.c", "devmain.c", "autoplay.c"):
-        body += open(os.path.join(here, "reconstruct", f)).read()
+    rc = os.path.join(here, "reconstruct")
+    for f in ("tools/lockstep.c", "src/sdl_io.c", "src/main.c",
+              "tools/devmain.c", "tools/autoplay.c"):
+        body += open(os.path.join(rc, f)).read()
     sig = r"^(?:static\s+)?(?:void|int32_t|uint32_t|uint8_t)\s+"
     defs = re.findall(sig + r"(\w+)\s*\(", src, re.M)
     expected = {

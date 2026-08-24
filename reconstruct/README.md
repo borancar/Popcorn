@@ -72,17 +72,26 @@ nothing else, because that command line is part of what the port is.
 
 ## Files
 
+**`src/` is the game. `tools/` is what exists to check it.**
+
 | | |
 | --- | --- |
-| `main.c` | `popcorn` — the game, and its one optional argument |
-| `devmain.c` | `popcorn-dev` — the same game with the harness flags |
-| `game.c` | the transcription: every routine, each with its `1ac2:xxxx` |
-| `game.h` | types, the named image offsets, the backend interface |
-| `exepack.c` | the EXEPACK decoder that recovers the data at startup |
-| `sdl_io.c` | window, presentation, keyboard, mouse, retrace, delay |
-| `autoplay.c` | the bot, for `popcorn-dev --autoplay` |
-| `lockstep.c`, `verify.c` | the two halves of the checking, on this side |
-| `stubs.c` | what is not transcribed. One safety net is left in it |
+| `src/main.c` | `popcorn` — the game, and its one optional argument |
+| `src/game.c` | the transcription: every routine, each with its `1ac2:xxxx` |
+| `src/game.h` | types, the named image offsets, the backend interface |
+| `src/exepack.c` | the EXEPACK decoder that recovers the data at startup |
+| `src/sdl_io.c` | window, presentation, keyboard, mouse, retrace, delay |
+| `src/stubs.c` | what is not transcribed. One safety net is left in it |
+| `tools/devmain.c` | `popcorn-dev` — the same game with the harness flags |
+| `tools/autoplay.c` | the bot, for `popcorn-dev --autoplay` |
+| `tools/lockstep.c`, `tools/verify.c` | the two halves of the checking, on this side |
+
+Both binaries link both halves, because the game's own code calls into them:
+`sdl_io.c` asks the bot whether it is driving, and `game.c` offers the extra
+sync points the driver compares screens at. They cost nothing when nothing has
+turned them on, and the alternative is `#ifdef`s through a transcription,
+which would make it harder to read against the disassembly than it needs to
+be.
 
 ## Licence
 
