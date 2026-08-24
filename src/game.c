@@ -885,9 +885,26 @@ static void menu_redraw(void)
     img_setw(BANNER_PTR, 0x3f1e);
 }
 
-void game_main(const char *dir, uint32_t speed, const char *levels)
+void game_main(const char *dir, const char *levels)
 {
-    read_speed_setting(speed);
+    /* The original reads POPSPEED's value out of the offset half of interrupt
+     * vector 0x68 here. Nothing sets that vector under the port, so this is
+     * always the "POPSPEED was never run" path - which is what read_speed_
+     * setting's 0 means, and it leaves DELAY_COUNT at the readme's 110.
+     *
+     * There is no way to pass anything else any more, and that is deliberate.
+     * The value's whole job was to trim the busy-wait the play loop paced
+     * itself on, and the play loop paces on the CGA refresh now (see
+     * io_frame_pace), so it no longer reaches the thing it exists to tune. It
+     * still reaches game_delay everywhere *outside* the play loop - the intro,
+     * the transitions, the ending - and 110 is what those should run at.
+     *
+     * Offering it would also have been actively wrong: the value 1 patches the
+     * delay to a `ret`, and play_setup keys off that byte to open the ball's
+     * gate from 3 to 0xfa. Under the old pacing those two moved together;
+     * under this one it would have sped the ball up without touching the frame
+     * rate, which is not a setting the original has. */
+    read_speed_setting(0);
     /* `POPCORN POPTAB` loads POPTAB.PPC over the built-in table. The original
      * builds the name from the PSP command tail at 1ac2:0157 - copy it to
      * 0x1428, skip a leading dot, and append ".PPC" unless it already has an
@@ -1397,7 +1414,9 @@ frames:
         }
 
         /* A pause that gets shorter as [0x33d6] rises: three passes of 0xb4
-         * empty loops, minus one per point of it. */
+         * empty loops, minus one per point of it. Kept for its shape - the
+         * frame is paced on the refresh below, so this no longer sets a
+         * speed, and the [0x33d6] taper rides on io_frame_pace instead. */
         for (int32_t i = 3 - g_image[0x33d6]; i > 0; i--)
             io_delay_cycles(0xb4 * CYCLES_PER_LOOP);
 
@@ -1406,8 +1425,11 @@ frames:
             bonus_spawn();
 
         sound_tick();
-        io_delay_cycles(img_w(FRAME_DELAY) * CYCLES_PER_LOOP);
-        game_delay();
+
+        /* Where the original spent FRAME_DELAY empty loops and then POPSPEED's
+         * own. The frame is paced against the CGA refresh instead - see
+         * io_frame_pace. */
+        io_frame_pace();
 
         /* 1ac2:1c3f, the `jmp 0x1a62` that closes the frame. The top of the
          * loop is the wrong place to sync a frame against the emulator: the

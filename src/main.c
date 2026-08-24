@@ -55,7 +55,7 @@ int32_t main(int32_t argc, char **argv)
     if (!io_init(SCALE))
         return 1;
 
-    game_main(g_dir, 0, levels);        /* 0: as if POPSPEED had never run */
+    game_main(g_dir, levels);
 
     io_shutdown();
     free(g_image);
