@@ -69,6 +69,7 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | **Reading the code** ||
 | `analyze.py` | recursive-descent map of the code segment, seeded with the entry point and every handler table the game dispatches through. `--listing` dumps each reachable routine |
 | `tools_dis.py` | disassemble any range; `load_image()` is the loader everything else shares |
+| `cycles.py` | what one play-loop frame costs the **original**, in 8086 cycles: hooks every instruction under the emulator and sums the iAPX 86/88 manual's table. This is how the port's frame rate is set - measuring the *port* only says how fast its own sleeps run, and adding up the delay loops misses everything they do not cover. It reports the mnemonics it could not cost, so the coverage of the estimate is visible rather than assumed |
 | `coverage.py` | records which bytes actually execute, across several menu routes, into `coverage.bin` |
 | `dump_data.py` | extracts a data structure and renders it back out — the 8x12 font at `0x9020` is the worked example |
 | **Checking the port** ||

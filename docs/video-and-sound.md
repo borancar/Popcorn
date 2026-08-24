@@ -18,6 +18,57 @@ four colours, two bits per pixel, most significant pair leftmost.
   matter. F8 cycles the colour-select register, 0x3d9.
 - It waits on port 0x3da bit 3 (vertical retrace) around its blits.
 
+## How fast the play loop runs
+
+The retrace is 60 Hz, but the play loop is **not** paced on it. One iteration
+of the loop is one simulation step for everything - the ball, the capsules,
+the laser, the entity chain, the keyboard repeat - and the ball's own gate at
+`1ac2:1b0d` can at most let it step once per iteration:
+
+```
+if (--[0x1485] != 0)  step the balls    else  [0x1485] = [0x1486]
+```
+
+so the gate **skips** one iteration in `[0x1486]`. A larger value there means
+the ball moves *more* often, and `SPEED_TIMER` raises it every 0x4e20
+iterations, which is the level speeding up as it runs. `play_setup` starts it
+at 3 - two steps in three - or at 0xfa when POPSPEED has patched the delay out.
+
+The loop paces itself on three busy-waits, at 17 cycles a taken `loop`:
+
+| | |
+| --- | --- |
+| three passes of 0xb4, one fewer per point of `[0x33d6]` | 9180 cy |
+| `FRAME_DELAY` at `0x1487`, 0x1f4 loops | 8500 cy |
+| `game_delay` at `1ac2:164c`, POPSPEED's N, default 0x6f-1 = 110 | 1870 cy |
+
+`FRAME_DELAY` is reloaded with 0x1f4 at the top of every frame, and
+`draw_paddle_shifted` takes 0x1f3 of it **back** if the paddle actually moved.
+The 500 loops *are* the author's estimate of what redrawing the paddle costs,
+and the delay is there to make the moved and still branches take the same
+time. A port that redraws the paddle for free must not simply keep the delay:
+it will only ever run the 1-loop branch and come out about twice too fast.
+
+**Measured, by `cycles.py`:** summing the iAPX 86/88 manual's cycle costs over
+every instruction of a frame gives about **24,500 cycles, or 326 Hz** at the
+8 MHz the readme names.
+
+| | cycles | Hz |
+| --- | --- | --- |
+| level 10, the bot moving the paddle | 24541 | 326.0 |
+| level 10, paddle still | 24537 | 326.0 |
+| level 1 | 24419 | 327.6 |
+
+Three-quarters of that is the `loop $` waits, which are exactly 17 cycles a
+turn, so only the remaining quarter carries any modelling - which is why the
+three figures agree to within two Hz. The manual's table excludes instruction
+fetch, and a real 8086 empties its prefetch queue on every branch, so 326 Hz
+is an **upper bound**; `cycles.py --stall` says what a given assumption costs.
+
+At 326 Hz the ball moves 217 pixels a second at the start of a level and 326
+at the ceiling, crossing the ~190-pixel field in around three-quarters of a
+second.
+
 ## The font
 
 `draw_char` at `0x0c64` maps a character to a glyph index — `' '` to 0, `'-'`
