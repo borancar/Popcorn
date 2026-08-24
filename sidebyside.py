@@ -46,7 +46,7 @@ PLAY_SESSION = 0x02F5                   # a whole game, with --from-session
 BONUS_BODY = 0x4210                     # the end-of-level bonus, --from-bonus
 # The ending animation, --sync-curtain: the curtain's pass and panel_finish's.
 CURTAIN = (0x467F, 0x09D1)
-ENDING = (0x596C, 0x59C0)               # after level 49, --sync-ending
+ENDING = (0x596C, 0x59C0, 0x59E3)       # after level 49, --sync-ending
 FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
 # The opt-in second sync point, --sync-scroll. screen_scroll_up is called once
 # per scrolled row by every screen that has a loop of its own, so taking it as

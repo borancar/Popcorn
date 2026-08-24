@@ -6215,14 +6215,21 @@ void screen_all_levels_done(void)
      * C's restore_int09 is a no-op - the platform layer owns the keyboard -
      * so the value has to be written down here or the ending starts from a
      * different seed than the original's. */
-    ending_particles_init(0x2509);
-    while (!io_key_ready()) {
-        ending_particles_tick();
+    ending_particles_init(0x2509);          /* 1ac2:59e0 */
+    /* 1ac2:59e3 is a do-while: the tick comes **first** and the key is tested
+     * after it, so a key already waiting still gets one tick. Testing first
+     * gives none, which is one frame of fountain the original always shows. */
+    for (;;) {
+        io_frame_sync_extra(SYNC_ENDING);   /* 1ac2:59e3, the pass */
+        ending_particles_tick();            /* 1ac2:5a56 */
         io_present();
+        if (io_key_ready()) {               /* 1ac2:59e6 */
+            io_get_key();                   /* 1ac2:59ec, and it takes it */
+            return;
+        }
         if (!io_pump())
             return;
     }
-    io_get_key();
 }
 
 /* ========================================================================
