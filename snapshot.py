@@ -128,6 +128,19 @@ def read(path):
 def restore(m, path):
     """Put one back, registers and all. -> (level, frame, extra)"""
     level, frame, regs, ticks, img, vram, extra, low = read(path)
+    # The mode, which the game sets once with INT 10h AX=0005 at startup and a
+    # resume never runs. Without it the machine is still in the 80x25 text mode
+    # DOS hands it, and anything that renders gets a black window - the
+    # emulator draws from m.width, m.height and m.text_mode, not from the bytes
+    # at 0xb8000.
+    #
+    # Before the screen is written, because setting mode 5 *clears* video
+    # memory; after it, the snapshot's own screen would be the thing lost.
+    m.mode = 0x05
+    m.width, m.height = 320, 200
+    m.text_mode = False
+    m.cga_mode_ctrl = 0x0E              # what the BIOS leaves for mode 05h
+    m.cga_colour = 0x30
     m.uc.mem_write(m.load_seg * 16, img)
     m.uc.mem_write(0xB8000, vram)
     for r, v in zip(_regs(m.uc), regs):
@@ -183,18 +196,30 @@ def main():
                          "transition runs becomes reachable in seconds. The "
                          "state is the game's own, only sooner")
     ap.add_argument("--cmdline", default="")
+    ap.add_argument("--watch", action="store_true",
+                    help="show the emulator in a window while it runs. "
+                         "Headless is the default because most uses here are "
+                         "unattended, but a run nobody can see is a run "
+                         "nobody can check - and the bot's behaviour is one "
+                         "of the things worth checking by eye")
+    ap.add_argument("--scale", type=int, default=3)
     args = ap.parse_args()
 
-    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    if not args.watch:
+        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     import pygame
     pygame.init()
     import unicorn
     from unicorn.x86_const import UC_X86_REG_CS, UC_X86_REG_IP
-    from emulation import VgaDos, KEYMAP, GAME_CODE
+    from emulation import VgaDos, KEYMAP, GAME_CODE, make_surface
     from trace_dos import UNPACKED
     from autoplay import Bot, parse_route
 
     m = VgaDos(UNPACKED, max_insns=1 << 62, cmdline=args.cmdline)
+    screen = None
+    if args.watch:
+        screen = pygame.display.set_mode((320 * args.scale, 200 * args.scale))
+        pygame.display.set_caption("Popcorn - the emulator, with the bot")
     code = m.load_seg * 16 + GAME_CODE
     bot = Bot(m)
     if args.resume:
@@ -232,6 +257,13 @@ def main():
         addr = m._reg(UC_X86_REG_CS) * 16 + m._reg(UC_X86_REG_IP)
         if args.bot and not pending:
             bot.step()
+        if screen is not None:
+            for _ev in pygame.event.get():
+                if _ev.type == pygame.QUIT:
+                    stop[0] = True
+            surf = make_surface(m).convert(screen)
+            pygame.transform.scale(surf, screen.get_size(), screen)
+            pygame.display.flip()
 
     if want is not None and not stop[0]:
         raise SystemExit(f"never reached {want:#06x} in "

@@ -81,11 +81,6 @@
 #define LASER_CAPSULE   3
 #define SHOT_SPACING    0x13
 
-/* The bonus's funnel: its mouth is x 0x60..0x6b at y 0x74, so the middle of
- * the gap is 0x66. */
-#define FUNNEL_Y        0x74
-#define FUNNEL_MID      0x66
-
 #define SAFETY_FRAMES   40
 #define LAST_BALL_FRAMES 140            /* one ball: the whole descent */
 /* A constant could not work. ball_paddle takes off = ball_x - (paddle_x - 3);
@@ -272,12 +267,13 @@ static int32_t aim_target(int32_t *tx, int32_t *ty)
  * the ball lands, and the middle keeps whatever slope the ball arrived with -
  * which is why a bot that always centres can return a ball but never place
  * one. */
-static int32_t aim_at(int32_t bx, int32_t tx, int32_t ty)
+static int32_t aim_at_margin(int32_t bx, int32_t tx, int32_t ty,
+                             int32_t margin, int32_t *miss_out)
 {
     int32_t lo = rd(PADDLE_MIN), hi = rd(PADDLE_MAX);
     int32_t span = (paddle_width() + PADDLE_LIP) & 0xff;
     int32_t best = -1, best_px = -1;
-    for (int32_t off = 0; off < SLOPE_N; off++) {
+    for (int32_t off = margin; off < SLOPE_N; off++) {
         uint32_t w = rw(SLOPE_TOP + (uint32_t)off * 2);
         int32_t dy = (int32_t)(w & 0xff), dx = (int32_t)(w >> 8);
         if (!dy)
@@ -297,7 +293,19 @@ static int32_t aim_at(int32_t bx, int32_t tx, int32_t ty)
             }
         }
     }
+    if (miss_out)
+        *miss_out = best;
     return best_px;
+}
+
+/* `margin` is how far inside the paddle's end the ball is allowed to strike.
+ * Zero means the very tip: the slope table is indexed 0 to 0x0a from each end
+ * and offset 0 is the first pixel, so a prediction a pixel out misses the
+ * paddle altogether. Which is what standing at the edge to intercept a
+ * shallow ball looks like when it goes wrong. */
+static int32_t aim_at(int32_t bx, int32_t tx, int32_t ty)
+{
+    return aim_at_margin(bx, tx, ty, 0, NULL);
 }
 
 /* Columns worth shooting at, as the pixel centre of each. A shot meets the
@@ -391,38 +399,28 @@ void autoplay_step(void)
         return;
     }
 
-    /* The end-of-level bonus is a different game and the usual play is wrong
-     * in it. The field is a funnel: the ball has to cross y = 0x74 with x
-     * inside [0x60, 0x6c) to get into it - 1ac2:45da bounces it back down
-     * from anywhere else - and once inside, the walls at 0x60 and 0x6c hold
-     * it until it reaches the upper chamber at y = 0x3c and the level is won.
-     * Miss, and it comes back down to the floor, which ends the level as a
-     * lost life (with a free one handed back at 1ac2:462c, so it costs the
-     * level and nothing else).
+    /* The end-of-level bonus is a different game, but the answer is the
+     * plainer one: **centre on the predicted landing and let the wander find
+     * the gap.**
      *
-     * So: aim at the middle of the gap rather than at a brick. aim_at already
-     * does exactly this - the paddle end that sends the ball nearest a point -
-     * and the stretch from the paddle row up to 0x74 is open field, so its
-     * fold off the side walls is the right one.
+     * Aiming with a paddle *end* was the mistake. The slope table is indexed
+     * in from each end, so placing an end under the ball means the ball
+     * arrives within a few pixels of the paddle's edge - and at the shallow
+     * angles this stage produces, `predict` is least reliable, because it
+     * folds off the side walls and multiplies any error in dx/dy by the
+     * drop. The ball goes past the edge and the stage is lost. A twelve-pixel
+     * mouth is not worth a lost ball when the rally is free.
      *
-     * Nothing else applies in here. There are no capsules to chase, the laser
-     * is gone (PADDLE_KIND is reset on the way in), and the cells still hold
-     * the level's bricks - none of them drawn, none reachable - so
-     * aim_target would send the ball at a brick that is not there, which is
-     * what it did. */
-    if (g_in_bonus) {
-        int32_t px2 = aim_at(aim, FUNNEL_MID, FUNNEL_Y);
-        int32_t w = px2 >= 0 ? px2 : aim - width / 2;
-        if (w < lo) w = lo;
-        if (w > hi) w = hi;
-        int32_t mx2 = 2 * w;
-        io_pin_mouse((uint32_t)(mx2 > 510 ? 510 : mx2), 1);
-        return;
-    }
-
+     * Centred, the ball comes back every time; the wander - which reaches the
+     * ends anyway, being width/2 - 6 - keeps changing the slope until one
+     * pass sends it through the mouth at 0x60..0x6b. Slower, and it finishes.
+     *
+     * What *is* skipped in here: the capsules, because there are none, and
+     * the brick aim, because the cells still hold a level's worth of bricks
+     * that are neither drawn nor reachable. */
     int32_t grabbing = 0;
     int32_t margin = count == 1 ? LAST_BALL_FRAMES : SAFETY_FRAMES;
-    if (spare > margin) {
+    if (!g_in_bonus && spare > margin) {
         int32_t laser = rd(PADDLE_KIND) == LASER_PADDLE;
         int32_t cols[BRICK_COLS];
         int32_t ncols = laser ? laser_columns(cols) : 0;
@@ -481,7 +479,7 @@ void autoplay_step(void)
      * where the ball meets an *end*, which is a smaller target than the
      * middle. */
     int32_t want = -1;
-    if (count == 1 && spare > SAFETY_FRAMES && !grabbing) {
+    if (!g_in_bonus && count == 1 && spare > SAFETY_FRAMES && !grabbing) {
         int32_t tx, ty;
         if (aim_target(&tx, &ty))
             want = aim_at(aim, tx, ty);
