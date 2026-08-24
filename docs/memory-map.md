@@ -11,8 +11,8 @@ carries **zero** relocations and an entry point 16 bytes from the end of the
 file — both belong to the unpacker stub. `unpack_popcorn.py` recovers it:
 
 ```sh
-venv/bin/python unpack_popcorn.py     # -> popcorn.unpacked.exe
-venv/bin/python validate.py           # round-trips it against the stub
+uv run unpack_popcorn.py     # -> popcorn.unpacked.exe
+uv run validate.py           # round-trips it against the stub
 ```
 
 EXEPACK header (16-byte variant, no `skip_len`): `real_cs:ip = 1ac2:0113`,

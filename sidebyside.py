@@ -23,10 +23,10 @@ instruction both paths through it converge on. Not 0x1a62, its top: the serve
 wait reaches that too, at 0x1a58, every time the action button is held, and a
 bot holds it permanently.
 
-    venv/bin/python sidebyside.py                 # 200 frames, stop on the first difference
-    venv/bin/python sidebyside.py --frames 500
-    venv/bin/python sidebyside.py --keep-going    # count them instead of stopping
-    venv/bin/python sidebyside.py --window        # watch the emulator while it runs
+    uv run sidebyside.py                 # 200 frames, stop on the first difference
+    uv run sidebyside.py --frames 500
+    uv run sidebyside.py --keep-going    # count them instead of stopping
+    uv run sidebyside.py --window        # watch the emulator while it runs
 """
 import argparse
 import collections

@@ -15,9 +15,9 @@ there. The format is the one `sidebyside.py --resume` and `verify.py --resume`
 already read: the unmasked image, the screen, all fourteen registers and the
 BIOS tick the PRNG is seeded from.
 
-    venv/bin/python snapshot.py hsc.snap --keys @0206:f6 --at 0x4d37
-    venv/bin/python snapshot.py demo.snap --keys @0206:f2 --seconds 25
-    venv/bin/python snapshot.py border.snap --seconds 20
+    uv run snapshot.py hsc.snap --keys @0206:f6 --at 0x4d37
+    uv run snapshot.py demo.snap --keys @0206:f2 --seconds 25
+    uv run snapshot.py border.snap --seconds 20
 
 `--at OFFSET` stops the first time execution reaches that code offset, which is
 reproducible; `--seconds` stops after that much *emulated* time, which is not

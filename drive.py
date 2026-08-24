@@ -12,7 +12,7 @@ back to asking for more. Feed the next key when the buffer has been empty for
 `--settle` slices, and a script means the same thing every time however fast
 the host is.
 
-    venv/bin/python drive.py --exe popcorn/popgen.exe \
+    uv run drive.py --exe popcorn/popgen.exe \
         --keys right,return,@editor,f1,right,f2,@placed --shot-dir debug/pg
 
 Keys are comma-separated: a name from the table below, a single character, or

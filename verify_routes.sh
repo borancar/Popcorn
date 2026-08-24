@@ -37,7 +37,7 @@ for f in menu level level10 level49 ending capsule tall particles marks \
     }
 done
 
-venv/bin/python verify_all.py --chase --summary "$OUT" \
+uv run verify_all.py --chase --summary "$OUT" \
     --snapshot "$D/level.snap" \
     --snapshot "$D/menu.snap=@0206:f8" \
     --snapshot "$D/menu.snap=@0206:f6" \

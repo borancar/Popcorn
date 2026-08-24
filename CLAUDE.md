@@ -45,14 +45,14 @@ run had ever executed.
 ## The tools
 
 ```sh
-python -m venv venv
-venv/bin/pip install -r requirements.txt   # includes the pinned emulator
+# uv reads pyproject.toml, makes .venv, and pins every dependency in uv.lock.
+uv sync
 
-venv/bin/python unpack_popcorn.py         # recover the plain EXE
-venv/bin/python validate.py               # prove the recovery
-venv/bin/python emulation.py --scale 3    # play it
-venv/bin/python analyze.py                # map the code segment
-venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
+uv run unpack_popcorn.py         # recover the plain EXE
+uv run validate.py               # prove the recovery
+uv run emulation.py --scale 3    # play it
+uv run analyze.py                # map the code segment
+uv run tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 ```
 
 | file | what |
@@ -63,7 +63,7 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `unpack_popcorn.py` | EXEPACK recovery by running the stub under Unicorn at segment 0x2000, which is the workaround for the stub's reliance on the 8086's 1 MB wrap |
 | `validate.py` | proves the recovery: round-trips the emitted EXE against the stub's own output, and checks the C decoder agrees |
 | **Emulating it** ||
-| `requirements.txt` | the dependencies, with **`dos-emulator` pinned to a commit**. That is the thing every measurement here is taken against, so which version produced a number is part of the number. Moving the pin is deliberate: re-run `verify_routes.sh` after |
+| `pyproject.toml`, `uv.lock` | the dependencies, run with **`uv`**. `dos-emulator` is **pinned to a commit**: it is what every measurement here is taken against, so which version produced a number is part of the number. Moving the pin is deliberate — re-run `verify_routes.sh` after |
 | `emulation.py` | **Popcorn's adapter onto the shared emulator.** The machine itself is `dos_emulator` (<https://github.com/borancar/dos_emulator>) — the DOS/BIOS shim, CGA, the IRQ 1 keyboard, the window. What is here is what is about *this game*: `GAME_DIR`, `UNPACKED`, `GAME_CODE = 0x1AC20`, and a command line that defaults to Popcorn so `python emulation.py --scale 3` still means what it always did. **Every tool here imports the emulator through this module**, so there is one place to look when the shared code moves |
 | `drive.py` | drives **any** DOS program under the emulator by key, feeding the next one when the guest has drained the buffer and come back for more. `emulation.py --keys` times against the wall clock, which is right for the game and wrong for a program that sits waiting: the emulator's speed varies with what the guest is doing, so the same script reaches POPGEN's editor on one run and misses it on the next. `@tag` in the key list saves a screenshot, so a run documents itself, and `--dump` writes the guest's low 256K - press one key, dump, diff against a run that pressed nothing, and the byte that differs is what that key writes. That is how POPGEN's palette was measured |
 | **Reading the code** ||
@@ -144,8 +144,8 @@ routines it ran straight past.
 ### Running the game
 
 ```sh
-venv/bin/python emulation.py --scale 3
-venv/bin/python emulation.py --scale 3 --cmdline poptab     # the shipped levels
+uv run emulation.py --scale 3
+uv run emulation.py --scale 3 --cmdline poptab     # the shipped levels
 ```
 
 F1-F10 go to the game. The emulator's own controls sit behind **Shift**:
@@ -155,7 +155,7 @@ For an unattended run, `--keys` scripts input against wall clock and
 `--shots N --shot-every S` writes PNGs headlessly:
 
 ```sh
-venv/bin/python emulation.py --shots 4 --shot-every 4 --shot-dir debug \
+uv run emulation.py --shots 4 --shot-every 4 --shot-dir debug \
     --keys 11:f1,14:b,15:o,16:b,18:return --cmdline poptab
 ```
 

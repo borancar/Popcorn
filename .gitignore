@@ -35,3 +35,7 @@ coverage.bin
 
 # The ralph loop's own session state, not project content.
 .claude/ralph-loop.local.md
+
+# uv keeps its environment here.
+.venv/
+uv-cache/

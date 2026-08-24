@@ -18,7 +18,7 @@ Two things it is honest about rather than quiet about:
     than this and the true rate *lower*. The figure here is an upper bound on
     the rate, and the report says by how much a given stall estimate moves it.
 
-    venv/bin/python cycles.py --resume level10.snap --frames 200
+    uv run cycles.py --resume level10.snap --frames 200
 """
 import argparse
 import collections

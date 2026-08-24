@@ -1,0 +1,25 @@
+[project]
+name = "popcorn-port"
+version = "0.1.0"
+description = "Reverse-engineering Popcorn (LACRAL software, 1988) and reconstructing it in C"
+requires-python = ">=3.9"
+dependencies = [
+    # The emulator is shared with the other reconstruction projects and lives
+    # in its own repository. **Pinned to a commit on purpose**: it is what every
+    # measurement here is taken against - the coverage table, the 326 Hz frame
+    # rate - and a measurement whose instrument cannot be named is not
+    # reproducible. Moving the pin is a deliberate act; re-run verify_routes.sh
+    # afterwards.
+    "dos-emulator @ git+https://github.com/borancar/dos_emulator@a9ae5ee40ffd4f790b86f92157fc98c1b547d392",
+
+    # Disassembly: tools_dis.py, analyze.py, cycles.py.
+    "capstone",
+    # Also used directly here - the tools drive the machine, not only run it.
+    "unicorn",
+    "pygame-ce",
+    "numpy",
+]
+
+# Scripts in a directory, not a package: there is nothing here to install.
+[tool.uv]
+package = false

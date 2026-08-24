@@ -45,7 +45,7 @@ It is a **plain EXE** - not EXEPACK'd, unlike the game - so the emulator loads
 it directly:
 
 ```sh
-venv/bin/python emulation.py --exe popcorn/popgen.exe --scale 3 --window
+uv run emulation.py --exe popcorn/popgen.exe --scale 3 --window
 ```
 
 It asks the machine for very little: INT 10h for the mode and the cursor
@@ -92,7 +92,7 @@ Measured, not read off the swatches: POPGEN keeps the level's cells at
 against a run that pressed nothing says exactly what that key does.
 
 ```sh
-venv/bin/python drive.py --exe popcorn/popgen.exe \
+uv run drive.py --exe popcorn/popgen.exe \
     --keys right,return,f1,right,f2,right,f4 --dump /tmp/pg.bin
 ```
 

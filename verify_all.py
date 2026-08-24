@@ -9,7 +9,7 @@ Measuring the union is the only honest number, and it is also the only way to
 see that a routine which fails on one route passes on another - which would be
 a real finding rather than a coverage gap.
 
-    venv/bin/python verify_all.py --snapshot DIR/level07_*.snap
+    uv run verify_all.py --snapshot DIR/level07_*.snap
 
 Each route runs as a subprocess so one crash does not take the rest with it.
 """
