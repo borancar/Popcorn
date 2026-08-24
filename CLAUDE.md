@@ -39,8 +39,37 @@ An Arkanoid clone. CGA only, keyboard or Microsoft-compatible mouse. French.
 | Esc | menu → DOS; in game → pause |
 
 Level sets are `.PPC` files made with the shipped `POPGEN.EXE`; `POPCORN POPTAB`
-loads `POPTAB.PPC`. `POPSPEED.EXE` sets the game speed (0-30000, default 110,
-lower is faster) for machines faster than an 8 MHz 8086.
+loads `POPTAB.PPC`. `POPSPEED.EXE` sets the game speed for machines faster than
+an 8 MHz 8086 (default 110, lower is faster).
+
+### What POPSPEED actually does
+
+It calculates nothing. It parses a decimal number and stores it verbatim as a
+loop count, in 620 bytes:
+
+- the PSP command tail is copied to `0000:0x24b`, `si` set past the length
+  byte and the one space it assumes;
+- **more than five digits is refused, and exactly five is compared against the
+  string at `0x246` - which is `"65534"`, not the 30000 its own message
+  advertises.** One to four digits are not range-checked at all, so the
+  reachable range is 0-65534 rather than the documented 0-30000;
+- the parse is `ax = 10^(digits-1)` by repeated `mul`, then digit by digit
+  `bx += digit * place; place /= 10`. Sixteen-bit throughout - only `ax` of
+  `mul`'s result is used - which is why the cap sits just under 0x10000;
+- `INT 21h AX=2568h` sets **interrupt vector 0x68** to `ds:dx` with `ds` = 0,
+  so the number lands in the *offset* word at `0000:01a0` and the segment is
+  zero. No file, no environment variable: a spare interrupt slot used as a
+  two-byte notepad, which is why the startup disk reads looked load-bearing
+  and were not.
+
+`read_speed_setting` at `0x5680` reads it back with `AH=35h`, subtracts one,
+and patches the result into the `mov cx, N` of the busy-wait at `0x164c`. The
+number *is* the loop count - hence lower is faster. 1 means "as fast as
+possible" and puts a `ret` over the delay; 0 means POPSPEED was never run and
+the default 0x6f applies, which is the readme's 110 after the decrement.
+
+`inc bx` at `0x6d` is dead on both paths: `dx` already holds the value and
+`bx` is never read again.
 
 Shipped files. The working copy in `popcorn/` is not committed; the same
 files are committed in `reconstruct/`, beside the port that reads them:
