@@ -16,6 +16,7 @@ about it.
 | [video-and-sound.md](video-and-sound.md) | CGA mode 05h and its palette, the 8x12 font, the PC speaker |
 | [utilities.md](utilities.md) | POPSPEED, and the cheat typed at the menu |
 | [the-game.md](the-game.md) | what Popcorn is, its menu keys, and what kind of program the binary turned out to be |
+| [original-readme.md](original-readme.md) | `popcorn.doc`, the authors' own readme, decoded from CP850 to UTF-8 |
 
 Addresses are **image offsets** unless written `seg:off`, and `DS = 0` for the
 whole program - so a data reference `[0x2d4f]` is image offset `0x2d4f`, and a
