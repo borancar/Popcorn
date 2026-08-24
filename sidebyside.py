@@ -338,6 +338,7 @@ def main():
     for off, key, _ in parse_route(ROUTE_PLAY):
         pending.setdefault(off, collections.deque()).append(key)
 
+    desynced = [False]
     start_at = (BONUS_BODY if args.from_bonus
                 else PLAY_SESSION if args.from_session else PLAY_LOOP)
     captured = {}
@@ -756,6 +757,9 @@ def main():
                 " ".join(f"{pp[nd + k]:02x}" for k in range(14)),
                 ee[0x33D3], ee[0x33D2], pp[0x33D3], pp[0x33D2]), flush=True)
 
+        if desynced[0]:
+            continue                        # driving, not comparing
+
         if n == args.inject:                # prove the check can fail
             pimg = bytearray(pimg)
             pimg[PADDLE_X] ^= 0x01
@@ -777,7 +781,14 @@ def main():
                       f"{'a scroll' if port_scroll else 'a frame close'}. "
                       f"Everything compared from here is two different "
                       f"moments, not two different results.")
-                return 2
+                if not args.keep_going:
+                    return 2
+                # --keep-going means the run is being *watched*, and the
+                # transition out of a screen is the interesting part - it is
+                # also exactly where the two part company. Carry on driving
+                # both, and stop comparing: the warning above says why, and a
+                # flood of meaningless diffs would bury it.
+                desynced[0] = True
 
         a, b = mask(frame_hit["img"]), mask(pimg)
         ev = frame_hit["vram"]

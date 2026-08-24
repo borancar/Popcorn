@@ -81,6 +81,11 @@
 #define LASER_CAPSULE   3
 #define SHOT_SPACING    0x13
 
+/* The bonus's funnel: its mouth is x 0x60..0x6b at y 0x74, so the middle of
+ * the gap is 0x66. */
+#define FUNNEL_Y        0x74
+#define FUNNEL_MID      0x66
+
 #define SAFETY_FRAMES   40
 #define LAST_BALL_FRAMES 140            /* one ball: the whole descent */
 /* A constant could not work. ball_paddle takes off = ball_x - (paddle_x - 3);
@@ -383,6 +388,35 @@ void autoplay_step(void)
         /* Between lives and between levels. Hold the button so the serve goes
          * out the moment the game asks for it, and leave the paddle alone. */
         io_pin_mouse((uint32_t)(2 * px), 1);
+        return;
+    }
+
+    /* The end-of-level bonus is a different game and the usual play is wrong
+     * in it. The field is a funnel: the ball has to cross y = 0x74 with x
+     * inside [0x60, 0x6c) to get into it - 1ac2:45da bounces it back down
+     * from anywhere else - and once inside, the walls at 0x60 and 0x6c hold
+     * it until it reaches the upper chamber at y = 0x3c and the level is won.
+     * Miss, and it comes back down to the floor, which ends the level as a
+     * lost life (with a free one handed back at 1ac2:462c, so it costs the
+     * level and nothing else).
+     *
+     * So: aim at the middle of the gap rather than at a brick. aim_at already
+     * does exactly this - the paddle end that sends the ball nearest a point -
+     * and the stretch from the paddle row up to 0x74 is open field, so its
+     * fold off the side walls is the right one.
+     *
+     * Nothing else applies in here. There are no capsules to chase, the laser
+     * is gone (PADDLE_KIND is reset on the way in), and the cells still hold
+     * the level's bricks - none of them drawn, none reachable - so
+     * aim_target would send the ball at a brick that is not there, which is
+     * what it did. */
+    if (g_in_bonus) {
+        int32_t px2 = aim_at(aim, FUNNEL_MID, FUNNEL_Y);
+        int32_t w = px2 >= 0 ? px2 : aim - width / 2;
+        if (w < lo) w = lo;
+        if (w > hi) w = hi;
+        int32_t mx2 = 2 * w;
+        io_pin_mouse((uint32_t)(mx2 > 510 ? 510 : mx2), 1);
         return;
     }
 
