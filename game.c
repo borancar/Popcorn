@@ -830,7 +830,8 @@ size_t popcorn_load_image(void)
                 "popcorn: cannot find POPCORN.EXE.\n"
                 "         Copy your own next to this binary, or set "
                 "POPCORN_EXE to its path.\n"
-                "         The game is not distributed with this source.\n");
+                "         It ships beside this binary; a copy has been "
+                "moved or deleted.\n");
         return 0;
     }
     size_t len = 0;
