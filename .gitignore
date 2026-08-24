@@ -1,0 +1,16 @@
+# Your own copy of the game, and anything derived from it. Nothing of Popcorn
+# is redistributed here - the program is the property of its authors, and the
+# port reads their data out of your copy at run time rather than carrying any
+# of it.
+popcorn.exe
+POPCORN.EXE
+*.ppc
+*.PPC
+*.hsc
+*.doc
+*.bat
+
+# Build output.
+*.o
+popcorn
+popcorn-dev
