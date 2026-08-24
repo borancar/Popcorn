@@ -8,7 +8,7 @@ the address in the original it was read from. It builds and plays:
 make && ./popcorn
 ```
 
-<p>
+<p align="center">
 <img src="screenshots/menu.png" width="320" alt="Popcorn's menu, drawn by the port">
 <img src="screenshots/level-1.png" width="320" alt="The first level in play, the bot on the paddle">
 </p>
