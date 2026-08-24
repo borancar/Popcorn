@@ -14,6 +14,12 @@ make && ./popcorn
 > Ce programme fait parti du domaine public. Il ne doit servir à aucune fin
 > commerciale sans accord préalable de […]
 
+That is from [`popcorn.doc`](popcorn.doc), the authors' own readme, which ships
+here as they wrote it - decoded from CP850 to UTF-8 so it can be read without a
+DOS codepage, and otherwise untouched. It is worth reading: the menu keys, how
+POPGEN's level sets work, and an address in Brive-la-Gaillarde to send
+"remarques, suggestions, félicitations ou insultes" to.
+
 Public domain, then, with the one condition they attached: **not for
 commercial use without their prior agreement.** That condition travels with
 the files, and it is theirs rather than this repository's to waive.
