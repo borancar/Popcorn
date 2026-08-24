@@ -43,6 +43,9 @@ PORT = os.path.join(HERE, "reconstruct", "popcorn-dev")
 CODE = 0x1AC20
 PLAY_LOOP = 0x1873                      # one level
 PLAY_SESSION = 0x02F5                   # a whole game, with --from-session
+BONUS_BODY = 0x4210                     # the end-of-level bonus, --from-bonus
+# The ending animation, --sync-curtain: the curtain's pass and panel_finish's.
+CURTAIN = (0x467F, 0x09D1)
 FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
 # The opt-in second sync point, --sync-scroll. screen_scroll_up is called once
 # per scrolled row by every screen that has a loop of its own, so taking it as
@@ -130,6 +133,20 @@ def main():
     ap.add_argument("--frames", type=int, default=200,
                     help="0 runs until a comparison fails or you "
                          "stop it")
+    ap.add_argument("--from-bonus", action="store_true",
+                    help="the snapshot was taken at 1ac2:4210, the end-of-"
+                         "level bonus, so resume there rather than in the play "
+                         "loop. That screen needs a + capsule to reach and + "
+                         "is 2 chances in 255 - injecting the capture is the "
+                         "only way it is a regression rather than a wait. "
+                         "Pair it with --sync-endgame, which is what compares "
+                         "the ball inside it")
+    ap.add_argument("--sync-curtain", action="store_true",
+                    help="also compare the ending animation - the curtain "
+                         "that closes a level and the panel that follows it. "
+                         "Without it that whole sequence has no sync point, so "
+                         "it is compared by nothing and --watch shows it as a "
+                         "jump: 1ac2:467f a pass and 1ac2:09d1 a pass")
     ap.add_argument("--sync-results", action="store_true",
                     help="also compare the results screen after a game over - "
                          "the two-player bar and the wait that follows it. "
@@ -308,7 +325,8 @@ def main():
     for off, key, _ in parse_route(ROUTE_PLAY):
         pending.setdefault(off, collections.deque()).append(key)
 
-    start_at = PLAY_SESSION if args.from_session else PLAY_LOOP
+    start_at = (BONUS_BODY if args.from_bonus
+                else PLAY_SESSION if args.from_session else PLAY_LOOP)
     captured = {}
     frame_hit = {}
     reentries = [0]
@@ -385,7 +403,8 @@ def main():
         elif captured and (off == FRAME_END
                            or (args.sync_scroll and off == SCROLL_UP)
                            or (args.sync_endgame and off == BALL_ENDGAME)
-                           or (args.sync_results and off == RESULTS_WAIT)):
+                           or (args.sync_results and off == RESULTS_WAIT)
+                           or (args.sync_curtain and off in CURTAIN)):
             # emu_stop() leaves IP *at* this instruction, so the next
             # emu_start runs it again and the hook fires a second time with
             # no work done in between. Counting those as frames compares the
@@ -498,7 +517,9 @@ def main():
                             + (["--lockstep-sync-endgame"]
                                if args.sync_endgame else [])
                             + (["--lockstep-sync-results"]
-                               if args.sync_results else []),
+                               if args.sync_results else [])
+                            + (["--lockstep-sync-curtain"]
+                               if args.sync_curtain else []),
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             bufsize=0)
 

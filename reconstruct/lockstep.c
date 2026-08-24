@@ -194,6 +194,20 @@ int32_t lockstep_main(const char *state_path)
     } else if (lockstep_from == 0x02f5) {
         if (setjmp(g_back_to_menu) == 0)
             play_session();             /* 1ac2:02f5 */
+    } else if (lockstep_from == 0x4210) {
+        /* The end-of-level bonus, which is the one screen that cannot be
+         * *played* into reliably: it needs a + capsule, and + is 2 chances in
+         * 255 of a brick-2 capsule and never comes out of a hatch, so a bot
+         * can play for ten thousand frames without seeing one. Captured at
+         * 1ac2:4210 it can simply be injected, and then it is a regression
+         * rather than a wait.
+         *
+         * The body, not 1ac2:2da0: the entry tears the play loop down and
+         * throws four words off the stack, and by here that has happened. */
+        g_resume_in_bonus = 1;
+        g_resume_in_session = 1;
+        if (setjmp(g_back_to_menu) == 0)
+            play_session();
     } else {
         play_loop();                    /* 1ac2:1873 */
     }

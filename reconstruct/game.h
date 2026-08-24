@@ -225,6 +225,7 @@ void io_set_grab(int32_t on);
 #define SYNC_SCROLL   1                 /* screen_scroll_up, once a row */
 #define SYNC_ENDGAME  2                 /* ball_after_endgame, once a step */
 #define SYNC_RESULTS  4                 /* screen_results' wait, once a pass */
+#define SYNC_CURTAIN  8                 /* the ending animation, once a pass */
 #endif
 void io_frame_sync_extra(int32_t which);
 void io_lockstep_extra_sync(int32_t mask);
@@ -318,6 +319,7 @@ void panel_finish(void);          /* 1ac2:09c5 */
 /* Called by play_loop; the ones still empty live in stubs.c too. */
 extern int32_t g_resume_at_frame_top;   /* lockstep: skip play_loop's prologue */
 extern int32_t g_resume_in_session;     /* lockstep: rejoin play_session's retry loop */
+extern int32_t g_resume_in_bonus;       /* lockstep: rejoin inside the bonus */
 int32_t  play_loop(void);             /* 1ac2:1873 - transcribed */
 uint32_t draw_text(uint32_t src, uint32_t count, uint32_t di);  /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
@@ -464,6 +466,7 @@ void io_set_grab(int32_t on);
 #define SYNC_SCROLL   1                 /* screen_scroll_up, once a row */
 #define SYNC_ENDGAME  2                 /* ball_after_endgame, once a step */
 #define SYNC_RESULTS  4                 /* screen_results' wait, once a pass */
+#define SYNC_CURTAIN  8                 /* the ending animation, once a pass */
 #endif
 void io_frame_sync_extra(int32_t which);
 void io_lockstep_extra_sync(int32_t mask);
