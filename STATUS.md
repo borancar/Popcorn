@@ -222,6 +222,33 @@ predicts, held over the whole run.
 
 ### What is still open
 
+**BP on the way out of the bonus, and a flag standing in for it.** The two
+endings run the same curtain and the same `call 0x2034` inside it, but that
+call is `push ds / mov ds, bp` first and BP is the data segment on only one
+path: `1ac2:4636` on the floor ending is `mov bp, ds`, and the chamber ending
+enters at `1ac2:4794` and never loads it. So the transition after a completed
+level is black and after a lost one shows the level behind it. The port
+carries a `cells` flag matched to that observation - what BP actually holds on
+the chamber path is **not established**.
+
+It cannot be staged: poking the ball into the upper chamber gives the chamber
+ending the *floor* ending's registers, so the emulator draws the bricks and
+the comparison answers a different question. What settles it is a register
+dump at `1ac2:46ce` on a chamber ending the game played into - the technique
+that found `DS = 0xc46` in the ending - which needs the bot through the funnel
+for real. A brief flash of the level before the curtain, reported from
+watching, is unresolved for the same reason.
+
+**Two sync points are not trusted yet.** `--sync-intro` reports a large
+difference from a capture at `1ac2:1c3f`, and the pictures are different
+*moments*: the driver can ask the port to start at `play_loop` or at
+`play_session` and a frame-close capture is neither, so `play_session` runs
+its prologue and resets the score, the lives and the level. And the step check
+only covered two of the six sync flags until recently, so the ending's "600
+frames identical" was an unverified pairing - the bug it found is real, the
+clean number after it is not yet worth what it looked like.
+
+
 **`verify.py` cannot check the end-level bonus at all**, and the reason is
 structural rather than an input problem - which took most of a day to see.
 `1ac2:2da0` throws four words off the stack and the ending's own `ret` lands
