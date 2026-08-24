@@ -34,7 +34,7 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PORT = os.path.join(HERE, "reconstruct", "popcorn")
+PORT = os.path.join(HERE, "reconstruct", "popcorn-dev")
 
 # Every routine the C side implements, with what it is and how far into a
 # session it is first reached. Keep in step with dispatch() in verify.c.

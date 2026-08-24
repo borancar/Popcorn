@@ -25,6 +25,7 @@ __pycache__/
 
 # Built by reconstruct/
 reconstruct/popcorn
+reconstruct/popcorn-dev
 coverage.bin
 
 # The ralph loop's own session state, not project content.

@@ -8,7 +8,7 @@ byte-identical to what EXEPACK's own stub leaves in memory at that segment.
 If that holds, the unpacked file is the original image by construction, and
 its relocation table is the one the stub would have applied.
 
-If reconstruct/popcorn has been built, its own unpacker is checked too. That
+If reconstruct/popcorn-dev has been built, its own unpacker is checked too. That
 one is a hundred lines of C that decode EXEPACK's RLE directly rather than
 running the stub, and the port depends on it to read the player's copy of the
 game at startup - so "it agrees with the emulator" is the property that
@@ -44,7 +44,7 @@ def load_flat(path, seg):
 
 
 def check_c_unpacker(packed, reference, seg):
-    """Compare reconstruct/popcorn's unpacker against this one, if it is built.
+    """Compare reconstruct/popcorn-dev's unpacker against this one, if it is built.
 
     The C image comes out with relocations unapplied, which is the same thing
     the round-trip reference holds before `seg` is added - so they are directly
@@ -52,9 +52,10 @@ def check_c_unpacker(packed, reference, seg):
     compared against the unpacked file's own image, which is what the port
     actually consumes.
     """
-    exe = os.path.join(HERE, "reconstruct", "popcorn")
+    exe = os.path.join(HERE, "reconstruct", "popcorn-dev")
     if not os.path.exists(exe):
-        print("reconstruct/popcorn is not built; skipping the C unpacker check")
+        print("reconstruct/popcorn-dev is not built; "
+              "skipping the C unpacker check")
         return True
     with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tmp:
         out = tmp.name
@@ -63,7 +64,7 @@ def check_c_unpacker(packed, reference, seg):
                            capture_output=True, text=True,
                            env={**os.environ, "POPCORN_EXE": packed})
         if r.returncode != 0:
-            print(f"FAIL reconstruct/popcorn exited {r.returncode}: "
+            print(f"FAIL reconstruct/popcorn-dev exited {r.returncode}: "
                   f"{r.stderr.strip()}")
             return False
         got = open(out, "rb").read()

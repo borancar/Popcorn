@@ -13,20 +13,32 @@ CFLAGS  ?= -O2 -g -std=c99 -Wall -Wextra -Wno-unused-parameter
 CFLAGS  += $(shell pkg-config --cflags sdl3)
 LDLIBS  += $(shell pkg-config --libs sdl3) -lm
 
-OBJS = main.o exepack.o sdl_io.o game.o verify.o lockstep.o stubs.o
-BIN  = popcorn
+# Two binaries over one set of objects.
+#
+#   popcorn      the game. Its command line is the original's - an optional
+#                level file - and nothing else, because that command line is
+#                part of what the port is.
+#   popcorn-dev  the same game with the flags the harness drives it by:
+#                --lockstep, --verify, --shot, --keys and the rest. Every
+#                tool here runs this one.
+COMMON = exepack.o sdl_io.o game.o verify.o lockstep.o stubs.o
+BIN    = popcorn
+DEVBIN = popcorn-dev
 
-all: $(BIN)
+all: $(BIN) $(DEVBIN)
 
-$(BIN): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDLIBS)
+$(BIN): main.o $(COMMON)
+	$(CC) $(CFLAGS) -o $@ main.o $(COMMON) $(LDLIBS)
 
-$(OBJS): game.h
+$(DEVBIN): devmain.o $(COMMON)
+	$(CC) $(CFLAGS) -o $@ devmain.o $(COMMON) $(LDLIBS)
+
+main.o devmain.o $(COMMON): game.h
 
 run: $(BIN)
 	./$(BIN)
 
 clean:
-	rm -f $(OBJS) $(BIN)
+	rm -f main.o devmain.o $(COMMON) $(BIN) $(DEVBIN)
 
 .PHONY: all run clean

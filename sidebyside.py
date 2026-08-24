@@ -38,7 +38,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PORT = os.path.join(HERE, "reconstruct", "popcorn")
+PORT = os.path.join(HERE, "reconstruct", "popcorn-dev")
 
 CODE = 0x1AC20
 PLAY_LOOP = 0x1873                      # one level

@@ -19,7 +19,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PORT = os.path.join(HERE, "reconstruct", "popcorn")
+PORT = os.path.join(HERE, "reconstruct", "popcorn-dev")
 
 
 def emulator_vram(seconds, cmdline):
@@ -64,7 +64,7 @@ def main():
     a = ap.parse_args()
 
     if not os.path.exists(PORT):
-        raise SystemExit("reconstruct/popcorn is not built")
+        raise SystemExit("reconstruct/popcorn-dev is not built")
 
     tmp = os.path.join(HERE, "debug", "port_vram.bin")
     os.makedirs(os.path.dirname(tmp), exist_ok=True)
