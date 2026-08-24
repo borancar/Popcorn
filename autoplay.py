@@ -210,7 +210,23 @@ SAFETY_FRAMES = 40
 # while the ball retraces one path. The offset is small enough not to cost a
 # catch on a 28-pixel paddle, and it comes from a seeded generator so a run is
 # still reproducible.
-JITTER = 3
+# A constant could not work. ball_paddle takes off = ball_x - (paddle_x - 3);
+# off <= 0x0a is the left end and off >= span - 0x0a the right, and each indexes
+# the slope table at 0x2e2c for a fresh (dy, dx). Anything between them - the
+# middle 0x0b..span-0x0b - **keeps the slope the ball arrived with**.
+#
+# The bot centres the paddle, so the ball lands at off = width/2 + 3 - wander.
+# With the default 27-wide paddle that is 16 - wander, and the middle band is
+# 11..19: a wander of +-3 lands in it every time. The jitter existed to break
+# the cycle where the paddle and the ball retrace one path, and it could not,
+# because it never changed the slope - it only moved where on the flat middle
+# the ball struck.
+#
+# An end needs wander >= width/2 - 7 or <= 10 - width/2, and staying on the
+# paddle at all needs wander in [-width/2, width/2 + 3]. Both scale with the
+# width, which E changes from 27 to 39, so the range does too: width/2 - 3
+# reaches both ends on either paddle and lands short of falling off.
+JITTER = 0                      # 0 = derive it from the live paddle width
 JITTER_HOLD = 24                # bot steps before a new offset is drawn
 # With one ball left there is nothing to come back to, so the margin is the
 # whole descent rather than a slice of it.
@@ -588,7 +604,12 @@ class Bot:
         # See JITTER: a few pixels of wander, held for a while so the aim is
         # steady across one approach rather than shaking every frame.
         if self.held <= 0:
-            self.wander = self.rng.randint(-self.jitter, self.jitter)
+            # width/2 - 7 is the least that reaches both ends; a little
+            # more, because the ball lands where the prediction said and the
+            # prediction is not exact - and not much more, since every pixel
+            # of wander is a pixel less margin for it being wrong.
+            j = self.jitter or max(6, self.width() // 2 - 6)
+            self.wander = self.rng.randint(-j, j)
             self.held = JITTER_HOLD
         self.held -= 1
         want = (override if override is not None

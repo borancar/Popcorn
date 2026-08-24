@@ -83,7 +83,22 @@
 
 #define SAFETY_FRAMES   40
 #define LAST_BALL_FRAMES 140            /* one ball: the whole descent */
-#define JITTER          3
+/* A constant could not work. ball_paddle takes off = ball_x - (paddle_x - 3);
+off <= 0x0a is the left end and off >= span - 0x0a the right, and each indexes
+the slope table at 0x2e2c for a fresh (dy, dx). Anything between them - the
+middle 0x0b..span-0x0b - **keeps the slope the ball arrived with**.
+
+The bot centres the paddle, so the ball lands at off = width/2 + 3 - wander.
+With the default 27-wide paddle that is 16 - wander, and the middle band is
+11..19: a wander of +-3 lands in it every time. The jitter existed to break
+the cycle where the paddle and the ball retrace one path, and it could not,
+because it never changed the slope - it only moved where on the flat middle
+the ball struck.
+
+An end needs wander >= width/2 - 7 or <= 10 - width/2, and staying on the
+paddle at all needs wander in [-width/2, width/2 + 3]. Both scale with the
+width, which E changes from 27 to 39, so the range does too: width/2 - 3
+reaches both ends on either paddle and lands short of falling off. */
 #define JITTER_HOLD     24
 
 static int32_t indestructible(uint8_t v)
@@ -305,10 +320,18 @@ static uint32_t rng_state = 1;
 static int32_t wander, held;
 
 /* A seeded generator, so a run is reproducible. */
-static int32_t next_wander(void)
+static int32_t next_wander(int32_t width)
 {
+    /* width/2 - 7 is the least that reaches both ends; a little more than
+     * that, because the ball lands where the *prediction* said and the
+     * prediction is not exact. Not much more: every pixel of wander is a
+     * pixel less margin for the prediction being wrong. This leaves nine on
+     * the near side of either paddle. */
+    int32_t j = width / 2 - 6;
+    if (j < 6)
+        j = 6;
     rng_state = rng_state * 1103515245u + 12345u;
-    return (int32_t)((rng_state >> 16) % (2 * JITTER + 1)) - JITTER;
+    return (int32_t)((rng_state >> 16) % (uint32_t)(2 * j + 1)) - j;
 }
 
 void autoplay_enable(uint32_t seed)
@@ -435,7 +458,7 @@ void autoplay_step(void)
      * ball off the same part of the paddle every time and the two settle into
      * a cycle that clears nothing. */
     if (held <= 0) {
-        wander = next_wander();
+        wander = next_wander(width);
         held = JITTER_HOLD;
     }
     held--;
