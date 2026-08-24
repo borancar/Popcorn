@@ -46,6 +46,7 @@ PLAY_SESSION = 0x02F5                   # a whole game, with --from-session
 BONUS_BODY = 0x4210                     # the end-of-level bonus, --from-bonus
 # The ending animation, --sync-curtain: the curtain's pass and panel_finish's.
 CURTAIN = (0x467F, 0x09D1)
+ENDING = 0x596C                         # after level 49, --sync-ending
 FRAME_END = 0x1C3F                      # `jmp 0x1a62`, the frame's close
 # The opt-in second sync point, --sync-scroll. screen_scroll_up is called once
 # per scrolled row by every screen that has a loop of its own, so taking it as
@@ -141,6 +142,12 @@ def main():
                          "only way it is a regression rather than a wait. "
                          "Pair it with --sync-endgame, which is what compares "
                          "the ball inside it")
+    ap.add_argument("--sync-ending", action="store_true",
+                    help="also compare the sequence after the fiftieth level "
+                         "is cleared, 1ac2:596c a pass. screen_all_levels_done "
+                         "has no sync of its own, so without this the ending "
+                         "is compared by nothing and the driver cannot tell "
+                         "it from a hang")
     ap.add_argument("--sync-curtain", action="store_true",
                     help="also compare the ending animation - the curtain "
                          "that closes a level and the panel that follows it. "
@@ -404,7 +411,8 @@ def main():
                            or (args.sync_scroll and off == SCROLL_UP)
                            or (args.sync_endgame and off == BALL_ENDGAME)
                            or (args.sync_results and off == RESULTS_WAIT)
-                           or (args.sync_curtain and off in CURTAIN)):
+                           or (args.sync_curtain and off in CURTAIN)
+                           or (args.sync_ending and off == ENDING)):
             # emu_stop() leaves IP *at* this instruction, so the next
             # emu_start runs it again and the hook fires a second time with
             # no work done in between. Counting those as frames compares the
@@ -519,7 +527,9 @@ def main():
                             + (["--lockstep-sync-results"]
                                if args.sync_results else [])
                             + (["--lockstep-sync-curtain"]
-                               if args.sync_curtain else []),
+                               if args.sync_curtain else [])
+                            + (["--lockstep-sync-ending"]
+                               if args.sync_ending else []),
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             bufsize=0)
 

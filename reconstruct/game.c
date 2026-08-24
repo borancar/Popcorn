@@ -6170,6 +6170,12 @@ void screen_all_levels_done(void)
         bp = cga_prev_row(bp);
         for (int32_t i = 0; i < 5; i++)
             game_delay();
+        /* 1ac2:596c, once a pass. Without it this screen has no sync at all -
+         * a lockstep driver is blocked while it runs and cannot tell
+         * "finished" from "hung", and the sequence after the fiftieth level
+         * is compared by nothing. The routines it calls are each checked;
+         * that is not the same as the animation being right. */
+        io_frame_sync_extra(SYNC_ENDING);
         io_present();
         if (!io_pump())
             return;
