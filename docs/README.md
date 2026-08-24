@@ -15,6 +15,7 @@ about it.
 | [entities.md](entities.md) | the entity chain, the ball structure, the capsules, the parachute, and a slip in the original's brick collision |
 | [video-and-sound.md](video-and-sound.md) | CGA mode 05h and its palette, the 8x12 font, the PC speaker |
 | [utilities.md](utilities.md) | POPSPEED, and the cheat typed at the menu |
+| [the-game.md](the-game.md) | what Popcorn is, its menu keys, and what kind of program the binary turned out to be |
 
 Addresses are **image offsets** unless written `seg:off`, and `DS = 0` for the
 whole program - so a data reference `[0x2d4f]` is image offset `0x2d4f`, and a
