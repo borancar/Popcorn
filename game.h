@@ -24,7 +24,15 @@
 #define CODE_BASE   0x1ac20
 
 extern uint8_t *g_image;          /* the whole unpacked load image */
-extern const char *g_dir;               /* the directory the game files are in */
+extern const char *g_dir;               /* "" - everything is relative to the
+                                         * current directory, as it was in DOS */
+
+/* The player's POPCORN.EXE: $POPCORN_EXE, else the usual places relative to
+ * where the port was started. NULL if there is none. */
+const char *find_exe(void);
+/* find_exe, then unpack into g_image. Says what it found, or why it found
+ * nothing. Returns the length, or 0. */
+size_t popcorn_load_image(void);
 
 /* Read the game's data out of the player's own POPCORN.EXE. */
 uint8_t *exepack_load(const char *path, size_t *out_len);

@@ -21,7 +21,17 @@
 #include "game.h"
 
 uint8_t *g_image;
-const char *g_dir = "";     /* where the game files are */
+/* Empty, and it stays empty: POPCORN.EXE, the .PPC sets and popcorn.hsc are
+ * all read and written relative to the **current directory**, which is what
+ * the original does - in DOS the game and its files were the current
+ * directory. Copy popcorn.exe and the .ppc files in beside the binary and run
+ * it from there.
+ *
+ * It mattered that this is one value. load_high_scores was given the
+ * directory POPCORN.EXE was found in and hsc_save was given g_dir, which
+ * nothing assigned - so the port read its scores from one file and wrote them
+ * to another, and no score ever came back. */
+const char *g_dir = "";
 
 /* ------------------------------------------------------------------------
  * 1ac2:27d7  ball_step
@@ -791,6 +801,48 @@ static void start_demo(void)
         play_session();                 /* 1ac2:02f5, left by longjmp */
 }
 
+const char *find_exe(void)
+{
+    static const char *candidates[] = {
+        "popcorn.exe", "POPCORN.EXE",
+        "../popcorn/popcorn.exe", "popcorn/popcorn.exe",
+        "../popcorn/POPCORN.EXE",
+    };
+    const char *env = getenv("POPCORN_EXE");
+    if (env)
+        return env;
+    for (size_t i = 0; i < sizeof candidates / sizeof *candidates; i++) {
+        FILE *f = fopen(candidates[i], "rb");
+        if (f) {
+            fclose(f);
+            return candidates[i];
+        }
+    }
+    return NULL;
+}
+
+size_t popcorn_load_image(void)
+{
+    const char *path = find_exe();
+    if (!path) {
+        fprintf(stderr,
+                "popcorn: cannot find POPCORN.EXE.\n"
+                "         Copy your own next to this binary, or set "
+                "POPCORN_EXE to its path.\n"
+                "         The game is not distributed with this source.\n");
+        return 0;
+    }
+    size_t len = 0;
+    g_image = exepack_load(path, &len);
+    if (!g_image)
+        return 0;
+    printf("popcorn: %s -> %zu bytes of load image\n", path, len);
+    if (len != IMAGE_LEN)
+        fprintf(stderr, "popcorn: note: expected %d bytes, got %zu\n",
+                IMAGE_LEN, len);
+    return len;
+}
+
 /* ========================================================================
  * 1ac2:0113  game_main
  *
@@ -848,7 +900,16 @@ void game_main(const char *dir, uint32_t speed, const char *levels)
             n++;
         }
         name[n] = 0;
-        if (!strchr(name, '.'))
+        /* 1ac2:0160 - leading dots are stepped over when looking for an
+         * extension, and stay in the name that is opened: the loader at
+         * 1ac2:08c8 opens 0x1428 itself. So `.LTF` becomes `.LTF.PPC` rather
+         * than being taken as already extended. It fails either way; matching
+         * it costs two lines and means the name-building is the original's
+         * rather than nearly it. */
+        size_t k = 0;
+        while (name[k] == '.')
+            k++;
+        if (!strchr(name + k, '.'))
             memcpy(name + n, ".PPC", 5);
         if (!level_load_file(dir))
             return;                     /* the original exits to DOS */
@@ -6163,24 +6224,34 @@ void intro_paddle(void)
  *
  * Returns 0 if the file could not be used, and the caller ends the program.
  * ===================================================================== */
-int32_t level_load_file(const char *dir)
+static FILE *ppc_open(const char *dir, const char *name)
 {
     char path[512];
-    snprintf(path, sizeof path, "%s%s", dir ? dir : "",
-             (const char *)(g_image + 0x1428));
+    snprintf(path, sizeof path, "%s%s", dir ? dir : "", name);
     FILE *f = fopen(path, "rb");
-    if (!f) {
-        /* DOS filesystems did not care about case and this one does. The tail
-         * arrives upper-cased, as DOS gave it; the file on disk is whatever
-         * the player named it. */
-        char lower[512];
-        size_t n = 0;
-        for (; path[n] && n < sizeof lower - 1; n++)
-            lower[n] = (char)((path[n] >= 'A' && path[n] <= 'Z')
-                              ? path[n] + 32 : path[n]);
-        lower[n] = 0;
-        f = fopen(lower, "rb");
-    }
+    if (f)
+        return f;
+    /* DOS filesystems did not care about case and this one does. The tail
+     * arrives upper-cased, as DOS gave it; the file on disk is whatever the
+     * player named it - the shipped sets are ltf.ppc and poptab.ppc. */
+    char lower[512];
+    size_t n = 0;
+    for (; path[n] && n < sizeof lower - 1; n++)
+        lower[n] = (char)((path[n] >= 'A' && path[n] <= 'Z')
+                          ? path[n] + 32 : path[n]);
+    lower[n] = 0;
+    return fopen(lower, "rb");
+}
+
+int32_t level_load_file(const char *dir)
+{
+    /* Beside the binary, like everything else the port reads: POPCORN.EXE for
+     * the data, the .PPC sets, and popcorn.hsc. The original reads its level
+     * file from the current directory, because in DOS the game and its files
+     * were the current directory; here one directory holds the lot and it
+     * does not move when the shell does. */
+    const char *name = (const char *)(g_image + 0x1428);
+    FILE *f = ppc_open(dir, name);
     if (!f) {
         fputs("****** Fichier des Tableaux non trouve ******\n", stderr);
         return 0;
