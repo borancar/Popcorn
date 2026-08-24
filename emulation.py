@@ -1098,6 +1098,14 @@ for _i, _c in zip(
         range(176, 224),
         "░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀"):
     CP437[_i] = _c
+# 128-175, the accented letters. POPGEN's menu is in French and without these
+# it reads "R pertoire" - every accent falls through to a space. POPCORN itself
+# never needed them, because it draws its own text with its own 8x12 font and
+# that font is ASCII; these are for the text-mode programs beside it.
+for _i, _c in zip(
+        range(128, 176),
+        "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»"):
+    CP437[_i] = _c
 CP437[249] = "·"
 CP437[250] = "·"
 CP437[254] = "■"
