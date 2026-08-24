@@ -27,7 +27,7 @@ def emulator_vram(seconds, cmdline):
     import pygame
     pygame.init()
     from emulation import VgaDos
-    from trace_dos import UNPACKED
+    from emulation import UNPACKED
     from unicorn.x86_const import UC_X86_REG_CS, UC_X86_REG_IP
 
     m = VgaDos(UNPACKED, max_insns=1 << 62, cmdline=cmdline)

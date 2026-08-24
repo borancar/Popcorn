@@ -46,7 +46,7 @@ def run(args):
     import unicorn
     from unicorn.x86_const import UC_X86_REG_CS, UC_X86_REG_IP
     from emulation import VgaDos, KEYMAP, GAME_CODE
-    from trace_dos import UNPACKED
+    from emulation import UNPACKED
     from analyze import CODE_BASE
     from autoplay import Bot
 
@@ -138,7 +138,7 @@ def main():
     ap = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    from trace_dos import UNPACKED
+    from emulation import UNPACKED
     ap.add_argument("--exe", default=UNPACKED)
     ap.add_argument("--cmdline", default="")
     ap.add_argument("--route", choices=sorted(ROUTES), default="play")

@@ -210,7 +210,7 @@ def main():
         UC_X86_REG_DS, UC_X86_REG_EFLAGS, UC_X86_REG_CS, UC_X86_REG_IP,
         UC_X86_REG_SP, UC_X86_REG_SS)
     from emulation import VgaDos, KEYMAP, GAME_CODE
-    from trace_dos import UNPACKED
+    from emulation import UNPACKED
     from autoplay import Bot, ROUTE_PLAY, ROUTE_PLAY_KEYS, parse_route
 
     m = VgaDos(UNPACKED, max_insns=1 << 62, cmdline=args.cmdline)

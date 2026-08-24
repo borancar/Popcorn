@@ -1,0 +1,12 @@
+# The emulator is shared with the other reconstruction projects and lives in
+# its own repository. **Pinned to a commit on purpose**: this is the thing every
+# measurement here is taken against, so a coverage figure or a cycle count is
+# only reproducible if the emulator that produced it is named. Moving the pin is
+# a deliberate act - re-run verify_routes.sh afterwards.
+dos-emulator @ git+https://github.com/borancar/dos_emulator@a9ae5ee40ffd4f790b86f92157fc98c1b547d392
+
+# Disassembly (tools_dis.py, analyze.py, cycles.py) and the SDL windows.
+capstone
+unicorn
+pygame-ce
+numpy

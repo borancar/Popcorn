@@ -46,7 +46,7 @@ run had ever executed.
 
 ```sh
 python -m venv venv
-venv/bin/pip install capstone unicorn pygame-ce numpy
+venv/bin/pip install -r requirements.txt   # includes the pinned emulator
 
 venv/bin/python unpack_popcorn.py         # recover the plain EXE
 venv/bin/python validate.py               # prove the recovery
@@ -63,8 +63,8 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `unpack_popcorn.py` | EXEPACK recovery by running the stub under Unicorn at segment 0x2000, which is the workaround for the stub's reliance on the 8086's 1 MB wrap |
 | `validate.py` | proves the recovery: round-trips the emitted EXE against the stub's own output, and checks the C decoder agrees |
 | **Emulating it** ||
-| `trace_dos.py` | headless DOS/BIOS shim — INT 21h, 16h, 33h, the IVT, the PSP. **Read-only** on the host filesystem: writes are satisfied from an in-memory overlay |
-| `emulation.py` | `VgaDos` on top of it: CGA modes 4/5/6, ports 0x3d8/0x3d9, retrace on 0x3da, IRQ 1 keyboard, INT 10h pixels, and the SDL window. The reference the port is measured against |
+| `requirements.txt` | the dependencies, with **`dos-emulator` pinned to a commit**. That is the thing every measurement here is taken against, so which version produced a number is part of the number. Moving the pin is deliberate: re-run `verify_routes.sh` after |
+| `emulation.py` | **Popcorn's adapter onto the shared emulator.** The machine itself is `dos_emulator` (<https://github.com/borancar/dos_emulator>) — the DOS/BIOS shim, CGA, the IRQ 1 keyboard, the window. What is here is what is about *this game*: `GAME_DIR`, `UNPACKED`, `GAME_CODE = 0x1AC20`, and a command line that defaults to Popcorn so `python emulation.py --scale 3` still means what it always did. **Every tool here imports the emulator through this module**, so there is one place to look when the shared code moves |
 | `drive.py` | drives **any** DOS program under the emulator by key, feeding the next one when the guest has drained the buffer and come back for more. `emulation.py --keys` times against the wall clock, which is right for the game and wrong for a program that sits waiting: the emulator's speed varies with what the guest is doing, so the same script reaches POPGEN's editor on one run and misses it on the next. `@tag` in the key list saves a screenshot, so a run documents itself, and `--dump` writes the guest's low 256K - press one key, dump, diff against a run that pressed nothing, and the byte that differs is what that key writes. That is how POPGEN's palette was measured |
 | `sb.py`, `xms.py` | Sound Blaster and XMS models inherited from Ducks. Popcorn uses neither — it is CGA and PC speaker — but `emulation.py` wires them in and they cost nothing |
 | **Reading the code** ||
@@ -165,11 +165,19 @@ what the game is doing, so a script tuned on one run can miss on another.
 
 ### Layering, and where changes go
 
-Same rule as Ducks: `trace_dos.py` → `emulation.py` → `native.py`. New behaviour
-goes in the **top** layer. `trace_dos.py`'s value is that it cannot modify the
-game directory — it serves reads from the real files and satisfies writes from
-an in-memory overlay — and weakening that to add a feature destroys the
-guarantee.
+`dos_emulator` (DOS/BIOS shim → video, input, timing → window) → `emulation.py`
+→ the tools. New behaviour goes in the **top** layer that can carry it.
+
+The bottom layer's value is that it cannot modify the game directory — it serves
+reads from the real files and satisfies writes from an in-memory overlay — and
+weakening that to add a feature destroys the guarantee.
+
+**Anything not about Popcorn belongs upstream, not here.** If a change would be
+useful to another game, put it in `dos_emulator` and subclass or configure it
+from `emulation.py`. If that means copying upstream code to change three lines,
+upstream is missing an extension point: add the hook there. A forked copy stops
+receiving fixes the moment it is made — and upstream has its own `CLAUDE.md`
+saying not to break the projects that depend on it, of which this is one.
 
 Large files are edited by one-shot anchored scripts (`edit_*.py`, git-ignored)
 that assert each anchor occurs exactly once, do every replacement, then write the

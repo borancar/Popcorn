@@ -212,7 +212,7 @@ def main():
     import unicorn
     from unicorn.x86_const import UC_X86_REG_CS, UC_X86_REG_IP
     from emulation import VgaDos, KEYMAP, GAME_CODE, make_surface
-    from trace_dos import UNPACKED
+    from emulation import UNPACKED
     from autoplay import Bot, parse_route
 
     m = VgaDos(UNPACKED, max_insns=1 << 62, cmdline=args.cmdline)

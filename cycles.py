@@ -249,7 +249,7 @@ def main():
     import unicorn, capstone
     from unicorn.x86_const import UC_X86_REG_CS, UC_X86_REG_IP
     from emulation import VgaDos, GAME_CODE
-    from trace_dos import UNPACKED
+    from emulation import UNPACKED
     from autoplay import Bot
     from snapshot import restore
 

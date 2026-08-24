@@ -64,7 +64,7 @@ from unicorn import UcError, UC_HOOK_CODE
 from unicorn.x86_const import *
 
 from emulation import VgaDos, KEYMAP, GAME_CODE, IPS_8086_8MHZ, make_surface
-from trace_dos import UNPACKED
+from emulation import UNPACKED
 
 # --------------------------------------------------------------- the addresses
 # The three bytes the game's INT 09h handler maintains, and the only thing its
