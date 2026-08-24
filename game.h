@@ -320,6 +320,7 @@ void panel_finish(void);          /* 1ac2:09c5 */
 extern int32_t g_resume_at_frame_top;   /* lockstep: skip play_loop's prologue */
 extern int32_t g_resume_in_session;     /* lockstep: rejoin play_session's retry loop */
 extern int32_t g_resume_in_bonus;       /* lockstep: rejoin inside the bonus */
+extern int32_t g_start_level;           /* --level N, or -1 for the first */
 int32_t  play_loop(void);             /* 1ac2:1873 - transcribed */
 uint32_t draw_text(uint32_t src, uint32_t count, uint32_t di);  /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
