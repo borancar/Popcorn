@@ -376,6 +376,7 @@ uint32_t game_random(uint32_t ticks, uint32_t limit)
  * two bytes POPSPEED patches. */
 #define CS_BASE        0x1ac20
 #define SOUND_ON       (CS_BASE + 0x84)   /* F9 toggles this */
+#define LAST_MAKE      0x2d49             /* the INT 09h handler's last make code */
 #define SOUND_REQUEST  (CS_BASE + 0xf4)   /* an id to start, 0 = nothing */
 #define SOUND_TIMER    (CS_BASE + 0xf5)   /* ticks left on the current note */
 #define SOUND_PTR      (CS_BASE + 0xf6)   /* where in the tune we are */
@@ -1037,15 +1038,90 @@ void game_main(const char *dir, uint32_t speed, const char *levels)
  * reads only the three state bytes, which the platform maintains; the demo's
  * reads the ball.
  */
+/* 1ac2:1654, the prologue to the mouse read at 1ac2:169f - and the port had
+ * only the read. Everything the game does with a key *during play* is here,
+ * so without it Esc, F9 and F10 all did nothing.
+ *
+ * Esc does not leave the level. It **pauses**: the screen goes aside, the
+ * overlay goes on, and the game waits for a key. `and al,0xdf / cmp al,0x41`
+ * - so **A**, either case - clears the entities and abandons the game back to
+ * the menu the way the mouse handler does at 1ac2:167e. Any other key puts
+ * the screen back and play carries on. */
+static void input_keys_mouse(void)
+{
+    if (!io_key_ready())
+        return;                         /* 1ac2:1658 */
+    uint32_t ax = io_get_key();
+
+    /* 1ac2:165e is F9, and it is **not** repeated here. The original reaches
+     * it only with the mouse, because the keyboard mode installs a handler
+     * that does not chain to the BIOS and starves INT 16h; the port's
+     * platform layer calls int09_handler for every scan code in both modes,
+     * so the 0xc3 toggle in there has already done it. Doing it again would
+     * toggle twice and look exactly like F9 not working. */
+    if (ax == 0x011b) {                 /* 1ac2:1669, Esc */
+        screen_stash();                 /* 1ac2:4ba9 */
+        uint32_t k;
+        do {
+            io_present();
+            if (!io_pump())
+                return;
+        } while (!io_key_ready());
+        k = io_get_key() & 0xff;
+        if ((k & 0xdf) == 'A') {        /* 1ac2:1677 */
+            entities_clear();           /* 1ac2:55e */
+            longjmp(g_back_to_menu, 1); /* sp = [0x1405]; jmp 0x1d1 */
+        }
+        screen_unstash();               /* 1ac2:4c13 */
+        return;
+    }
+    if (ax == 0x4400) {                 /* 1ac2:168b, F10 */
+        /* The boss key is a no-op here on purpose - see employee_enter - so
+         * nothing was stashed and 1ac2:169c's screen_restore is skipped with
+         * it, exactly as the menu's F10 does. */
+        employee_enter();               /* 1ac2:4ae0 */
+        while (io_key_ready() && io_get_key() == 0x4400)
+            ;                           /* 1ac2:1693 */
+    }
+}
+
+/* 1ac2:16d2, the same pause on the keyboard path. It tests [0x2d49] - the
+ * make code the game's own INT 09h handler left - against 1, which is Esc,
+ * and takes the BIOS handler back so INT 16h has something to read. */
+static void input_keys_keyboard(void)
+{
+    if (g_image[LAST_MAKE] != 1)
+        return;
+    screen_stash();                     /* 1ac2:4ba9 */
+    restore_int09();                    /* 1ac2:03d1 */
+    uint32_t k;
+    do {
+        io_present();
+        if (!io_pump())
+            return;
+    } while (!io_key_ready());
+    k = io_get_key() & 0xff;
+    if ((k & 0xdf) == 'A') {            /* 1ac2:16e5 */
+        entities_clear();
+        longjmp(g_back_to_menu, 1);
+    }
+    screen_unstash();                   /* 1ac2:4c13 */
+    install_int09();                    /* 1ac2:03b0 */
+    g_image[LAST_MAKE] = 0xff;          /* 1ac2:16ef */
+}
+
 void game_input(void)
 {
     uint32_t which = img_w(INPUT_ACTIVE);
-    if (which == INPUT_MOUSE)
+    if (which == INPUT_MOUSE) {
+        input_keys_mouse();
         input_mouse(io_mouse_x(), io_mouse_buttons());
-    else if (which == INPUT_DEMO)
+    } else if (which == INPUT_DEMO) {
         input_demo();
-    else
+    } else {
+        input_keys_keyboard();
         input_keyboard();
+    }
 }
 
 /* ========================================================================
