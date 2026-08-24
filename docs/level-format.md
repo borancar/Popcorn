@@ -27,6 +27,39 @@ them, so it cannot fall straight into another, and the entity at `0x36fb` puts
 them all back to 9 afterwards. The list is there so neither has to scan the
 field.
 
+### The cell values
+
+A cell is one byte, and the byte *is* the behaviour: `1ac2:3044` is thirty
+words indexed by it, and hitting a cell calls the word it finds. Anything the
+table has as zero cannot be hit at all.
+
+| value | handler | what happens |
+| ---: | --- | --- |
+| 0 | - | empty |
+| 1 | `1ac2:28cb` `brick_1` | 20 points and gone. Usually left to a crumbling entity; while fewer than three capsules are out, one hit in three removes it at once and leaves a score popup |
+| 2 | `1ac2:2985` `brick_2` | the same, but that outright break drops a **capsule** - the only place the weighted eleven at `0x33b1` are drawn from |
+| 3 | `1ac2:2a3f` `brick_3` | no score: **hardens into a 4**, and nothing breaks a 4 |
+| 4 | `1ac2:3221` `brick_solid` | indestructible; the ball bounces and nothing else |
+| 5 | `1ac2:2a73` `brick_5` | 20 points, becomes a 6 |
+| 6 | `1ac2:2ab4` `brick_6` | 30 points, becomes a 7 |
+| 7 | `1ac2:2af5` `brick_7` | 50 points, becomes an 8 |
+| 8 | `1ac2:2b36` `brick_8` | 100 points and gone, leaving an entity at `0x366f` |
+| 9 | `1ac2:2b9d` `brick_9` | 25 points. Takes the ball away and puts it back at a cell picked at random. **Every 9 in the level becomes a 4** while it is gone, so it cannot fall straight into another |
+| 10 | `1ac2:2c59` `brick_10` | 50 points. The ball goes into state 4 and comes down under a parachute |
+| 11 | `1ac2:2d68` `brick_11` | 72 points. The cell becomes **12**, which is not a brick - the drawing code has a case of its own for it |
+| 12 | `1ac2:3221` `brick_solid` | the hole an 11 leaves. Indestructible |
+| 16-21 | `1ac2:2ccd` `brick_animated` | 33 points. Six pieces of one moving picture; **adds eight** to the cell rather than clearing it |
+| 24-29 | `1ac2:3221` `brick_solid` | what a hit animated piece became. Bounce only |
+| 13-15, 22-23 | - | zero in the table, and no level uses them |
+
+**5, 6, 7, 8 are one brick**, four hits deep and worth 200 altogether. Each hit
+scores and steps the cell down the chain; only the last removes anything.
+
+Only **3** and **9** are exempt from the brick count at `+0x00` - a 3 is on its
+way to being unbreakable and a 9 is transport rather than something to clear.
+Everything else in the table counts, the six animated pieces included, which is
+why a level whose last cells are 3s can never be finished by breaking them.
+
 ### `.PPC` files
 
 Exactly **8,630 bytes** (`0x21b6`), and the shape is the header the game
