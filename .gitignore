@@ -1,13 +1,18 @@
-# The game is never part of this repository.
+# The game travels with the port that reads it - see reconstruct/. Its authors
+# put it in the public domain in its own documentation, asking only that it not
+# be put to commercial use without their agreement.
+#
+# popcorn/ stays out: it is the working copy the Python tools read, and the
+# copy that matters is the one beside the binary that needs it. Two of the same
+# bytes in one repository is one too many.
 popcorn/
 game/
-*.exe
-*.ppc
 *.hsc
-*.doc
 *.bat
 
-# Derived from the game, and therefore just as copyrighted.
+# A build product: recovered from popcorn.exe in a second by
+# unpack_popcorn.py, so carrying a second copy of the same bytes serves
+# nothing.
 popcorn.unpacked.exe
 snapshots/
 *.snap

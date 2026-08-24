@@ -2,10 +2,11 @@
  * Recover POPCORN.EXE's load image at run time.
  *
  * The port needs the game's data - its sprites, fonts, level tables and
- * strings all live in the first 0x1ac20 bytes of the image - and that data is
- * not distributed with this source.  So the port reads the player's own copy
- * of POPCORN.EXE and unpacks it, which is a hundred lines of RLE and costs a
- * millisecond at startup.
+ * strings all live in the first 0x1ac20 bytes of the image - and none of it is
+ * embedded in this C.  So the port reads POPCORN.EXE and unpacks it, which is
+ * a hundred lines of RLE and costs a millisecond at startup.  The executable
+ * sits beside the binary; the authors put the game in the public domain, so it
+ * travels with the port rather than having to be found.
  *
  * The format is Microsoft EXEPACK.  A 16-byte header sits at CS:0 with the
  * real entry point, the unpacked length, and an 'RB' signature; the packed

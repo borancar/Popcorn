@@ -8,22 +8,34 @@ the address in the original it was read from. It builds and plays:
 make && ./popcorn
 ```
 
-**You need your own copy of the game.** Nothing of Popcorn is distributed
-here — no executable, no level sets, no artwork. Every sprite, font, level
-table and string the game has lives in the first 0x1ac20 bytes of
-`POPCORN.EXE`, and the port unpacks that file at startup and reads its data
-from there. Put `popcorn.exe` beside the binary, along with any `.ppc` level
-sets you want to play:
+**The game is here**, because its authors put it in the public domain. From
+`popcorn.doc`, in their own words:
+
+> Ce programme fait parti du domaine public. Il ne doit servir à aucune fin
+> commerciale sans accord préalable de […]
+
+Public domain, then, with the one condition they attached: **not for
+commercial use without their prior agreement.** That condition travels with
+the files, and it is theirs rather than this repository's to waive.
+
+So `popcorn.exe` is here, and the port needs it — every sprite, font, level
+table and string the game has lives in the first 0x1ac20 bytes of that
+executable, which the port unpacks at startup and reads its data from. Nothing
+of the game is embedded in the C; it is read at run time from the file beside
+it. The two shipped level sets are here too, and `POPGEN.EXE`, which made
+them, and `POPSPEED.EXE`, which sets the game speed:
 
 ```sh
-cp /wherever/popcorn.exe /wherever/*.ppc .
 make && ./popcorn          # the fifty levels built into the executable
 ./popcorn POPTAB           # POPTAB.PPC instead, as POPGEN wrote it
+./popcorn LTF              # LTF.PPC
 ```
 
 `POPCORN_EXE` points at a copy kept somewhere else. Everything the game reads
 and writes — the executable, the `.ppc` sets, and `popcorn.hsc` — is relative
-to the current directory, as it was under DOS.
+to the current directory, as it was under DOS. `popcorn.hsc` is not in here:
+the game writes it, so it is a save file rather than part of the game, and one
+player's scores are nobody else's starting point.
 
 Needs SDL3 and a C99 compiler. `make` prints what to install if it cannot find
 SDL3.
@@ -74,8 +86,13 @@ nothing else, because that command line is part of what the port is.
 
 ## Licence
 
-The program is stated in its own readme to be public domain — *"Ce programme
-fait parti du domaine public"* — but that is the authors' word about their own
-distribution, not a grant anybody else can re-publish under, so nothing of the
-game is redistributed here. This reconstruction is a separate work; ask before
-assuming a licence for it.
+Two works, and they are not the same one.
+
+**The game** — `popcorn.exe`, the `.ppc` sets, `popgen.exe`, `popspeed.exe`,
+`popcorn.doc` — is Christophe Lacaze's and Frédérick Raynal's, placed by them
+in the public domain in `popcorn.doc`, with the condition that it not be put
+to commercial use without their prior agreement. Redistributing it here rests
+on that declaration and carries that condition with it.
+
+**The reconstruction** — the C, the Makefile, this README — is a separate work
+written from the disassembly. Ask before assuming a licence for it.

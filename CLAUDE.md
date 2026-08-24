@@ -42,7 +42,8 @@ Level sets are `.PPC` files made with the shipped `POPGEN.EXE`; `POPCORN POPTAB`
 loads `POPTAB.PPC`. `POPSPEED.EXE` sets the game speed (0-30000, default 110,
 lower is faster) for machines faster than an 8 MHz 8086.
 
-Shipped files, in `popcorn/` (never committed):
+Shipped files. The working copy in `popcorn/` is not committed; the same
+files are committed in `reconstruct/`, beside the port that reads them:
 `popcorn.exe`, `popcorn.doc`, `popcorn.hsc` (high scores), `popspeed.exe`,
 `popgen.exe`, `poptab.ppc`, `ltf.ppc`, and two batch files.
 
@@ -301,7 +302,7 @@ venv/bin/python tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `reconstruct/stubs.c` | down to `entity_unknown`, a safety net for a handler address that is in no table. It was the to-do list and everything on it has landed; the two screens the port deliberately does not have are no-ops in `game.c`, not stubs here |
 | `reconstruct/verify.c` | the other half of `verify.py`: loads a captured state, calls one routine, writes back what it produced |
 | **Not in the repository** ||
-| `popcorn/` | the game itself, excluded by directory and again by file type. Never committed |
+| `popcorn/` | the working copy the Python tools read, not committed. The committed copy is in `reconstruct/`, which is what the split repository publishes |
 | `popcorn.unpacked.exe` | derived from it, and therefore just as copyrighted. Regenerated, not committed |
 | `debug/`, `*.png` | screenshots and VRAM dumps from `shift+F10` |
 | `venv/`, `coverage.bin` | build and run products |
@@ -395,12 +396,21 @@ Large files are edited by one-shot anchored scripts (`edit_*.py`, git-ignored)
 that assert each anchor occurs exactly once, do every replacement, then write the
 file back once, so a failed anchor leaves the file untouched.
 
-## The game is never in the repository
+## Where the game lives
 
-`popcorn/` is git-ignored by directory name and again by file type
-(`*.exe`, `*.ppc`, `*.hsc`, `*.doc`, `*.bat`). `popcorn.unpacked.exe` is derived
-from it and therefore just as copyrighted; it is regenerated, not committed.
-`POPCORN_GAME_DIR` moves the game directory elsewhere for the Python tools.
+**In `reconstruct/`, and committed** - `popcorn.exe`, both `.ppc` sets,
+`popgen.exe`, `popspeed.exe` and `popcorn.doc`. The authors put the program in
+the public domain in `popcorn.doc`, asking only that it not be put to
+commercial use without their prior agreement, so it travels with the port that
+reads it and a fresh clone of the split repository plays.
+
+`popcorn/` stays ignored: it is the working copy the Python tools read, and
+two copies of the same bytes in one repository is one too many.
+`POPCORN_GAME_DIR` moves it elsewhere for those tools.
+
+`popcorn.hsc` is ignored wherever it appears - the game writes it, so it is a
+save file rather than part of the game. `popcorn.unpacked.exe` is ignored too:
+it is recovered from `popcorn.exe` in a second by `unpack_popcorn.py`.
 
 The **port reads and writes everything relative to the current directory**, as
 the original does - in DOS the game and its files *were* the current
