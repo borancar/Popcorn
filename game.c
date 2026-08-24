@@ -1589,7 +1589,12 @@ static uint32_t cga_at(uint32_t x, uint32_t y)
 #define CELL_TABLE  0x3080              /* cell value -> bitmap pointer */
 #define SEG_14A1   0x14a10
 
-void draw_brick_row(uint32_t y)
+/* Returns the DI it leaves, which 1ac2:46dc depends on: the curtain lays its
+ * second cap at [di] without saving DI across this call, and 1ac2:2034 opens
+ * `xor di, di` - so the cap goes at the end of the brick row, not where the
+ * caller had DI. The `inc di / inc di` at 1ac2:46cc is dead for the same
+ * reason. */
+uint32_t draw_brick_row(uint32_t y)
 {
     uint32_t di = cga_at(0, y) + BRICK_LEFT;
     uint32_t row = (y - BRICK_TOP) & 0xff;
@@ -1608,6 +1613,7 @@ void draw_brick_row(uint32_t y)
         for (int32_t b = 0; b < BRICK_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
     }
+    return di;
 }
 
 /* 1ac2:20b9  draw_sprite_20x6
@@ -6689,19 +6695,27 @@ static void endgame_curtain(void)
          * Which read as "the whole curtain differs" and was really "this is
          * not the curtain". */
         io_frame_sync_extra(SYNC_CURTAIN);
-        uint32_t d = bp;
+        uint32_t d = bp, wrote = bp;
         for (int32_t r = 7; r > 0; r--) {
             uint32_t s = cga_next_row(d);
             for (int32_t b = 0; b < 0x1a * 2; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] =
                     g_vram[(s + b) & (CGA_SIZE - 1)];
+            wrote = d;                  /* the row just written */
             d = s;
         }
+        /* 1ac2:46b9 - the caps go on the row the loop **wrote**, not the one
+         * after it. `xchg di, si` at 1ac2:46b1 leaves DI on that row and DX
+         * on the next, and the caps use DI. Capping the next row instead puts
+         * the border one scan line out, which grows by a row a pass. */
+        d = wrote;
         uint32_t cap = (ah & 3) ? 0x50 : 0x10;
-        g_vram[d & (CGA_SIZE - 1)] = 0x0d;
+        g_vram[d & (CGA_SIZE - 1)] = 0x0d;          /* 1ac2:46b9 */
         g_vram[(d + 1) & (CGA_SIZE - 1)] = (uint8_t)cap;
-        d += 2;
-        draw_brick_row(g_image[SWEEP_Y]);
+        /* 1ac2:46dc caps at whatever DI the call left, which is the end of
+         * the brick row. Capping the caller's own DI + 2 instead put it at
+         * the band's second byte and left the row's end uncapped. */
+        d = draw_brick_row(g_image[SWEEP_Y]);       /* 1ac2:46d6 */
         g_vram[d & (CGA_SIZE - 1)] = 0x0d;
         g_vram[(d + 1) & (CGA_SIZE - 1)] = (uint8_t)cap;
 
