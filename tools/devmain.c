@@ -21,8 +21,11 @@
  *   --shot FILE          write the screen there when the deadline is reached
  *   --dump-vram FILE     likewise, the raw 0xb8000 aperture
  *   --dump-image FILE    write the unpacked load image and exit, which is how
+ *                        exepack.c is checked - or, with --run-ms, write it
+ *                        when the run ends, to see what a session changed
  *                        exepack.c is checked against unpack_popcorn.py
- *   --keys SCAN@MS,...   press scan codes at wall-clock times
+ *   --keys SCAN@MS,...   press scan codes at wall-clock times; `^` before a
+ *                        scan code presses it with shift
  *   --verify IN OUT      run one routine on a captured state (verify.py)
  *   --lockstep STATE     the frame protocol sidebyside.py and autoplay.py
  *                        drive, resuming from a captured state
@@ -202,6 +205,7 @@ int32_t main(int32_t argc, char **argv)
         if (!io_init(scale))
             return 1;
         io_set_deadline(run_ms, shot, vram);
+        io_set_deadline_image(dump && run_ms ? dump : NULL);
         int32_t r = resume_snapshot(resume);
         io_shutdown();
         return r;
@@ -211,7 +215,10 @@ int32_t main(int32_t argc, char **argv)
     if (!len)
         return 1;
 
-    if (dump) {
+    /* With --run-ms, the image is wanted *after* the run - "did typing this
+     * set that byte" is not a question the load image can answer. Without it,
+     * dump and exit, which is how exepack.c is checked. */
+    if (dump && !run_ms) {
         FILE *f = fopen(dump, "wb");
         if (!f) {
             perror(dump);
@@ -226,13 +233,19 @@ int32_t main(int32_t argc, char **argv)
     if (!io_init(scale))
         return 1;
     io_set_deadline(run_ms, shot, vram);
+    io_set_deadline_image(dump && run_ms ? dump : NULL);
     /* --keys 3b@30000,39@34000 : scan code, then when to press it. */
     for (const char *k = keys; k && *k; ) {
+        /* `^` before the scan code presses it with shift, which is the only
+         * way a script types a mixed-case string - the cheat at 0x3f0b is
+         * `LACRAL software`, and cheat_match compares byte for byte. */
+        int32_t shift = 0;
+        if (*k == '^') { shift = 1; k++; }
         uint32_t scan = (uint32_t)strtoul(k, (char **)&k, 16);
         if (*k == '@')
             k++;
         uint32_t ms = (uint32_t)strtoul(k, (char **)&k, 10);
-        io_script_key(scan, ms);
+        io_script_key_shift(scan, ms, shift);
         if (*k == ',')
             k++;
         else

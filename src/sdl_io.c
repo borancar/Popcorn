@@ -434,14 +434,15 @@ void io_flush_keys(void)
 void key_push(uint32_t scan, uint32_t ascii);
 
 #define SCRIPT_MAX 32
-static struct { uint32_t scan, ms; int32_t done; } script[SCRIPT_MAX];
+static struct { uint32_t scan, ms; int32_t done, shift; } script[SCRIPT_MAX];
 static int32_t script_n;
 
-void io_script_key(uint32_t scan, uint32_t ms)
+void io_script_key_shift(uint32_t scan, uint32_t ms, int32_t shift)
 {
     if (script_n < SCRIPT_MAX) {
         script[script_n].scan = scan;
         script[script_n].ms = ms;
+        script[script_n].shift = shift;
         script[script_n].done = 0;
         script_n++;
     }
@@ -478,7 +479,14 @@ static void script_pump(void)
             continue;
         script[i].done = 1;
         uint32_t sc = script[i].scan;
-        key_push(sc, ascii_of_scan(sc));
+        /* An unmodified scan code is an unshifted key, so a letter is
+         * lower-case - the same as the live path above. `--keys ^1e@...`
+         * presses it with shift, which is how a mixed-case string like the
+         * cheat gets typed by a script. */
+        uint32_t a = ascii_of_scan(sc);
+        if (!script[i].shift && a >= 'A' && a <= 'Z')
+            a += 32;
+        key_push(sc, a);
         if (sc == g_image[KEY_SCAN_L]) g_image[KEY_LEFT] = 1;
         if (sc == g_image[KEY_SCAN_R]) g_image[KEY_RIGHT] = 1;
         if (sc == g_image[KEY_SCAN_A]) g_image[KEY_ACTION] = 1;
@@ -526,12 +534,21 @@ int32_t io_save_shot(const char *path)
 static uint64_t deadline_ns;
 static const char *shot_path;
 static const char *vram_path;
+static const char *image_path;
 
 void io_set_deadline(uint32_t ms, const char *shot, const char *vram)
 {
     deadline_ns = ms ? SDL_GetTicksNS() + (uint64_t)ms * SDL_NS_PER_MS : 0;
     shot_path = shot;
     vram_path = vram;
+}
+
+/* The load image as the run leaves it. "Did typing this set that byte" is not
+ * a question the image at startup can answer, and the deadline exits the
+ * process, so it has to be written from here. */
+void io_set_deadline_image(const char *path)
+{
+    image_path = path;
 }
 
 /* The unattended deadline. Checked from both the retrace wait and the event
@@ -547,6 +564,13 @@ static void check_deadline(void)
         FILE *f = fopen(vram_path, "wb");
         if (f) {
             fwrite(g_vram, 1, CGA_SIZE, f);
+            fclose(f);
+        }
+    }
+    if (image_path) {
+        FILE *f = fopen(image_path, "wb");
+        if (f) {
+            fwrite(g_image, 1, IMAGE_LEN, f);
             fclose(f);
         }
     }
@@ -629,6 +653,18 @@ void io_set_grab(int32_t on)
 
 int32_t io_grabbed(void) { return grabbed; }
 
+/* Whether the game's own INT 09h handler is in place. While it is, scan codes
+ * still reach int09_handler but stop reaching the BIOS key buffer, which is
+ * what the real handler's failure to chain amounts to. */
+static int32_t int09_installed;
+
+void io_set_int09_installed(int32_t on)
+{
+    int09_installed = on ? 1 : 0;
+    if (int09_installed)
+        io_flush_keys();        /* what the BIOS buffer held is unreachable */
+}
+
 int32_t io_pump(void)
 {
     if (io_lockstep())
@@ -679,11 +715,29 @@ int32_t io_pump(void)
             /* ... and separately, what the BIOS would have put in its buffer
              * for the menus to read through INT 16h. Only on the make: a
              * break code never reached that buffer. */
-            if (down) {
+            /* The BIOS buffer, but only while the BIOS owns the keyboard.
+             * The game's own INT 09h handler does not chain, so with it
+             * installed INT 16h has nothing to read - see install_int09. */
+            if (down && !int09_installed) {
                 uint32_t ascii = 0;
-                if (ev.key.key >= 0x20 && ev.key.key < 0x7f)
-                    ascii = (uint32_t)SDL_toupper((int32_t)ev.key.key);
-                else if (ev.key.scancode == SDL_SCANCODE_RETURN)
+                if (ev.key.key >= 0x20 && ev.key.key < 0x7f) {
+                    /* The ASCII the BIOS would have buffered - which means
+                     * **case as typed**, not folded.
+                     *
+                     * This upper-cased everything, and that silently broke the
+                     * cheat: the string at 0x3f0b is `LACRAL software`, caps
+                     * then lower, and cheat_match compares byte for byte, so
+                     * the match died on the `s` and no amount of typing it
+                     * correctly would do anything. Nothing else noticed,
+                     * because the menu dispatches on the scan code in the high
+                     * byte and the high-score name is upper-case anyway. */
+                    ascii = (uint32_t)ev.key.key;
+                    int32_t caps = (ev.key.mod & SDL_KMOD_SHIFT) != 0;
+                    if (ev.key.mod & SDL_KMOD_CAPS)
+                        caps = !caps;   /* shift and caps lock cancel out */
+                    if (caps && ascii >= 'a' && ascii <= 'z')
+                        ascii = (uint32_t)SDL_toupper((int32_t)ascii);
+                } else if (ev.key.scancode == SDL_SCANCODE_RETURN)
                     ascii = 0x0d;
                 else if (ev.key.scancode == SDL_SCANCODE_ESCAPE)
                     ascii = 0x1b;

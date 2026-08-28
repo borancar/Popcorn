@@ -5365,8 +5365,18 @@ void flush_keys(void)
  * bytes at 0x2d4c-0x2d4e from SDL key events, all the time, so both are
  * recorded and do nothing. See the note on 1ac2:03e3 below.
  */
-void install_int09(void) { }
-void restore_int09(void) { }
+/* These are no-ops in the sense that there is no vector to write, but they
+ * are **not** nothing: while the game's own handler is installed it does not
+ * chain to the BIOS, so INT 16h's buffer stays empty. That is load-bearing.
+ *
+ * `input_keys_keyboard` pauses on Esc and then waits for a key through INT
+ * 16h - and calls restore_int09 first precisely so there is something to wait
+ * for. If the platform layer keeps filling that buffer while the game's
+ * handler is installed, the Esc that opened the pause is still sitting in it,
+ * satisfies the wait immediately, and the pause opens and closes inside one
+ * frame. At 326 Hz that looks exactly like Esc doing nothing. */
+void install_int09(void) { io_set_int09_installed(1); }
+void restore_int09(void) { io_set_int09_installed(0); }
 
 /* 1ac2:03e3  the INT 09h handler itself
  *

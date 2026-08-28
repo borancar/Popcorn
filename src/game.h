@@ -185,9 +185,12 @@ extern uint32_t g_play_hz;             /* measured play-loop rate, 326 Hz */
 int32_t  io_key_ready(void);               /* INT 16h AH=01 */
 uint32_t io_get_key(void);             /* INT 16h AH=00: scan<<8 | ascii */
 void io_flush_keys(void);
-void io_script_key(uint32_t scan, uint32_t ms);
+void io_script_key_shift(uint32_t scan, uint32_t ms, int32_t shift);
+#define io_script_key(scan, ms) io_script_key_shift((scan), (ms), 0)
 int32_t  io_save_shot(const char *path);
 void io_set_deadline(uint32_t ms, const char *shot, const char *vram);
+void io_set_deadline_image(const char *path);
+void io_set_int09_installed(int32_t on);
 
 /* Little-endian accessors, so a transcribed `mov ax,[0x3144]` reads the way it
  * reads in the disassembly. */
