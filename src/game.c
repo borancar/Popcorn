@@ -1231,7 +1231,7 @@ int32_t play_loop(void)
     paddle_row_offsets(gv.paddle_x, PADDLE_ROWS_CUR);
     memcpy(g_image + PADDLE_PIX_CUR, g_image + SPRITE_BASE, 0x27 * 2);
     gv.ball_alive = 1;
-    memcpy(g_image + BALLS + 4, g_image + 0x48fb, 8);
+    memcpy(gv.balls[0].sprite, g_image + 0x48fb, sizeof gv.balls[0].sprite);
     gv.frame_delay_set = 0x1f4;
     gv.key_right = gv.key_left = 0;
     gv.repeat_div = 0;
@@ -1321,7 +1321,7 @@ frames:
 
         if (--gv.speed_step != 0) {
             for (int32_t i = 0; i < 3; i++) {
-                uint32_t ball = BALLS + i * BALL_STRIDE;
+                uint32_t ball = img_off(&gv.balls[i]);
                 uint8_t st = ball_at(ball)->state;
                 if (st == 0 || st >= 3)
                     continue;
@@ -1648,7 +1648,6 @@ void draw_sprite_20x6(uint32_t x, uint32_t y, uint32_t src)
  * the wrong one at every frame before it - which is what put a TABLEAU banner
  * in the port that the emulator had already cleared.
  * ===================================================================== */
-#define SWEEP_Y     0x2f0c              /* four kernel positions */
 #define SWEEP_STATE 0x2efc              /* four of (timer, period, sprite) */
 #define SWEEP_X     0x60
 
@@ -1689,23 +1688,23 @@ void level_intro(void)
             return;
     }
 
-    g_image[SWEEP_Y + 3] = 0xc2;
-    g_image[SWEEP_Y + 2] = 0xbd;
-    g_image[SWEEP_Y + 1] = 0xb8;
-    g_image[SWEEP_Y + 0] = 0xb3;
+    gv.sweep_y[3] = 0xc2;
+    gv.sweep_y[2] = 0xbd;
+    gv.sweep_y[1] = 0xb8;
+    gv.sweep_y[0] = 0xb3;
 
     /* Up the screen, laying the backdrop over what was there. */
-    while (g_image[SWEEP_Y] != 0x0c) {
+    while (gv.sweep_y[0] != 0x0c) {
         io_frame_sync_extra(SYNC_INTRO);        /* 1ac2:1f13 */
-        field_backdrop((g_image[SWEEP_Y] - 7) & 0xff);
+        field_backdrop((gv.sweep_y[0] - 7) & 0xff);
         for (uint32_t k = 0; k < 4; k++) {
             uint32_t st = SWEEP_STATE + k * 4;
             g_image[st]++;
             if (g_image[st + 1] != g_image[st])
                 continue;
             g_image[st] = 0;
-            g_image[SWEEP_Y + k]--;
-            draw_sprite_20x6(SWEEP_X, g_image[SWEEP_Y + k],
+            gv.sweep_y[k]--;
+            draw_sprite_20x6(SWEEP_X, gv.sweep_y[k],
                              img_w(st + 2));
         }
         intro_pause(0xa);
@@ -1717,16 +1716,16 @@ void level_intro(void)
     /* And back down, drawing the bricks. The kernels are walked backwards
      * here - `mov cx,3` and down to -1 - which is not the same order as the
      * sweep up, and shows: they trail the reveal instead of leading it. */
-    while (g_image[SWEEP_Y] != 0xb3) {
-        uint32_t y = (g_image[SWEEP_Y] - 6) & 0xff;
+    while (gv.sweep_y[0] != 0xb3) {
+        uint32_t y = (gv.sweep_y[0] - 6) & 0xff;
         draw_brick_row(y);              /* 1ac2:2034 */
         field_backdrop((y + 1) & 0xff); /* 1ac2:1fc1 */
         for (int32_t k = 3; k >= 0; k--) {
             uint32_t st = SWEEP_STATE + k * 4;
             if (g_image[st] == 0) {
                 g_image[st] = g_image[st + 1];
-                g_image[SWEEP_Y + k]++;
-                draw_sprite_20x6(SWEEP_X, g_image[SWEEP_Y + k],
+                gv.sweep_y[k]++;
+                draw_sprite_20x6(SWEEP_X, gv.sweep_y[k],
                                  img_w(st + 2));
             }
             g_image[st]--;              /* both ways round, after the draw */
@@ -3555,7 +3554,7 @@ void bonus_hits_ball(uint32_t bx, uint32_t ball)
  */
 
 /* Which ball the collision found - the original's DI across 3df1/3f20. */
-static uint32_t g_hit_ball = BALLS;
+static uint32_t g_hit_ball = offsetof(game_vars, balls);
 
 void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
 {
@@ -3620,7 +3619,7 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
      * DI and entity_bonus bounces *that* ball, not the first one it can find
      * afterwards. */
     for (int32_t i = 0; i < 3; i++) {
-        uint32_t ball = BALLS + i * BALL_STRIDE;
+        uint32_t ball = img_off(&gv.balls[i]);
         if (ball_at(ball)->state != 1)
             continue;
         bonus_hits_ball(bx, ball);
@@ -4206,7 +4205,7 @@ void bonus_net(void)
 void bonus_reverse(void)
 {
     for (int32_t i = 0; i < 3; i++) {
-        ball_t *b = (ball_t *)(g_image + BALLS + i * BALL_STRIDE);
+        ball_t *b = &gv.balls[i];
         if (b->state == 0)
             continue;
         b->dir_y = (uint8_t)(b->dir_y == 1 ? 0 : 1);
@@ -4276,7 +4275,7 @@ void entity_multiball(uint32_t bx)
     /* Find one that is in play to copy. */
     uint32_t src = 0;
     for (int32_t i = 0; i < 3; i++) {
-        uint32_t b = BALLS + i * BALL_STRIDE;
+        uint32_t b = img_off(&gv.balls[i]);
         if (ball_at(b)->state != 0) {
             src = b;
             break;
@@ -4290,7 +4289,7 @@ void entity_multiball(uint32_t bx)
     uint32_t x = ball_at(src)->x, y = ball_at(src)->y;
 
     for (int32_t i = 0; i < 3; i++) {
-        uint32_t si = BALLS + i * BALL_STRIDE;
+        uint32_t si = img_off(&gv.balls[i]);
         if (ball_at(si)->state != 0)
             continue;
         ball_t *b = (ball_t *)(g_image + si);
@@ -4372,7 +4371,7 @@ void entity_paddle_fx(uint32_t bx)
             gv.caught = 0;
             gv.hold_timer = (uint16_t)(0x460);
             for (int32_t i = 0; i < 3; i++) {
-                uint32_t ball = BALLS + i * BALL_STRIDE;
+                uint32_t ball = img_off(&gv.balls[i]);
                 ball_t *b = (ball_t *)(g_image + ball);
                 if (b->state != 2)
                     continue;
@@ -6709,14 +6708,14 @@ static void endgame_curtain(int32_t cells)
          * not the data segment. A register dump at 1ac2:46ce would settle it,
          * the way one settled DS = 0xc46 in the ending. */
         if (cells)
-            d = draw_brick_row(g_image[SWEEP_Y]);   /* 1ac2:46d6 */
+            d = draw_brick_row(gv.sweep_y[0]);   /* 1ac2:46d6 */
         g_vram[d & (CGA_SIZE - 1)] = 0x0d;
         g_vram[(d + 1) & (CGA_SIZE - 1)] = (uint8_t)cap;
 
         bp = cga_prev_row(bp);
         for (int32_t i = 0; i < 0x0f; i++)
             game_delay();
-        g_image[SWEEP_Y]--;
+        gv.sweep_y[0]--;
         io_present();
         if (!io_pump())
             return;
@@ -6763,7 +6762,7 @@ int32_t ball_after_endgame(uint32_t ball)
         if (y == 0x3c) {
             /* The upper chamber: the level is over. */
             speaker_off();
-            ball_draw(BALLS + 4, g_image[BALLS], g_image[BALLS + 1]);
+            ball_draw(img_off(gv.balls[0].sprite), gv.balls[0].x, gv.balls[0].y);
             for (uint32_t si = 0x6abe; img_w(si) != 0xffff; si += 2) {
                 /* 1ac2:4769. The stretch between the ball reaching the
                  * chamber and the curtain starting had no sync of its own,
@@ -6808,10 +6807,10 @@ int32_t ball_after_endgame(uint32_t ball)
     /* It reached the bottom: the level is over the other way. */
     speaker_off();
     blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
-    ball_draw(BALLS + 4, g_image[BALLS], g_image[BALLS + 1]);
+    ball_draw(img_off(gv.balls[0].sprite), gv.balls[0].x, gv.balls[0].y);
     if (g_image[0x3f1b] != 1)
         gv.lives++;               /* a free life, unless cheating */
-    g_image[SWEEP_Y] = 0x75;
+    gv.sweep_y[0] = 0x75;
     endgame_curtain(1);                 /* 1ac2:4636 put DS in BP */
     /* **2**: this ending arrives back in play_session as a *lost life*, not a
      * completed level. That is not a guess about the carry - it is what the
@@ -7031,7 +7030,7 @@ static int32_t bonus_end_level_run(void)
 
     /* And a fresh ball, played until ball_after_endgame says the level is
      * over. */
-    ball_t *b = (ball_t *)(g_image + BALLS);
+    ball_t *b = &gv.balls[0];
     /* 1ac2:4518. Two things the transcription left out, and they are why the
      * bonus's ball started wherever the level's had ended rather than at the
      * top of the funnel: eight bytes of sprite record copied in from 0x48fb,
@@ -7048,13 +7047,13 @@ static int32_t bonus_end_level_run(void)
     b->anchor_y = b->y;
     b->acc_x = b->acc_y = 0;
     b->state = 1;
-    ball_draw(BALLS + B_SPRITE, b->x, b->y);
+    ball_draw(img_off(b->sprite), b->x, b->y);
 
     for (;;) {
         input_and_draw_paddle();
-        ball_step(BALLS);
-        ball_redraw(BALLS);
-        int32_t how = ball_after_endgame(BALLS);
+        ball_step(img_off(&gv.balls[0]));
+        ball_redraw(img_off(&gv.balls[0]));
+        int32_t how = ball_after_endgame(img_off(&gv.balls[0]));
         if (how)
             return how;
         for (int32_t i = 0; i < 4; i++) {
@@ -7450,7 +7449,7 @@ void input_demo(void)
 
     uint32_t chasing = g_image[DEMO_BALL];
     if (chasing != 0xff) {
-        uint32_t b = BALLS + chasing * BALL_STRIDE;
+        uint32_t b = img_off(&gv.balls[chasing]);
         if (ball_at(b)->y >= DEMO_CHASE_Y &&
             ball_at(b)->dir_y != 1 &&
             ball_at(b)->state != 0) {
@@ -7475,7 +7474,7 @@ void input_demo(void)
 
     /* Nothing to chase, or the one we had is gone: pick another. */
     for (uint32_t cl = 0; cl < 3; cl++) {
-        uint32_t b = BALLS + cl * BALL_STRIDE;
+        uint32_t b = img_off(&gv.balls[cl]);
         if (ball_at(b)->y > DEMO_CHASE_Y &&
             ball_at(b)->state != 0 &&
             ball_at(b)->dir_y != 1) {
