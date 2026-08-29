@@ -233,7 +233,7 @@ a difference.
 - **F5, `screen_define_keys` at `1ac2:1581`**, with `read_new_key` (`0x1614`)
   and the prompt writer at `0x1642`. Redefining left, right and the key that
   launches the ball off the paddle, on a 40x25 text screen. The port keeps the
-  defaults at `0x2d4f`-`0x2d51`: K, L and Space.
+  defaults at `0x2d4f`-`0x2d51`, which are **J**, **K** and Space (0x24, 0x25, 0x39 - checked against the image, not the letters on a modern keyboard).
 
 `0x1642` was called `copy_string_text` here, which described the instructions
 it runs rather than the job it does. It writes one of those three prompts.
