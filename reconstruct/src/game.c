@@ -1155,7 +1155,6 @@ void game_input(void)
  * taken out of the list by setting [0x313a], and the unlink needs the node
  * *before* it, which is why [0x3142] trails one step behind.
  * ===================================================================== */
-#define LEVEL_CELLS     0x2f10          /* the copy the level is played from */
 #define PADDLE_SPRITES  0x2d0d          /* four-entry table of sprite bases */
 
 /* One step of the safety net's crawl: blank the two bytes it occupies, move a
@@ -1298,7 +1297,7 @@ frames:
             gv.game_over = 1;
             return 1;                   /* the original's `stc` */
         }
-        if (g_image[LEVEL_CELLS] == 0) {
+        if (gv.level.bricks == 0) {
             io_log_random(0x9001);
             play_teardown();
             return 0;                   /* `clc`: the bricks are gone */
@@ -1335,7 +1334,7 @@ frames:
                     gv.game_over = 1;
                     return 1;
                 }
-                if (g_image[LEVEL_CELLS] == 0) {
+                if (gv.level.bricks == 0) {
                     io_log_random(0x9003);
                     play_teardown();
                     return 0;
@@ -1498,7 +1497,7 @@ void play_session(void)
 
     for (;;) {
         level_colours();                        /* 1ac2:044b */
-        memcpy(g_image + LEVEL_CELLS,
+        memcpy(&gv.level,
                g_image + SEG_C46 + gv.level_src, LEVEL_BYTES);
 
         for (;;) {                              /* one level, retried on death */
@@ -1594,7 +1593,7 @@ uint32_t draw_brick_row(uint32_t y)
     uint32_t di = cga_at(0, y) + BRICK_LEFT;
     uint32_t row = (y - BRICK_TOP) & 0xff;
     uint32_t sub = (row & 7) * 4;
-    uint32_t si = LEVEL_CELLS + 8 + (row >> 3) * BRICK_COLS;
+    uint32_t si = img_off(gv.level.cells) + (row >> 3) * BRICK_COLS;
 
     for (int32_t c = 0; c < BRICK_COLS; c++, si++, di += BRICK_BYTES) {
         uint32_t cell = g_image[si];
@@ -2028,7 +2027,7 @@ void probe_cell_at(uint32_t x, uint32_t y, uint32_t slot)
         return;
     }
     uint32_t row = y & 0xf8;
-    uint32_t di = row + (row >> 1) + (x >> 4) + LEVEL_CELLS + 8;
+    uint32_t di = row + (row >> 1) + (x >> 4) + img_off(gv.level.cells);
     uint32_t cell = g_image[di];
     if (cell == 0x0c || cell == 0) {
         img_setw(slot, 0);
@@ -2262,11 +2261,11 @@ static void brick_1_or_2(uint32_t slot, uint32_t ball, int32_t is_two)
                               is_two ? 0x6508 : 0x65fe, 7) + 2,
                  img_w(slot));
         g_image[img_w(slot)] = 0;
-        g_image[LEVEL_CELLS]--;
+        gv.level.bricks--;
         return;
     }
 
-    g_image[LEVEL_CELLS]--;
+    gv.level.bricks--;
     uint32_t cell = img_w(slot);
     g_image[cell] = 0;
     uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
@@ -2342,7 +2341,7 @@ void brick_8(uint32_t slot, uint32_t ball)
     xor_sprite_16x7(x, y, 0x681c);
     uint32_t si = brick_entity(slot, 0x366f, 0x67ea, 7);
     g_image[si + 2] = 4;
-    g_image[LEVEL_CELLS]--;
+    gv.level.bricks--;
 }
 
 /* The dispatch ball_bricks does through the table at 0x3044. */
@@ -2907,9 +2906,9 @@ void cell_set_three(uint32_t node)
  */
 void cells_restore(void)
 {
-    uint32_t n = g_image[LEVEL_CELLS + 1];
+    uint32_t n = gv.level.teleports;
     for (uint32_t i = 0; i < n; i++)
-        g_image[LEVEL_CELLS + 8 + g_image[LEVEL_CELLS + 2 + i]] = 9;
+        gv.level.cells[gv.level.teleport[i]] = 9;
     gv.entity_remove = 1;
 }
 
@@ -3116,7 +3115,7 @@ void entity_hatch(uint32_t bx)
 static uint32_t cell_index(uint32_t y, uint32_t x)
 {
     uint32_t row = y & 0xf8;
-    return LEVEL_CELLS + 8 + row + (row >> 1) + ((x >> 4) & 0x0f);
+    return img_off(gv.level.cells) + row + (row >> 1) + ((x >> 4) & 0x0f);
 }
 
 /* 1ac2:3c66  bonus_move_right */
@@ -3344,9 +3343,9 @@ void brick_9(uint32_t slot, uint32_t ball)
         return;
     brick_score(0, 0, 0x0502);
 
-    uint32_t n = g_image[LEVEL_CELLS + 1];
+    uint32_t n = gv.level.teleports;
     for (uint32_t i = 0; i < n; i++)
-        g_image[LEVEL_CELLS + 8 + g_image[LEVEL_CELLS + 2 + i]] = 4;
+        gv.level.cells[gv.level.teleport[i]] = 4;
 
     ball_t *b = (ball_t *)(g_image + ball);
     b->state = 3;
@@ -3358,8 +3357,8 @@ void brick_9(uint32_t slot, uint32_t ball)
     /* A cell that is not this one. */
     uint32_t cell, idx;
     do {
-        idx = g_image[LEVEL_CELLS + 2 + game_random(io_ticks(), n)];
-        cell = LEVEL_CELLS + 8 + idx;
+        idx = gv.level.teleport[game_random(io_ticks(), n)];
+        cell = img_off(gv.level.cells) + idx;
     } while (cell == img_w(slot));
 
     uint32_t si = entity_alloc();
@@ -3381,7 +3380,7 @@ void brick_10(uint32_t slot, uint32_t ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 5);
     g_image[img_w(slot)] = 0;
-    g_image[LEVEL_CELLS]--;
+    gv.level.bricks--;
     uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
     xor_sprite_16x7(x, y, 0x63e6);
     if (!ball)
@@ -4511,7 +4510,7 @@ void level_between(void)
         g_vram[(0x20a3 + i * 2) & (CGA_SIZE - 1)] = 0;
     }
 
-    uint32_t di_cell = LEVEL_CELLS + 8;
+    uint32_t di_cell = img_off(gv.level.cells);
     uint32_t y = 6;
     for (int32_t row = 0; row < 0x0e; row++, y += 8) {
         uint32_t x = 8;
@@ -4957,7 +4956,7 @@ void brick_11(uint32_t slot, uint32_t ball)
     brick_score(0, 0, 0x0207);
     g_image[SOUND_REQUEST] = SOUND_BRICK;
     g_image[img_w(slot)] = 0x0c;
-    g_image[LEVEL_CELLS]--;
+    gv.level.bricks--;
     uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
     xor_sprite_16x7(x, y, 0x6406);
     brick_11_after(x, y);               /* 1ac2:4c4b */
@@ -4976,7 +4975,7 @@ void bonus_spawn(void)
     uint32_t si = FIELD_MARKS + game_random(io_ticks(), 4) * 4;
     if (g_image[si + 3] != 0)
         return;                         /* that hatch is already open */
-    uint32_t di = LEVEL_CELLS + 8 + g_image[si + 2];
+    uint32_t di = img_off(gv.level.cells) + g_image[si + 2];
     if (g_image[di] != 0 || g_image[di + 0x0c] != 0)
         return;                         /* still bricked over */
 
@@ -5608,7 +5607,7 @@ void screen_scroll_up(void)
 void level_tally(void)
 {
     for (int32_t i = 0; i < 0xa8; i++) {
-        uint32_t si = 0x30bc + g_image[LEVEL_CELLS + 8 + i] * 4;
+        uint32_t si = 0x30bc + gv.level.cells[i] * 4;
         img_setw(SCORE_ADD + 0, 0);
         img_setw(SCORE_ADD + 2, img_w(si));
         img_setw(SCORE_ADD + 4, img_w(si + 2));
@@ -6147,7 +6146,7 @@ void screen_all_levels_done(void)
         for (int32_t i = 0; i < 0xc8; i++)
             game_delay();
 
-    memset(g_image + LEVEL_CELLS + 8, 0, 0x54 * 2);
+    memset(gv.level.cells, 0, sizeof gv.level.cells);
     level_intro();
 
     uint32_t bp = 0x3ef2;
@@ -7116,7 +7115,7 @@ int32_t next_player(const char *dir)
     img_setw(di + REC_LEVEL, gv.level_src);
     g_image[di + REC_NUMBER] = gv.level_number;
     memcpy(g_image + di + REC_SCORE, g_image + SCORE_TEXT, 6);
-    memcpy(g_image + di + REC_CELLS, g_image + LEVEL_CELLS, LEVEL_BYTES);
+    memcpy(g_image + di + REC_CELLS, &gv.level, sizeof gv.level);
     memcpy(g_image + di + REC_STATE, g_image + 0x30b0, 12);
 
     /* And its entities, count first. */
@@ -7144,7 +7143,7 @@ int32_t next_player(const char *dir)
     gv.level_src = (uint16_t)(img_w(si + REC_LEVEL));
     gv.level_number = g_image[si + REC_NUMBER];
     memcpy(g_image + SCORE_TEXT, g_image + si + REC_SCORE, 6);
-    memcpy(g_image + LEVEL_CELLS, g_image + si + REC_CELLS, LEVEL_BYTES);
+    memcpy(&gv.level, g_image + si + REC_CELLS, sizeof gv.level);
     memcpy(g_image + 0x30b0, g_image + si + REC_STATE, 12);
 
     uint32_t n = g_image[si + REC_ENTS];
@@ -7216,7 +7215,7 @@ void screen_results(const char *dir)
         return;
     }
 
-    memset(g_image + LEVEL_CELLS + 8, 0, 0x54 * 2);
+    memset(gv.level.cells, 0, sizeof gv.level.cells);
     level_intro();
 
     /* An insertion sort of the player records into the scratch at 0x1aef. */
@@ -7623,5 +7622,5 @@ void brick_animated(uint32_t slot, uint32_t ball)
     img_setw(si + 0, 0x3abf);
     img_setw(si + 2, img_w(slot + 2));  /* the centre, as one word */
     g_image[si + 4] = (uint8_t)piece;
-    g_image[LEVEL_CELLS]--;
+    gv.level.bricks--;
 }
