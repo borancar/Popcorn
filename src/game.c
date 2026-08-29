@@ -53,26 +53,26 @@ const char *g_dir = "";
  */
 void ball_step(uint32_t ball)
 {
-    uint8_t *b = g_image + ball;
-    uint32_t dy = b[B_DY], dx = b[B_DX];
+    ball_t *b = (ball_t *)(g_image + ball);
+    uint32_t dy = b->dy, dx = b->dx;
     uint32_t off_x, off_y;
 
     if (dx >= dy) {                     /* x is the major axis */
-        off_x = b[B_ACC_X];
+        off_x = b->acc_x;
         off_y = dy ? (uint32_t)(off_x * dy) / dx : 0;
-        b[B_ACC_X]++;
+        b->acc_x++;
     } else {                            /* y is the major axis */
-        off_y = b[B_ACC_Y];
+        off_y = b->acc_y;
         off_x = dx ? (uint32_t)(off_y * dx) / dy : 0;
-        b[B_ACC_Y]++;
+        b->acc_y++;
     }
     /* The direction flags negate each axis independently. The original does
      * this in 8-bit registers and lets the add wrap, which is what keeps a
      * ball at the left wall from running off into high coordinates. */
-    int32_t sx = b[B_DIR_X] ? -(int32_t)off_x : (int32_t)off_x;
-    int32_t sy = b[B_DIR_Y] ? -(int32_t)off_y : (int32_t)off_y;
-    b[B_X] = (uint8_t)(b[B_ANCHOR_X] + sx);
-    b[B_Y] = (uint8_t)(b[B_ANCHOR_Y] + sy);
+    int32_t sx = b->dir_x ? -(int32_t)off_x : (int32_t)off_x;
+    int32_t sy = b->dir_y ? -(int32_t)off_y : (int32_t)off_y;
+    b->x = (uint8_t)(b->anchor_x + sx);
+    b->y = (uint8_t)(b->anchor_y + sy);
 }
 
 /* ------------------------------------------------------------------------
@@ -1250,21 +1250,21 @@ int32_t play_loop(void)
     gv.game_over = gv.extra_on = gv.laser_on = 0;
 
     /* The serve: ball 0 on the paddle, the other two idle. */
-    uint8_t *b = g_image + BALLS;
-    b[0x00] = b[0x02] = 0x70;
-    b[0x01] = b[0x03] = 0xb5;
-    b[B_DY] = 1;
-    b[B_DX] = 2;
-    b[B_DIR_X] = 0;
-    b[B_DIR_Y] = 1;
-    b[B_ANCHOR_X] = b[0x00];
-    b[B_ANCHOR_Y] = b[0x01];
-    b[B_ACC_X] = b[B_ACC_Y] = 0;
-    b[B_STATE] = 1;
-    b[0x1d] = 0;
-    b[0x1c + BALL_STRIDE] = 0;          /* +0x3a: ball 1 idle */
-    b[0x1c + BALL_STRIDE * 2] = 0;      /* +0x58: ball 2 idle */
-    ball_draw(BALLS + B_SPRITE, b[0x00], b[0x01]);
+    ball_t *b = &gv.balls[0];
+    b->x = b->prev_x = 0x70;
+    b->y = b->prev_y = 0xb5;
+    b->dy = 1;
+    b->dx = 2;
+    b->dir_x = 0;
+    b->dir_y = 1;
+    b->anchor_x = b->x;
+    b->anchor_y = b->y;
+    b->acc_x = b->acc_y = 0;
+    b->state = 1;
+    b->bounces = 0;
+    gv.balls[1].state = 0;
+    gv.balls[2].state = 0;
+    ball_draw(img_off(b->sprite), b->x, b->y);
 
     flush_keys();                   /* 1ac2:0106 */
 
@@ -1323,7 +1323,7 @@ frames:
         if (--gv.speed_step != 0) {
             for (int32_t i = 0; i < 3; i++) {
                 uint32_t ball = BALLS + i * BALL_STRIDE;
-                uint8_t st = g_image[ball + B_STATE];
+                uint8_t st = ball_at(ball)->state;
                 if (st == 0 || st >= 3)
                     continue;
                 if (gv.caught == 1 && !ball_on_paddle(ball))
@@ -1790,25 +1790,23 @@ void ball_draw(uint32_t sprite, uint32_t x, uint32_t y)
 
 int32_t ball_redraw(uint32_t ball)
 {
-    uint8_t *b = g_image + ball;
+    ball_t *b = (ball_t *)(g_image + ball);
 
-    memcpy(b + B_PREV_SPR, b + B_SPRITE, 8);
-    memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
+    memcpy(b->prev_spr, b->sprite, sizeof b->sprite);
+    memcpy(b->sprite, g_image + BALL_SPRITE_SRC, sizeof b->sprite);
 
-    uint32_t shift = (b[B_X] & 3) * 2;
+    uint32_t shift = (b->x & 3) * 2;
     if (shift) {
         for (int32_t r = 0; r < 4; r++) {
-            uint32_t w = b[B_SPRITE + r * 2] | (b[B_SPRITE + r * 2 + 1] << 8);
-            w = ((w >> shift) | (w << (16 - shift))) & 0xffff;
-            b[B_SPRITE + r * 2] = (uint8_t)w;
-            b[B_SPRITE + r * 2 + 1] = (uint8_t)(w >> 8);
+            uint32_t w = b->sprite[r];
+            b->sprite[r] = (uint16_t)((w >> shift) | (w << (16 - shift)));
         }
     }
 
-    ball_draw(ball + B_PREV_SPR, b[B_PREV_X], b[B_PREV_Y]);
-    b[B_PREV_X] = b[B_X];
-    b[B_PREV_Y] = b[B_Y];
-    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+    ball_draw(img_off(b->prev_spr), b->prev_x, b->prev_y);
+    b->prev_x = b->x;
+    b->prev_y = b->y;
+    ball_draw(img_off(b->sprite), b->x, b->y);
     return 1;
 }
 
@@ -1839,56 +1837,56 @@ int32_t ball_redraw(uint32_t ball)
 
 void ball_after(uint32_t ball)
 {
-    uint8_t *b = g_image + ball;
+    ball_t *b = (ball_t *)(g_image + ball);
 
-    if (b[B_BOUNCES] >= 0x23) {
-        b[B_BOUNCES] = 0;
-        b[B_ANCHOR_X] = b[B_X];
-        b[B_ANCHOR_Y] = b[B_Y];
-        b[B_ACC_X] = b[B_ACC_Y] = 0;
-        b[B_DY] = (uint8_t)(game_random(io_ticks(), 5) + 1);
-        b[B_DX] = (uint8_t)(game_random(io_ticks(), 5) + 1);
+    if (b->bounces >= 0x23) {
+        b->bounces = 0;
+        b->anchor_x = b->x;
+        b->anchor_y = b->y;
+        b->acc_x = b->acc_y = 0;
+        b->dy = (uint8_t)(game_random(io_ticks(), 5) + 1);
+        b->dx = (uint8_t)(game_random(io_ticks(), 5) + 1);
     }
 
-    uint32_t x = b[B_X], y = b[B_Y];
+    uint32_t x = b->x, y = b->y;
     if (x <= WALL_LEFT || x >= WALL_RIGHT) {
         g_image[SOUND_REQUEST] = SOUND_BOUNCE;
-        b[B_DIR_X] = (x <= WALL_LEFT) ? 0 : 1;
-        b[B_ACC_X] = 1;
-        b[B_ACC_Y] = 0;
-        b[B_ANCHOR_X] = (uint8_t)(x <= WALL_LEFT ? 9 : 0xc3);
-        b[B_ANCHOR_Y] = (uint8_t)y;
-        b[B_BOUNCES]++;
+        b->dir_x = (x <= WALL_LEFT) ? 0 : 1;
+        b->acc_x = 1;
+        b->acc_y = 0;
+        b->anchor_x = (uint8_t)(x <= WALL_LEFT ? 9 : 0xc3);
+        b->anchor_y = (uint8_t)y;
+        b->bounces++;
     }
     if (y <= WALL_TOP) {
         g_image[SOUND_REQUEST] = SOUND_BOUNCE;
-        b[B_DIR_Y] = 0;                 /* downwards */
-        b[B_BOUNCES]++;
-        b[B_ACC_X] = 0;
-        b[B_ACC_Y] = 1;
-        b[B_ANCHOR_X] = (uint8_t)x;
-        b[B_ANCHOR_Y] = (uint8_t)(y + 1);
+        b->dir_y = 0;                 /* downwards */
+        b->bounces++;
+        b->acc_x = 0;
+        b->acc_y = 1;
+        b->anchor_x = (uint8_t)x;
+        b->anchor_y = (uint8_t)(y + 1);
     }
 
     ball_bricks(ball);                  /* 1ac2:254d */
 
-    if (b[B_Y] != FLOOR) {
+    if (b->y != FLOOR) {
         ball_paddle(ball);              /* 1ac2:2316 */
         return;
     }
     if (gv.net_on == 1) {     /* the net catches it */
         g_image[SOUND_REQUEST] = SOUND_BOUNCE;
-        b[B_ANCHOR_X] = b[B_X];
-        b[B_ANCHOR_Y] = 0xc3;
-        b[B_DIR_Y] = 1;                 /* upwards */
-        b[B_ACC_X] = 1;
-        b[B_ACC_Y] = 1;
+        b->anchor_x = b->x;
+        b->anchor_y = 0xc3;
+        b->dir_y = 1;                 /* upwards */
+        b->acc_x = 1;
+        b->acc_y = 1;
         return;
     }
     /* Lost. Erase it, mark it idle, and take one off the live count - the
      * play loop notices [0x2e73] reaching zero at the top of the next frame. */
-    b[B_STATE] = 0;
-    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+    b->state = 0;
+    ball_draw(img_off(b->sprite), b->x, b->y);
     gv.ball_alive--;
 }
 
@@ -1920,43 +1918,43 @@ void ball_after(uint32_t ball)
 
 /* The common tail of every top-of-paddle bounce: reverse vertically, anchor
  * one pixel clear of the paddle, and restart the accumulators. */
-static void paddle_bounce_up(uint8_t *b)
+static void paddle_bounce_up(ball_t *b)
 {
-    uint32_t ah = b[B_Y];
-    if (b[B_Y] == PADDLE_BOTTOM) {
-        b[B_DIR_Y] = 0;                 /* it came from below: send it down */
+    uint32_t ah = b->y;
+    if (b->y == PADDLE_BOTTOM) {
+        b->dir_y = 0;                 /* it came from below: send it down */
         ah++;
     } else {
-        b[B_DIR_Y] = 1;
+        b->dir_y = 1;
         ah--;
     }
-    b[B_ANCHOR_X] = b[B_X];
-    b[B_ANCHOR_Y] = (uint8_t)ah;
-    b[B_ACC_X] = b[B_ACC_Y] = 1;
-    b[B_BOUNCES] = 0;
+    b->anchor_x = b->x;
+    b->anchor_y = (uint8_t)ah;
+    b->acc_x = b->acc_y = 1;
+    b->bounces = 0;
     g_image[SOUND_REQUEST] = SOUND_PADDLE;
 }
 
-static void paddle_slope(uint8_t *b, uint32_t table, uint32_t index)
+static void paddle_slope(ball_t *b, uint32_t table, uint32_t index)
 {
     uint32_t w = img_w(table + index * 2);
-    b[B_DY] = (uint8_t)w;
-    b[B_DX] = (uint8_t)(w >> 8);
+    b->dy = (uint8_t)w;
+    b->dx = (uint8_t)(w >> 8);
 }
 
 void ball_paddle(uint32_t ball)
 {
-    uint8_t *b = g_image + ball;
-    uint32_t y = b[B_Y];
+    ball_t *b = (ball_t *)(g_image + ball);
+    uint32_t y = b->y;
 
     if (y < PADDLE_TOP || y > PADDLE_BOTTOM)
         return;
 
-    if (y > PADDLE_TOP && b[B_DIR_Y] != 1) {
+    if (y > PADDLE_TOP && b->dir_y != 1) {
         /* The sides. Only the two single columns just outside the paddle
          * count, which is why this is an equality and not a range. */
         uint32_t left = (gv.paddle_x - 3) & 0xff;
-        uint32_t bx = b[B_X];
+        uint32_t bx = b->x;
         int32_t from_left = 1;
         if (bx != left) {
             uint32_t off = (bx - left) & 0xff;
@@ -1965,14 +1963,14 @@ void ball_paddle(uint32_t ball)
             from_left = 0;
         }
         uint32_t depth = (y - 0xb6) & 0xff;
-        b[B_DIR_Y] = (depth <= 5) ? 1 : 0;
-        b[B_DIR_X] = (uint8_t)from_left;
-        b[B_ANCHOR_X] = from_left
+        b->dir_y = (depth <= 5) ? 1 : 0;
+        b->dir_x = (uint8_t)from_left;
+        b->anchor_x = from_left
             ? (uint8_t)(gv.paddle_x - 4)
             : (uint8_t)(gv.paddle_x + gv.paddle_width + 1);
-        b[B_ANCHOR_Y] = (uint8_t)y;
-        b[B_ACC_X] = b[B_ACC_Y] = 1;
-        b[B_BOUNCES] = 0;
+        b->anchor_y = (uint8_t)y;
+        b->acc_x = b->acc_y = 1;
+        b->bounces = 0;
         paddle_slope(b, SLOPE_SIDE, depth);
         g_image[SOUND_REQUEST] = SOUND_PADDLE;
         return;
@@ -1980,13 +1978,13 @@ void ball_paddle(uint32_t ball)
 
     /* The top. */
     uint32_t left = (gv.paddle_x - 3) & 0xff;
-    if (b[B_X] < left)
+    if (b->x < left)
         return;
-    uint32_t off = (b[B_X] - left) & 0xff;
+    uint32_t off = (b->x - left) & 0xff;
 
     if (off <= 0x0a) {                          /* the left end */
         paddle_slope(b, SLOPE_TOP, off);
-        b[B_DIR_X] = 1;                         /* away to the left */
+        b->dir_x = 1;                         /* away to the left */
         paddle_bounce_up(b);
         return;
     }
@@ -1996,7 +1994,7 @@ void ball_paddle(uint32_t ball)
     uint32_t from_right = (span - off) & 0xff;
     if (from_right <= 0x0a) {                   /* the right end */
         paddle_slope(b, SLOPE_TOP, from_right);
-        b[B_DIR_X] = 0;                         /* away to the right */
+        b->dir_x = 0;                         /* away to the right */
         paddle_bounce_up(b);
         return;
     }
@@ -2064,25 +2062,25 @@ void drop_duplicate_hits(void)
 }
 
 /* Reverse one axis, anchoring one pixel back the way the ball came. */
-static void bounce_x(uint8_t *b)
+static void bounce_x(ball_t *b)
 {
-    if (b[B_DIR_X] == 0) {
-        b[B_DIR_X] = 1;
-        b[B_ANCHOR_X] = (uint8_t)(b[B_X] - 1);
+    if (b->dir_x == 0) {
+        b->dir_x = 1;
+        b->anchor_x = (uint8_t)(b->x - 1);
     } else {
-        b[B_DIR_X] = 0;
-        b[B_ANCHOR_X] = (uint8_t)(b[B_X] + 1);
+        b->dir_x = 0;
+        b->anchor_x = (uint8_t)(b->x + 1);
     }
 }
 
-static void bounce_y(uint8_t *b)
+static void bounce_y(ball_t *b)
 {
-    if (b[B_DIR_Y] == 0) {
-        b[B_DIR_Y] = 1;
-        b[B_ANCHOR_Y] = (uint8_t)(b[B_Y] - 1);
+    if (b->dir_y == 0) {
+        b->dir_y = 1;
+        b->anchor_y = (uint8_t)(b->y - 1);
     } else {
-        b[B_DIR_Y] = 0;
-        b[B_ANCHOR_Y] = (uint8_t)(b[B_Y] + 1);
+        b->dir_y = 0;
+        b->anchor_y = (uint8_t)(b->y + 1);
     }
 }
 
@@ -2101,10 +2099,10 @@ static void bounce_y(uint8_t *b)
  */
 void ball_bricks(uint32_t ball)
 {
-    uint8_t *b = g_image + ball;
+    ball_t *b = (ball_t *)(g_image + ball);
     gv.hit_count = 0;
 
-    uint32_t x = (b[B_X] - 8) & 0xff, y = (b[B_Y] - 6) & 0xff;
+    uint32_t x = (b->x - 8) & 0xff, y = (b->y - 6) & 0xff;
     probe_cell_at(x, y, HIT_SLOTS + 0);
     probe_cell_at((x + 3) & 0xff, y, HIT_SLOTS + 4);
     probe_cell_at((x + 3) & 0xff, (y + 3) & 0xff, HIT_SLOTS + 8);
@@ -2132,11 +2130,11 @@ void ball_bricks(uint32_t ball)
     } else if (n == 2) {
         /* A flat face: the pair tells which axis it was. */
         if (s0 && s1)
-            bounce_y(b), b[B_ANCHOR_X] = b[B_X];
+            bounce_y(b), b->anchor_x = b->x;
         else if (s2 && s3)
-            bounce_y(b), b[B_ANCHOR_X] = b[B_X];
+            bounce_y(b), b->anchor_x = b->x;
         else
-            bounce_x(b), b[B_ANCHOR_Y] = b[B_Y];
+            bounce_x(b), b->anchor_y = b->y;
     } else {
         /* One corner, or all four: leave in the direction its slot names. */
         int32_t i = 0;
@@ -2144,10 +2142,10 @@ void ball_bricks(uint32_t ball)
             i++;
         if (i < 4) {
             uint32_t d = gv.hit_dirs[i];
-            b[B_DIR_X] = (uint8_t)(d & 0xff);
-            b[B_DIR_Y] = (uint8_t)(d >> 8);
-            b[B_ANCHOR_Y] = (uint8_t)(b[B_Y] + (b[B_DIR_Y] ? -1 : 1));
-            b[B_ANCHOR_X] = (uint8_t)(b[B_X] + (b[B_DIR_X] ? -1 : 1));
+            b->dir_x = (uint8_t)(d & 0xff);
+            b->dir_y = (uint8_t)(d >> 8);
+            b->anchor_y = (uint8_t)(b->y + (b->dir_y ? -1 : 1));
+            b->anchor_x = (uint8_t)(b->x + (b->dir_x ? -1 : 1));
         }
     }
 
@@ -2165,7 +2163,7 @@ void ball_bricks(uint32_t ball)
         }
     }
 
-    b[B_ACC_X] = b[B_ACC_Y] = 1;
+    b->acc_x = b->acc_y = 1;
     drop_duplicate_hits();
 
     for (int32_t i = 0; i < 4; i++) {
@@ -2203,7 +2201,7 @@ static void brick_common(uint32_t ball, uint32_t sound,
     brick_score(a, b, c);
     g_image[SOUND_REQUEST] = (uint8_t)sound;
     if (ball)
-        g_image[ball + B_BOUNCES] = 0;
+        ball_at(ball)->bounces = 0;
 }
 
 /* Attach a fresh entity to the brick that was just hit. `slot` is the hit
@@ -2299,7 +2297,7 @@ void brick_3(uint32_t slot, uint32_t ball)
 {
     g_image[SOUND_REQUEST] = 4;
     if (ball)
-        g_image[ball + B_BOUNCES]++;
+        ball_at(ball)->bounces++;
     img_setw(brick_entity(slot, 0x365e, 0x66f4, 8) + 2, img_w(slot));
     g_image[img_w(slot)] = 4;
 }
@@ -2310,7 +2308,7 @@ void brick_solid(uint32_t slot, uint32_t ball)
     (void)slot;
     g_image[SOUND_REQUEST] = SOUND_BOUNCE;
     if (ball)
-        g_image[ball + B_BOUNCES]++;
+        ball_at(ball)->bounces++;
 }
 
 /* 1ac2:2a73, 1ac2:2ab4, 1ac2:2af5  bricks 5, 6, 7 - one step down the
@@ -3293,14 +3291,14 @@ void entity_plain(uint32_t bx)
  * this and only the offsets they add differ. */
 void ball_place(uint32_t ball, uint32_t x, uint32_t y)
 {
-    uint8_t *b = g_image + ball;
-    b[B_X] = b[B_PREV_X] = b[B_ANCHOR_X] = (uint8_t)x;
-    b[B_Y] = b[B_PREV_Y] = b[B_ANCHOR_Y] = (uint8_t)y;
-    b[B_ACC_X] = b[B_ACC_Y] = 0;
-    b[B_STATE] = 1;
-    b[B_DIR_Y] = 1;                     /* set off upwards */
+    ball_t *b = (ball_t *)(g_image + ball);
+    b->x = b->prev_x = b->anchor_x = (uint8_t)x;
+    b->y = b->prev_y = b->anchor_y = (uint8_t)y;
+    b->acc_x = b->acc_y = 0;
+    b->state = 1;
+    b->dir_y = 1;                     /* set off upwards */
     memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
-    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+    ball_draw(img_off(b->sprite), b->x, b->y);
 }
 
 /* 1ac2:36a1  from brick 9 - where the ball comes back
@@ -3350,10 +3348,10 @@ void brick_9(uint32_t slot, uint32_t ball)
     for (uint32_t i = 0; i < n; i++)
         g_image[LEVEL_CELLS + 8 + g_image[LEVEL_CELLS + 2 + i]] = 4;
 
-    uint8_t *b = g_image + ball;
-    b[B_STATE] = 3;
-    b[B_BOUNCES] = 0;
-    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+    ball_t *b = (ball_t *)(g_image + ball);
+    b->state = 3;
+    b->bounces = 0;
+    ball_draw(img_off(b->sprite), b->x, b->y);
 
     img_setw(brick_entity(slot, 0x3696, 0x6abe, 0x32) + 2, img_w(slot));
 
@@ -3398,9 +3396,9 @@ void brick_10(uint32_t slot, uint32_t ball)
     g_image[si + 8] = g_image[si + 9] = 0x69;
     sprite_shift_draw(x, y, 0x6b9c);
 
-    uint8_t *b = g_image + ball;
-    b[B_STATE] = 4;
-    ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
+    ball_t *b = (ball_t *)(g_image + ball);
+    b->state = 4;
+    ball_draw(img_off(b->sprite), b->x, b->y);
 }
 
 /* ------------------------------------------------------------------------
@@ -3461,7 +3459,7 @@ void entity_ball_hold(uint32_t bx)
             return;
         }
         gv.ball_alive--;
-        g_image[img_w(bx + 2) + B_STATE] = 0;
+        ball_at(img_w(bx + 2))->state = 0;
         gv.entity_remove = 1;
         return;
     }
@@ -3529,12 +3527,12 @@ void shot_xor(uint32_t x, uint32_t y)
  */
 void bonus_hits_ball(uint32_t bx, uint32_t ball)
 {
-    uint32_t by = g_image[bx + 5], ballY = g_image[ball + B_Y];
+    uint32_t by = g_image[bx + 5], ballY = ball_at(ball)->y;
     if (by > ((ballY + 3) & 0xff))
         return;
     if (((by + 0x0f) & 0xff) < ballY)
         return;
-    uint32_t bxx = g_image[bx + 4], ballX = g_image[ball + B_X];
+    uint32_t bxx = g_image[bx + 4], ballX = ball_at(ball)->x;
     if (((bxx + 0x0f) & 0xff) < ballX)
         return;
     if (bxx > ((ballX + 3) & 0xff))
@@ -3621,7 +3619,7 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
      * afterwards. */
     for (int32_t i = 0; i < 3; i++) {
         uint32_t ball = BALLS + i * BALL_STRIDE;
-        if (g_image[ball + B_STATE] != 1)
+        if (ball_at(ball)->state != 1)
             continue;
         bonus_hits_ball(bx, ball);
         if (gv.hit_kind == 2) {
@@ -3671,14 +3669,14 @@ void entity_bonus(uint32_t bx)
     }
 
     {   /* A ball: fresh slope, re-anchor, and reverse both ways. */
-        uint8_t *b = g_image + g_hit_ball;
-        b[B_DY] = (uint8_t)(game_random(io_ticks(), 7) + 1);
-        b[B_DX] = (uint8_t)(game_random(io_ticks(), 7) + 1);
-        b[B_ANCHOR_X] = b[B_X];
-        b[B_ANCHOR_Y] = b[B_Y];
-        b[B_ACC_X] = b[B_ACC_Y] = 0;
-        b[B_DIR_X] ^= 1;
-        b[B_DIR_Y] ^= 1;
+        ball_t *b = (ball_t *)(g_image + g_hit_ball);
+        b->dy = (uint8_t)(game_random(io_ticks(), 7) + 1);
+        b->dx = (uint8_t)(game_random(io_ticks(), 7) + 1);
+        b->anchor_x = b->x;
+        b->anchor_y = b->y;
+        b->acc_x = b->acc_y = 0;
+        b->dir_x ^= 1;
+        b->dir_y ^= 1;
     }
 
 sprite:
@@ -3883,30 +3881,30 @@ void life_lost(void)
 
 int32_t ball_on_paddle(uint32_t ball)
 {
-    uint8_t *b = g_image + ball;
+    ball_t *b = (ball_t *)(g_image + ball);
     if (gv.paddle_morphing != 0)
         return 1;
 
     if (gv.hold_timer == HOLD_RESET) {
         /* Not holding one yet: is this ball landing on the paddle? */
-        uint32_t y = b[B_Y];
+        uint32_t y = b->y;
         uint32_t left = (gv.paddle_x - 3) & 0xff;
-        uint32_t off = (b[B_X] - left) & 0xff;
-        if (y < PADDLE_TOP || y > PADDLE_BOTTOM || b[B_X] < left ||
+        uint32_t off = (b->x - left) & 0xff;
+        if (y < PADDLE_TOP || y > PADDLE_BOTTOM || b->x < left ||
             off > ((gv.paddle_width + 3) & 0xff)) {
             gv.hold_timer = (uint16_t)(HOLD_RESET);
             return 1;
         }
-        b[B_Y] = PADDLE_TOP;
-        b[B_STATE] = 2;                 /* held */
+        b->y = PADDLE_TOP;
+        b->state = 2;                 /* held */
         gv.hold_timer = (uint16_t)((gv.hold_timer - gv.speed_limit) & 0xffff);
-        gv.hold_offset = (uint8_t)(b[B_X] - gv.paddle_x);
+        gv.hold_offset = (uint8_t)(b->x - gv.paddle_x);
         ball_redraw(ball);
         g_image[SOUND_REQUEST] = SOUND_CATCH;
         return 0;
     }
 
-    if (b[B_STATE] != 2)
+    if (b->state != 2)
         return 1;                       /* a different ball; not held */
 
     int32_t release = gv.key_action == 1;
@@ -3925,19 +3923,19 @@ int32_t ball_on_paddle(uint32_t ball)
     }
 
     if (!release) {
-        b[B_X] = (uint8_t)(gv.paddle_x + gv.hold_offset);
+        b->x = (uint8_t)(gv.paddle_x + gv.hold_offset);
         ball_redraw(ball);
         return 0;
     }
 
     gv.hold_timer = (uint16_t)(HOLD_RESET);
     ball_after(ball);
-    b[B_DIR_Y] = 1;                     /* away, upwards */
-    b[B_Y] = 0xb4;
-    b[B_ANCHOR_X] = b[B_X];
-    b[B_ANCHOR_Y] = 0xb4;
-    b[B_ACC_X] = b[B_ACC_Y] = 0;
-    b[B_STATE] = 1;
+    b->dir_y = 1;                     /* away, upwards */
+    b->y = 0xb4;
+    b->anchor_x = b->x;
+    b->anchor_y = 0xb4;
+    b->acc_x = b->acc_y = 0;
+    b->state = 1;
     ball_redraw(ball);
     return 1;
 }
@@ -4206,13 +4204,13 @@ void bonus_net(void)
 void bonus_reverse(void)
 {
     for (int32_t i = 0; i < 3; i++) {
-        uint8_t *b = g_image + BALLS + i * BALL_STRIDE;
-        if (b[B_STATE] == 0)
+        ball_t *b = (ball_t *)(g_image + BALLS + i * BALL_STRIDE);
+        if (b->state == 0)
             continue;
-        b[B_DIR_Y] = (uint8_t)(b[B_DIR_Y] == 1 ? 0 : 1);
-        b[B_ANCHOR_X] = b[B_X];
-        b[B_ANCHOR_Y] = b[B_Y];
-        b[B_ACC_X] = b[B_ACC_Y] = 0;
+        b->dir_y = (uint8_t)(b->dir_y == 1 ? 0 : 1);
+        b->anchor_x = b->x;
+        b->anchor_y = b->y;
+        b->acc_x = b->acc_y = 0;
     }
 }
 
@@ -4277,7 +4275,7 @@ void entity_multiball(uint32_t bx)
     uint32_t src = 0;
     for (int32_t i = 0; i < 3; i++) {
         uint32_t b = BALLS + i * BALL_STRIDE;
-        if (g_image[b + B_STATE] != 0) {
+        if (ball_at(b)->state != 0) {
             src = b;
             break;
         }
@@ -4286,37 +4284,34 @@ void entity_multiball(uint32_t bx)
         return;                         /* none: nothing to multiply */
 
     gv.ball_alive = 3;
-    uint32_t dy = g_image[src + B_DY], dx = g_image[src + B_DX];
-    uint32_t x = g_image[src + B_X], y = g_image[src + B_Y];
+    uint32_t dy = ball_at(src)->dy, dx = ball_at(src)->dx;
+    uint32_t x = ball_at(src)->x, y = ball_at(src)->y;
 
     for (int32_t i = 0; i < 3; i++) {
         uint32_t si = BALLS + i * BALL_STRIDE;
-        if (g_image[si + B_STATE] != 0)
+        if (ball_at(si)->state != 0)
             continue;
-        uint8_t *b = g_image + si;
-        b[B_X] = b[B_PREV_X] = b[B_ANCHOR_X] = (uint8_t)x;
-        b[B_Y] = b[B_PREV_Y] = b[B_ANCHOR_Y] = (uint8_t)y;
+        ball_t *b = (ball_t *)(g_image + si);
+        b->x = b->prev_x = b->anchor_x = (uint8_t)x;
+        b->y = b->prev_y = b->anchor_y = (uint8_t)y;
         dx = (dx + 2) & 0xff;           /* each copy a little steeper */
-        b[B_DY] = (uint8_t)dy;
-        b[B_DX] = (uint8_t)dx;
-        b[B_DIR_X] = g_image[src + B_DIR_X];
-        b[B_DIR_Y] = g_image[src + B_DIR_Y];
-        b[B_ACC_X] = b[B_ACC_Y] = 1;
-        b[B_STATE] = 1;
-        b[B_BOUNCES] = 0;
+        b->dy = (uint8_t)dy;
+        b->dx = (uint8_t)dx;
+        b->dir_x = ball_at(src)->dir_x;
+        b->dir_y = ball_at(src)->dir_y;
+        b->acc_x = b->acc_y = 1;
+        b->state = 1;
+        b->bounces = 0;
 
-        memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
-        uint32_t shift = (b[B_X] & 3) * 2;
+        memcpy(b->sprite, g_image + BALL_SPRITE_SRC, sizeof b->sprite);
+        uint32_t shift = (b->x & 3) * 2;
         if (shift) {
             for (int32_t r = 0; r < 4; r++) {
-                uint32_t w = b[B_SPRITE + r * 2] |
-                             (b[B_SPRITE + r * 2 + 1] << 8);
-                w = ((w >> shift) | (w << (16 - shift))) & 0xffff;
-                b[B_SPRITE + r * 2] = (uint8_t)w;
-                b[B_SPRITE + r * 2 + 1] = (uint8_t)(w >> 8);
+                uint32_t w = b->sprite[r];
+                b->sprite[r] = (uint16_t)((w >> shift) | (w << (16 - shift)));
             }
         }
-        ball_draw(si + B_SPRITE, b[B_X], b[B_Y]);
+        ball_draw(si + B_SPRITE, b->x, b->y);
     }
     gv.entity_remove = 1;
 }
@@ -4376,17 +4371,17 @@ void entity_paddle_fx(uint32_t bx)
             gv.hold_timer = (uint16_t)(0x460);
             for (int32_t i = 0; i < 3; i++) {
                 uint32_t ball = BALLS + i * BALL_STRIDE;
-                uint8_t *b = g_image + ball;
-                if (b[B_STATE] != 2)
+                ball_t *b = (ball_t *)(g_image + ball);
+                if (b->state != 2)
                     continue;
                 ball_after(ball);
-                b[B_DIR_Y] = 1;
-                b[B_Y] = 0xb4;
-                b[B_ANCHOR_X] = b[B_X];
-                b[B_ANCHOR_Y] = b[B_Y];
-                b[B_ACC_X] = b[B_ACC_Y] = 0;
-                b[B_STATE] = 1;
-                b[B_BOUNCES] = 0;
+                b->dir_y = 1;
+                b->y = 0xb4;
+                b->anchor_x = b->x;
+                b->anchor_y = b->y;
+                b->acc_x = b->acc_y = 0;
+                b->state = 1;
+                b->bounces = 0;
                 ball_redraw(ball);
             }
         }
@@ -6734,16 +6729,16 @@ int32_t ball_after_endgame(uint32_t ball)
     /* Once per step of the bonus's own ball loop, which reaches no other sync
      * point - the whole loop is one indivisible move otherwise. */
     io_frame_sync_extra(SYNC_ENDGAME);
-    uint8_t *b = g_image + ball;
-    uint32_t x = b[B_X], y = b[B_Y];
+    ball_t *b = (ball_t *)(g_image + ball);
+    uint32_t x = b->x, y = b->y;
 
     if (x <= WALL_LEFT || x >= WALL_RIGHT) {
-        b[B_DIR_X] = (x <= WALL_LEFT) ? 0 : 1;
+        b->dir_x = (x <= WALL_LEFT) ? 0 : 1;
         g_image[SOUND_REQUEST] = SOUND_BOUNCE;
-        b[B_ACC_X] = 1;
-        b[B_ACC_Y] = 0;
-        b[B_ANCHOR_X] = (uint8_t)(x <= WALL_LEFT ? 9 : 0xc3);
-        b[B_ANCHOR_Y] = (uint8_t)y;
+        b->acc_x = 1;
+        b->acc_y = 0;
+        b->anchor_x = (uint8_t)(x <= WALL_LEFT ? 9 : 0xc3);
+        b->anchor_y = (uint8_t)y;
     }
 
     if (y == 0x74) {
@@ -6754,12 +6749,12 @@ int32_t ball_after_endgame(uint32_t ball)
          * bounced in the gap and fell through the wall, and then it was drawn
          * somewhere the original never put it. */
         if (x < 0x60 || x >= 0x6c) {
-            b[B_DIR_Y] = 0;
-            b[B_BOUNCES]++;
-            b[B_ACC_X] = 0;
-            b[B_ACC_Y] = 1;
-            b[B_ANCHOR_X] = (uint8_t)x;
-            b[B_ANCHOR_Y] = (uint8_t)(y + 1);
+            b->dir_y = 0;
+            b->bounces++;
+            b->acc_x = 0;
+            b->acc_y = 1;
+            b->anchor_x = (uint8_t)x;
+            b->anchor_y = (uint8_t)(y + 1);
             g_image[SOUND_REQUEST] = SOUND_BOUNCE;
         }
     } else if (y < 0x74) {
@@ -6793,17 +6788,17 @@ int32_t ball_after_endgame(uint32_t ball)
          * slipped through on the exact pixel - two thousand steps into the
          * funnel before the two sides noticed. */
         if (x <= 0x60 || x >= 0x6c) {
-            b[B_DIR_X] = (x <= 0x60) ? 0 : 1;
-            b[B_ACC_X] = 1;
-            b[B_ACC_Y] = 0;
-            b[B_ANCHOR_X] = (uint8_t)(x <= 0x60 ? 0x61 : 0x6b);
-            b[B_ANCHOR_Y] = (uint8_t)y;
+            b->dir_x = (x <= 0x60) ? 0 : 1;
+            b->acc_x = 1;
+            b->acc_y = 0;
+            b->anchor_x = (uint8_t)(x <= 0x60 ? 0x61 : 0x6b);
+            b->anchor_y = (uint8_t)y;
             g_image[SOUND_REQUEST] = SOUND_BOUNCE;
         }
         return 0;
     }
 
-    if (b[B_Y] != FLOOR) {
+    if (b->y != FLOOR) {
         ball_paddle(ball);
         return 0;
     }
@@ -7034,24 +7029,24 @@ static int32_t bonus_end_level_run(void)
 
     /* And a fresh ball, played until ball_after_endgame says the level is
      * over. */
-    uint8_t *b = g_image + BALLS;
+    ball_t *b = (ball_t *)(g_image + BALLS);
     /* 1ac2:4518. Two things the transcription left out, and they are why the
      * bonus's ball started wherever the level's had ended rather than at the
      * top of the funnel: eight bytes of sprite record copied in from 0x48fb,
      * and the position **set** to (0x70, 0xb4) - both the live pair at +0 and
      * the drawn pair at +2. */
-    memcpy(g_image + BALLS + 4, g_image + 0x48fb, 8);
-    b[B_X] = b[0x02] = 0x70;
-    b[B_Y] = b[0x03] = 0xb4;
-    b[B_DY] = 1;
-    b[B_DX] = 2;
-    b[B_DIR_X] = 0;
-    b[B_DIR_Y] = 1;
-    b[B_ANCHOR_X] = b[B_X];
-    b[B_ANCHOR_Y] = b[B_Y];
-    b[B_ACC_X] = b[B_ACC_Y] = 0;
-    b[B_STATE] = 1;
-    ball_draw(BALLS + B_SPRITE, b[B_X], b[B_Y]);
+    memcpy(gv.balls[0].sprite, g_image + 0x48fb, sizeof gv.balls[0].sprite);
+    b->x = b->prev_x = 0x70;
+    b->y = b->prev_y = 0xb4;
+    b->dy = 1;
+    b->dx = 2;
+    b->dir_x = 0;
+    b->dir_y = 1;
+    b->anchor_x = b->x;
+    b->anchor_y = b->y;
+    b->acc_x = b->acc_y = 0;
+    b->state = 1;
+    ball_draw(BALLS + B_SPRITE, b->x, b->y);
 
     for (;;) {
         input_and_draw_paddle();
@@ -7452,14 +7447,14 @@ void input_demo(void)
     uint32_t chasing = g_image[DEMO_BALL];
     if (chasing != 0xff) {
         uint32_t b = BALLS + chasing * BALL_STRIDE;
-        if (g_image[b + B_Y] >= DEMO_CHASE_Y &&
-            g_image[b + B_DIR_Y] != 1 &&
-            g_image[b + B_STATE] != 0) {
+        if (ball_at(b)->y >= DEMO_CHASE_Y &&
+            ball_at(b)->dir_y != 1 &&
+            ball_at(b)->state != 0) {
             /* Hold the action key down while the laser is armed, so the
              * demo fires as well as chases. */
             gv.key_action = gv.laser_on != 0;
 
-            uint32_t ball_x = g_image[b + B_X];
+            uint32_t ball_x = ball_at(b)->x;
             uint32_t paddle = gv.paddle_x;
             if (ball_x < paddle) {
                 if (paddle != gv.paddle_min)
@@ -7477,9 +7472,9 @@ void input_demo(void)
     /* Nothing to chase, or the one we had is gone: pick another. */
     for (uint32_t cl = 0; cl < 3; cl++) {
         uint32_t b = BALLS + cl * BALL_STRIDE;
-        if (g_image[b + B_Y] > DEMO_CHASE_Y &&
-            g_image[b + B_STATE] != 0 &&
-            g_image[b + B_DIR_Y] != 1) {
+        if (ball_at(b)->y > DEMO_CHASE_Y &&
+            ball_at(b)->state != 0 &&
+            ball_at(b)->dir_y != 1) {
             g_image[DEMO_BALL] = (uint8_t)cl;
             demo_clamp();
             return;
