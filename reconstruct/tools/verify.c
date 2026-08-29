@@ -62,7 +62,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
 {
     switch (routine) {
     case 0x27d7:                        /* ball_step(si = the ball) */
-        ball_step(r[R_SI]);
+        ball_step(ball_at(r[R_SI]));
         return 1;
     case 0x22de:                        /* paddle_row_offsets(bl, di) */
         paddle_row_offsets(r[R_BX] & 0xff, r[R_DI]);
@@ -74,14 +74,14 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         draw_paddle(r[R_SI]);
         return 1;
     case 0x2881:                        /* ball_draw(si = sprite, bl, al) */
-        ball_draw(r[R_SI], r[R_BX] & 0xff, r[R_AX] & 0xff);
+        ball_draw(g_image + r[R_SI], r[R_BX] & 0xff, r[R_AX] & 0xff);
         return 1;
     /* These answer in the **carry flag**, not in memory: play_loop reads
      * `jae` after each of them. A routine can leave the image byte-identical
      * and still say the opposite thing, and until this was reported the
      * harness called that agreement. */
     case 0x2827:                        /* ball_redraw(si = the ball) */
-        g_result = ball_redraw(r[R_SI]);
+        g_result = ball_redraw(ball_at(r[R_SI]));
         return 1;
     case 0x044b: level_colours(); return 1;
     case 0x10c5: draw_run((uint8_t)(r[R_AX] & 0xff), r[R_DX] & 0xff,
@@ -95,7 +95,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x36fb: cells_restore(); return 1;
     case 0x30dd: pixel_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
     case 0x306b: shot_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
-    case 0x3f20: bonus_hits_ball(r[R_BX], r[R_SI]); return 1;
+    case 0x3f20: bonus_hits_ball(r[R_BX], ball_at(r[R_SI])); return 1;
     case 0x3f4f: sprite_shift_draw(r[R_CX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
                  return 1;
     case 0x406a: xor_sprite_20x16(r[R_CX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
@@ -136,17 +136,17 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * heart of the game - what happens when the ball meets a cell - could not
      * be checked at all. SI is the hit record and BP the ball, or zero when
      * something other than a ball did the hitting. */
-    case 0x28cb: brick_1(r[R_SI], r[R_BP]); return 1;
-    case 0x2985: brick_2(r[R_SI], r[R_BP]); return 1;
-    case 0x2a3f: brick_3(r[R_SI], r[R_BP]); return 1;
-    case 0x3221: brick_solid(r[R_SI], r[R_BP]); return 1;
-    case 0x2a73: brick_5(r[R_SI], r[R_BP]); return 1;
-    case 0x2ab4: brick_6(r[R_SI], r[R_BP]); return 1;
-    case 0x2af5: brick_7(r[R_SI], r[R_BP]); return 1;
-    case 0x2b36: brick_8(r[R_SI], r[R_BP]); return 1;
-    case 0x2b9d: brick_9(r[R_SI], r[R_BP]); return 1;
-    case 0x2c59: brick_10(r[R_SI], r[R_BP]); return 1;
-    case 0x2ccd: brick_animated(r[R_SI], r[R_BP]); return 1;
+    case 0x28cb: brick_1(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x2985: brick_2(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x2a3f: brick_3(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x3221: brick_solid(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x2a73: brick_5(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x2ab4: brick_6(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x2af5: brick_7(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x2b36: brick_8(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x2b9d: brick_9(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x2c59: brick_10(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x2ccd: brick_animated(r[R_SI], ball_at(r[R_BP])); return 1;
     case 0x3aee: entity_sparkle(r[R_BX]); return 1;
     case 0x3b2a: entity_crumble(r[R_BX]); return 1;
     case 0x390d: entity_hatch(r[R_BX]); return 1;
@@ -165,7 +165,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x2148: scroll_down_band(); return 1;
     case 0x22a9: draw_paddle_raw(r[R_SI]); return 1;
     case 0x2187: draw_paddle_shifted(r[R_SI]); return 1;
-    case 0x2e1e: g_result = ball_on_paddle(r[R_SI]); return 1;
+    case 0x2e1e: g_result = ball_on_paddle(ball_at(r[R_SI])); return 1;
     case 0x2ee3: laser_fire(); return 1;
     case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, r[R_SI]);
                  return 1;
@@ -196,7 +196,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x0598: field_marks(); return 1;
     case 0x0911: panel_reveal(); return 1;
     case 0x1354: frame_band(r[R_DI], r[R_AX]); return 1;
-    case 0x2d68: brick_11(r[R_SI], r[R_BP]); return 1;
+    case 0x2d68: brick_11(r[R_SI], ball_at(r[R_BP])); return 1;
     case 0x3d95: bonus_spawn(); return 1;
     case 0x0cc5: play_prepare(); return 1;
     case 0x1509: demo_start(); return 1;
@@ -207,13 +207,13 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         draw_sprite_20x6(r[R_BX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
         return 1;
     case 0x247f:                        /* ball_after(si = the ball) */
-        ball_after(r[R_SI]);
+        ball_after(ball_at(r[R_SI]));
         return 1;
     case 0x2316:                        /* ball_paddle(si = the ball) */
-        ball_paddle(r[R_SI]);
+        ball_paddle(ball_at(r[R_SI]));
         return 1;
     case 0x254d:                        /* ball_bricks(si = the ball) */
-        ball_bricks(r[R_SI]);
+        ball_bricks(ball_at(r[R_SI]));
         return 1;
     case 0x413d:                        /* score_add, no arguments */
         score_add();
@@ -362,7 +362,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         intro_reveal();
         return 1;
     case 0x108c:                        /* score_before(si, di) */
-        g_result = score_before(r[R_SI], r[R_DI]);
+        g_result = score_before(g_image + r[R_SI], r[R_DI]);
         return 1;
     case 0x34c5:                        /* morph_begin(bx, si, dx) */
         morph_begin(r[R_BX], r[R_SI], r[R_DX]);
@@ -419,7 +419,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         return 1;
     }
     case 0x45a1:                        /* ball_after_endgame(si) */
-        g_result = ball_after_endgame(r[R_SI]);
+        g_result = ball_after_endgame(ball_at(r[R_SI]));
         return 1;
     case 0x4d5d:                        /* hsc_bubble(si, di) */
         g_result = hsc_bubble(r[R_SI], r[R_DI]);
