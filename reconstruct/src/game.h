@@ -29,7 +29,7 @@ extern uint8_t *g_image;
  *
  * Every byte is accounted for - the members below tile 0x00..0x1d with no
  * gaps - which is the corroboration that the layout is right and not merely
- * consistent. BALL_AT checks each offset and the size at compile time.
+ * consistent. ENSURE_BALL_AT checks each offset and the size at compile time.
  *
  * The two four-word sprite arrays were reached a byte at a time, assembling
  * and splitting words by hand (`b[B_SPRITE + r*2] | b[B_SPRITE + r*2+1] << 8`).
@@ -55,17 +55,23 @@ typedef struct __attribute__((packed)) {
     uint8_t  bounces;           /* 0x1d */
 } ball_t;
 
-#define BALL_AT(field, off) \
-    typedef char ball_at_##field[offsetof(ball_t, field) == (off) ? 1 : -1]
-BALL_AT(x, 0x00);        BALL_AT(y, 0x01);
-BALL_AT(prev_x, 0x02);   BALL_AT(prev_y, 0x03);
-BALL_AT(sprite, 0x04);   BALL_AT(prev_spr, 0x0c);
-BALL_AT(dir_x, 0x14);    BALL_AT(dir_y, 0x15);
-BALL_AT(dy, 0x16);       BALL_AT(dx, 0x17);
-BALL_AT(anchor_x, 0x18); BALL_AT(anchor_y, 0x19);
-BALL_AT(acc_x, 0x1a);    BALL_AT(acc_y, 0x1b);
-BALL_AT(state, 0x1c);    BALL_AT(bounces, 0x1d);
-typedef char ball_t_is_0x1e[sizeof(ball_t) == 0x1e ? 1 : -1];
+#define ENSURE_BALL_AT(field, off) \
+    typedef char ensure_ball_at_##field[offsetof(ball_t, field) == (off) ? 1 : -1]
+ENSURE_BALL_AT(x, 0x00);        ENSURE_BALL_AT(y, 0x01);
+ENSURE_BALL_AT(prev_x, 0x02);   ENSURE_BALL_AT(prev_y, 0x03);
+ENSURE_BALL_AT(sprite, 0x04);   ENSURE_BALL_AT(prev_spr, 0x0c);
+ENSURE_BALL_AT(dir_x, 0x14);    ENSURE_BALL_AT(dir_y, 0x15);
+ENSURE_BALL_AT(dy, 0x16);       ENSURE_BALL_AT(dx, 0x17);
+ENSURE_BALL_AT(anchor_x, 0x18); ENSURE_BALL_AT(anchor_y, 0x19);
+ENSURE_BALL_AT(acc_x, 0x1a);    ENSURE_BALL_AT(acc_y, 0x1b);
+ENSURE_BALL_AT(state, 0x1c);    ENSURE_BALL_AT(bounces, 0x1d);
+/* Sizes, the same way: a record's length is as much a fact from the
+ * disassembly as any field's offset, and asserting it catches what the field
+ * offsets alone cannot - a table declared with one entry too many. */
+#define ENSURE_SIZE(type, n) \
+    typedef char ensure_size_##type[sizeof(type) == (n) ? 1 : -1]
+
+ENSURE_SIZE(ball_t, 0x1e);
 
 /* Struct-land to offset-land, for the routines that still take an image
  * offset because that is what the original passed in a register. */
@@ -86,8 +92,10 @@ typedef struct __attribute__((packed)) {
                              * by eight, which no [row][col] spelling keeps */
 } level_t;
 
-typedef char level_t_is_0xb0[sizeof(level_t) == 0xb0 ? 1 : -1];
-typedef char level_cells_at_8[offsetof(level_t, cells) == 8 ? 1 : -1];
+ENSURE_SIZE(level_t, 0xb0);
+#define ENSURE_LEVEL_AT(field, off) \
+    typedef char ensure_level_at_##field[offsetof(level_t, field) == (off) ? 1 : -1]
+ENSURE_LEVEL_AT(cells, 0x08);
 
 /* One player's record, the 0x11b bytes at gv.players[i].
  *
@@ -109,14 +117,14 @@ typedef struct __attribute__((packed)) {
     uint8_t  ents[6][12];   /* 0xd3 six entities, twelve bytes each */
 } player_t;
 
-typedef char player_t_is_0x11b[sizeof(player_t) == 0x11b ? 1 : -1];
-#define PLAYER_AT(field, off) \
-    typedef char player_at_##field[offsetof(player_t, field) == (off) ? 1 : -1]
-PLAYER_AT(name, 0x00);   PLAYER_AT(lives, 0x0c);
-PLAYER_AT(level_src, 0x0d); PLAYER_AT(level_number, 0x0f);
-PLAYER_AT(score, 0x10);  PLAYER_AT(level, 0x16);
-PLAYER_AT(state, 0xc6);  PLAYER_AT(ent_count, 0xd2);
-PLAYER_AT(ents, 0xd3);
+ENSURE_SIZE(player_t, 0x11b);
+#define ENSURE_PLAYER_AT(field, off) \
+    typedef char ensure_player_at_##field[offsetof(player_t, field) == (off) ? 1 : -1]
+ENSURE_PLAYER_AT(name, 0x00);   ENSURE_PLAYER_AT(lives, 0x0c);
+ENSURE_PLAYER_AT(level_src, 0x0d); ENSURE_PLAYER_AT(level_number, 0x0f);
+ENSURE_PLAYER_AT(score, 0x10);  ENSURE_PLAYER_AT(level, 0x16);
+ENSURE_PLAYER_AT(state, 0xc6);  ENSURE_PLAYER_AT(ent_count, 0xd2);
+ENSURE_PLAYER_AT(ents, 0xd3);
 
 /* A ball by its image offset, for the routines that still carry one because
  * the original passed it in a register. */
@@ -143,8 +151,16 @@ static inline uint32_t img_off(const void *p)
  * field after it shifts, and the build says which.
  *
  * The struct is packed and grows a field at a time: name an offset, split the
- * padding around it, add its IMG_AT. It does not have to cover the image, and
+ * padding around it, add its ENSURE_IMG_AT. It does not have to cover the image, and
  * anything not yet named is still reached through g_image.
+ *
+ * **The packing and the padding are load-bearing, not tidiness.** The struct
+ * has to land on the game's own addresses, and those are what they are:
+ * frame_delay is at an odd offset, and so are most of the words. Drop the
+ * `packed` attribute and let the compiler align things naturally and the
+ * fields move - which is not a subtle failure, because the ENSURE_ macros
+ * refuse to compile it. There is no unpacked layout that is still the image,
+ * so there is no build-time choice to be made here.
  *
  * **Endianness.** The fields are the image's own little-endian words, so this
  * assumes a little-endian host, where `img_w`'s explicit `lo | hi << 8` did
@@ -261,88 +277,88 @@ typedef struct __attribute__((packed)) {
 
 /* offsetof checked at compile time. _Static_assert is C11 and this is C99, so
  * it is the negative-array-size trick; the failure message names the field. */
-#define IMG_AT(field, off) \
-    typedef char img_at_##field[offsetof(game_vars, field) == (off) ? 1 : -1]
+#define ENSURE_IMG_AT(field, off) \
+    typedef char ensure_img_at_##field[offsetof(game_vars, field) == (off) ? 1 : -1]
 
-IMG_AT(eog_screen_at, 0x13c0);
-IMG_AT(eog_build_at, 0x13c2);
-IMG_AT(banner_state, 0x13c4);
-IMG_AT(banner_ptr, 0x13c5);
-IMG_AT(lives, 0x13c9);
-IMG_AT(level_src, 0x13ca);
-IMG_AT(level_number, 0x13cc);
-IMG_AT(score_text, 0x13cd);
-IMG_AT(extra_at, 0x13d3);
-IMG_AT(name_index, 0x13e9);
-IMG_AT(level_num_text, 0x1410);
-IMG_AT(particle_count, 0x1413);
-IMG_AT(walker_anim, 0x1468);
-IMG_AT(speed_step, 0x1485);
-IMG_AT(speed_limit, 0x1486);
-IMG_AT(frame_delay, 0x1487);
-IMG_AT(frame_delay_set, 0x1489);
-IMG_AT(speed_timer, 0x148b);
-IMG_AT(paddle_step, 0x2d38);
-IMG_AT(paddle_kind, 0x2d39);
-IMG_AT(paddle_width, 0x2d3a);
-IMG_AT(paddle_morphing, 0x2d3b);
-IMG_AT(morph_owner, 0x2d3c);
-IMG_AT(paddle_min, 0x2d3e);
-IMG_AT(paddle_max, 0x2d3f);
-IMG_AT(repeat_count, 0x2d40);
-IMG_AT(input_active, 0x2d45);
-IMG_AT(input_selected, 0x2d47);
-IMG_AT(last_make, 0x2d49);
-IMG_AT(last_dir, 0x2d4a);
-IMG_AT(repeat_div, 0x2d4b);
-IMG_AT(key_action, 0x2d4c);
-IMG_AT(key_right, 0x2d4d);
-IMG_AT(key_left, 0x2d4e);
-IMG_AT(key_scan_l, 0x2d4f);
-IMG_AT(key_scan_r, 0x2d50);
-IMG_AT(key_scan_a, 0x2d51);
-IMG_AT(paddle_x, 0x2e54);
-IMG_AT(paddle_prev_x, 0x2e55);
-IMG_AT(hold_offset, 0x2e56);
-IMG_AT(ball_alive, 0x2e73);
-IMG_AT(hit_count, 0x2e74);
-IMG_AT(caught, 0x2e75);
-IMG_AT(hold_timer, 0x2e76);
-IMG_AT(game_over, 0x2e78);
-IMG_AT(extra_on, 0x2e79);
-IMG_AT(serve_timeout, 0x2e7a);
-IMG_AT(extra_timer, 0x2e7c);
-IMG_AT(laser_on, 0x2e7e);
-IMG_AT(laser_y, 0x2e7f);
-IMG_AT(laser_x, 0x2e80);
-IMG_AT(net_on, 0x2e81);
-IMG_AT(net_life, 0x2e82);
-IMG_AT(net_timer, 0x2e84);
-IMG_AT(net_pos, 0x2e85);
-IMG_AT(extra_pos, 0x2e87);
-IMG_AT(hit_dirs, 0x2e99);
-IMG_AT(balls, 0x2ea1);
-IMG_AT(backdrop_phase, 0x2efb);
-IMG_AT(sweep_y, 0x2f0c);
-IMG_AT(level, 0x2f10);
-IMG_AT(anim_count, 0x3134);
-IMG_AT(anim_rate, 0x3135);
-IMG_AT(anim_ptr, 0x3136);
-IMG_AT(entity_free, 0x3138);
-IMG_AT(entity_remove, 0x313a);
-IMG_AT(entity_prev, 0x3142);
-IMG_AT(entity_head, 0x3144);
-IMG_AT(bonus_cap, 0x3384);
-IMG_AT(rng_state, 0x33d2);
-IMG_AT(hit_kind, 0x33d4);
-IMG_AT(bonus_live, 0x33d6);
-IMG_AT(hatch_x, 0x33f3);
-IMG_AT(hatch_y, 0x33f4);
-IMG_AT(players, 0x344f);
-IMG_AT(player_count, 0x3f08);
-IMG_AT(live_count, 0x3f09);
-IMG_AT(cur_player, 0x3f0a);
-IMG_AT(speed_timer,     0x148b);          /* the whole unpacked load image */
+ENSURE_IMG_AT(eog_screen_at, 0x13c0);
+ENSURE_IMG_AT(eog_build_at, 0x13c2);
+ENSURE_IMG_AT(banner_state, 0x13c4);
+ENSURE_IMG_AT(banner_ptr, 0x13c5);
+ENSURE_IMG_AT(lives, 0x13c9);
+ENSURE_IMG_AT(level_src, 0x13ca);
+ENSURE_IMG_AT(level_number, 0x13cc);
+ENSURE_IMG_AT(score_text, 0x13cd);
+ENSURE_IMG_AT(extra_at, 0x13d3);
+ENSURE_IMG_AT(name_index, 0x13e9);
+ENSURE_IMG_AT(level_num_text, 0x1410);
+ENSURE_IMG_AT(particle_count, 0x1413);
+ENSURE_IMG_AT(walker_anim, 0x1468);
+ENSURE_IMG_AT(speed_step, 0x1485);
+ENSURE_IMG_AT(speed_limit, 0x1486);
+ENSURE_IMG_AT(frame_delay, 0x1487);
+ENSURE_IMG_AT(frame_delay_set, 0x1489);
+ENSURE_IMG_AT(speed_timer, 0x148b);
+ENSURE_IMG_AT(paddle_step, 0x2d38);
+ENSURE_IMG_AT(paddle_kind, 0x2d39);
+ENSURE_IMG_AT(paddle_width, 0x2d3a);
+ENSURE_IMG_AT(paddle_morphing, 0x2d3b);
+ENSURE_IMG_AT(morph_owner, 0x2d3c);
+ENSURE_IMG_AT(paddle_min, 0x2d3e);
+ENSURE_IMG_AT(paddle_max, 0x2d3f);
+ENSURE_IMG_AT(repeat_count, 0x2d40);
+ENSURE_IMG_AT(input_active, 0x2d45);
+ENSURE_IMG_AT(input_selected, 0x2d47);
+ENSURE_IMG_AT(last_make, 0x2d49);
+ENSURE_IMG_AT(last_dir, 0x2d4a);
+ENSURE_IMG_AT(repeat_div, 0x2d4b);
+ENSURE_IMG_AT(key_action, 0x2d4c);
+ENSURE_IMG_AT(key_right, 0x2d4d);
+ENSURE_IMG_AT(key_left, 0x2d4e);
+ENSURE_IMG_AT(key_scan_l, 0x2d4f);
+ENSURE_IMG_AT(key_scan_r, 0x2d50);
+ENSURE_IMG_AT(key_scan_a, 0x2d51);
+ENSURE_IMG_AT(paddle_x, 0x2e54);
+ENSURE_IMG_AT(paddle_prev_x, 0x2e55);
+ENSURE_IMG_AT(hold_offset, 0x2e56);
+ENSURE_IMG_AT(ball_alive, 0x2e73);
+ENSURE_IMG_AT(hit_count, 0x2e74);
+ENSURE_IMG_AT(caught, 0x2e75);
+ENSURE_IMG_AT(hold_timer, 0x2e76);
+ENSURE_IMG_AT(game_over, 0x2e78);
+ENSURE_IMG_AT(extra_on, 0x2e79);
+ENSURE_IMG_AT(serve_timeout, 0x2e7a);
+ENSURE_IMG_AT(extra_timer, 0x2e7c);
+ENSURE_IMG_AT(laser_on, 0x2e7e);
+ENSURE_IMG_AT(laser_y, 0x2e7f);
+ENSURE_IMG_AT(laser_x, 0x2e80);
+ENSURE_IMG_AT(net_on, 0x2e81);
+ENSURE_IMG_AT(net_life, 0x2e82);
+ENSURE_IMG_AT(net_timer, 0x2e84);
+ENSURE_IMG_AT(net_pos, 0x2e85);
+ENSURE_IMG_AT(extra_pos, 0x2e87);
+ENSURE_IMG_AT(hit_dirs, 0x2e99);
+ENSURE_IMG_AT(balls, 0x2ea1);
+ENSURE_IMG_AT(backdrop_phase, 0x2efb);
+ENSURE_IMG_AT(sweep_y, 0x2f0c);
+ENSURE_IMG_AT(level, 0x2f10);
+ENSURE_IMG_AT(anim_count, 0x3134);
+ENSURE_IMG_AT(anim_rate, 0x3135);
+ENSURE_IMG_AT(anim_ptr, 0x3136);
+ENSURE_IMG_AT(entity_free, 0x3138);
+ENSURE_IMG_AT(entity_remove, 0x313a);
+ENSURE_IMG_AT(entity_prev, 0x3142);
+ENSURE_IMG_AT(entity_head, 0x3144);
+ENSURE_IMG_AT(bonus_cap, 0x3384);
+ENSURE_IMG_AT(rng_state, 0x33d2);
+ENSURE_IMG_AT(hit_kind, 0x33d4);
+ENSURE_IMG_AT(bonus_live, 0x33d6);
+ENSURE_IMG_AT(hatch_x, 0x33f3);
+ENSURE_IMG_AT(hatch_y, 0x33f4);
+ENSURE_IMG_AT(players, 0x344f);
+ENSURE_IMG_AT(player_count, 0x3f08);
+ENSURE_IMG_AT(live_count, 0x3f09);
+ENSURE_IMG_AT(cur_player, 0x3f0a);
+ENSURE_IMG_AT(speed_timer,     0x148b);          /* the whole unpacked load image */
 extern const char *g_dir;               /* "" - everything is relative to the
                                          * current directory, as it was in DOS */
 
