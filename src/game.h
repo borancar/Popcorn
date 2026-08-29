@@ -89,6 +89,35 @@ typedef struct __attribute__((packed)) {
 typedef char level_t_is_0xb0[sizeof(level_t) == 0xb0 ? 1 : -1];
 typedef char level_cells_at_8[offsetof(level_t, cells) == 8 ? 1 : -1];
 
+/* One player's record, the 0x11b bytes at gv.players[i].
+ *
+ * It carries a whole game, not just a score: with more than one player the
+ * game switches between them, and each has to come back to the level exactly
+ * as they left it - which bricks are still standing and which capsules were
+ * in flight. That is why level is a private copy and the entities are here.
+ */
+typedef struct __attribute__((packed)) {
+    uint8_t  name[12];      /* 0x00 */
+    uint8_t  lives;         /* 0x0c */
+    uint16_t level_src;     /* 0x0d offset of their level in the 0xc46 table */
+    uint8_t  level_number;  /* 0x0f */
+    uint8_t  score[6];      /* 0x10 ASCII digits, as gv.score_text is */
+    level_t  level;         /* 0x16 their copy of it, cells and all */
+    uint16_t state[6];      /* 0xc6 twelve bytes from 0x30b0. Initialised to
+                             * six 0xffff, which is the "six terminators" */
+    uint8_t  ent_count;     /* 0xd2 */
+    uint8_t  ents[6][12];   /* 0xd3 six entities, twelve bytes each */
+} player_t;
+
+typedef char player_t_is_0x11b[sizeof(player_t) == 0x11b ? 1 : -1];
+#define PLAYER_AT(field, off) \
+    typedef char player_at_##field[offsetof(player_t, field) == (off) ? 1 : -1]
+PLAYER_AT(name, 0x00);   PLAYER_AT(lives, 0x0c);
+PLAYER_AT(level_src, 0x0d); PLAYER_AT(level_number, 0x0f);
+PLAYER_AT(score, 0x10);  PLAYER_AT(level, 0x16);
+PLAYER_AT(state, 0xc6);  PLAYER_AT(ent_count, 0xd2);
+PLAYER_AT(ents, 0xd3);
+
 /* A ball by its image offset, for the routines that still carry one because
  * the original passed it in a register. */
 static inline ball_t *ball_at(uint32_t off)
@@ -125,32 +154,32 @@ static inline uint32_t img_off(const void *p)
  * big-endian host.
  */
 typedef struct __attribute__((packed)) {
-    uint8_t  _pad_00[0x13c0];
+    uint8_t  _pad_00[5056];
     uint16_t eog_screen_at;             /* 0x13c0 end-of-game screen cursor */
     uint16_t eog_build_at;              /* 0x13c2 */
     uint8_t  banner_state;              /* 0x13c4 the menu's scrolling text */
     uint16_t banner_ptr;                /* 0x13c5 where it has got to, as an image offset */
-    uint8_t  _pad_01[0x2];
+    uint8_t  _pad_01[2];
     uint8_t  lives;                     /* 0x13c9 */
     uint16_t level_src;                 /* 0x13ca offset of the current level within the 0xc46 block */
     uint8_t  level_number;              /* 0x13cc */
     uint8_t  score_text[6];             /* 0x13cd the score, six ASCII digits - the game keeps no binary copy */
     uint16_t extra_at;                  /* 0x13d3 the next extra life, as the two ASCII digits the score has to reach - and stored **byte-swapped** against the score, which is why the comparison at 1ac2:2435 swaps before it compares. Reached as SCORE_TEXT + 6 and so looked like two more score digits; it is not */
-    uint8_t  _pad_02[0x14];
+    uint8_t  _pad_02[20];
     uint8_t  name_index;                /* 0x13e9 how far the player has typed their name */
-    uint8_t  _pad_03[0x26];
+    uint8_t  _pad_03[38];
     uint16_t level_num_text;            /* 0x1410 the level number as two ASCII digits, tens in the low byte */
-    uint8_t  _pad_04[0x1];
+    uint8_t  _pad_04[1];
     uint16_t particle_count;            /* 0x1413 the menu's fountain */
-    uint8_t  _pad_05[0x53];
+    uint8_t  _pad_05[83];
     uint16_t walker_anim;               /* 0x1468 a pointer into the walking figure's frame list, stepped by two */
-    uint8_t  _pad_06[0x1b];
+    uint8_t  _pad_06[27];
     uint8_t  speed_step;                /* 0x1485 the ball's move-this-frame counter, reloaded from speed_limit */
     uint8_t  speed_limit;               /* 0x1486 its reload value: the ball steps on (limit-1) frames in limit */
     uint16_t frame_delay;               /* 0x1487 empty loops left this frame */
     uint16_t frame_delay_set;           /* 0x1489 what it is reloaded with */
     uint16_t speed_timer;               /* 0x148b frames until speed_limit rises, so a level speeds up */
-    uint8_t  _pad_07[0x18ab];
+    uint8_t  _pad_07[6315];
     uint8_t  paddle_step;               /* 0x2d38 how much the width changes per morph frame */
     uint8_t  paddle_kind;               /* 0x2d39 which of the four sprite sets is current */
     uint8_t  paddle_width;              /* 0x2d3a in pixels */
@@ -159,7 +188,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  paddle_min;                /* 0x2d3e 8. Was also PADDLE_LOW */
     uint8_t  paddle_max;                /* 0x2d3f 172, and it moves as the paddle grows. Was also PADDLE_HIGH */
     uint8_t  repeat_count;              /* 0x2d40 frames until the held key moves the paddle again */
-    uint8_t  _pad_08[0x4];
+    uint8_t  _pad_08[4];
     uint16_t input_active;              /* 0x2d45 the input routine in use: 0x1654 mouse, 0x16d2 keyboard, 0x1785 demo */
     uint16_t input_selected;            /* 0x2d47 what the menu has chosen, copied to input_active at F1 */
     uint8_t  last_make;                 /* 0x2d49 the last make code the INT 09h handler saw; 1 is Esc, which pauses */
@@ -171,11 +200,11 @@ typedef struct __attribute__((packed)) {
     uint8_t  key_scan_l;                /* 0x2d4f the configured scan codes. Defaults 0x24, 0x25, 0x39 - **J**, **K** and space, read from the image rather than assumed */
     uint8_t  key_scan_r;                /* 0x2d50 */
     uint8_t  key_scan_a;                /* 0x2d51 */
-    uint8_t  _pad_09[0x102];
+    uint8_t  _pad_09[258];
     uint8_t  paddle_x;                  /* 0x2e54 left edge, pixels */
     uint8_t  paddle_prev_x;             /* 0x2e55 where it was last frame, so the old one can be erased */
     uint8_t  hold_offset;               /* 0x2e56 a caught ball's x relative to the paddle */
-    uint8_t  _pad_10[0x1c];
+    uint8_t  _pad_10[28];
     uint8_t  ball_alive;                /* 0x2e73 clear when the last ball is lost */
     uint8_t  hit_count;                 /* 0x2e74 */
     uint8_t  caught;                    /* 0x2e75 the C capsule: the ball sticks to the paddle */
@@ -192,33 +221,35 @@ typedef struct __attribute__((packed)) {
     uint8_t  net_timer;                 /* 0x2e84 its redraw counter, reloaded with 0xc8 */
     uint16_t net_pos;                   /* 0x2e85 where it is drawn */
     uint16_t extra_pos;                 /* 0x2e87 */
-    uint8_t  _pad_11[0x10];
+    uint8_t  _pad_11[16];
     uint16_t hit_dirs[4];               /* 0x2e99 the four directions a brick hit can send the ball, indexed by which slot matched */
     ball_t   balls[3];                  /* 0x2ea1 the ball pool. **Three**, not four: 0x2ea1 + 3*0x1e ends exactly where backdrop_phase begins, and every loop over it is i < 3. BALL_COUNT said 4 and was never used */
     uint8_t  backdrop_phase;            /* 0x2efb the level intro's reveal, counted by kernel zero's timer */
-    uint8_t  _pad_12[0x10];
+    uint8_t  _pad_12[16];
     uint8_t  sweep_y[4];                /* 0x2f0c the four popcorn kernels sweeping the field during the level intro; kernel zero paces the reveal */
     level_t  level;                     /* 0x2f10 the level being played, copied out of the table at 0xc46:0x000c */
-    uint8_t  _pad_13[0x174];
+    uint8_t  _pad_13[372];
     uint8_t  anim_count;                /* 0x3134 the animated bricks */
     uint8_t  anim_rate;                 /* 0x3135 */
     uint16_t anim_ptr;                  /* 0x3136 */
     uint16_t entity_free;               /* 0x3138 head of the free list - and the value entity_prev starts a walk at, so an unlink at the head has a node to write through */
     uint8_t  entity_remove;             /* 0x313a a handler asking to be taken out of the list */
-    uint8_t  _pad_14[0x7];
+    uint8_t  _pad_14[7];
     uint16_t entity_prev;               /* 0x3142 trails one node behind the walk, so the unlink needs no second pass */
     uint16_t entity_head;               /* 0x3144 */
-    uint8_t  _pad_15[0x23e];
+    uint8_t  _pad_15[574];
     uint8_t  bonus_cap;                 /* 0x3384 */
-    uint8_t  _pad_16[0x4d];
+    uint8_t  _pad_16[77];
     uint16_t rng_state;                 /* 0x33d2 */
     uint8_t  hit_kind;                  /* 0x33d4 */
-    uint8_t  _pad_17[0x1];
+    uint8_t  _pad_17[1];
     uint8_t  bonus_live;                /* 0x33d6 capsules on screen; the play loop's pause shortens as it rises */
-    uint8_t  _pad_18[0x1c];
+    uint8_t  _pad_18[28];
     uint8_t  hatch_x;                   /* 0x33f3 */
     uint8_t  hatch_y;                   /* 0x33f4 */
-    uint8_t  _pad_19[0xb13];
+    uint8_t  _pad_19[90];
+    player_t players[9];                /* 0x344f nine of them - screen_player_names stops at nine, and a tenth record would run into player_count at 0x3f08 */
+    uint8_t  _pad_20[198];
     uint8_t  player_count;              /* 0x3f08 how many were entered */
     uint8_t  live_count;                /* 0x3f09 how many are still in. next_player hands over while this is more than one */
     uint8_t  cur_player;                /* 0x3f0a */
@@ -307,6 +338,7 @@ IMG_AT(hit_kind, 0x33d4);
 IMG_AT(bonus_live, 0x33d6);
 IMG_AT(hatch_x, 0x33f3);
 IMG_AT(hatch_y, 0x33f4);
+IMG_AT(players, 0x344f);
 IMG_AT(player_count, 0x3f08);
 IMG_AT(live_count, 0x3f09);
 IMG_AT(cur_player, 0x3f0a);
