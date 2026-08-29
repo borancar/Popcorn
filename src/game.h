@@ -69,6 +69,26 @@ typedef char ball_t_is_0x1e[sizeof(ball_t) == 0x1e ? 1 : -1];
 
 /* Struct-land to offset-land, for the routines that still take an image
  * offset because that is what the original passed in a register. */
+/* The level being played: the 176-byte record play_session copies out of the
+ * table at 0xc46:0x000c, and the same shape every record in a .PPC file has.
+ * See docs/level-format.md.
+ */
+typedef struct __attribute__((packed)) {
+    uint8_t bricks;         /* 0x00 what is left to break - every non-zero
+                             * cell except 3 and 9. The play loop watches it
+                             * for zero to know the level is won */
+    uint8_t teleports;      /* 0x01 how many teleport cells, 0 to 6 */
+    uint8_t teleport[6];    /* 0x02 their indices into cells[] */
+    uint8_t cells[168];     /* 0x08 twelve columns by fourteen rows, row
+                             * major - and indexed **flat**, because the
+                             * original multiplies a row by twelve as
+                             * `row + (row >> 1)` with the row already scaled
+                             * by eight, which no [row][col] spelling keeps */
+} level_t;
+
+typedef char level_t_is_0xb0[sizeof(level_t) == 0xb0 ? 1 : -1];
+typedef char level_cells_at_8[offsetof(level_t, cells) == 8 ? 1 : -1];
+
 /* A ball by its image offset, for the routines that still carry one because
  * the original passed it in a register. */
 static inline ball_t *ball_at(uint32_t off)
@@ -174,26 +194,29 @@ typedef struct __attribute__((packed)) {
     uint16_t hit_dirs[4];               /* 0x2e99 the four directions a brick hit can send the ball, indexed by which slot matched */
     ball_t   balls[3];                  /* 0x2ea1 the ball pool. **Three**, not four: 0x2ea1 + 3*0x1e ends exactly where backdrop_phase begins, and every loop over it is i < 3. BALL_COUNT said 4 and was never used */
     uint8_t  backdrop_phase;            /* 0x2efb the level intro's reveal, counted by kernel zero's timer */
-    uint8_t  _pad_12[0x238];
+    uint8_t  _pad_12[0x10];
+    uint8_t  sweep_y[4];                /* 0x2f0c the four popcorn kernels sweeping the field during the level intro; kernel zero paces the reveal */
+    level_t  level;                     /* 0x2f10 the level being played, copied out of the table at 0xc46:0x000c */
+    uint8_t  _pad_13[0x174];
     uint8_t  anim_count;                /* 0x3134 the animated bricks */
     uint8_t  anim_rate;                 /* 0x3135 */
     uint16_t anim_ptr;                  /* 0x3136 */
     uint16_t entity_free;               /* 0x3138 head of the free list - and the value entity_prev starts a walk at, so an unlink at the head has a node to write through */
     uint8_t  entity_remove;             /* 0x313a a handler asking to be taken out of the list */
-    uint8_t  _pad_13[0x7];
+    uint8_t  _pad_14[0x7];
     uint16_t entity_prev;               /* 0x3142 trails one node behind the walk, so the unlink needs no second pass */
     uint16_t entity_head;               /* 0x3144 */
-    uint8_t  _pad_14[0x23e];
+    uint8_t  _pad_15[0x23e];
     uint8_t  bonus_cap;                 /* 0x3384 */
-    uint8_t  _pad_15[0x4d];
+    uint8_t  _pad_16[0x4d];
     uint16_t rng_state;                 /* 0x33d2 */
     uint8_t  hit_kind;                  /* 0x33d4 */
-    uint8_t  _pad_16[0x1];
+    uint8_t  _pad_17[0x1];
     uint8_t  bonus_live;                /* 0x33d6 capsules on screen; the play loop's pause shortens as it rises */
-    uint8_t  _pad_17[0x1c];
+    uint8_t  _pad_18[0x1c];
     uint8_t  hatch_x;                   /* 0x33f3 */
     uint8_t  hatch_y;                   /* 0x33f4 */
-    uint8_t  _pad_18[0xb13];
+    uint8_t  _pad_19[0xb13];
     uint8_t  player_count;              /* 0x3f08 how many were entered */
     uint8_t  live_count;                /* 0x3f09 how many are still in. next_player hands over while this is more than one */
     uint8_t  cur_player;                /* 0x3f0a */
@@ -265,6 +288,8 @@ IMG_AT(extra_pos, 0x2e87);
 IMG_AT(hit_dirs, 0x2e99);
 IMG_AT(balls, 0x2ea1);
 IMG_AT(backdrop_phase, 0x2efb);
+IMG_AT(sweep_y, 0x2f0c);
+IMG_AT(level, 0x2f10);
 IMG_AT(anim_count, 0x3134);
 IMG_AT(anim_rate, 0x3135);
 IMG_AT(anim_ptr, 0x3136);
