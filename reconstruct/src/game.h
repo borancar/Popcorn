@@ -134,7 +134,9 @@ typedef struct __attribute__((packed)) {
     uint8_t  lives;                     /* 0x13c9 */
     uint16_t level_src;                 /* 0x13ca offset of the current level within the 0xc46 block */
     uint8_t  level_number;              /* 0x13cc */
-    uint8_t  _pad_02[0x1c];
+    uint8_t  score_text[6];             /* 0x13cd the score, six ASCII digits - the game keeps no binary copy */
+    uint16_t extra_at;                  /* 0x13d3 the next extra life, as the two ASCII digits the score has to reach - and stored **byte-swapped** against the score, which is why the comparison at 1ac2:2435 swaps before it compares. Reached as SCORE_TEXT + 6 and so looked like two more score digits; it is not */
+    uint8_t  _pad_02[0x14];
     uint8_t  name_index;                /* 0x13e9 how far the player has typed their name */
     uint8_t  _pad_03[0x26];
     uint16_t level_num_text;            /* 0x1410 the level number as two ASCII digits, tens in the low byte */
@@ -238,6 +240,8 @@ IMG_AT(banner_ptr, 0x13c5);
 IMG_AT(lives, 0x13c9);
 IMG_AT(level_src, 0x13ca);
 IMG_AT(level_number, 0x13cc);
+IMG_AT(score_text, 0x13cd);
+IMG_AT(extra_at, 0x13d3);
 IMG_AT(name_index, 0x13e9);
 IMG_AT(level_num_text, 0x1410);
 IMG_AT(particle_count, 0x1413);
