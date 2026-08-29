@@ -1162,28 +1162,22 @@ void game_input(void)
 #define LEVEL_NUMBER    0x13cc
 #define LEVEL_NUM_TEXT  0x1410
 #define LEVEL_CELLS     0x2f10          /* the copy the level is played from */
-#define BALL_ALIVE      0x2e73          /* clear when the last one is lost */
-#define GAME_OVER       0x2e78
 #define PADDLE_SPRITES  0x2d0d          /* four-entry table of sprite bases */
-#define LASER_ON        0x2e7e
-#define SHOT_ON         0x2e81
-#define SHOT_TIMER      0x2e84
-#define SHOT_POS        0x2e85
-#define SHOT_LIFE       0x2e82
-#define EXTRA_ON        0x2e79
-#define EXTRA_TIMER     0x2e7c
-#define EXTRA_POS       0x2e87
-#define SERVE_TIMEOUT   0x2e7a
-#define CAUGHT          0x2e75
 
-static void erase_shot(uint32_t pos_var, uint32_t reload, uint32_t timer)
+/* One step of the safety net's crawl: blank the two bytes it occupies, move a
+ * row down, and reload the counter.
+ *
+ * It was `erase_shot`, and took the position and timer as *offsets* so it
+ * could serve a laser shot too. It never did - it has one caller, the net's -
+ * and naming its variables correctly left the parameters with nothing to
+ * generalise over. */
+static void net_step(uint32_t reload)
 {
-    uint32_t di = img_w(pos_var);
+    uint32_t di = gv.net_pos;
     g_vram[di & (CGA_SIZE - 1)] = 0;
     g_vram[(di + 1) & (CGA_SIZE - 1)] = 0;
-    di = cga_next_row(di);
-    img_setw(pos_var, di);
-    g_image[timer] = (uint8_t)reload;
+    gv.net_pos = (uint16_t)cga_next_row(di);
+    gv.net_timer = (uint8_t)reload;
 }
 
 /* Set by the lockstep harness when it is resuming from a snapshot taken at a
@@ -1243,7 +1237,7 @@ int32_t play_loop(void)
 
     paddle_row_offsets(gv.paddle_x, PADDLE_ROWS_CUR);
     memcpy(g_image + PADDLE_PIX_CUR, g_image + SPRITE_BASE, 0x27 * 2);
-    g_image[BALL_ALIVE] = 1;
+    gv.ball_alive = 1;
     memcpy(g_image + BALLS + 4, g_image + 0x48fb, 8);
     gv.frame_delay_set = 0x1f4;
     gv.key_right = gv.key_left = 0;
@@ -1258,8 +1252,8 @@ int32_t play_loop(void)
     g_image[ENTITY_REMOVE] = 0;
     g_image[0x33d5] = g_image[0x33d6] = g_image[0x3384] = 0;
     gv.paddle_morphing = 0;
-    g_image[SHOT_ON] = g_image[CAUGHT] = 0;
-    g_image[GAME_OVER] = g_image[EXTRA_ON] = g_image[LASER_ON] = 0;
+    gv.net_on = gv.caught = 0;
+    gv.game_over = gv.extra_on = gv.laser_on = 0;
 
     /* The serve: ball 0 on the paddle, the other two idle. */
     uint8_t *b = g_image + BALLS;
@@ -1282,10 +1276,10 @@ int32_t play_loop(void)
 
     /* Wait for the action key, or two thousand ticks, before serving. */
     if (gv.input_active != 0x1785) {
-        img_setw(SERVE_TIMEOUT, 0x7d0);
+        gv.serve_timeout = (uint16_t)(0x7d0);
         for (;;) {
-            img_setw(SERVE_TIMEOUT, img_w(SERVE_TIMEOUT) - 1);
-            if (img_w(SERVE_TIMEOUT) == 0)
+            gv.serve_timeout = (uint16_t)(gv.serve_timeout - 1);
+            if (gv.serve_timeout == 0)
                 break;
             for (int32_t i = 0; i < 0xf; i++)
                 game_delay();
@@ -1304,10 +1298,10 @@ frames:
         gv.frame_delay = gv.frame_delay_set;
         demo_input_step();
 
-        if (g_image[BALL_ALIVE] == 0) {
+        if (gv.ball_alive == 0) {
             io_log_random(0x9000);      /* tagged for sidebyside */
             play_teardown();
-            g_image[GAME_OVER] = 1;
+            gv.game_over = 1;
             return 1;                   /* the original's `stc` */
         }
         if (g_image[LEVEL_CELLS] == 0) {
@@ -1319,7 +1313,7 @@ frames:
         game_input();
         if (gv.paddle_morphing == 0)
             draw_paddle(img_w(PADDLE_SPRITES + gv.paddle_kind * 4));
-        if (g_image[LASER_ON])
+        if (gv.laser_on)
             laser_fire();
 
         /* Every 0x4e20 frames the ball is allowed to move one step more
@@ -1338,13 +1332,13 @@ frames:
                 uint8_t st = g_image[ball + B_STATE];
                 if (st == 0 || st >= 3)
                     continue;
-                if (g_image[CAUGHT] == 1 && !ball_on_paddle(ball))
+                if (gv.caught == 1 && !ball_on_paddle(ball))
                     continue;
                 ball_step(ball);
                 if (!ball_redraw(ball)) {
                     io_log_random(0x9002);
                     play_teardown();
-                    g_image[GAME_OVER] = 1;
+                    gv.game_over = 1;
                     return 1;
                 }
                 if (g_image[LEVEL_CELLS] == 0) {
@@ -1374,29 +1368,29 @@ frames:
             }
         }
 
-        if (g_image[SHOT_ON]) {
-            if (--g_image[SHOT_TIMER] == 0)
-                erase_shot(SHOT_POS, 0xc8, SHOT_TIMER);
-            img_setw(SHOT_LIFE, img_w(SHOT_LIFE) - 1);
-            if (img_w(SHOT_LIFE) == 0) {
-                g_image[SHOT_ON] = 0;
+        if (gv.net_on) {
+            if (--gv.net_timer == 0)
+                net_step(0xc8);
+            gv.net_life = (uint16_t)(gv.net_life - 1);
+            if (gv.net_life == 0) {
+                gv.net_on = 0;
                 flash_bar(0x1554);
             }
         }
-        if (g_image[EXTRA_ON]) {
-            img_setw(EXTRA_TIMER, img_w(EXTRA_TIMER) - 1);
-            if (img_w(EXTRA_TIMER) == 0) {
+        if (gv.extra_on) {
+            gv.extra_timer = (uint16_t)(gv.extra_timer - 1);
+            if (gv.extra_timer == 0) {
                 /* One cell off the bar. `stosw` leaves di two on, and the
                  * two `dec di` put it back, so what follows is a plain step
                  * to the next scan line - the bar drains downwards. */
-                uint32_t di = img_w(EXTRA_POS);
+                uint32_t di = gv.extra_pos;
                 img_vram_setw(di, 0);
-                img_setw(EXTRA_POS, cga_next_row(di));
-                img_setw(EXTRA_TIMER, 0x190);
+                gv.extra_pos = (uint16_t)(cga_next_row(di));
+                gv.extra_timer = (uint16_t)(0x190);
             }
-            img_setw(SERVE_TIMEOUT, img_w(SERVE_TIMEOUT) - 1);
-            if (img_w(SERVE_TIMEOUT) == 0)
-                g_image[EXTRA_ON] = 0;
+            gv.serve_timeout = (uint16_t)(gv.serve_timeout - 1);
+            if (gv.serve_timeout == 0)
+                gv.extra_on = 0;
         }
 
         /* A pause that gets shorter as [0x33d6] rises: three passes of 0xb4
@@ -1406,7 +1400,7 @@ frames:
         for (int32_t i = 3 - g_image[0x33d6]; i > 0; i--)
             io_delay_cycles(0xb4 * CYCLES_PER_LOOP);
 
-        if (g_image[EXTRA_ON] != 1 && g_image[0x33d5] != 3 &&
+        if (gv.extra_on != 1 && g_image[0x33d5] != 3 &&
             game_random(io_ticks(), 0x86) == 0)
             bonus_spawn();
 
@@ -1540,7 +1534,7 @@ retry:
                 life_lost();                    /* 1ac2:0735 */
                 if (g_image[0x3f1b] != 1)
                     g_image[LIVES]--;
-                if (g_image[GAME_OVER] == 1)
+                if (gv.game_over == 1)
                     break;
             }
             screen_game_over();                 /* 1ac2:0473 */
@@ -1850,7 +1844,6 @@ int32_t ball_redraw(uint32_t ball)
 #define WALL_TOP    0x04
 #define FLOOR       0xc4
 #define SOUND_BOUNCE   2
-#define SAFETY_NET  0x2e81
 
 void ball_after(uint32_t ball)
 {
@@ -1891,7 +1884,7 @@ void ball_after(uint32_t ball)
         ball_paddle(ball);              /* 1ac2:2316 */
         return;
     }
-    if (g_image[SAFETY_NET] == 1) {     /* the net catches it */
+    if (gv.net_on == 1) {     /* the net catches it */
         g_image[SOUND_REQUEST] = SOUND_BOUNCE;
         b[B_ANCHOR_X] = b[B_X];
         b[B_ANCHOR_Y] = 0xc3;
@@ -1904,7 +1897,7 @@ void ball_after(uint32_t ball)
      * play loop notices [0x2e73] reaching zero at the top of the next frame. */
     b[B_STATE] = 0;
     ball_draw(ball + B_SPRITE, b[B_X], b[B_Y]);
-    g_image[BALL_ALIVE]--;
+    gv.ball_alive--;
 }
 
 /* ------------------------------------------------------------------------
@@ -2036,9 +2029,7 @@ void ball_paddle(uint32_t ball)
  * A hit records the cell's address in the slot and the brick's centre after
  * it, and counts itself in [0x2e74].
  */
-#define HIT_COUNT  0x2e74
 #define HIT_SLOTS  0x2e89               /* four of four bytes */
-#define HIT_DIRS   0x2e99               /* the direction to leave in, per slot */
 
 void probe_cell_at(uint32_t x, uint32_t y, uint32_t slot)
 {
@@ -2054,7 +2045,7 @@ void probe_cell_at(uint32_t x, uint32_t y, uint32_t slot)
         return;
     }
     img_setw(slot, di);
-    g_image[HIT_COUNT]++;
+    gv.hit_count++;
     g_image[slot + 2] = (uint8_t)((x & 0xf0) + 8);   /* the brick's */
     g_image[slot + 3] = (uint8_t)((y & 0xf8) + 6);   /* centre */
 }
@@ -2119,7 +2110,7 @@ static void bounce_y(uint8_t *b)
 void ball_bricks(uint32_t ball)
 {
     uint8_t *b = g_image + ball;
-    g_image[HIT_COUNT] = 0;
+    gv.hit_count = 0;
 
     uint32_t x = (b[B_X] - 8) & 0xff, y = (b[B_Y] - 6) & 0xff;
     probe_cell_at(x, y, HIT_SLOTS + 0);
@@ -2127,7 +2118,7 @@ void ball_bricks(uint32_t ball)
     probe_cell_at((x + 3) & 0xff, (y + 3) & 0xff, HIT_SLOTS + 8);
     probe_cell_at(x, (y + 3) & 0xff, HIT_SLOTS + 12);
 
-    uint32_t n = g_image[HIT_COUNT];
+    uint32_t n = gv.hit_count;
     if (n == 0)
         return;
 
@@ -2143,7 +2134,7 @@ void ball_bricks(uint32_t ball)
      * and the ball's path depends on it. Reading s3 here instead sends a ball
      * that clips two corners off in the wrong direction, which took eleven
      * thousand frames of a level 6 game to show up. */
-    if (n == 3 || (n == 2 && ((s0 && s2) || (!s0 && s1 && img_w(HIT_DIRS))))) {
+    if (n == 3 || (n == 2 && ((s0 && s2) || (!s0 && s1 && gv.hit_dirs[0])))) {
         bounce_x(b);                    /* wedged, or hit on the diagonal */
         bounce_y(b);
     } else if (n == 2) {
@@ -2160,7 +2151,7 @@ void ball_bricks(uint32_t ball)
         while (i < 4 && !img_w(HIT_SLOTS + i * 4))
             i++;
         if (i < 4) {
-            uint32_t d = img_w(HIT_DIRS + i * 2);
+            uint32_t d = gv.hit_dirs[i];
             b[B_DIR_X] = (uint8_t)(d & 0xff);
             b[B_DIR_Y] = (uint8_t)(d >> 8);
             b[B_ANCHOR_Y] = (uint8_t)(b[B_Y] + (b[B_DIR_Y] ? -1 : 1));
@@ -2506,14 +2497,13 @@ void extra_life(void)
  * through the playfield.
  */
 #define BACKDROP_TABLE 0x6d95
-#define BACKDROP_PHASE 0x2efb
 #define BACKDROP_BYTES     48
 
 void field_backdrop(uint32_t y)
 {
     io_log_random(0x1fc1);              /* tagged, for sidebyside's per-frame list */
     uint32_t di = cga_at(0, y) + BRICK_LEFT;
-    uint32_t si = img_w(BACKDROP_TABLE + ((g_image[BACKDROP_PHASE] >> 3) & 7) * 2);
+    uint32_t si = img_w(BACKDROP_TABLE + ((gv.backdrop_phase >> 3) & 7) * 2);
     for (int32_t r = 0; r < 8; r++) {
         for (int32_t b = 0; b < BACKDROP_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
@@ -2523,10 +2513,10 @@ void field_backdrop(uint32_t y)
     /* `shr al,1` three times looking for a set bit, then `cmp al,4`: the
      * counter resets only when its low three bits are clear and it has
      * reached the last of the eight patterns. */
-    uint32_t p = g_image[BACKDROP_PHASE];
+    uint32_t p = gv.backdrop_phase;
     if ((p & 7) == 0 && (p >> 3) == 4)
         p = 0xff;
-    g_image[BACKDROP_PHASE] = (uint8_t)(p + 1);
+    gv.backdrop_phase = (uint8_t)(p + 1);
 }
 
 /* ========================================================================
@@ -3098,7 +3088,7 @@ void entity_hatch(uint32_t bx)
      * sits just above it: while an extra ball is in play the hatch does
      * nothing at all. Decrementing here walks a counter that is already 0
      * round to 0xffff, which is what diverged 5,872 frames into level 4. */
-    if (g_image[EXTRA_ON] != 0)
+    if (gv.extra_on != 0)
         return;
     if (img_w(bx + 6) != 0) {
         img_setw(bx + 6, img_w(bx + 6) - 1);
@@ -3480,12 +3470,12 @@ void entity_ball_hold(uint32_t bx)
     if ((g_image[bx + 8] & 0x0f) == 1 && ny == 0xb8) {
         /* It has arrived at the bottom. */
         sprite_shift_draw(x, y, img_w(img_w(bx + 6)));
-        if (g_image[SAFETY_NET] == 1) {
+        if (gv.net_on == 1) {
             g_image[ENTITY_REMOVE] = 1;
             ball_place(img_w(bx + 2), (x + 8) & 0xff, (y + 0x0b) & 0xff);
             return;
         }
-        g_image[BALL_ALIVE]--;
+        gv.ball_alive--;
         g_image[img_w(bx + 2) + B_STATE] = 0;
         g_image[ENTITY_REMOVE] = 1;
         return;
@@ -3544,7 +3534,7 @@ void shot_xor(uint32_t x, uint32_t y)
             g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
         }
     }
-    g_image[LASER_ON] = 1;
+    gv.laser_on = 1;
 }
 
 /* 1ac2:3f20  bonus_hits_ball
@@ -3578,8 +3568,6 @@ void bonus_hits_ball(uint32_t bx, uint32_t ball)
  * nibble paces the movement and the high nibble the frame, which is why it is
  * masked apart rather than simply decremented.
  */
-#define SHOT_Y   0x2e7f
-#define SHOT_X   0x2e80
 #define HIT_KIND 0x33d4
 
 /* Which ball the collision found - the original's DI across 3df1/3f20. */
@@ -3613,11 +3601,11 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
     }
 
     /* The laser shot, if one is in flight. */
-    if (g_image[LASER_ON] == 2) {
-        uint32_t sy = (g_image[SHOT_Y] + 2) & 0xff;
+    if (gv.laser_on == 2) {
+        uint32_t sy = (gv.laser_y + 2) & 0xff;
         uint32_t by = g_image[bx + 5];
         if (((sy + 1) & 0xff) >= by && sy <= ((by + 0x0f) & 0xff)) {
-            uint32_t sx = g_image[SHOT_X], bxx = g_image[bx + 4];
+            uint32_t sx = gv.laser_x, bxx = g_image[bx + 4];
             int32_t hit = (sx >= bxx && sx <= ((bxx + 0x0f) & 0xff)) ||
                       (((sx + 0x13) & 0xff) >= bxx &&
                        ((sx + 0x13) & 0xff) <= ((bxx + 0x0f) & 0xff));
@@ -3625,8 +3613,8 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
                 g_image[HIT_KIND] = 3;
                 sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
                                   img_w(img_w(bx + 6)));
-                shot_xor(g_image[SHOT_X], (g_image[SHOT_Y] + 2) & 0xff);
-                g_image[SHOT_Y] = 0xb3;
+                shot_xor(gv.laser_x, (gv.laser_y + 2) & 0xff);
+                gv.laser_y = 0xb3;
                 return;
             }
         }
@@ -3685,7 +3673,7 @@ void entity_bonus(uint32_t bx)
     uint32_t x = g_image[bx + 4], y = g_image[bx + 5];
     int32_t draw = 1;
 
-    if (g_image[EXTRA_ON] != 1 && (g_image[bx + 8] & 0x0f) == 1) {
+    if (gv.extra_on != 1 && (g_image[bx + 8] & 0x0f) == 1) {
         if (!bonus_steer(bx, &x, &y))
             goto sprite;                /* 1ac2:3a52, the draw */
     }
@@ -3716,7 +3704,7 @@ sprite:
 
 settle:
     if (g_image[HIT_KIND] == 0) {       /* 1ac2:3aaa - it reached the bottom */
-        if (g_image[SAFETY_NET] != 1) {
+        if (gv.net_on != 1) {
             g_image[ENTITY_REMOVE] = 1;
             g_image[0x33d5]--;
             g_image[BONUS_LIVE]--;
@@ -3906,7 +3894,6 @@ void life_lost(void)
  * [0x2e56] is the offset along the paddle where it landed, so it stays at the
  * same point as the paddle moves rather than snapping to the middle.
  * ===================================================================== */
-#define HOLD_TIMER  0x2e76
 #define HOLD_RESET   0x230
 #define SOUND_CATCH      7
 
@@ -3916,19 +3903,19 @@ int32_t ball_on_paddle(uint32_t ball)
     if (gv.paddle_morphing != 0)
         return 1;
 
-    if (img_w(HOLD_TIMER) == HOLD_RESET) {
+    if (gv.hold_timer == HOLD_RESET) {
         /* Not holding one yet: is this ball landing on the paddle? */
         uint32_t y = b[B_Y];
         uint32_t left = (gv.paddle_x - 3) & 0xff;
         uint32_t off = (b[B_X] - left) & 0xff;
         if (y < PADDLE_TOP || y > PADDLE_BOTTOM || b[B_X] < left ||
             off > ((gv.paddle_width + 3) & 0xff)) {
-            img_setw(HOLD_TIMER, HOLD_RESET);
+            gv.hold_timer = (uint16_t)(HOLD_RESET);
             return 1;
         }
         b[B_Y] = PADDLE_TOP;
         b[B_STATE] = 2;                 /* held */
-        img_setw(HOLD_TIMER, (img_w(HOLD_TIMER) - gv.speed_limit) & 0xffff);
+        gv.hold_timer = (uint16_t)((gv.hold_timer - gv.speed_limit) & 0xffff);
         gv.hold_offset = (uint8_t)(b[B_X] - gv.paddle_x);
         ball_redraw(ball);
         g_image[SOUND_REQUEST] = SOUND_CATCH;
@@ -3940,15 +3927,15 @@ int32_t ball_on_paddle(uint32_t ball)
 
     int32_t release = gv.key_action == 1;
     if (!release) {
-        img_setw(HOLD_TIMER, img_w(HOLD_TIMER) - 1);
-        if (img_w(HOLD_TIMER) == 0) {
+        gv.hold_timer = (uint16_t)(gv.hold_timer - 1);
+        if (gv.hold_timer == 0) {
             release = 1;
         } else if (((gv.speed_limit - 1) & 0xff) == gv.speed_step) {
             /* On the frame the ball would have moved, the timer runs down
              * twice, so a held ball is let go after the same amount of play
              * however fast the level has become. */
-            img_setw(HOLD_TIMER, img_w(HOLD_TIMER) - 1);
-            if (img_w(HOLD_TIMER) == 0)
+            gv.hold_timer = (uint16_t)(gv.hold_timer - 1);
+            if (gv.hold_timer == 0)
                 release = 1;
         }
     }
@@ -3959,7 +3946,7 @@ int32_t ball_on_paddle(uint32_t ball)
         return 0;
     }
 
-    img_setw(HOLD_TIMER, HOLD_RESET);
+    gv.hold_timer = (uint16_t)(HOLD_RESET);
     ball_after(ball);
     b[B_DIR_Y] = 1;                     /* away, upwards */
     b[B_Y] = 0xb4;
@@ -4032,39 +4019,39 @@ static void laser_dot_rows(uint32_t x, uint32_t y, int32_t moving)
 
 void laser_fire(void)
 {
-    if (gv.paddle_morphing == 0 && g_image[LASER_ON] != 2) {
+    if (gv.paddle_morphing == 0 && gv.laser_on != 2) {
         if (gv.key_action != 1)
             return;
         uint32_t x = (gv.paddle_x + 4) & 0xff;
         g_image[SOUND_REQUEST] = SHOT_SOUND;
-        g_image[SHOT_X] = (uint8_t)x;
-        uint32_t y = g_image[SHOT_Y];
+        gv.laser_x = (uint8_t)x;
+        uint32_t y = gv.laser_y;
         laser_dot_rows(x, y, 0);
         laser_dot_rows((x + 0x13) & 0xff, y, 0);
-        g_image[SHOT_Y] = 0xb1;
-        g_image[LASER_ON] = 2;
+        gv.laser_y = 0xb1;
+        gv.laser_on = 2;
         return;
     }
-    if (g_image[LASER_ON] != 2)
+    if (gv.laser_on != 2)
         return;
 
-    uint32_t x = g_image[SHOT_X], y = g_image[SHOT_Y];
+    uint32_t x = gv.laser_x, y = gv.laser_y;
     laser_dot_rows(x, y, 1);
     laser_dot_rows((x + 0x13) & 0xff, y, 1);
-    g_image[SHOT_Y] -= 2;
+    gv.laser_y -= 2;
 
     if (y < 4) {                        /* off the top of the playfield */
         shot_xor(x, y);
-        g_image[SHOT_Y] = 0xb3;
+        gv.laser_y = 0xb3;
         return;
     }
 
     /* Probe the two cells the shot covers. */
-    g_image[HIT_COUNT] = 0;
+    gv.hit_count = 0;
     uint32_t py = (x - 8) & 0xff, px = (y - 6) & 0xff;
     probe_cell_at(py, px, HIT_SLOTS + 0);
     probe_cell_at((py + 0x13) & 0xff, px, HIT_SLOTS + 4);
-    if (g_image[HIT_COUNT] == 0)
+    if (gv.hit_count == 0)
         return;
 
     for (int32_t i = 0; i < 2; i++) {
@@ -4072,8 +4059,8 @@ void laser_fire(void)
         if (cell)
             brick_hit(HIT_SLOTS + i * 4, cell, 0);   /* no ball: BP is zero */
     }
-    shot_xor(g_image[SHOT_X], (g_image[SHOT_Y] + 2) & 0xff);
-    g_image[SHOT_Y] = 0xb3;
+    shot_xor(gv.laser_x, (gv.laser_y + 2) & 0xff);
+    gv.laser_y = 0xb3;
 }
 
 /* ========================================================================
@@ -4173,33 +4160,33 @@ void fill_column(uint32_t di, uint32_t value)
 void bonus_points(void)
 {
     brick_score(0, 0x100, 0);
-    if (g_image[SAFETY_NET] == 1) {
+    if (gv.net_on == 1) {
         flash_bar(0x1554);
-        g_image[SAFETY_NET] = 0;
+        gv.net_on = 0;
         fill_column(0x1a77, 0);
     }
-    if (g_image[EXTRA_ON] != 1)
+    if (gv.extra_on != 1)
         return;
-    g_image[EXTRA_ON] = 0;
+    gv.extra_on = 0;
     fill_column(0x1a8b, 0);
 }
 
 /* 1ac2:2def  bonus 1 - the paddle catches the ball */
 void bonus_catch(void)
 {
-    if (g_image[CAUGHT] != 0)
+    if (gv.caught != 0)
         return;
-    g_image[CAUGHT] = 1;
-    img_setw(HOLD_TIMER, HOLD_RESET);
+    gv.caught = 1;
+    gv.hold_timer = (uint16_t)(HOLD_RESET);
 }
 
 /* 1ac2:2e03  bonus 3 - the laser */
 void bonus_laser(void)
 {
-    if (g_image[LASER_ON] != 0)
+    if (gv.laser_on != 0)
         return;
-    g_image[LASER_ON] = 1;
-    g_image[SHOT_Y] = 0xb3;
+    gv.laser_on = 1;
+    gv.laser_y = 0xb3;
 }
 
 /* 1ac2:2e16  bonus 4 - more balls, run by an entity of its own */
@@ -4220,14 +4207,14 @@ void bonus_wider_paddle(void) { }
 /* 1ac2:3119  bonus 5 - the safety net across the bottom */
 void bonus_net(void)
 {
-    if (g_image[SAFETY_NET] != 1) {
-        g_image[SAFETY_NET] = 1;
+    if (gv.net_on != 1) {
+        gv.net_on = 1;
         flash_bar(0x1554);
     }
-    img_setw(SHOT_LIFE, 0x1388);
-    g_image[SHOT_TIMER] = 0xc8;
+    gv.net_life = (uint16_t)(0x1388);
+    gv.net_timer = 0xc8;
     fill_column(0x1a77, 0xaaaa);
-    img_setw(SHOT_POS, 0x1a77);
+    gv.net_pos = (uint16_t)(0x1a77);
 }
 
 /* 1ac2:315b  bonus 6 - every ball in play reverses vertically and re-anchors
@@ -4297,7 +4284,7 @@ void bonus_effect(uint32_t kind)
  * ===================================================================== */
 void entity_multiball(uint32_t bx)
 {
-    if (g_image[BALL_ALIVE] == 3) {
+    if (gv.ball_alive == 3) {
         g_image[ENTITY_REMOVE] = 1;
         return;
     }
@@ -4314,7 +4301,7 @@ void entity_multiball(uint32_t bx)
     if (!src)
         return;                         /* none: nothing to multiply */
 
-    g_image[BALL_ALIVE] = 3;
+    gv.ball_alive = 3;
     uint32_t dy = g_image[src + B_DY], dx = g_image[src + B_DX];
     uint32_t x = g_image[src + B_X], y = g_image[src + B_Y];
 
@@ -4395,14 +4382,14 @@ void entity_paddle_fx(uint32_t bx)
 
         if (g_image[bx + 7] != 2) {
             /* Losing the laser: take any shot in flight off the screen. */
-            if (g_image[LASER_ON] == 2)
-                shot_xor(g_image[SHOT_X], (g_image[SHOT_Y] + 2) & 0xff);
-            g_image[LASER_ON] = 0;
+            if (gv.laser_on == 2)
+                shot_xor(gv.laser_x, (gv.laser_y + 2) & 0xff);
+            gv.laser_on = 0;
         }
         if (g_image[bx + 7] != 3) {
             /* Losing the catch: release anything held. */
-            g_image[CAUGHT] = 0;
-            img_setw(HOLD_TIMER, 0x460);
+            gv.caught = 0;
+            gv.hold_timer = (uint16_t)(0x460);
             for (int32_t i = 0; i < 3; i++) {
                 uint32_t ball = BALLS + i * BALL_STRIDE;
                 uint8_t *b = g_image + ball;
@@ -7136,9 +7123,9 @@ static int32_t bonus_end_level_run(void)
  * is the longjmp below. */
 int32_t next_player(const char *dir)
 {
-    g_image[GAME_OVER] = 0;
+    gv.game_over = 0;
     if (g_image[LIVES] == 0) {
-        g_image[GAME_OVER] = 1;
+        gv.game_over = 1;
         if (--g_image[LIVE_COUNT] == 0) {
             /* Everybody is out: keep this player's final score and finish. */
             uint32_t di = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
@@ -7146,7 +7133,7 @@ int32_t next_player(const char *dir)
             screen_results(dir);        /* 1ac2:0d68 jmp 0xea3 */
             longjmp(g_back_to_menu, 1); /* and its ret leaves play_session */
         }
-    } else if (g_image[LIVE_COUNT] == 1 && g_image[GAME_OVER] != 1) {
+    } else if (g_image[LIVE_COUNT] == 1 && gv.game_over != 1) {
         return 1;                       /* 1ac2:0d79 - carry on, no intro */
     }
 
@@ -7432,11 +7419,11 @@ int32_t bonus_script(uint32_t bx, uint32_t *px, uint32_t *py)
  */
 void bonus_stop_monsters(void)
 {
-    g_image[EXTRA_ON] = 1;
-    img_setw(SERVE_TIMEOUT, 0x2710);
-    img_setw(EXTRA_TIMER, 0x190);
+    gv.extra_on = 1;
+    gv.serve_timeout = (uint16_t)(0x2710);
+    gv.extra_timer = (uint16_t)(0x190);
     fill_column(0x1a8b, 0xaaaa);
-    img_setw(EXTRA_POS, 0x1a8b);
+    gv.extra_pos = (uint16_t)(0x1a8b);
 }
 
 /* ========================================================================
@@ -7492,7 +7479,7 @@ void input_demo(void)
             g_image[b + B_STATE] != 0) {
             /* Hold the action key down while the laser is armed, so the
              * demo fires as well as chases. */
-            gv.key_action = g_image[LASER_ON] != 0;
+            gv.key_action = gv.laser_on != 0;
 
             uint32_t ball_x = g_image[b + B_X];
             uint32_t paddle = gv.paddle_x;
