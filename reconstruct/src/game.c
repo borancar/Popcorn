@@ -4560,12 +4560,10 @@ void level_between(void)
  * Enter on an **empty** box is the "that's everyone" signal, but only once at
  * least one name has been entered; on the first box it just waits again.
  * ===================================================================== */
-#define NAME_TABLE   0x344f
-#define NAME_STRIDE  0x11b
 
 int32_t name_field(uint32_t di, uint8_t *abort)
 {
-    uint32_t si = NAME_TABLE + (gv.name_index - '1') * NAME_STRIDE;
+    uint32_t si = img_off(gv.players[gv.name_index - '1'].name);
     uint32_t len = 0;
     *abort = 0;
 
@@ -4642,7 +4640,7 @@ int32_t name_field(uint32_t di, uint8_t *abort)
      * leave it blank - which is what a five-letter name got, since its
      * shift is three. The space then goes at rec+0, not rec-1: after the
      * eleven steps `si` is rec-1 and the store is `[si+1]`. */
-    uint32_t base = NAME_TABLE + (gv.name_index - '1') * NAME_STRIDE + 0x0a;
+    uint32_t base = img_off(gv.players[gv.name_index - '1'].name) + 0x0a;
     for (uint32_t n = shift; n > 0; n--) {
         uint32_t si2 = base;
         for (int32_t k = 0x0b; k > 0; k--, si2--)
@@ -5204,33 +5202,23 @@ void banner_shift(void)
  * the game switches between them, and each has to come back to the level as
  * they left it.
  * ===================================================================== */
-#define REC_LIVES    0x0c
-#define REC_LEVEL    0x0d
-#define REC_NUMBER   0x0f
-#define REC_SCORE    0x10
-#define REC_CELLS    0x16
-#define REC_END      0xc6
 
-static void player_record_init(uint32_t di)
+static void player_record_init(player_t *p)
 {
-    g_image[di + REC_LIVES] = 5;
-    img_setw(di + REC_LEVEL, LEVEL_TABLE);
-    g_image[di + REC_NUMBER] = 0;
-    img_setw(di + REC_SCORE + 0, 0x3030);
-    img_setw(di + REC_SCORE + 2, 0x3030);
-    img_setw(di + REC_SCORE + 4, 0x3030);
-    memcpy(g_image + di + REC_CELLS, g_image + SEG_C46 + LEVEL_TABLE,
-           LEVEL_BYTES);
+    p->lives = 5;
+    p->level_src = LEVEL_TABLE;
+    p->level_number = 0;
+    memset(p->score, '0', sizeof p->score);
+    memcpy(&p->level, g_image + SEG_C46 + LEVEL_TABLE, sizeof p->level);
     for (int32_t i = 0; i < 6; i++)
-        img_setw(di + REC_END + i * 2, 0xffff);
+        p->state[i] = 0xffff;
 }
 
 void play_prepare(void)
 {
-    uint32_t di = NAME_TABLE;
-    for (uint32_t n = gv.player_count; n > 0; n--, di += NAME_STRIDE) {
-        player_record_init(di);
-        g_image[di + 0xd2] = 0;
+    for (uint32_t n = 0; n < gv.player_count; n++) {
+        player_record_init(&gv.players[n]);
+        gv.players[n].ent_count = 0;
     }
 }
 
@@ -5243,9 +5231,13 @@ void demo_start(void)
 {
     gv.input_active = (uint16_t)(INPUT_DEMO);
     g_image[CS_BASE + 0x1784] = 0xff;
-    memcpy(g_image + NAME_TABLE, g_image + 0x13f9, 12);
-    player_record_init(NAME_TABLE);
-    g_image[NAME_TABLE + 0xd3] = 0;
+    memcpy(gv.players[0].name, g_image + 0x13f9, sizeof gv.players[0].name);
+    player_record_init(&gv.players[0]);
+    /* 1ac2:1576 clears **+0xd3**, one past the entity count at +0xd2 that
+     * play_prepare clears at 1ac2:0d20 and 1ac2:0dce. So the demo's record
+     * never has its count cleared; it blanks the first byte of the first
+     * entity slot instead. The original's slip, kept. */
+    gv.players[0].ents[0][0] = 0;
     gv.player_count = 1;
 }
 
@@ -7083,8 +7075,6 @@ static int32_t bonus_end_level_run(void)
  * comparison the hall of fame uses, merged into the table, and written back to
  * popcorn.hsc.
  * ===================================================================== */
-#define REC_STATE   0xc6
-#define REC_ENTS    0xd2
 
 /* Returns 1 when the original threw its own return address away and jumped
  * straight back to play_loop at 1ac2:034f - a single player who still has
@@ -7102,8 +7092,7 @@ int32_t next_player(const char *dir)
         gv.game_over = 1;
         if (--gv.live_count == 0) {
             /* Everybody is out: keep this player's final score and finish. */
-            uint32_t di = NAME_TABLE + gv.cur_player * NAME_STRIDE;
-            memcpy(g_image + di + REC_SCORE, gv.score_text,
+            memcpy(gv.players[gv.cur_player].score, gv.score_text,
                    sizeof gv.score_text);
             screen_results(dir);        /* 1ac2:0d68 jmp 0xea3 */
             longjmp(g_back_to_menu, 1); /* and its ret leaves play_session */
@@ -7113,46 +7102,40 @@ int32_t next_player(const char *dir)
     }
 
     /* Save this player. */
-    uint32_t di = NAME_TABLE + gv.cur_player * NAME_STRIDE;
-    g_image[di + REC_LIVES] = gv.lives;
-    img_setw(di + REC_LEVEL, gv.level_src);
-    g_image[di + REC_NUMBER] = gv.level_number;
-    memcpy(g_image + di + REC_SCORE, gv.score_text, sizeof gv.score_text);
-    memcpy(g_image + di + REC_CELLS, &gv.level, sizeof gv.level);
-    memcpy(g_image + di + REC_STATE, g_image + 0x30b0, 12);
+    player_t *p = &gv.players[gv.cur_player];
+    p->lives = gv.lives;
+    p->level_src = gv.level_src;
+    p->level_number = gv.level_number;
+    memcpy(p->score, gv.score_text, sizeof p->score);
+    p->level = gv.level;
+    memcpy(p->state, g_image + 0x30b0, sizeof p->state);
 
     /* And its entities, count first. */
-    g_image[di + REC_ENTS] = 0;
-    uint32_t out = di + REC_ENTS + 1;
+    p->ent_count = 0;
     for (uint32_t bx = gv.entity_head; bx != 0xffff;
-         bx = img_w(bx + E_NEXT)) {
-        g_image[di + REC_ENTS]++;
-        memcpy(g_image + out, g_image + bx, 12);
-        out += 12;
-    }
+         bx = img_w(bx + E_NEXT))
+        memcpy(p->ents[p->ent_count++], g_image + bx, sizeof p->ents[0]);
     entities_clear();
 
     /* Move on to the next player who still has lives. */
-    uint32_t si;
+    const player_t *q;
     do {
         gv.cur_player = (uint8_t)
             ((gv.cur_player + 1) % gv.player_count);
-        si = NAME_TABLE + gv.cur_player * NAME_STRIDE;
-    } while (g_image[si + REC_LIVES] == 0);
+        q = &gv.players[gv.cur_player];
+    } while (q->lives == 0);
 
     /* Restore them. */
-    memcpy(g_image + PLAYER_NAME, g_image + si, 12);
-    gv.lives = g_image[si + REC_LIVES];
-    gv.level_src = (uint16_t)(img_w(si + REC_LEVEL));
-    gv.level_number = g_image[si + REC_NUMBER];
-    memcpy(gv.score_text, g_image + si + REC_SCORE, sizeof gv.score_text);
-    memcpy(&gv.level, g_image + si + REC_CELLS, sizeof gv.level);
-    memcpy(g_image + 0x30b0, g_image + si + REC_STATE, 12);
+    memcpy(g_image + PLAYER_NAME, q->name, sizeof q->name);
+    gv.lives = q->lives;
+    gv.level_src = q->level_src;
+    gv.level_number = q->level_number;
+    memcpy(gv.score_text, q->score, sizeof gv.score_text);
+    gv.level = q->level;
+    memcpy(g_image + 0x30b0, q->state, sizeof q->state);
 
-    uint32_t n = g_image[si + REC_ENTS];
-    uint32_t in = si + REC_ENTS + 1;
-    for (uint32_t k = 0; k < n; k++, in += 12)
-        memcpy(g_image + entity_alloc(), g_image + in, 12);
+    for (uint32_t k = 0; k < q->ent_count; k++)
+        memcpy(g_image + entity_alloc(), q->ents[k], sizeof q->ents[0]);
 
     panel_draw();
     level_colours();
@@ -7212,9 +7195,10 @@ void screen_results(const char *dir)
 {
     if (gv.player_count == 1) {
         /* 1ac2:1053 - the only record's name, then its six score digits. */
-        memcpy(g_image + HSC_SCRATCH, g_image + NAME_TABLE, 12);
+        memcpy(g_image + HSC_SCRATCH, gv.players[0].name,
+               sizeof gv.players[0].name);
         memcpy(g_image + HSC_SCRATCH + 12,
-               g_image + NAME_TABLE + REC_SCORE, 6);
+               gv.players[0].score, sizeof gv.players[0].score);
         results_finish(dir);
         return;
     }
@@ -7223,19 +7207,20 @@ void screen_results(const char *dir)
     level_intro();
 
     /* An insertion sort of the player records into the scratch at 0x1aef. */
-    uint32_t di = HSC_SCRATCH, si = NAME_TABLE;
-    memcpy(g_image + di, g_image + si, 12);
-    memcpy(g_image + di + 12, g_image + si + REC_SCORE, 6);
-    si += NAME_STRIDE;
-    for (uint32_t n = gv.player_count - 1; n > 0; n--,
-         si += NAME_STRIDE) {
+    uint32_t di = HSC_SCRATCH;
+    const player_t *q = &gv.players[0];
+    memcpy(g_image + di, q->name, sizeof q->name);
+    memcpy(g_image + di + 12, q->score, sizeof q->score);
+    for (uint32_t k = 1; k < gv.player_count; k++) {
+        q = &gv.players[k];
         di += HSC_ENTRY;
         uint32_t at = di;
-        while (at > HSC_SCRATCH && score_before(si + REC_SCORE, at - HSC_ENTRY + 12))
+        while (at > HSC_SCRATCH &&
+               score_before(img_off(q->score), at - HSC_ENTRY + 12))
             at -= HSC_ENTRY;
         memmove(g_image + at + HSC_ENTRY, g_image + at, di - at);
-        memcpy(g_image + at, g_image + si, 12);
-        memcpy(g_image + at + 12, g_image + si + REC_SCORE, 6);
+        memcpy(g_image + at, q->name, sizeof q->name);
+        memcpy(g_image + at + 12, q->score, sizeof q->score);
     }
 
     /* 1ac2:0f02 - the CLASSEMENT panel. The port had a sketch of this: the
