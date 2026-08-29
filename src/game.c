@@ -51,9 +51,8 @@ const char *g_dir = "";
  * position written to +0x00/+0x01 is anchor plus offset.  So +0x18/+0x19 is
  * not where the ball is, and stays put until the next bounce.
  */
-void ball_step(uint32_t ball)
+void ball_step(ball_t *b)
 {
-    ball_t *b = (ball_t *)(g_image + ball);
     uint32_t dy = b->dy, dx = b->dx;
     uint32_t off_x, off_y;
 
@@ -1263,7 +1262,7 @@ int32_t play_loop(void)
     b->bounces = 0;
     gv.balls[1].state = 0;
     gv.balls[2].state = 0;
-    ball_draw(img_off(b->sprite), b->x, b->y);
+    ball_draw(b->sprite, b->x, b->y);
 
     flush_keys();                   /* 1ac2:0106 */
 
@@ -1321,8 +1320,8 @@ frames:
 
         if (--gv.speed_step != 0) {
             for (int32_t i = 0; i < 3; i++) {
-                uint32_t ball = img_off(&gv.balls[i]);
-                uint8_t st = ball_at(ball)->state;
+                ball_t *ball = &gv.balls[i];
+                uint8_t st = ball->state;
                 if (st == 0 || st >= 3)
                     continue;
                 if (gv.caught == 1 && !ball_on_paddle(ball))
@@ -1753,12 +1752,18 @@ void level_intro(void)
  * drawing the same sprite twice erases it. Everything that moves in this game
  * is drawn this way.
  */
-void ball_draw(uint32_t sprite, uint32_t x, uint32_t y)
+/* `rows` is void, not uint16_t *, on purpose. The four words live inside a
+ * packed record at an odd address - gv.balls[i] is at 0x2ea1 + i * 0x1e - so a
+ * typed pointer to them claims an alignment they do not have, and GCC is right
+ * to warn about it. Bytes have no alignment to get wrong, and bytes are what
+ * goes into video memory anyway. */
+void ball_draw(const void *rows, uint32_t x, uint32_t y)
 {
+    const uint8_t *p = rows;
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 4; r++) {
-        g_vram[di & (CGA_SIZE - 1)] ^= g_image[sprite + r * 2];
-        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[sprite + r * 2 + 1];
+        g_vram[di & (CGA_SIZE - 1)] ^= p[r * 2];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= p[r * 2 + 1];
         di = cga_next_row(di);
     }
 }
@@ -1783,9 +1788,8 @@ void ball_draw(uint32_t sprite, uint32_t x, uint32_t y)
  */
 #define BALL_SPRITE_SRC 0x48fb
 
-int32_t ball_redraw(uint32_t ball)
+int32_t ball_redraw(ball_t *b)
 {
-    ball_t *b = (ball_t *)(g_image + ball);
 
     memcpy(b->prev_spr, b->sprite, sizeof b->sprite);
     memcpy(b->sprite, g_image + BALL_SPRITE_SRC, sizeof b->sprite);
@@ -1798,10 +1802,10 @@ int32_t ball_redraw(uint32_t ball)
         }
     }
 
-    ball_draw(img_off(b->prev_spr), b->prev_x, b->prev_y);
+    ball_draw(b->prev_spr, b->prev_x, b->prev_y);
     b->prev_x = b->x;
     b->prev_y = b->y;
-    ball_draw(img_off(b->sprite), b->x, b->y);
+    ball_draw(b->sprite, b->x, b->y);
     return 1;
 }
 
@@ -1830,9 +1834,8 @@ int32_t ball_redraw(uint32_t ball)
 #define FLOOR       0xc4
 #define SOUND_BOUNCE   2
 
-void ball_after(uint32_t ball)
+void ball_after(ball_t *b)
 {
-    ball_t *b = (ball_t *)(g_image + ball);
 
     if (b->bounces >= 0x23) {
         b->bounces = 0;
@@ -1863,10 +1866,10 @@ void ball_after(uint32_t ball)
         b->anchor_y = (uint8_t)(y + 1);
     }
 
-    ball_bricks(ball);                  /* 1ac2:254d */
+    ball_bricks(b);                     /* 1ac2:254d */
 
     if (b->y != FLOOR) {
-        ball_paddle(ball);              /* 1ac2:2316 */
+        ball_paddle(b);                 /* 1ac2:2316 */
         return;
     }
     if (gv.net_on == 1) {     /* the net catches it */
@@ -1881,7 +1884,7 @@ void ball_after(uint32_t ball)
     /* Lost. Erase it, mark it idle, and take one off the live count - the
      * play loop notices [0x2e73] reaching zero at the top of the next frame. */
     b->state = 0;
-    ball_draw(img_off(b->sprite), b->x, b->y);
+    ball_draw(b->sprite, b->x, b->y);
     gv.ball_alive--;
 }
 
@@ -1937,9 +1940,8 @@ static void paddle_slope(ball_t *b, uint32_t table, uint32_t index)
     b->dx = (uint8_t)(w >> 8);
 }
 
-void ball_paddle(uint32_t ball)
+void ball_paddle(ball_t *b)
 {
-    ball_t *b = (ball_t *)(g_image + ball);
     uint32_t y = b->y;
 
     if (y < PADDLE_TOP || y > PADDLE_BOTTOM)
@@ -2092,9 +2094,8 @@ static void bounce_y(ball_t *b)
  * the ball sprite is 16 by 4 but only its middle counts for collision, which
  * is why it can graze a brick without taking it.
  */
-void ball_bricks(uint32_t ball)
+void ball_bricks(ball_t *b)
 {
-    ball_t *b = (ball_t *)(g_image + ball);
     gv.hit_count = 0;
 
     uint32_t x = (b->x - 8) & 0xff, y = (b->y - 6) & 0xff;
@@ -2164,7 +2165,7 @@ void ball_bricks(uint32_t ball)
     for (int32_t i = 0; i < 4; i++) {
         uint32_t cell = img_w(HIT_SLOTS + i * 4);
         if (cell)
-            brick_hit(HIT_SLOTS + i * 4, cell, ball);
+            brick_hit(HIT_SLOTS + i * 4, cell, b);
     }
 }
 
@@ -2190,13 +2191,13 @@ static void brick_score(uint32_t a, uint32_t b, uint32_t c)
 }
 
 /* The common opening: score, sound, and clear the ball's bounce counter. */
-static void brick_common(uint32_t ball, uint32_t sound,
+static void brick_common(ball_t *ball, uint32_t sound,
                          uint32_t a, uint32_t b, uint32_t c)
 {
     brick_score(a, b, c);
     g_image[SOUND_REQUEST] = (uint8_t)sound;
     if (ball)
-        ball_at(ball)->bounces = 0;
+        ball->bounces = 0;
 }
 
 /* Attach a fresh entity to the brick that was just hit. `slot` is the hit
@@ -2248,7 +2249,7 @@ static uint32_t bonus_kind(void)
  * time in three - removes the brick at once and leaves something behind:
  * brick 1 a score popup (0x3561), brick 2 a falling capsule (0x3273).
  */
-static void brick_1_or_2(uint32_t slot, uint32_t ball, int32_t is_two)
+static void brick_1_or_2(uint32_t slot, ball_t *ball, int32_t is_two)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 2);
 
@@ -2284,43 +2285,43 @@ static void brick_1_or_2(uint32_t slot, uint32_t ball, int32_t is_two)
     gv.bonus_cap++;
 }
 
-void brick_1(uint32_t slot, uint32_t ball) { brick_1_or_2(slot, ball, 0); }
-void brick_2(uint32_t slot, uint32_t ball) { brick_1_or_2(slot, ball, 1); }
+void brick_1(uint32_t slot, ball_t *ball) { brick_1_or_2(slot, ball, 0); }
+void brick_2(uint32_t slot, ball_t *ball) { brick_1_or_2(slot, ball, 1); }
 
 /* 1ac2:2a3f  brick 3 - hardens into a 4, which nothing can break */
-void brick_3(uint32_t slot, uint32_t ball)
+void brick_3(uint32_t slot, ball_t *ball)
 {
     g_image[SOUND_REQUEST] = 4;
     if (ball)
-        ball_at(ball)->bounces++;
+        ball->bounces++;
     img_setw(brick_entity(slot, 0x365e, 0x66f4, 8) + 2, img_w(slot));
     g_image[img_w(slot)] = 4;
 }
 
 /* 1ac2:3221  bricks 4 and 12 - indestructible; the ball only bounces */
-void brick_solid(uint32_t slot, uint32_t ball)
+void brick_solid(uint32_t slot, ball_t *ball)
 {
     (void)slot;
     g_image[SOUND_REQUEST] = SOUND_BOUNCE;
     if (ball)
-        ball_at(ball)->bounces++;
+        ball->bounces++;
 }
 
 /* 1ac2:2a73, 1ac2:2ab4, 1ac2:2af5  bricks 5, 6, 7 - one step down the
  * chain per hit */
-void brick_5(uint32_t slot, uint32_t ball)
+void brick_5(uint32_t slot, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 2);
     brick_degrade(slot, 6, 0x6466, 0x6486);
 }
 
-void brick_6(uint32_t slot, uint32_t ball)
+void brick_6(uint32_t slot, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 3);
     brick_degrade(slot, 7, 0x6486, 0x64a6);
 }
 
-void brick_7(uint32_t slot, uint32_t ball)
+void brick_7(uint32_t slot, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 5);
     brick_degrade(slot, 8, 0x64a6, 0x64c6);
@@ -2328,7 +2329,7 @@ void brick_7(uint32_t slot, uint32_t ball)
 
 /* 1ac2:2b36  brick 8 - the end of that chain. A hundred points, and it leaves
  * an entity running 0x366f where it was. */
-void brick_8(uint32_t slot, uint32_t ball)
+void brick_8(uint32_t slot, ball_t *ball)
 {
     brick_common(ball, 4, 0, 0x100, 0);
     g_image[img_w(slot)] = 0;
@@ -2353,7 +2354,7 @@ static uint32_t brick_tag(uint32_t v)
     return v;
 }
 
-void brick_hit(uint32_t slot, uint32_t cell, uint32_t ball)
+void brick_hit(uint32_t slot, uint32_t cell, ball_t *ball)
 {
     io_log_random(0x8000 | brick_tag(g_image[cell]));  /* for sidebyside */
     switch (g_image[cell]) {
@@ -3290,16 +3291,16 @@ void entity_plain(uint32_t bx)
 /* Put a ball down at a point and set it going upwards: position, anchor and
  * both accumulators, a fresh sprite, and draw it. Three handlers do exactly
  * this and only the offsets they add differ. */
-void ball_place(uint32_t ball, uint32_t x, uint32_t y)
+void ball_place(ball_t *ball, uint32_t x, uint32_t y)
 {
-    ball_t *b = (ball_t *)(g_image + ball);
+    ball_t *b = ball;
     b->x = b->prev_x = b->anchor_x = (uint8_t)x;
     b->y = b->prev_y = b->anchor_y = (uint8_t)y;
     b->acc_x = b->acc_y = 0;
     b->state = 1;
     b->dir_y = 1;                     /* set off upwards */
     memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
-    ball_draw(img_off(b->sprite), b->x, b->y);
+    ball_draw(b->sprite, b->x, b->y);
 }
 
 /* 1ac2:36a1  from brick 9 - where the ball comes back
@@ -3314,7 +3315,7 @@ void entity_ball_arrive(uint32_t bx)
     if (gv.entity_remove != 1)
         return;
 
-    ball_place(img_w(bx + 2), (g_image[bx + 4] + 8) & 0xff,
+    ball_place(ball_at(img_w(bx + 2)), (g_image[bx + 4] + 8) & 0xff,
                (g_image[bx + 5] - 4) & 0xff);
 }
 
@@ -3339,7 +3340,7 @@ void entity_cells_timer(uint32_t bx)
  * quotient is the row and the remainder the column, so x = column * 16 + 8 and
  * y = row * 8 + 6, which is the same grid as everywhere else read backwards.
  */
-void brick_9(uint32_t slot, uint32_t ball)
+void brick_9(uint32_t slot, ball_t *ball)
 {
     if (!ball)
         return;
@@ -3349,10 +3350,10 @@ void brick_9(uint32_t slot, uint32_t ball)
     for (uint32_t i = 0; i < n; i++)
         gv.level.cells[gv.level.teleport[i]] = 4;
 
-    ball_t *b = (ball_t *)(g_image + ball);
+    ball_t *b = ball;
     b->state = 3;
     b->bounces = 0;
-    ball_draw(img_off(b->sprite), b->x, b->y);
+    ball_draw(b->sprite, b->x, b->y);
 
     img_setw(brick_entity(slot, 0x3696, 0x6abe, 0x32) + 2, img_w(slot));
 
@@ -3369,7 +3370,7 @@ void brick_9(uint32_t slot, uint32_t ball)
 
     si = entity_alloc();
     img_setw(si + 0, 0x36a1);
-    img_setw(si + 2, ball);
+    img_setw(si + 2, img_off(ball));    /* the slot holds its address */
     img_setw(si + 6, 0x6ad0);
     g_image[si + 8] = g_image[si + 9] = 0x32;
     g_image[si + 4] = (uint8_t)((idx % 12) * 16 + 8);
@@ -3378,7 +3379,7 @@ void brick_9(uint32_t slot, uint32_t ball)
 
 /* 1ac2:2c59  brick 10 - fifty points, and the ball goes into state 4 while an
  * entity runs at where the brick was. */
-void brick_10(uint32_t slot, uint32_t ball)
+void brick_10(uint32_t slot, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 5);
     g_image[img_w(slot)] = 0;
@@ -3390,16 +3391,16 @@ void brick_10(uint32_t slot, uint32_t ball)
 
     uint32_t si = entity_alloc();
     img_setw(si + 0, 0x37e0);
-    img_setw(si + 2, ball);
+    img_setw(si + 2, img_off(ball));    /* likewise */
     img_setw(si + 6, 0x6b88);
     g_image[si + 4] = (uint8_t)x;
     g_image[si + 5] = (uint8_t)y;
     g_image[si + 8] = g_image[si + 9] = 0x69;
     sprite_shift_draw(x, y, 0x6b9c);
 
-    ball_t *b = (ball_t *)(g_image + ball);
+    ball_t *b = ball;
     b->state = 4;
-    ball_draw(img_off(b->sprite), b->x, b->y);
+    ball_draw(b->sprite, b->x, b->y);
 }
 
 /* ------------------------------------------------------------------------
@@ -3456,7 +3457,7 @@ void entity_ball_hold(uint32_t bx)
         sprite_shift_draw(x, y, img_w(img_w(bx + 6)));
         if (gv.net_on == 1) {
             gv.entity_remove = 1;
-            ball_place(img_w(bx + 2), (x + 8) & 0xff, (y + 0x0b) & 0xff);
+            ball_place(ball_at(img_w(bx + 2)), (x + 8) & 0xff, (y + 0x0b) & 0xff);
             return;
         }
         gv.ball_alive--;
@@ -3478,7 +3479,7 @@ void entity_ball_hold(uint32_t bx)
         brick_score(0, 0, 0x0303);
         ry = (ry + 4) & 0xff;
     }
-    ball_place(img_w(bx + 2), (g_image[bx + 4] + 8) & 0xff, (ry + 0x0c) & 0xff);
+    ball_place(ball_at(img_w(bx + 2)), (g_image[bx + 4] + 8) & 0xff, (ry + 0x0c) & 0xff);
     if (gv.hit_kind != 3)
         brick_score(0, 0, 5);
 }
@@ -3526,14 +3527,14 @@ void shot_xor(uint32_t x, uint32_t y)
  * Do a capsule's sixteen-pixel box and a ball's four overlap? Sets [0x33d4] to
  * 2 if so, which is the answer bonus_update passes back up.
  */
-void bonus_hits_ball(uint32_t bx, uint32_t ball)
+void bonus_hits_ball(uint32_t bx, const ball_t *ball)
 {
-    uint32_t by = g_image[bx + 5], ballY = ball_at(ball)->y;
+    uint32_t by = g_image[bx + 5], ballY = ball->y;
     if (by > ((ballY + 3) & 0xff))
         return;
     if (((by + 0x0f) & 0xff) < ballY)
         return;
-    uint32_t bxx = g_image[bx + 4], ballX = ball_at(ball)->x;
+    uint32_t bxx = g_image[bx + 4], ballX = ball->x;
     if (((bxx + 0x0f) & 0xff) < ballX)
         return;
     if (bxx > ((ballX + 3) & 0xff))
@@ -3554,7 +3555,7 @@ void bonus_hits_ball(uint32_t bx, uint32_t ball)
  */
 
 /* Which ball the collision found - the original's DI across 3df1/3f20. */
-static uint32_t g_hit_ball = offsetof(game_vars, balls);
+static int32_t g_hit_ball;              /* an index: 0 was the original's default */
 
 void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
 {
@@ -3619,12 +3620,12 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
      * DI and entity_bonus bounces *that* ball, not the first one it can find
      * afterwards. */
     for (int32_t i = 0; i < 3; i++) {
-        uint32_t ball = img_off(&gv.balls[i]);
-        if (ball_at(ball)->state != 1)
+        ball_t *ball = &gv.balls[i];
+        if (ball->state != 1)
             continue;
         bonus_hits_ball(bx, ball);
         if (gv.hit_kind == 2) {
-            g_hit_ball = ball;
+            g_hit_ball = i;
             return;
         }
     }
@@ -3670,7 +3671,7 @@ void entity_bonus(uint32_t bx)
     }
 
     {   /* A ball: fresh slope, re-anchor, and reverse both ways. */
-        ball_t *b = (ball_t *)(g_image + g_hit_ball);
+        ball_t *b = &gv.balls[g_hit_ball];
         b->dy = (uint8_t)(game_random(io_ticks(), 7) + 1);
         b->dx = (uint8_t)(game_random(io_ticks(), 7) + 1);
         b->anchor_x = b->x;
@@ -3880,9 +3881,8 @@ void life_lost(void)
 #define HOLD_RESET   0x230
 #define SOUND_CATCH      7
 
-int32_t ball_on_paddle(uint32_t ball)
+int32_t ball_on_paddle(ball_t *b)
 {
-    ball_t *b = (ball_t *)(g_image + ball);
     if (gv.paddle_morphing != 0)
         return 1;
 
@@ -3900,7 +3900,7 @@ int32_t ball_on_paddle(uint32_t ball)
         b->state = 2;                 /* held */
         gv.hold_timer = (uint16_t)((gv.hold_timer - gv.speed_limit) & 0xffff);
         gv.hold_offset = (uint8_t)(b->x - gv.paddle_x);
-        ball_redraw(ball);
+        ball_redraw(b);
         g_image[SOUND_REQUEST] = SOUND_CATCH;
         return 0;
     }
@@ -3925,19 +3925,19 @@ int32_t ball_on_paddle(uint32_t ball)
 
     if (!release) {
         b->x = (uint8_t)(gv.paddle_x + gv.hold_offset);
-        ball_redraw(ball);
+        ball_redraw(b);
         return 0;
     }
 
     gv.hold_timer = (uint16_t)(HOLD_RESET);
-    ball_after(ball);
+    ball_after(b);
     b->dir_y = 1;                     /* away, upwards */
     b->y = 0xb4;
     b->anchor_x = b->x;
     b->anchor_y = 0xb4;
     b->acc_x = b->acc_y = 0;
     b->state = 1;
-    ball_redraw(ball);
+    ball_redraw(b);
     return 1;
 }
 
@@ -3962,11 +3962,11 @@ void read_new_key(uint32_t which)
  * hall-of-fame sort walks the table with this. `scasb` compares and steps, so
  * the first digit that differs decides.
  */
-int32_t score_before(uint32_t si, uint32_t di)
+int32_t score_before(const uint8_t *a, uint32_t di)
 {
     for (int32_t i = 0; i < 6; i++)
-        if (g_image[si + i] != g_image[di + i])
-            return g_image[si + i] > g_image[di + i];
+        if (a[i] != g_image[di + i])
+            return a[i] > g_image[di + i];
     return 0;
 }
 
@@ -4040,7 +4040,7 @@ void laser_fire(void)
     for (int32_t i = 0; i < 2; i++) {
         uint32_t cell = img_w(HIT_SLOTS + i * 4);
         if (cell)
-            brick_hit(HIT_SLOTS + i * 4, cell, 0);   /* no ball: BP is zero */
+            brick_hit(HIT_SLOTS + i * 4, cell, NULL); /* no ball: BP is zero */
     }
     shot_xor(gv.laser_x, (gv.laser_y + 2) & 0xff);
     gv.laser_y = 0xb3;
@@ -4273,10 +4273,10 @@ void entity_multiball(uint32_t bx)
     }
 
     /* Find one that is in play to copy. */
-    uint32_t src = 0;
+    ball_t *src = NULL;
     for (int32_t i = 0; i < 3; i++) {
-        uint32_t b = img_off(&gv.balls[i]);
-        if (ball_at(b)->state != 0) {
+        ball_t *b = &gv.balls[i];
+        if (b->state != 0) {
             src = b;
             break;
         }
@@ -4285,21 +4285,21 @@ void entity_multiball(uint32_t bx)
         return;                         /* none: nothing to multiply */
 
     gv.ball_alive = 3;
-    uint32_t dy = ball_at(src)->dy, dx = ball_at(src)->dx;
-    uint32_t x = ball_at(src)->x, y = ball_at(src)->y;
+    uint32_t dy = src->dy, dx = src->dx;
+    uint32_t x = src->x, y = src->y;
 
     for (int32_t i = 0; i < 3; i++) {
-        uint32_t si = img_off(&gv.balls[i]);
-        if (ball_at(si)->state != 0)
+        ball_t *si = &gv.balls[i];
+        if (si->state != 0)
             continue;
-        ball_t *b = (ball_t *)(g_image + si);
+        ball_t *b = si;
         b->x = b->prev_x = b->anchor_x = (uint8_t)x;
         b->y = b->prev_y = b->anchor_y = (uint8_t)y;
         dx = (dx + 2) & 0xff;           /* each copy a little steeper */
         b->dy = (uint8_t)dy;
         b->dx = (uint8_t)dx;
-        b->dir_x = ball_at(src)->dir_x;
-        b->dir_y = ball_at(src)->dir_y;
+        b->dir_x = src->dir_x;
+        b->dir_y = src->dir_y;
         b->acc_x = b->acc_y = 1;
         b->state = 1;
         b->bounces = 0;
@@ -4312,7 +4312,7 @@ void entity_multiball(uint32_t bx)
                 b->sprite[r] = (uint16_t)((w >> shift) | (w << (16 - shift)));
             }
         }
-        ball_draw(si + B_SPRITE, b->x, b->y);
+        ball_draw(si->sprite, b->x, b->y);
     }
     gv.entity_remove = 1;
 }
@@ -4371,8 +4371,8 @@ void entity_paddle_fx(uint32_t bx)
             gv.caught = 0;
             gv.hold_timer = (uint16_t)(0x460);
             for (int32_t i = 0; i < 3; i++) {
-                uint32_t ball = img_off(&gv.balls[i]);
-                ball_t *b = (ball_t *)(g_image + ball);
+                ball_t *ball = &gv.balls[i];
+                ball_t *b = ball;
                 if (b->state != 2)
                     continue;
                 ball_after(ball);
@@ -4944,7 +4944,7 @@ void panel_finish(void)
 
 /* 1ac2:2d68  brick 11 - 72 points, and the cell becomes 0x0c, which is not a
  * brick at all: the drawing code has a special case for it. */
-void brick_11(uint32_t slot, uint32_t ball)
+void brick_11(uint32_t slot, ball_t *ball)
 {
     /* **Not** brick_common. 1ac2:2d68 scores and asks for a sound and then
      * never touches the ball: there is no `inc [di+0x1d]` and no bp anywhere
@@ -6717,12 +6717,11 @@ static void endgame_curtain(int32_t cells)
     panel_finish();
 }
 
-int32_t ball_after_endgame(uint32_t ball)
+int32_t ball_after_endgame(ball_t *b)
 {
     /* Once per step of the bonus's own ball loop, which reaches no other sync
      * point - the whole loop is one indivisible move otherwise. */
     io_frame_sync_extra(SYNC_ENDGAME);
-    ball_t *b = (ball_t *)(g_image + ball);
     uint32_t x = b->x, y = b->y;
 
     if (x <= WALL_LEFT || x >= WALL_RIGHT) {
@@ -6754,7 +6753,7 @@ int32_t ball_after_endgame(uint32_t ball)
         if (y == 0x3c) {
             /* The upper chamber: the level is over. */
             speaker_off();
-            ball_draw(img_off(gv.balls[0].sprite), gv.balls[0].x, gv.balls[0].y);
+            ball_draw(gv.balls[0].sprite, gv.balls[0].x, gv.balls[0].y);
             for (uint32_t si = 0x6abe; img_w(si) != 0xffff; si += 2) {
                 /* 1ac2:4769. The stretch between the ball reaching the
                  * chamber and the curtain starting had no sync of its own,
@@ -6792,14 +6791,14 @@ int32_t ball_after_endgame(uint32_t ball)
     }
 
     if (b->y != FLOOR) {
-        ball_paddle(ball);
+        ball_paddle(b);
         return 0;
     }
 
     /* It reached the bottom: the level is over the other way. */
     speaker_off();
     blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
-    ball_draw(img_off(gv.balls[0].sprite), gv.balls[0].x, gv.balls[0].y);
+    ball_draw(gv.balls[0].sprite, gv.balls[0].x, gv.balls[0].y);
     if (g_image[0x3f1b] != 1)
         gv.lives++;               /* a free life, unless cheating */
     gv.sweep_y[0] = 0x75;
@@ -7039,13 +7038,13 @@ static int32_t bonus_end_level_run(void)
     b->anchor_y = b->y;
     b->acc_x = b->acc_y = 0;
     b->state = 1;
-    ball_draw(img_off(b->sprite), b->x, b->y);
+    ball_draw(b->sprite, b->x, b->y);
 
     for (;;) {
         input_and_draw_paddle();
-        ball_step(img_off(&gv.balls[0]));
-        ball_redraw(img_off(&gv.balls[0]));
-        int32_t how = ball_after_endgame(img_off(&gv.balls[0]));
+        ball_step(&gv.balls[0]);
+        ball_redraw(&gv.balls[0]);
+        int32_t how = ball_after_endgame(&gv.balls[0]);
         if (how)
             return how;
         for (int32_t i = 0; i < 4; i++) {
@@ -7216,7 +7215,7 @@ void screen_results(const char *dir)
         di += HSC_ENTRY;
         uint32_t at = di;
         while (at > HSC_SCRATCH &&
-               score_before(img_off(q->score), at - HSC_ENTRY + 12))
+               score_before(q->score, at - HSC_ENTRY + 12))
             at -= HSC_ENTRY;
         memmove(g_image + at + HSC_ENTRY, g_image + at, di - at);
         memcpy(g_image + at, q->name, sizeof q->name);
@@ -7434,15 +7433,15 @@ void input_demo(void)
 
     uint32_t chasing = g_image[DEMO_BALL];
     if (chasing != 0xff) {
-        uint32_t b = img_off(&gv.balls[chasing]);
-        if (ball_at(b)->y >= DEMO_CHASE_Y &&
-            ball_at(b)->dir_y != 1 &&
-            ball_at(b)->state != 0) {
+        ball_t *b = &gv.balls[chasing];
+        if (b->y >= DEMO_CHASE_Y &&
+            b->dir_y != 1 &&
+            b->state != 0) {
             /* Hold the action key down while the laser is armed, so the
              * demo fires as well as chases. */
             gv.key_action = gv.laser_on != 0;
 
-            uint32_t ball_x = ball_at(b)->x;
+            uint32_t ball_x = b->x;
             uint32_t paddle = gv.paddle_x;
             if (ball_x < paddle) {
                 if (paddle != gv.paddle_min)
@@ -7459,10 +7458,10 @@ void input_demo(void)
 
     /* Nothing to chase, or the one we had is gone: pick another. */
     for (uint32_t cl = 0; cl < 3; cl++) {
-        uint32_t b = img_off(&gv.balls[cl]);
-        if (ball_at(b)->y > DEMO_CHASE_Y &&
-            ball_at(b)->state != 0 &&
-            ball_at(b)->dir_y != 1) {
+        ball_t *b = &gv.balls[cl];
+        if (b->y > DEMO_CHASE_Y &&
+            b->state != 0 &&
+            b->dir_y != 1) {
             g_image[DEMO_BALL] = (uint8_t)cl;
             demo_clamp();
             return;
@@ -7584,12 +7583,12 @@ void entity_anim_brick(uint32_t bx)
 }
 
 /* 1ac2:2ccd  brick_animated - cells 16 to 21 */
-void brick_animated(uint32_t slot, uint32_t ball)
+void brick_animated(uint32_t slot, ball_t *ball)
 {
     brick_score(0, 0, 0x0303);
     g_image[SOUND_REQUEST] = 3;
     if (ball)
-        g_image[ball + 0x1d]++;
+        ball->bounces++;
 
     uint32_t cell = img_w(slot);
     uint32_t was = g_image[cell];

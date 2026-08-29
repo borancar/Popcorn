@@ -531,7 +531,7 @@ static inline void img_setw(uint32_t off, uint32_t v)
  * offsets to these calls, and the mapping of registers to arguments is part of
  * what the check asserts.
  */
-void ball_step(uint32_t ball);                          /* 1ac2:27d7 */
+void ball_step(ball_t *b);                          /* 1ac2:27d7 */
 void input_keyboard(void);                              /* 1ac2:1712 */
 void input_mouse(uint32_t mouse_x, uint32_t buttons);   /* 1ac2:169f */
 void save_screen(void);                                 /* 1ac2:5099 */
@@ -654,35 +654,35 @@ uint32_t draw_text(uint32_t src, uint32_t count, uint32_t di);  /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
 void walker_draw(uint32_t x);     /* 1ac2:1e50 */
 void walker_step(uint32_t x);     /* 1ac2:1e23 */
-void ball_draw(uint32_t sprite, uint32_t x, uint32_t y);    /* 1ac2:2881 */
-int32_t  ball_redraw(uint32_t ball);  /* 1ac2:2827 */
-int32_t  ball_on_paddle(uint32_t ball); /* 1ac2:2e1e */
+void ball_draw(const void *rows, uint32_t x, uint32_t y);    /* 1ac2:2881 */
+int32_t  ball_redraw(ball_t *b);  /* 1ac2:2827 */
+int32_t  ball_on_paddle(ball_t *b); /* 1ac2:2e1e */
 void read_new_key(uint32_t which);  /* 1ac2:1614 */
-int32_t  score_before(uint32_t si, uint32_t di); /* 1ac2:108c */
-void ball_after(uint32_t ball);   /* 1ac2:247f */
-int32_t  ball_after_endgame(uint32_t ball);  /* 1ac2:45a1 */
-void ball_bricks(uint32_t ball);  /* 1ac2:254d */
-void brick_hit(uint32_t slot, uint32_t cell, uint32_t ball);
+int32_t  score_before(const uint8_t *a, uint32_t di); /* 1ac2:108c */
+void ball_after(ball_t *b);   /* 1ac2:247f */
+int32_t  ball_after_endgame(ball_t *b);  /* 1ac2:45a1 */
+void ball_bricks(ball_t *b);  /* 1ac2:254d */
+void brick_hit(uint32_t slot, uint32_t cell, ball_t *ball);
 void xor_sprite_16xn(uint32_t x, uint32_t y, uint32_t src, uint32_t rows); /* 1ac2:40f2 */
-void brick_1(uint32_t slot, uint32_t ball);     /* 1ac2:28cb */
-void brick_2(uint32_t slot, uint32_t ball);     /* 1ac2:2985 */
-void brick_3(uint32_t slot, uint32_t ball);     /* 1ac2:2a3f */
-void brick_solid(uint32_t slot, uint32_t ball);       /* 1ac2:3221 */
-void brick_animated(uint32_t slot, uint32_t ball);   /* 1ac2:2ccd */
+void brick_1(uint32_t slot, ball_t *ball);     /* 1ac2:28cb */
+void brick_2(uint32_t slot, ball_t *ball);     /* 1ac2:2985 */
+void brick_3(uint32_t slot, ball_t *ball);     /* 1ac2:2a3f */
+void brick_solid(uint32_t slot, ball_t *ball);       /* 1ac2:3221 */
+void brick_animated(uint32_t slot, ball_t *ball);   /* 1ac2:2ccd */
 void entity_anim_brick(uint32_t bx);                 /* 1ac2:3abf */
 void draw_anim_cell(uint32_t si, uint32_t x, uint32_t y); /* 1ac2:3bac */
-void brick_5(uint32_t slot, uint32_t ball);     /* 1ac2:2a73 */
-void brick_6(uint32_t slot, uint32_t ball);     /* 1ac2:2ab4 */
-void brick_7(uint32_t slot, uint32_t ball);     /* 1ac2:2af5 */
-void brick_8(uint32_t slot, uint32_t ball);     /* 1ac2:2b36 */
-void brick_9(uint32_t slot, uint32_t ball);     /* 1ac2:2b9d */
+void brick_5(uint32_t slot, ball_t *ball);     /* 1ac2:2a73 */
+void brick_6(uint32_t slot, ball_t *ball);     /* 1ac2:2ab4 */
+void brick_7(uint32_t slot, ball_t *ball);     /* 1ac2:2af5 */
+void brick_8(uint32_t slot, ball_t *ball);     /* 1ac2:2b36 */
+void brick_9(uint32_t slot, ball_t *ball);     /* 1ac2:2b9d */
 void entity_soften(uint32_t bx);      /* 1ac2:365e */
 void entity_repeat(uint32_t bx);      /* 1ac2:366f */
 void entity_plain(uint32_t bx);       /* 1ac2:3696 */
 void entity_ball_arrive(uint32_t bx); /* 1ac2:36a1 */
 void entity_cells_timer(uint32_t bx); /* 1ac2:36f6 */
-void brick_10(uint32_t slot, uint32_t ball);    /* 1ac2:2c59 */
-void brick_11(uint32_t slot, uint32_t ball);    /* 1ac2:2d68 */
+void brick_10(uint32_t slot, ball_t *ball);    /* 1ac2:2c59 */
+void brick_11(uint32_t slot, ball_t *ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:3b64 */
 void score_add(void);             /* 1ac2:413d */
 void extra_life(void);            /* 1ac2:318b */
@@ -703,7 +703,7 @@ void scroll_up_band(void);        /* 1ac2:2109 */
 void scroll_down_band(void);      /* 1ac2:2148 */
 void draw_paddle_raw(uint32_t src);      /* 1ac2:22a9 */
 void draw_paddle_shifted(uint32_t src);  /* 1ac2:2187 */
-void ball_paddle(uint32_t ball);  /* 1ac2:2316 */
+void ball_paddle(ball_t *b);  /* 1ac2:2316 */
 void laser_fire(void);            /* 1ac2:2ee3 */
 void probe_cell_at(uint32_t x, uint32_t y, uint32_t slot); /* 1ac2:2755 */
 void play_teardown(void);         /* 1ac2:41d4 */
@@ -715,11 +715,11 @@ void morph_step(uint32_t bx);       /* 1ac2:34d7 */
 void entity_popup(uint32_t bx);     /* 1ac2:3561 */
 void entity_capsule_frames(uint32_t bx, uint32_t table);
 void entity_ball_hold(uint32_t bx); /* 1ac2:37e0 */
-void ball_place(uint32_t ball, uint32_t x, uint32_t y);
+void ball_place(ball_t *ball, uint32_t x, uint32_t y);
 void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny); /* 1ac2:3df1 */
 uint32_t pixel_xor(uint32_t x, uint32_t y);        /* 1ac2:30dd */
 void shot_xor(uint32_t x, uint32_t y);             /* 1ac2:306b */
-void bonus_hits_ball(uint32_t bx, uint32_t ball);  /* 1ac2:3f20 */
+void bonus_hits_ball(uint32_t bx, const ball_t *ball);  /* 1ac2:3f20 */
 void entity_bonus(uint32_t bx);     /* 1ac2:39fa */
 void entity_unknown(uint32_t bx);
 void entity_multiball(uint32_t bx);  /* 1ac2:3717 */
