@@ -561,3 +561,36 @@ original shoot.
   million frames without clearing it, so the levels after it are untested by
   the side-by-side. Reaching them wants a bot that aims rather than one that
   survives, or a snapshot taken with the level number written by hand.
+
+- **Stretch: stop needing the packed struct at all.** The image is the port's
+  authoritative store, so `game_vars` has to land on the game's own addresses
+  and most of its words sit at odd offsets. That forces `__attribute__((packed))`
+  and the explicit padding, and it is what makes the port assume a
+  little-endian host.
+
+  The packing is not the problem, it is the symptom. It would go if the
+  *mutable* state lived in ordinary C structures and the image were kept only
+  as the read-only reference data it mostly is - the sprites, the font, the
+  level table, the strings. What stands in the way, in order of difficulty:
+
+  - **Stored image offsets.** The original keeps 16-bit addresses inside its
+    own data: an entity's next pointer, a cell's address in an entity slot, a
+    ball's offset passed in a register. Those have to become indices or real
+    pointers, and each one has to be found.
+  - **The differential verifier.** It compares whole images byte for byte,
+    which only means anything while the image *is* the state. It would need
+    marshalling both ways, or to be retired once every routine is proven -
+    which is the honest prerequisite: this is work for after 166 of 166, not
+    before.
+  - **Snapshots and lockstep**, for the same reason and with the same answer.
+
+  What it buys: no packing, no padding, no endianness assumption, and a port
+  that builds on a big-endian or strict-alignment target - which also makes
+  the WASM route simpler.
+
+  What it costs, and why it is a stretch goal rather than a plan: the C stops
+  mirroring the original's memory. The addresses in the comments would still
+  be true, but the *shape* would not, and this port's whole claim is that it
+  can be read against the disassembly. That is the point where it stops being
+  a transcription and becomes a reimplementation, and it should be taken
+  deliberately, if at all.
