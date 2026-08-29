@@ -6548,13 +6548,13 @@ void screen_high_scores(void)
  *
  * **Not transcribed, on purpose**, along with 0x1614 and 0x1642. This is a
  * decision about what the port is for rather than something still to be read:
- * the port keeps the defaults at 0x2d4f-0x2d51, which are K, L and Space.
+ * the port keeps the defaults at 0x2d4f-0x2d51, which are J, K and Space.
  * ===================================================================== */
 void screen_define_keys(void)
 {
     /* **Not transcribed, on purpose.** F5 redefines the left, right and
      * launch keys on a 40x25 text screen. Out of scope: the port keeps the
-     * defaults at 0x2d4f-0x2d51, which are K, L and Space. */
+     * defaults at 0x2d4f-0x2d51, which are J, K and Space. */
 }
 
 /* ========================================================================

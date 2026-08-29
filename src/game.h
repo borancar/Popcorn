@@ -73,7 +73,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  key_action;                /* 0x2d4c held flags. These three are in the **reverse** order of the scan codes below, which is what int09_handler's `2 - i` was for */
     uint8_t  key_right;                 /* 0x2d4d */
     uint8_t  key_left;                  /* 0x2d4e */
-    uint8_t  key_scan_l;                /* 0x2d4f the configured scan codes: K, L and space by default */
+    uint8_t  key_scan_l;                /* 0x2d4f the configured scan codes. Defaults 0x24, 0x25, 0x39 - **J**, **K** and space, read from the image rather than assumed */
     uint8_t  key_scan_r;                /* 0x2d50 */
     uint8_t  key_scan_a;                /* 0x2d51 */
     uint8_t  _pad_03[0x102];

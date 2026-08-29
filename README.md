@@ -108,7 +108,7 @@ transitions, the ending.
 **Two screens are not transcribed.** F10 is the boss key, which paints a fake
 DOS prompt over the game; under a window of its own it protects nobody, so it
 does nothing. F5 redefines left, right and launch on a text screen; the port
-keeps the defaults, **K**, **L** and space. Both are understood, and are no-ops
+keeps the defaults, **J**, **K** and space. Both are understood, and are no-ops
 with a comment rather than gaps.
 
 ## How it is known to be right
