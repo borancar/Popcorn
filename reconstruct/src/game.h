@@ -25,7 +25,7 @@
 
 extern uint8_t *g_image;
 
-/* One ball, the 0x1e bytes at BALLS + i * 0x1e.
+/* One ball, the 0x1e bytes at gv.balls[i].
  *
  * Every byte is accounted for - the members below tile 0x00..0x1d with no
  * gaps - which is the corroboration that the layout is right and not merely
@@ -404,7 +404,6 @@ extern uint32_t g_palette[4];
 
 /* The ball pool: four entries of 0x1e bytes at 0x2ea1, walked by the play loop
  * at 1ac2:1873 and stepped by the Bresenham routine at 1ac2:27d7. */
-#define BALLS         0x2ea1
 #define BALL_STRIDE   0x1e
 #define BALL_COUNT       3             /* was 4, and never used - the pool is three */
 #define B_X           0x00             /* the LIVE position */
