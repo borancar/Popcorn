@@ -126,6 +126,37 @@ ENSURE_PLAYER_AT(score, 0x10);  ENSURE_PLAYER_AT(level, 0x16);
 ENSURE_PLAYER_AT(state, 0xc6);  ENSURE_PLAYER_AT(ent_count, 0xd2);
 ENSURE_PLAYER_AT(ents, 0xd3);
 
+/* One entity, the 0x0e bytes of a node in the chain at gv.entity_head.
+ *
+ * Only the head and the tail are typed, and that is not laziness. The handler
+ * at +0x00 and the link at +0x0c are read as words by everything and as bytes
+ * by nothing - 13 and 19 accesses, no exceptions. The ten bytes between them
+ * are the original's **variant**: whether +0x02 is a word or two bytes depends
+ * on which handler owns the node, and five of the six slots are read both ways
+ * across the fifteen handlers. Naming them wants each handler read first, so
+ * until then they are payload and reached as bytes, which claims nothing.
+ */
+typedef struct __attribute__((packed)) {
+    uint16_t handler;       /* 0x00 the routine entity_call dispatches to */
+    uint8_t  payload[10];   /* 0x02 whatever that handler keeps here */
+    uint16_t next;          /* 0x0c 0xffff ends the chain */
+} entity_t;
+
+ENSURE_SIZE(entity_t, 0x0e);
+#define ENSURE_ENTITY_AT(field, off) \
+    typedef char ensure_entity_at_##field[offsetof(entity_t, field) == (off) ? 1 : -1]
+ENSURE_ENTITY_AT(handler, 0x00);
+ENSURE_ENTITY_AT(payload, 0x02);
+ENSURE_ENTITY_AT(next, 0x0c);
+
+/* A node by its image offset. The chain's links are the game's own 16-bit
+ * offsets, stored in the image and ended by 0xffff, so a walk still carries
+ * one - this types what it finds there. */
+static inline entity_t *entity_at(uint32_t off)
+{
+    return (entity_t *)(g_image + off);
+}
+
 /* A ball by its image offset, for the routines that still carry one because
  * the original passed it in a register. */
 static inline ball_t *ball_at(uint32_t off)
@@ -475,8 +506,6 @@ extern uint32_t g_palette[4];
  * 0xffff terminating.  The node pool is at 0x3146, stride 0x0e. */
 #define ENTITY_POOL   0x3146
 #define ENTITY_STRIDE 0x0e
-#define E_HANDLER     0x00
-#define E_NEXT        0x0c
 
 /* --------------------------------------------------------- the backend ---
  *
