@@ -92,28 +92,26 @@ void ball_step(uint32_t ball)
  * *both* held it moves in the direction of whichever key was pressed most
  * recently, which the INT 09h handler records at [0x2d4a].
  */
-#define REPEAT_COUNT  0x2d40
-#define REPEAT_DIV    0x2d4b
 #define REPEAT_RESET  5
 
 void input_keyboard(void)
 {
-    if (--g_image[REPEAT_COUNT] != 0)
+    if (--gv.repeat_count != 0)
         return;
-    if (g_image[REPEAT_DIV] != 1)
-        g_image[REPEAT_DIV]--;
-    g_image[REPEAT_COUNT] = g_image[REPEAT_DIV];
+    if (gv.repeat_div != 1)
+        gv.repeat_div--;
+    gv.repeat_count = gv.repeat_div;
 
-    int32_t go_left = g_image[KEY_LEFT] != 0;
-    if (g_image[KEY_LEFT] == g_image[KEY_RIGHT]) {
-        if (!g_image[KEY_LEFT]) {              /* neither key held */
-            g_image[REPEAT_COUNT] = REPEAT_RESET;
-            g_image[REPEAT_DIV] = REPEAT_RESET;
+    int32_t go_left = gv.key_left != 0;
+    if (gv.key_left == gv.key_right) {
+        if (!gv.key_left) {              /* neither key held */
+            gv.repeat_count = REPEAT_RESET;
+            gv.repeat_div = REPEAT_RESET;
             if (gv.paddle_x > gv.paddle_max)
                 gv.paddle_x = gv.paddle_max;
             return;
         }
-        go_left = g_image[LAST_DIR] == 0;      /* both: the most recent wins */
+        go_left = gv.last_dir == 0;      /* both: the most recent wins */
     }
 
     /* Both limits are compared unsigned, after an 8-bit inc or dec that is
@@ -150,7 +148,7 @@ void input_keyboard(void)
  */
 void input_mouse(uint32_t mouse_x, uint32_t buttons)
 {
-    g_image[KEY_ACTION] = (buttons & 3) ? 1 : 0;
+    gv.key_action = (buttons & 3) ? 1 : 0;
 
     uint8_t x = (uint8_t)((mouse_x >> 1) & 0xff);
     if (x > gv.paddle_max)
@@ -374,7 +372,6 @@ uint32_t game_random(uint32_t ticks, uint32_t limit)
  * two bytes POPSPEED patches. */
 #define CS_BASE        0x1ac20
 #define SOUND_ON       (CS_BASE + 0x84)   /* F9 toggles this */
-#define LAST_MAKE      0x2d49             /* the INT 09h handler's last make code */
 #define SOUND_REQUEST  (CS_BASE + 0xf4)   /* an id to start, 0 = nothing */
 #define SOUND_TIMER    (CS_BASE + 0xf5)   /* ticks left on the current note */
 #define SOUND_PTR      (CS_BASE + 0xf6)   /* where in the tune we are */
@@ -860,8 +857,6 @@ size_t popcorn_load_image(void)
  * ===================================================================== */
 
 /* Which input routine the menu is set to, and which the game will use. */
-#define INPUT_SELECTED  0x2d47          /* 0x16d2 keyboard, 0x1654 mouse */
-#define INPUT_ACTIVE    0x2d45
 #define INPUT_KEYBOARD  0x16d2
 #define INPUT_DEMO      0x1785          /* demo_start installs this one */
 #define INPUT_MOUSE     0x1654
@@ -875,7 +870,7 @@ static void menu_redraw(void)
     speaker_off();
     flush_keys();                   /* 1ac2:0106 */
     restore_screen();
-    if (img_w(INPUT_SELECTED) != INPUT_KEYBOARD)
+    if (gv.input_selected != INPUT_KEYBOARD)
         menu_arrow();
     img_setw(PARTICLE_COUNT, 0x50);
     menu_particles_init(0xb800);
@@ -931,7 +926,7 @@ void game_main(const char *dir, const char *levels)
         if (!level_load_file(dir))
             return;                     /* the original exits to DOS */
     }
-    img_setw(INPUT_SELECTED, INPUT_KEYBOARD);
+    gv.input_selected = (uint16_t)(INPUT_KEYBOARD);
     g_image[0x3f1b] = 0;
     g_image[SOUND_ON] = 1;
     load_high_scores(dir);
@@ -990,14 +985,14 @@ void game_main(const char *dir, const char *levels)
                     ;
                 break;
             case 0x3d:                                  /* F3: mouse */
-                if (img_w(INPUT_SELECTED) != INPUT_MOUSE) {
-                    img_setw(INPUT_SELECTED, INPUT_MOUSE);
+                if (gv.input_selected != INPUT_MOUSE) {
+                    gv.input_selected = (uint16_t)(INPUT_MOUSE);
                     menu_arrow();
                 }
                 break;
             case 0x3e:                                  /* F4: keyboard */
-                if (img_w(INPUT_SELECTED) != INPUT_KEYBOARD) {
-                    img_setw(INPUT_SELECTED, INPUT_KEYBOARD);
+                if (gv.input_selected != INPUT_KEYBOARD) {
+                    gv.input_selected = (uint16_t)(INPUT_KEYBOARD);
                     menu_arrow();
                 }
                 break;
@@ -1014,14 +1009,14 @@ void game_main(const char *dir, const char *levels)
                 back_to_menu = 1;
                 break;
             case 0x3b:                                  /* F1: play */
-                img_setw(INPUT_ACTIVE, img_w(INPUT_SELECTED));
+                gv.input_active = (uint16_t)(gv.input_selected);
                 speaker_on();
                 if (screen_player_names() == 0xff) {
                     back_to_menu = 1;
                     break;
                 }
                 play_prepare();
-                if (img_w(INPUT_ACTIVE) == 0x16d2)
+                if (gv.input_active == 0x16d2)
                     install_int09();            /* 1ac2:02ea, keyboard only */
                 /* play_session() never returns normally: it is left by the
                  * stack-throwing jump the original does at 1ac2:167e. */
@@ -1106,7 +1101,7 @@ static void input_keys_mouse(void)
  * and takes the BIOS handler back so INT 16h has something to read. */
 static void input_keys_keyboard(void)
 {
-    if (g_image[LAST_MAKE] != 1)
+    if (gv.last_make != 1)
         return;
     screen_stash();                     /* 1ac2:4ba9 */
     restore_int09();                    /* 1ac2:03d1 */
@@ -1123,12 +1118,12 @@ static void input_keys_keyboard(void)
     }
     screen_unstash();                   /* 1ac2:4c13 */
     install_int09();                    /* 1ac2:03b0 */
-    g_image[LAST_MAKE] = 0xff;          /* 1ac2:16ef */
+    gv.last_make = 0xff;          /* 1ac2:16ef */
 }
 
 void game_input(void)
 {
-    uint32_t which = img_w(INPUT_ACTIVE);
+    uint32_t which = gv.input_active;
     if (which == INPUT_MOUSE) {
         input_keys_mouse();
         input_mouse(io_mouse_x(), io_mouse_buttons());
@@ -1242,8 +1237,8 @@ int32_t play_loop(void)
     g_image[0x2d3a] = g_image[PADDLE_SPRITES + 2];
     gv.paddle_max = 0xac;
     gv.paddle_min = 0x08;
-    g_image[REPEAT_COUNT] = 5;
-    g_image[REPEAT_DIV] = 5;
+    gv.repeat_count = 5;
+    gv.repeat_div = 5;
     io_mouse_warp(0x64 * 2, 0xb8);
 
     paddle_row_offsets(gv.paddle_x, PADDLE_ROWS_CUR);
@@ -1251,9 +1246,9 @@ int32_t play_loop(void)
     g_image[BALL_ALIVE] = 1;
     memcpy(g_image + BALLS + 4, g_image + 0x48fb, 8);
     gv.frame_delay_set = 0x1f4;
-    g_image[KEY_RIGHT] = g_image[KEY_LEFT] = 0;
-    g_image[REPEAT_DIV] = 0;
-    g_image[KEY_ACTION] = 0;
+    gv.key_right = gv.key_left = 0;
+    gv.repeat_div = 0;
+    gv.key_action = 0;
     gv.speed_step = gv.speed_limit = 0xfa;
     if (g_image[DELAY_ENTRY] != 0xc3) {
         gv.speed_step = 3;
@@ -1286,7 +1281,7 @@ int32_t play_loop(void)
     flush_keys();                   /* 1ac2:0106 */
 
     /* Wait for the action key, or two thousand ticks, before serving. */
-    if (img_w(INPUT_ACTIVE) != 0x1785) {
+    if (gv.input_active != 0x1785) {
         img_setw(SERVE_TIMEOUT, 0x7d0);
         for (;;) {
             img_setw(SERVE_TIMEOUT, img_w(SERVE_TIMEOUT) - 1);
@@ -1295,7 +1290,7 @@ int32_t play_loop(void)
             for (int32_t i = 0; i < 0xf; i++)
                 game_delay();
             game_input();
-            if (g_image[KEY_ACTION] == 1)
+            if (gv.key_action == 1)
                 break;
             draw_paddle(SPRITE_BASE);
             io_present();
@@ -1502,7 +1497,7 @@ void play_session(void)
 
     /* A demo starts on a random level; a game always starts on the first. */
     uint32_t lv = game_random(io_ticks(), 0x1e);
-    if (img_w(INPUT_ACTIVE) != 0x1785)
+    if (gv.input_active != 0x1785)
         lv = 0;
     /* popcorn-dev --level N. The draw above still happens: it is one of the
      * PRNG's callers and skipping it would shift every number the rest of the
@@ -3943,7 +3938,7 @@ int32_t ball_on_paddle(uint32_t ball)
     if (b[B_STATE] != 2)
         return 1;                       /* a different ball; not held */
 
-    int32_t release = g_image[KEY_ACTION] == 1;
+    int32_t release = gv.key_action == 1;
     if (!release) {
         img_setw(HOLD_TIMER, img_w(HOLD_TIMER) - 1);
         if (img_w(HOLD_TIMER) == 0) {
@@ -4038,7 +4033,7 @@ static void laser_dot_rows(uint32_t x, uint32_t y, int32_t moving)
 void laser_fire(void)
 {
     if (gv.paddle_morphing == 0 && g_image[LASER_ON] != 2) {
-        if (g_image[KEY_ACTION] != 1)
+        if (gv.key_action != 1)
             return;
         uint32_t x = (gv.paddle_x + 4) & 0xff;
         g_image[SOUND_REQUEST] = SHOT_SOUND;
@@ -5281,7 +5276,7 @@ void play_prepare(void)
 
 void demo_start(void)
 {
-    img_setw(INPUT_ACTIVE, INPUT_DEMO);
+    gv.input_active = (uint16_t)(INPUT_DEMO);
     g_image[CS_BASE + 0x1784] = 0xff;
     memcpy(g_image + NAME_TABLE, g_image + 0x13f9, 12);
     player_record_init(NAME_TABLE);
@@ -6286,21 +6281,23 @@ void int09_handler(uint32_t scan)
 {
     uint32_t make = scan <= 0x7f;
 
-    if ((scan & 0xff) == g_image[KEY_SCAN_L])
-        g_image[LAST_DIR] = 0;
-    if ((scan & 0xff) == g_image[KEY_SCAN_R])
-        g_image[LAST_DIR] = 1;
+    if ((scan & 0xff) == gv.key_scan_l)
+        gv.last_dir = 0;
+    if ((scan & 0xff) == gv.key_scan_r)
+        gv.last_dir = 1;
     if (scan == 0xc3)                   /* F9 released */
         g_image[SOUND_ON] ^= 1;
     if (make)
         g_image[0x2d49] = (uint8_t)scan;
 
+    /* The original walks the three scan codes and stores into the flags
+     * *backwards* - `[KEY_ACTION + (2 - i)]` - because the two triples are
+     * laid out in opposite orders. Unrolled, so that is a fact you can see
+     * rather than one you have to work out. */
     uint32_t code = scan & 0x7f;
-    for (int32_t i = 0; i < 3; i++)
-        if (code == g_image[KEY_SCAN_L + i]) {
-            g_image[KEY_ACTION + (2 - i)] = (uint8_t)make;
-            return;
-        }
+    if (code == gv.key_scan_l) { gv.key_left   = (uint8_t)make; return; }
+    if (code == gv.key_scan_r) { gv.key_right  = (uint8_t)make; return; }
+    if (code == gv.key_scan_a) { gv.key_action = (uint8_t)make; return; }
 }
 
 /* ========================================================================
@@ -7236,11 +7233,11 @@ int32_t next_player(const char *dir)
 /* 1ac2:1066 - where both paths meet. */
 static void results_finish(const char *dir)
 {
-    if (img_w(INPUT_ACTIVE) == INPUT_KEYBOARD)
+    if (gv.input_active == INPUT_KEYBOARD)
         restore_int09();            /* 1ac2:106e */
     /* 1ac2:1071 - the demo does not enter the hall of fame, and above all
      * does not write popcorn.hsc. */
-    if (img_w(INPUT_ACTIVE) != INPUT_DEMO) {
+    if (gv.input_active != INPUT_DEMO) {
         hsc_sort();                 /* 1ac2:1079 */
         hsc_save(dir);              /* 1ac2:107c */
     }
@@ -7334,7 +7331,7 @@ void screen_results(const char *dir)
 
     /* 1ac2:102a - the keyboard handler comes out before the wait, so the
      * BIOS buffer fills again and INT 16h below has something to read. */
-    if (img_w(INPUT_ACTIVE) == INPUT_KEYBOARD)
+    if (gv.input_active == INPUT_KEYBOARD)
         restore_int09();
 
     /* 1ac2:1035 - the results stand until a key or until the two nested
@@ -7495,7 +7492,7 @@ void input_demo(void)
             g_image[b + B_STATE] != 0) {
             /* Hold the action key down while the laser is armed, so the
              * demo fires as well as chases. */
-            g_image[KEY_ACTION] = g_image[LASER_ON] != 0;
+            gv.key_action = g_image[LASER_ON] != 0;
 
             uint32_t ball_x = g_image[b + B_X];
             uint32_t paddle = gv.paddle_x;

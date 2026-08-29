@@ -487,9 +487,9 @@ static void script_pump(void)
         if (!script[i].shift && a >= 'A' && a <= 'Z')
             a += 32;
         key_push(sc, a);
-        if (sc == g_image[KEY_SCAN_L]) g_image[KEY_LEFT] = 1;
-        if (sc == g_image[KEY_SCAN_R]) g_image[KEY_RIGHT] = 1;
-        if (sc == g_image[KEY_SCAN_A]) g_image[KEY_ACTION] = 1;
+        if (sc == gv.key_scan_l) gv.key_left = 1;
+        if (sc == gv.key_scan_r) gv.key_right = 1;
+        if (sc == gv.key_scan_a) gv.key_action = 1;
         fprintf(stderr, "popcorn: [keys] scan %#04x at %ums\n", sc, script[i].ms);
     }
 }

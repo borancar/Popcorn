@@ -63,7 +63,20 @@ typedef struct __attribute__((packed)) {
     uint16_t morph_owner;               /* 0x2d3c the entity running it, so a second capsule does not fight the first */
     uint8_t  paddle_min;                /* 0x2d3e 8. Was also PADDLE_LOW */
     uint8_t  paddle_max;                /* 0x2d3f 172, and it moves as the paddle grows. Was also PADDLE_HIGH */
-    uint8_t  _pad_02[0x114];
+    uint8_t  repeat_count;              /* 0x2d40 frames until the held key moves the paddle again */
+    uint8_t  _pad_02[0x4];
+    uint16_t input_active;              /* 0x2d45 the input routine in use: 0x1654 mouse, 0x16d2 keyboard, 0x1785 demo */
+    uint16_t input_selected;            /* 0x2d47 what the menu has chosen, copied to input_active at F1 */
+    uint8_t  last_make;                 /* 0x2d49 the last make code the INT 09h handler saw; 1 is Esc, which pauses */
+    uint8_t  last_dir;                  /* 0x2d4a which of left/right was pressed most recently, for when both are held */
+    uint8_t  repeat_div;                /* 0x2d4b the reload for repeat_count; falls to 1, so a held key accelerates */
+    uint8_t  key_action;                /* 0x2d4c held flags. These three are in the **reverse** order of the scan codes below, which is what int09_handler's `2 - i` was for */
+    uint8_t  key_right;                 /* 0x2d4d */
+    uint8_t  key_left;                  /* 0x2d4e */
+    uint8_t  key_scan_l;                /* 0x2d4f the configured scan codes: K, L and space by default */
+    uint8_t  key_scan_r;                /* 0x2d50 */
+    uint8_t  key_scan_a;                /* 0x2d51 */
+    uint8_t  _pad_03[0x102];
     uint8_t  paddle_x;                  /* 0x2e54 left edge, pixels */
     uint8_t  paddle_prev_x;             /* 0x2e55 where it was last frame, so the old one can be erased */
     uint8_t  hold_offset;               /* 0x2e56 a caught ball's x relative to the paddle */
@@ -90,6 +103,18 @@ IMG_AT(paddle_morphing, 0x2d3b);
 IMG_AT(morph_owner, 0x2d3c);
 IMG_AT(paddle_min, 0x2d3e);
 IMG_AT(paddle_max, 0x2d3f);
+IMG_AT(repeat_count, 0x2d40);
+IMG_AT(input_active, 0x2d45);
+IMG_AT(input_selected, 0x2d47);
+IMG_AT(last_make, 0x2d49);
+IMG_AT(last_dir, 0x2d4a);
+IMG_AT(repeat_div, 0x2d4b);
+IMG_AT(key_action, 0x2d4c);
+IMG_AT(key_right, 0x2d4d);
+IMG_AT(key_left, 0x2d4e);
+IMG_AT(key_scan_l, 0x2d4f);
+IMG_AT(key_scan_r, 0x2d50);
+IMG_AT(key_scan_a, 0x2d51);
 IMG_AT(paddle_x, 0x2e54);
 IMG_AT(paddle_prev_x, 0x2e55);
 IMG_AT(hold_offset, 0x2e56);
@@ -175,12 +200,6 @@ extern uint32_t g_palette[4];
  * keyboard input routine at 1ac2:16d2 reads.  Named here because they are the
  * whole keyboard interface.
  */
-#define KEY_ACTION  0x2d4c
-#define KEY_RIGHT   0x2d4d
-#define KEY_LEFT    0x2d4e
-#define KEY_SCAN_L  0x2d4f             /* the configured scan codes */
-#define KEY_SCAN_R  0x2d50
-#define KEY_SCAN_A  0x2d51
 
 /* --------------------------------------------------------------- state ---
  *
@@ -316,7 +335,6 @@ void intro_paddle(void);                                /* 1ac2:49bc */
 void int09_handler(uint32_t scan);                      /* 1ac2:03e3 */
 int32_t  drive_check(void);                                 /* 1ac2:4dea */
 int32_t  drive_writable(void);                              /* 1ac2:4e04 */
-#define LAST_DIR 0x2d4a
 void game_main(const char *dir, const char *levels);
 
 /* --------------------------------------------------------- not yet done ---
