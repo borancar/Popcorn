@@ -80,6 +80,27 @@ typedef struct __attribute__((packed)) {
     uint8_t  paddle_x;                  /* 0x2e54 left edge, pixels */
     uint8_t  paddle_prev_x;             /* 0x2e55 where it was last frame, so the old one can be erased */
     uint8_t  hold_offset;               /* 0x2e56 a caught ball's x relative to the paddle */
+    uint8_t  _pad_04[0x1c];
+    uint8_t  ball_alive;                /* 0x2e73 clear when the last ball is lost */
+    uint8_t  hit_count;                 /* 0x2e74 */
+    uint8_t  caught;                    /* 0x2e75 the C capsule: the ball sticks to the paddle */
+    uint16_t hold_timer;                /* 0x2e76 how much holding is left before it is released anyway */
+    uint8_t  game_over;                 /* 0x2e78 */
+    uint8_t  extra_on;                  /* 0x2e79 the extra-ball hatch is open */
+    uint16_t serve_timeout;             /* 0x2e7a */
+    uint16_t extra_timer;               /* 0x2e7c */
+    uint8_t  laser_on;                  /* 0x2e7e the laser paddle. bonus_laser sets this and laser_y */
+    uint8_t  laser_y;                   /* 0x2e7f the shot in flight; starts at 0xb3, the paddle's row */
+    uint8_t  laser_x;                   /* 0x2e80 */
+    uint8_t  net_on;                    /* 0x2e81 the safety net across the floor. **These four were named SHOT_ON, SHOT_LIFE, SHOT_TIMER and SHOT_POS, as though they were the laser's** - but 1ac2:3119, bonus_net, writes 0x2e81, 0x2e82 and 0x2e84, and the play loop's countdown over them ends in the same flash_bar(0x1554) the net's arrival plays. The laser is 0x2e7e-0x2e80 and nothing else */
+    uint16_t net_life;                  /* 0x2e82 frames the net lasts; bonus_net sets 0x1388, five thousand */
+    uint8_t  net_timer;                 /* 0x2e84 its redraw counter, reloaded with 0xc8 */
+    uint16_t net_pos;                   /* 0x2e85 where it is drawn */
+    uint16_t extra_pos;                 /* 0x2e87 */
+    uint8_t  _pad_05[0x10];
+    uint16_t hit_dirs[4];               /* 0x2e99 the four directions a brick hit can send the ball, indexed by which slot matched */
+    uint8_t  _pad_06[0x5a];
+    uint8_t  backdrop_phase;            /* 0x2efb the level intro's reveal, counted by kernel zero's timer */
 } game_vars;
 
 /* The same bytes as g_image, which stays the buffer everything else - memcpy,
@@ -118,6 +139,24 @@ IMG_AT(key_scan_a, 0x2d51);
 IMG_AT(paddle_x, 0x2e54);
 IMG_AT(paddle_prev_x, 0x2e55);
 IMG_AT(hold_offset, 0x2e56);
+IMG_AT(ball_alive, 0x2e73);
+IMG_AT(hit_count, 0x2e74);
+IMG_AT(caught, 0x2e75);
+IMG_AT(hold_timer, 0x2e76);
+IMG_AT(game_over, 0x2e78);
+IMG_AT(extra_on, 0x2e79);
+IMG_AT(serve_timeout, 0x2e7a);
+IMG_AT(extra_timer, 0x2e7c);
+IMG_AT(laser_on, 0x2e7e);
+IMG_AT(laser_y, 0x2e7f);
+IMG_AT(laser_x, 0x2e80);
+IMG_AT(net_on, 0x2e81);
+IMG_AT(net_life, 0x2e82);
+IMG_AT(net_timer, 0x2e84);
+IMG_AT(net_pos, 0x2e85);
+IMG_AT(extra_pos, 0x2e87);
+IMG_AT(hit_dirs, 0x2e99);
+IMG_AT(backdrop_phase, 0x2efb);
 IMG_AT(speed_timer,     0x148b);          /* the whole unpacked load image */
 extern const char *g_dir;               /* "" - everything is relative to the
                                          * current directory, as it was in DOS */
