@@ -49,13 +49,30 @@ extern uint8_t *g_image;
  * big-endian host.
  */
 typedef struct __attribute__((packed)) {
-    uint8_t  _pad_00[0x1485];
+    uint8_t  _pad_00[0x13c0];
+    uint16_t eog_screen_at;             /* 0x13c0 end-of-game screen cursor */
+    uint16_t eog_build_at;              /* 0x13c2 */
+    uint8_t  banner_state;              /* 0x13c4 the menu's scrolling text */
+    uint16_t banner_ptr;                /* 0x13c5 where it has got to, as an image offset */
+    uint8_t  _pad_01[0x2];
+    uint8_t  lives;                     /* 0x13c9 */
+    uint16_t level_src;                 /* 0x13ca offset of the current level within the 0xc46 block */
+    uint8_t  level_number;              /* 0x13cc */
+    uint8_t  _pad_02[0x1c];
+    uint8_t  name_index;                /* 0x13e9 how far the player has typed their name */
+    uint8_t  _pad_03[0x26];
+    uint16_t level_num_text;            /* 0x1410 the level number as two ASCII digits, tens in the low byte */
+    uint8_t  _pad_04[0x1];
+    uint16_t particle_count;            /* 0x1413 the menu's fountain */
+    uint8_t  _pad_05[0x53];
+    uint16_t walker_anim;               /* 0x1468 a pointer into the walking figure's frame list, stepped by two */
+    uint8_t  _pad_06[0x1b];
     uint8_t  speed_step;                /* 0x1485 the ball's move-this-frame counter, reloaded from speed_limit */
     uint8_t  speed_limit;               /* 0x1486 its reload value: the ball steps on (limit-1) frames in limit */
     uint16_t frame_delay;               /* 0x1487 empty loops left this frame */
     uint16_t frame_delay_set;           /* 0x1489 what it is reloaded with */
     uint16_t speed_timer;               /* 0x148b frames until speed_limit rises, so a level speeds up */
-    uint8_t  _pad_01[0x18ab];
+    uint8_t  _pad_07[0x18ab];
     uint8_t  paddle_step;               /* 0x2d38 how much the width changes per morph frame */
     uint8_t  paddle_kind;               /* 0x2d39 which of the four sprite sets is current */
     uint8_t  paddle_width;              /* 0x2d3a in pixels */
@@ -64,7 +81,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  paddle_min;                /* 0x2d3e 8. Was also PADDLE_LOW */
     uint8_t  paddle_max;                /* 0x2d3f 172, and it moves as the paddle grows. Was also PADDLE_HIGH */
     uint8_t  repeat_count;              /* 0x2d40 frames until the held key moves the paddle again */
-    uint8_t  _pad_02[0x4];
+    uint8_t  _pad_08[0x4];
     uint16_t input_active;              /* 0x2d45 the input routine in use: 0x1654 mouse, 0x16d2 keyboard, 0x1785 demo */
     uint16_t input_selected;            /* 0x2d47 what the menu has chosen, copied to input_active at F1 */
     uint8_t  last_make;                 /* 0x2d49 the last make code the INT 09h handler saw; 1 is Esc, which pauses */
@@ -76,11 +93,11 @@ typedef struct __attribute__((packed)) {
     uint8_t  key_scan_l;                /* 0x2d4f the configured scan codes. Defaults 0x24, 0x25, 0x39 - **J**, **K** and space, read from the image rather than assumed */
     uint8_t  key_scan_r;                /* 0x2d50 */
     uint8_t  key_scan_a;                /* 0x2d51 */
-    uint8_t  _pad_03[0x102];
+    uint8_t  _pad_09[0x102];
     uint8_t  paddle_x;                  /* 0x2e54 left edge, pixels */
     uint8_t  paddle_prev_x;             /* 0x2e55 where it was last frame, so the old one can be erased */
     uint8_t  hold_offset;               /* 0x2e56 a caught ball's x relative to the paddle */
-    uint8_t  _pad_04[0x1c];
+    uint8_t  _pad_10[0x1c];
     uint8_t  ball_alive;                /* 0x2e73 clear when the last ball is lost */
     uint8_t  hit_count;                 /* 0x2e74 */
     uint8_t  caught;                    /* 0x2e75 the C capsule: the ball sticks to the paddle */
@@ -97,10 +114,33 @@ typedef struct __attribute__((packed)) {
     uint8_t  net_timer;                 /* 0x2e84 its redraw counter, reloaded with 0xc8 */
     uint16_t net_pos;                   /* 0x2e85 where it is drawn */
     uint16_t extra_pos;                 /* 0x2e87 */
-    uint8_t  _pad_05[0x10];
+    uint8_t  _pad_11[0x10];
     uint16_t hit_dirs[4];               /* 0x2e99 the four directions a brick hit can send the ball, indexed by which slot matched */
-    uint8_t  _pad_06[0x5a];
+    uint8_t  _pad_12[0x5a];
     uint8_t  backdrop_phase;            /* 0x2efb the level intro's reveal, counted by kernel zero's timer */
+    uint8_t  _pad_13[0x238];
+    uint8_t  anim_count;                /* 0x3134 the animated bricks */
+    uint8_t  anim_rate;                 /* 0x3135 */
+    uint16_t anim_ptr;                  /* 0x3136 */
+    uint16_t entity_free;               /* 0x3138 head of the free list - and the value entity_prev starts a walk at, so an unlink at the head has a node to write through */
+    uint8_t  entity_remove;             /* 0x313a a handler asking to be taken out of the list */
+    uint8_t  _pad_14[0x7];
+    uint16_t entity_prev;               /* 0x3142 trails one node behind the walk, so the unlink needs no second pass */
+    uint16_t entity_head;               /* 0x3144 */
+    uint8_t  _pad_15[0x23e];
+    uint8_t  bonus_cap;                 /* 0x3384 */
+    uint8_t  _pad_16[0x4d];
+    uint16_t rng_state;                 /* 0x33d2 */
+    uint8_t  hit_kind;                  /* 0x33d4 */
+    uint8_t  _pad_17[0x1];
+    uint8_t  bonus_live;                /* 0x33d6 capsules on screen; the play loop's pause shortens as it rises */
+    uint8_t  _pad_18[0x1c];
+    uint8_t  hatch_x;                   /* 0x33f3 */
+    uint8_t  hatch_y;                   /* 0x33f4 */
+    uint8_t  _pad_19[0xb13];
+    uint8_t  player_count;              /* 0x3f08 how many were entered */
+    uint8_t  live_count;                /* 0x3f09 how many are still in. next_player hands over while this is more than one */
+    uint8_t  cur_player;                /* 0x3f0a */
 } game_vars;
 
 /* The same bytes as g_image, which stays the buffer everything else - memcpy,
@@ -112,6 +152,17 @@ typedef struct __attribute__((packed)) {
 #define IMG_AT(field, off) \
     typedef char img_at_##field[offsetof(game_vars, field) == (off) ? 1 : -1]
 
+IMG_AT(eog_screen_at, 0x13c0);
+IMG_AT(eog_build_at, 0x13c2);
+IMG_AT(banner_state, 0x13c4);
+IMG_AT(banner_ptr, 0x13c5);
+IMG_AT(lives, 0x13c9);
+IMG_AT(level_src, 0x13ca);
+IMG_AT(level_number, 0x13cc);
+IMG_AT(name_index, 0x13e9);
+IMG_AT(level_num_text, 0x1410);
+IMG_AT(particle_count, 0x1413);
+IMG_AT(walker_anim, 0x1468);
 IMG_AT(speed_step, 0x1485);
 IMG_AT(speed_limit, 0x1486);
 IMG_AT(frame_delay, 0x1487);
@@ -157,6 +208,22 @@ IMG_AT(net_pos, 0x2e85);
 IMG_AT(extra_pos, 0x2e87);
 IMG_AT(hit_dirs, 0x2e99);
 IMG_AT(backdrop_phase, 0x2efb);
+IMG_AT(anim_count, 0x3134);
+IMG_AT(anim_rate, 0x3135);
+IMG_AT(anim_ptr, 0x3136);
+IMG_AT(entity_free, 0x3138);
+IMG_AT(entity_remove, 0x313a);
+IMG_AT(entity_prev, 0x3142);
+IMG_AT(entity_head, 0x3144);
+IMG_AT(bonus_cap, 0x3384);
+IMG_AT(rng_state, 0x33d2);
+IMG_AT(hit_kind, 0x33d4);
+IMG_AT(bonus_live, 0x33d6);
+IMG_AT(hatch_x, 0x33f3);
+IMG_AT(hatch_y, 0x33f4);
+IMG_AT(player_count, 0x3f08);
+IMG_AT(live_count, 0x3f09);
+IMG_AT(cur_player, 0x3f0a);
 IMG_AT(speed_timer,     0x148b);          /* the whole unpacked load image */
 extern const char *g_dir;               /* "" - everything is relative to the
                                          * current directory, as it was in DOS */
@@ -273,14 +340,10 @@ extern uint32_t g_palette[4];
 /* The entity list the play loop walks: a chain from the head link at 0x3144,
  * each node carrying its handler at +0x00 and the next link at +0x0c, with
  * 0xffff terminating.  The node pool is at 0x3146, stride 0x0e. */
-#define ENTITY_HEAD   0x3144
 #define ENTITY_POOL   0x3146
 #define ENTITY_STRIDE 0x0e
 #define E_HANDLER     0x00
 #define E_NEXT        0x0c
-#define ENTITY_REMOVE 0x313a            /* a handler sets this to be unlinked */
-#define ENTITY_PREV   0x3142            /* the node before the current one */
-#define ENTITY_FREE   0x3138            /* head of the free list */
 
 /* --------------------------------------------------------- the backend ---
  *

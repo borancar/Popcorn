@@ -346,7 +346,6 @@ void draw_char(uint8_t c, uint32_t di)
  * replay can be made deterministic by feeding it a fixed sequence.
  */
 #define RNG_STIR   0x3164               /* ten words folded in */
-#define RNG_STATE  0x33d2
 
 uint32_t game_random(uint32_t ticks, uint32_t limit)
 {
@@ -354,8 +353,8 @@ uint32_t game_random(uint32_t ticks, uint32_t limit)
     uint32_t ax = ticks & 0xffff;
     for (int32_t i = 0; i < 10; i++)
         ax = (ax + img_w(RNG_STIR + i * 2)) & 0xffff;
-    ax = (ax + img_w(RNG_STATE)) & 0xffff;
-    img_setw(RNG_STATE, (img_w(RNG_STATE) + 0x5ec5) & 0xffff);
+    ax = (ax + gv.rng_state) & 0xffff;
+    gv.rng_state = (uint16_t)((gv.rng_state + 0x5ec5) & 0xffff);
 
     /* `add al,ah` then `xor ah,ah` then `div dl`: folded to eight bits before
      * the divide, so the result really is only ever 0..255 wide. */
@@ -861,9 +860,6 @@ size_t popcorn_load_image(void)
 #define INPUT_DEMO      0x1785          /* demo_start installs this one */
 #define INPUT_MOUSE     0x1654
 
-#define BANNER_PTR      0x13c5          /* the scrolling text's cursor */
-#define BANNER_STATE    0x13c4
-#define PARTICLE_COUNT  0x1413
 
 static void menu_redraw(void)
 {
@@ -872,10 +868,10 @@ static void menu_redraw(void)
     restore_screen();
     if (gv.input_selected != INPUT_KEYBOARD)
         menu_arrow();
-    img_setw(PARTICLE_COUNT, 0x50);
+    gv.particle_count = (uint16_t)(0x50);
     menu_particles_init(0xb800);
-    g_image[BANNER_STATE] = 2;
-    img_setw(BANNER_PTR, 0x3f1e);
+    gv.banner_state = 2;
+    gv.banner_ptr = (uint16_t)(0x3f1e);
 }
 
 void game_main(const char *dir, const char *levels)
@@ -951,7 +947,7 @@ void game_main(const char *dir, const char *levels)
                 /* The idle path: step the decoration, and when the banner
                  * runs out of text start the demo, which is how the attract
                  * mode comes on by itself. */
-                if (g_image[img_w(BANNER_PTR)] == 0) {
+                if (g_image[gv.banner_ptr] == 0) {
                     start_demo();
                     back_to_menu = 1;
                     continue;
@@ -1159,8 +1155,6 @@ void game_input(void)
  * taken out of the list by setting [0x313a], and the unlink needs the node
  * *before* it, which is why [0x3142] trails one step behind.
  * ===================================================================== */
-#define LEVEL_NUMBER    0x13cc
-#define LEVEL_NUM_TEXT  0x1410
 #define LEVEL_CELLS     0x2f10          /* the copy the level is played from */
 #define PADDLE_SPRITES  0x2d0d          /* four-entry table of sprite bases */
 
@@ -1194,8 +1188,8 @@ int32_t play_loop(void)
         goto frames;
     }
     /* The level number, drawn into the header bar as two digits. */
-    uint32_t n = (g_image[LEVEL_NUMBER] + 1) & 0xff;
-    img_setw(LEVEL_NUM_TEXT, ((n % 10) << 8 | (n / 10)) + 0x3030);
+    uint32_t n = (gv.level_number + 1) & 0xff;
+    gv.level_num_text = (uint16_t)(((n % 10) << 8 | (n / 10)) + 0x3030);
 
     uint32_t di = 0x177e;
     for (int32_t i = 0; i < 12; i++, di += 2) {
@@ -1249,7 +1243,7 @@ int32_t play_loop(void)
         gv.speed_limit = 3;
     }
     gv.speed_timer = 0x4e20;
-    g_image[ENTITY_REMOVE] = 0;
+    gv.entity_remove = 0;
     g_image[0x33d5] = g_image[0x33d6] = g_image[0x3384] = 0;
     gv.paddle_morphing = 0;
     gv.net_on = gv.caught = 0;
@@ -1354,12 +1348,12 @@ frames:
 
         /* The entity list. [0x3142] trails one node behind so a handler that
          * asks to be removed can be unlinked without walking the list again. */
-        img_setw(ENTITY_PREV, 0x3138);
-        uint32_t bx = img_w(ENTITY_HEAD);
+        gv.entity_prev = offsetof(game_vars, entity_free);
+        uint32_t bx = gv.entity_head;
         while (bx != 0xffff) {
             entity_call(bx);
-            if (g_image[ENTITY_REMOVE] == 0) {
-                img_setw(ENTITY_PREV, bx);
+            if (gv.entity_remove == 0) {
+                gv.entity_prev = (uint16_t)(bx);
                 bx = img_w(bx + E_NEXT);
             } else {
                 uint32_t next = img_w(bx + E_NEXT);
@@ -1434,8 +1428,6 @@ frames:
  * is written as one here rather than pretended away, because the routines it
  * unwinds through really are abandoned mid-call.
  * ===================================================================== */
-#define LIVES         0x13c9
-#define LEVEL_SRC     0x13ca            /* offset of the level in the table */
 #define PLAYER_NAME   0x13d5
 #define SCORE_TEXT    0x13cd
 #define LEVEL_TABLE   0x000c            /* within the 0xc46 block */
@@ -1487,7 +1479,7 @@ void play_session(void)
     img_setw(SCORE_TEXT + 6, 0x3032);
     g_image[0x3f0a] = 0;
     g_image[0x3f09] = g_image[0x3f08];
-    g_image[LIVES] = 5;
+    gv.lives = 5;
 
     /* A demo starts on a random level; a game always starts on the first. */
     uint32_t lv = game_random(io_ticks(), 0x1e);
@@ -1500,14 +1492,14 @@ void play_session(void)
      * exactly where the game put it. */
     if (g_start_level >= 0)
         lv = (uint32_t)g_start_level;
-    g_image[LEVEL_NUMBER] = (uint8_t)lv;
-    img_setw(LEVEL_SRC, lv * LEVEL_BYTES + LEVEL_TABLE);
+    gv.level_number = (uint8_t)lv;
+    gv.level_src = (uint16_t)(lv * LEVEL_BYTES + LEVEL_TABLE);
     panel_draw();
 
     for (;;) {
         level_colours();                        /* 1ac2:044b */
         memcpy(g_image + LEVEL_CELLS,
-               g_image + SEG_C46 + img_w(LEVEL_SRC), LEVEL_BYTES);
+               g_image + SEG_C46 + gv.level_src, LEVEL_BYTES);
 
         for (;;) {                              /* one level, retried on death */
             level_intro();                      /* 1ac2:1eb9 */
@@ -1533,7 +1525,7 @@ retry:
                     goto level_done;
                 life_lost();                    /* 1ac2:0735 */
                 if (g_image[0x3f1b] != 1)
-                    g_image[LIVES]--;
+                    gv.lives--;
                 if (gv.game_over == 1)
                     break;
             }
@@ -1544,11 +1536,11 @@ retry:
 
     level_done:
         screen_level_done();                    /* 1ac2:0521 */
-        img_setw(LEVEL_SRC, img_w(LEVEL_SRC) + LEVEL_BYTES);
-        g_image[LEVEL_NUMBER]++;
-        if (g_image[LEVEL_NUMBER] == LEVEL_COUNT) {
-            g_image[LEVEL_NUMBER] = 0;
-            img_setw(LEVEL_SRC, LEVEL_TABLE);
+        gv.level_src = (uint16_t)(gv.level_src + LEVEL_BYTES);
+        gv.level_number++;
+        if (gv.level_number == LEVEL_COUNT) {
+            gv.level_number = 0;
+            gv.level_src = (uint16_t)(LEVEL_TABLE);
             screen_all_levels_done();           /* 1ac2:5940 */
         }
     }
@@ -2194,7 +2186,6 @@ void ball_bricks(uint32_t ball)
  * ===================================================================== */
 #define SCORE_ADD  0x1415               /* six bytes, most significant first */
 #define SOUND_BRICK      3
-#define BONUS_CAP  0x3384               /* how many capsules are out */
 #define BONUS_ODDS 0x33b1               /* cumulative weights for the kinds */
 
 static void brick_score(uint32_t a, uint32_t b, uint32_t c)
@@ -2268,7 +2259,7 @@ static void brick_1_or_2(uint32_t slot, uint32_t ball, int32_t is_two)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 2);
 
-    if (g_image[BONUS_CAP] >= 3 || game_random(io_ticks(), 3) != 0) {
+    if (gv.bonus_cap >= 3 || game_random(io_ticks(), 3) != 0) {
         img_setw(brick_entity(slot, 0x3b2a,
                               is_two ? 0x6508 : 0x65fe, 7) + 2,
                  img_w(slot));
@@ -2297,7 +2288,7 @@ static void brick_1_or_2(uint32_t slot, uint32_t ball, int32_t is_two)
      * number landed. */
     xor_sprite_16xn(centre & 0xff, ((centre >> 8) + 1) & 0xff,
                     is_two ? 0x4e13 : 0x5863, 6);
-    g_image[BONUS_CAP]++;
+    gv.bonus_cap++;
 }
 
 void brick_1(uint32_t slot, uint32_t ball) { brick_1_or_2(slot, ball, 0); }
@@ -2468,9 +2459,9 @@ void score_add(void)
  */
 void extra_life(void)
 {
-    if (g_image[LIVES] == 0x0c)
+    if (gv.lives == 0x0c)
         return;
-    uint32_t n = (g_image[LIVES] - 1) & 0xff;
+    uint32_t n = (gv.lives - 1) & 0xff;
     uint32_t di = 0x3a7c + (n & 0xfc) + (n & 3) * 0xf0;
     uint32_t si = 0x48e7;
     for (int32_t r = 0; r < 5; r++) {
@@ -2480,7 +2471,7 @@ void extra_life(void)
          * follows is the ordinary step to the next scan line. */
         di = cga_next_row(di);
     }
-    g_image[LIVES]++;
+    gv.lives++;
 }
 
 /* ------------------------------------------------------------------------
@@ -2524,7 +2515,6 @@ void field_backdrop(uint32_t y)
  * the ball on. 1ac2:1c4f drives it, 1ac2:1e23 steps it, 1ac2:1e50 draws one
  * frame.
  * ===================================================================== */
-#define WALKER_ANIM   0x1468            /* cursor into a list of frames */
 #define WALKER_WORK   0x146a            /* 0x15 bytes, shifted in place */
 #define WALKER_ROW    0x1cc0            /* the paddle row */
 #define WALKER_FIRST  0x7521            /* where the frame list restarts */
@@ -2538,7 +2528,7 @@ void field_backdrop(uint32_t y)
  */
 void walker_draw(uint32_t x)
 {
-    uint32_t src = img_w(img_w(WALKER_ANIM));
+    uint32_t src = img_w(gv.walker_anim);
     memcpy(g_image + WALKER_WORK, g_image + src, 0x15);
 
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
@@ -2570,13 +2560,13 @@ void walker_draw(uint32_t x)
  */
 void walker_step(uint32_t x)
 {
-    img_setw(WALKER_ANIM, img_w(WALKER_ANIM) - 2);
+    gv.walker_anim = (uint16_t)(gv.walker_anim - 2);
     walker_draw(x + 2);
-    img_setw(WALKER_ANIM, img_w(WALKER_ANIM) + 2);
+    gv.walker_anim = (uint16_t)(gv.walker_anim + 2);
     walker_draw(x);
-    img_setw(WALKER_ANIM, img_w(WALKER_ANIM) + 2);
-    if (img_w(img_w(WALKER_ANIM)) == 0xffff)
-        img_setw(WALKER_ANIM, WALKER_FIRST);
+    gv.walker_anim = (uint16_t)(gv.walker_anim + 2);
+    if (img_w(gv.walker_anim) == 0xffff)
+        gv.walker_anim = (uint16_t)(WALKER_FIRST);
 }
 
 /* One strip of the hatch the creature comes out of: 19 rows of one word at a
@@ -2598,15 +2588,13 @@ static void hatch_frame(uint32_t src, uint32_t x, uint32_t y)
  * 0x1cd9. Cosmetic, but it is also what puts the bottom band of the playfield
  * on screen - the backdrop sweep only reaches y=179.
  */
-#define HATCH_X    0x33f3               /* 0xc8 */
-#define HATCH_Y    0x33f4               /* 0xb3 */
 #define HATCH_OPEN  0x770d
 #define HATCH_SHUT  0x7717
 #define LIVES_MARK  0x3a7c
 
 void level_draw(void)
 {
-    uint32_t hx = g_image[HATCH_X], hy = (g_image[HATCH_Y] - 1) & 0xff;
+    uint32_t hx = gv.hatch_x, hy = (gv.hatch_y - 1) & 0xff;
 
     gv.paddle_x = 0xc8;
     for (int32_t f = 0; f < 5; f++) {
@@ -2619,7 +2607,7 @@ void level_draw(void)
      * the same layout extra_life draws them in, and the same trap. The
      * `sub di, 4` only puts back what `rep stosw` advanced, and the step
      * that follows is forwards. */
-    uint32_t n = (g_image[LIVES] - 1) & 0xff;
+    uint32_t n = (gv.lives - 1) & 0xff;
     uint32_t di = LIVES_MARK + (n & 0xfc) + (n & 3) * 0xf0;
     for (int32_t r = 0; r < 5; r++) {
         for (int32_t b = 0; b < 4; b++)
@@ -2627,10 +2615,10 @@ void level_draw(void)
         di = cga_next_row(di);
     }
 
-    img_setw(WALKER_ANIM, 0x7525);
+    gv.walker_anim = (uint16_t)(0x7525);
     gv.paddle_x = 0xc6;
     walker_draw(0xc8);
-    img_setw(WALKER_ANIM, img_w(WALKER_ANIM) + 2);
+    gv.walker_anim = (uint16_t)(gv.walker_anim + 2);
     for (int32_t i = 0; i < 9; i++) {
         for (int32_t d = 0; d < 0x4b; d++)
             game_delay();
@@ -2738,7 +2726,7 @@ void panel_draw(void)
     for (uint32_t n = 1; n <= 0x0c; n++) {
         uint32_t k = n - 1;
         uint32_t d = PANEL_LIVES + (k & 0xfc) + (k & 3) * 0xa8;
-        int32_t lit = n <= g_image[LIVES];
+        int32_t lit = n <= gv.lives;
         for (int32_t r = 0; r < 5; r++, d += PANEL_STRIDE) {
             for (int32_t b = 0; b < 4; b++)
                 g_image[d + b] = lit
@@ -2780,16 +2768,13 @@ void panel_draw(void)
  * The play loop walks it with the same `0xffff means restart` idiom the entity
  * list uses.
  */
-#define ANIM_PTR    0x3136
-#define ANIM_COUNT  0x3134
-#define ANIM_RATE   0x3135
 
 void level_colours(void)
 {
-    uint32_t si = SEG_14A1 + g_image[LEVEL_NUMBER] * 4;
-    img_setw(ANIM_PTR, img_w(si));
-    g_image[ANIM_RATE] = g_image[si + 2];
-    g_image[ANIM_COUNT] = g_image[si + 2];
+    uint32_t si = SEG_14A1 + gv.level_number * 4;
+    gv.anim_ptr = (uint16_t)(img_w(si));
+    gv.anim_rate = g_image[si + 2];
+    gv.anim_count = g_image[si + 2];
 }
 
 /* 1ac2:10c5  draw_run - the same character `count` times.
@@ -2885,10 +2870,11 @@ void flash_bar(uint32_t pattern)
 
 uint32_t entity_alloc(void)
 {
-    uint32_t si = img_w(ENTITY_FREE);
-    img_setw(ENTITY_FREE, img_w(si + E_NEXT));
+    uint32_t si = gv.entity_free;
+    gv.entity_free = (uint16_t)(img_w(si + E_NEXT));
 
-    uint32_t bx = ENTITY_FREE;
+    /* The free-list head is itself a node, walked from its own address. */
+    uint32_t bx = offsetof(game_vars, entity_free);
     while (img_w(bx + E_NEXT) != 0xffff)
         bx = img_w(bx + E_NEXT);
     img_setw(si + E_NEXT, 0xffff);
@@ -2904,10 +2890,10 @@ uint32_t entity_alloc(void)
  */
 void entity_unlink(uint32_t node)
 {
-    img_setw(img_w(ENTITY_PREV) + E_NEXT, img_w(node + E_NEXT));
-    img_setw(node + E_NEXT, img_w(ENTITY_FREE));
-    img_setw(ENTITY_FREE, node);
-    g_image[ENTITY_REMOVE] = 0;
+    img_setw(gv.entity_prev + E_NEXT, img_w(node + E_NEXT));
+    img_setw(node + E_NEXT, gv.entity_free);
+    gv.entity_free = (uint16_t)(node);
+    gv.entity_remove = 0;
 }
 
 /* 1ac2:3668  cell_set_three - the cell an entity is sitting on becomes a 3 */
@@ -2926,7 +2912,7 @@ void cells_restore(void)
     uint32_t n = g_image[LEVEL_CELLS + 1];
     for (uint32_t i = 0; i < n; i++)
         g_image[LEVEL_CELLS + 8 + g_image[LEVEL_CELLS + 2 + i]] = 9;
-    g_image[ENTITY_REMOVE] = 1;
+    gv.entity_remove = 1;
 }
 
 /* ========================================================================
@@ -3014,7 +3000,7 @@ void entity_sparkle(uint32_t bx)
 {
     if (entity_anim(bx, sprite_shift_draw) < 0) {
         g_image[0x33d5]--;
-        g_image[ENTITY_REMOVE] = 1;
+        gv.entity_remove = 1;
     }
 }
 
@@ -3037,7 +3023,7 @@ void entity_crumble(uint32_t bx)
     xor_sprite_16x7(x, y, img_w(cur));
     img_setw(bx + 6, cur + 2);
     if (img_w(img_w(bx + 6)) == 0xffff)
-        g_image[ENTITY_REMOVE] = 1;
+        gv.entity_remove = 1;
 }
 
 /* 1ac2:39a1  bonus_release
@@ -3048,11 +3034,10 @@ void entity_crumble(uint32_t bx)
  * eight pixels left and is marked type 2.
  */
 #define BONUS_KINDS 0xac60
-#define BONUS_LIVE  0x33d6
 
 void bonus_release(uint32_t bx)
 {
-    g_image[BONUS_LIVE]++;
+    gv.bonus_live++;
     uint32_t si = entity_alloc();
     img_setw(si + 0, 0x39fa);
     g_image[si + 2] = 0;
@@ -3112,7 +3097,7 @@ void entity_hatch(uint32_t bx)
     img_setw(bx + 0x0a, img_w(bx + 0x0a) + 2);
     if (img_w(img_w(bx + 0x0a)) == 0xffff) {
         g_image[img_w(bx + 2) + 3] = 0;
-        g_image[ENTITY_REMOVE] = 1;
+        gv.entity_remove = 1;
     }
 }
 
@@ -3278,7 +3263,7 @@ void xor_sprite_16xn(uint32_t x, uint32_t y, uint32_t src, uint32_t rows)
 void entity_soften(uint32_t bx)
 {
     entity_crumble(bx);
-    if (g_image[ENTITY_REMOVE] == 1)
+    if (gv.entity_remove == 1)
         g_image[img_w(bx + 2)] = 3;
 }
 
@@ -3287,10 +3272,10 @@ void entity_soften(uint32_t bx)
 void entity_repeat(uint32_t bx)
 {
     entity_crumble(bx);
-    if (g_image[ENTITY_REMOVE] != 1)
+    if (gv.entity_remove != 1)
         return;
     if (--g_image[bx + 2] != 0) {
-        g_image[ENTITY_REMOVE] = 0;
+        gv.entity_remove = 0;
         img_setw(bx + 6, 0x67ea);
         return;
     }
@@ -3327,7 +3312,7 @@ void ball_place(uint32_t ball, uint32_t x, uint32_t y)
 void entity_ball_arrive(uint32_t bx)
 {
     entity_crumble(bx);
-    if (g_image[ENTITY_REMOVE] != 1)
+    if (gv.entity_remove != 1)
         return;
 
     ball_place(img_w(bx + 2), (g_image[bx + 4] + 8) & 0xff,
@@ -3471,13 +3456,13 @@ void entity_ball_hold(uint32_t bx)
         /* It has arrived at the bottom. */
         sprite_shift_draw(x, y, img_w(img_w(bx + 6)));
         if (gv.net_on == 1) {
-            g_image[ENTITY_REMOVE] = 1;
+            gv.entity_remove = 1;
             ball_place(img_w(bx + 2), (x + 8) & 0xff, (y + 0x0b) & 0xff);
             return;
         }
         gv.ball_alive--;
         g_image[img_w(bx + 2) + B_STATE] = 0;
-        g_image[ENTITY_REMOVE] = 1;
+        gv.entity_remove = 1;
         return;
     }
 
@@ -3488,7 +3473,7 @@ void entity_ball_hold(uint32_t bx)
         return;                         /* bounced: nothing more to do */
 
     /* Hit: let the ball go, and score for it unless the hit was type 1. */
-    g_image[ENTITY_REMOVE] = 1;
+    gv.entity_remove = 1;
     uint32_t ry = g_image[bx + 5];      /* 1ac2:3897 reloads it */
     if (g_image[0x33d4] != 1) {
         brick_score(0, 0, 0x0303);
@@ -3568,14 +3553,13 @@ void bonus_hits_ball(uint32_t bx, uint32_t ball)
  * nibble paces the movement and the high nibble the frame, which is why it is
  * masked apart rather than simply decremented.
  */
-#define HIT_KIND 0x33d4
 
 /* Which ball the collision found - the original's DI across 3df1/3f20. */
 static uint32_t g_hit_ball = BALLS;
 
 void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
 {
-    g_image[HIT_KIND] = 0;
+    gv.hit_kind = 0;
 
     if ((--g_image[bx + 8] & 0x0f) == 0) {
         g_image[bx + 8]--;
@@ -3610,7 +3594,7 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
                       (((sx + 0x13) & 0xff) >= bxx &&
                        ((sx + 0x13) & 0xff) <= ((bxx + 0x0f) & 0xff));
             if (hit) {
-                g_image[HIT_KIND] = 3;
+                gv.hit_kind = 3;
                 sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
                                   img_w(img_w(bx + 6)));
                 shot_xor(gv.laser_x, (gv.laser_y + 2) & 0xff);
@@ -3626,7 +3610,7 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
         uint32_t bxx = g_image[bx + 4], px = gv.paddle_x;
         if (((bxx + 0x0f) & 0xff) >= px &&
             bxx <= ((px + gv.paddle_width) & 0xff)) {
-            g_image[HIT_KIND] = 1;
+            gv.hit_kind = 1;
             sprite_shift_draw(bxx, y, img_w(img_w(bx + 6)));
             return;
         }
@@ -3640,7 +3624,7 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
         if (g_image[ball + B_STATE] != 1)
             continue;
         bonus_hits_ball(bx, ball);
-        if (g_image[HIT_KIND] == 2) {
+        if (gv.hit_kind == 2) {
             g_hit_ball = ball;
             return;
         }
@@ -3679,9 +3663,9 @@ void entity_bonus(uint32_t bx)
     }
     bonus_update(bx, x, y);             /* 1ac2:3df1 */
 
-    if (g_image[HIT_KIND] == 0)
+    if (gv.hit_kind == 0)
         return;                         /* 1ac2:3a24 */
-    if (g_image[HIT_KIND] != 2) {
+    if (gv.hit_kind != 2) {
         draw = 0;                       /* 1ac2:3a60, no draw on the way */
         goto settle;
     }
@@ -3703,11 +3687,11 @@ sprite:
                           img_w(img_w(bx + 6)));
 
 settle:
-    if (g_image[HIT_KIND] == 0) {       /* 1ac2:3aaa - it reached the bottom */
+    if (gv.hit_kind == 0) {       /* 1ac2:3aaa - it reached the bottom */
         if (gv.net_on != 1) {
-            g_image[ENTITY_REMOVE] = 1;
+            gv.entity_remove = 1;
             g_image[0x33d5]--;
-            g_image[BONUS_LIVE]--;
+            gv.bonus_live--;
             return;
         }
         /* the net catches it, so it counts as collected */
@@ -3717,7 +3701,7 @@ settle:
     img_setw(bx + 0, 0x3aee);           /* it becomes a sparkle */
     img_setw(bx + 6, 0xb7a4);
     g_image[bx + 8] = g_image[bx + 9] = 0x0f;
-    g_image[BONUS_LIVE]--;
+    gv.bonus_live--;
     sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
                       img_w(img_w(bx + 6) - 2));
     brick_score(0, 0, 0x0703);
@@ -3835,15 +3819,15 @@ static void entity_farewell(uint32_t bx)
 /* 1ac2:055e  entities_clear - empty the active list onto the free one */
 void entities_clear(void)
 {
-    uint32_t bx = img_w(ENTITY_HEAD);
+    uint32_t bx = gv.entity_head;
     while (bx != 0xffff) {
         entity_farewell(bx);
         uint32_t next = img_w(bx + E_NEXT);
-        img_setw(bx + E_NEXT, img_w(ENTITY_FREE));
-        img_setw(ENTITY_FREE, bx);
+        img_setw(bx + E_NEXT, gv.entity_free);
+        gv.entity_free = (uint16_t)(bx);
         bx = next;
     }
-    img_setw(ENTITY_HEAD, 0xffff);
+    gv.entity_head = (uint16_t)(0xffff);
 }
 
 /* 1ac2:0521  screen_level_done - the same, and then the between-levels
@@ -3864,19 +3848,19 @@ void screen_level_done(void)
 void life_lost(void)
 {
     level_colours();
-    img_setw(ENTITY_PREV, ENTITY_FREE);
-    uint32_t bx = img_w(ENTITY_HEAD);
+    gv.entity_prev = offsetof(game_vars, entity_free);
+    uint32_t bx = gv.entity_head;
     while (bx != 0xffff) {
         if (img_w(bx) == 0x3abf) {      /* this one stays */
-            img_setw(ENTITY_PREV, bx);
+            gv.entity_prev = (uint16_t)(bx);
             bx = img_w(bx + E_NEXT);
             continue;
         }
         entity_farewell(bx);
         uint32_t next = img_w(bx + E_NEXT);
-        img_setw(bx + E_NEXT, img_w(ENTITY_FREE));
-        img_setw(ENTITY_FREE, bx);
-        img_setw(img_w(ENTITY_PREV) + E_NEXT, next);
+        img_setw(bx + E_NEXT, gv.entity_free);
+        gv.entity_free = (uint16_t)(bx);
+        img_setw(gv.entity_prev + E_NEXT, next);
         bx = next;
     }
     level_between();
@@ -4102,8 +4086,8 @@ void entity_capsule_frames(uint32_t bx, uint32_t table)
 
     y = g_image[bx + 3];
     if (y == 0xc5) {                    /* fallen past the paddle */
-        g_image[BONUS_CAP]--;
-        g_image[ENTITY_REMOVE] = 1;
+        gv.bonus_cap--;
+        gv.entity_remove = 1;
         return;
     }
 
@@ -4121,7 +4105,7 @@ void entity_capsule_frames(uint32_t bx, uint32_t table)
             g_image[bx + 2] = 1;
             g_image[bx + 3] = 6;
             img_setw(bx + 0, 0x3386);   /* becomes the paddle morph */
-            g_image[BONUS_CAP]--;
+            gv.bonus_cap--;
             brick_score(0, 0, 0x0302);
             return;
         }
@@ -4285,7 +4269,7 @@ void bonus_effect(uint32_t kind)
 void entity_multiball(uint32_t bx)
 {
     if (gv.ball_alive == 3) {
-        g_image[ENTITY_REMOVE] = 1;
+        gv.entity_remove = 1;
         return;
     }
 
@@ -4334,7 +4318,7 @@ void entity_multiball(uint32_t bx)
         }
         ball_draw(si + B_SPRITE, b[B_X], b[B_Y]);
     }
-    g_image[ENTITY_REMOVE] = 1;
+    gv.entity_remove = 1;
 }
 
 /* ========================================================================
@@ -4364,7 +4348,7 @@ void entity_multiball(uint32_t bx)
 static void morph_finish(uint32_t bx)
 {
     bonus_effect(g_image[bx + 0x0a]);
-    g_image[ENTITY_REMOVE] = 1;
+    gv.entity_remove = 1;
 }
 
 void entity_paddle_fx(uint32_t bx)
@@ -4582,12 +4566,10 @@ void level_between(void)
  * ===================================================================== */
 #define NAME_TABLE   0x344f
 #define NAME_STRIDE  0x11b
-#define NAME_INDEX   0x13e9             /* ASCII '1' upwards */
-#define PLAYER_COUNT 0x3f08
 
 int32_t name_field(uint32_t di, uint8_t *abort)
 {
-    uint32_t si = NAME_TABLE + (g_image[NAME_INDEX] - '1') * NAME_STRIDE;
+    uint32_t si = NAME_TABLE + (gv.name_index - '1') * NAME_STRIDE;
     uint32_t len = 0;
     *abort = 0;
 
@@ -4632,7 +4614,7 @@ int32_t name_field(uint32_t di, uint8_t *abort)
         if (c == 0x0d) {                /* Enter */
             if (len != 0)
                 break;                  /* accept this name */
-            if (g_image[PLAYER_COUNT] == 0)
+            if (gv.player_count == 0)
                 continue;               /* the first box: keep waiting */
             return 1;                   /* that is everyone: start */
         }
@@ -4664,7 +4646,7 @@ int32_t name_field(uint32_t di, uint8_t *abort)
      * leave it blank - which is what a five-letter name got, since its
      * shift is three. The space then goes at rec+0, not rec-1: after the
      * eleven steps `si` is rec-1 and the store is `[si+1]`. */
-    uint32_t base = NAME_TABLE + (g_image[NAME_INDEX] - '1') * NAME_STRIDE + 0x0a;
+    uint32_t base = NAME_TABLE + (gv.name_index - '1') * NAME_STRIDE + 0x0a;
     for (uint32_t n = shift; n > 0; n--) {
         uint32_t si2 = base;
         for (int32_t k = 0x0b; k > 0; k--, si2--)
@@ -4719,7 +4701,7 @@ static uint32_t panel_row(uint32_t di, uint32_t lead, uint32_t mid,
 
 uint8_t screen_player_names(void)
 {
-    g_image[PLAYER_COUNT] = 0;
+    gv.player_count = 0;
     play_frame();                       /* 1ac2:1212 - the surround */
     flush_keys();                   /* 1ac2:0106 */
 
@@ -4738,15 +4720,15 @@ uint8_t screen_player_names(void)
             uint32_t d = top;
             for (int32_t r = 0; r < 0x0e; r++)
                 d = name_bar(d, 0);
-            g_image[NAME_INDEX] = '1';
+            gv.name_index = '1';
             return 0;
         }
         if (abort == 0xff) {
-            g_image[NAME_INDEX] = '1';
+            gv.name_index = '1';
             return 0xff;
         }
-        if (++g_image[PLAYER_COUNT] == 9) {
-            g_image[NAME_INDEX] = '1';
+        if (++gv.player_count == 9) {
+            gv.name_index = '1';
             return 0;
         }
 
@@ -4756,7 +4738,7 @@ uint8_t screen_player_names(void)
         d = panel_row(d, 0xf5, 0x55, 0,    0);
         d = panel_row(d, 0xd5, 0x15, 0,    0);
         d = panel_row(d, 0x15, 0x55, 0x54, 1);
-        g_image[NAME_INDEX]++;
+        gv.name_index++;
         di = (d + 0x50) & 0xffff;
     }
 }
@@ -5025,10 +5007,10 @@ void bonus_spawn(void)
  */
 void menu_banner_tick(void)
 {
-    if (g_image[BANNER_STATE] == 2) {
-        g_image[BANNER_STATE] = 0x80;
-        img_setw(BANNER_PTR, img_w(BANNER_PTR) + 1);
-        uint32_t c = g_image[img_w(BANNER_PTR)];
+    if (gv.banner_state == 2) {
+        gv.banner_state = 0x80;
+        gv.banner_ptr = (uint16_t)(gv.banner_ptr + 1);
+        uint32_t c = g_image[gv.banner_ptr];
         c = ((c ^ 0xaa) - 0x20) & 0xff;
         uint32_t src = 0xa3c0 + c * 6;
         memcpy(g_image, g_image + src, 6);
@@ -5037,11 +5019,11 @@ void menu_banner_tick(void)
 
     uint32_t di = 0x38a9;
     for (int32_t i = 0; i < 6; i++) {
-        if (g_image[i] & g_image[BANNER_STATE])
+        if (g_image[i] & gv.banner_state)
             g_vram[di & (CGA_SIZE - 1)] ^= 3;
         di = cga_next_row(di);
     }
-    g_image[BANNER_STATE] >>= 1;
+    gv.banner_state >>= 1;
 }
 
 /* 1ac2:5448  particle_random
@@ -5057,7 +5039,7 @@ void menu_banner_tick(void)
  */
 uint32_t particle_random(uint32_t ax, uint32_t ticks, uint32_t limit)
 {
-    uint32_t n = img_w(PARTICLE_COUNT);
+    uint32_t n = gv.particle_count;
     for (uint32_t i = 0; i < n; i++)
         ax = (ax + img_w(PARTICLES + i * 2)) & 0xffff;
     ax = (ax + ticks) & 0xffff;
@@ -5121,7 +5103,7 @@ uint32_t particle_init(uint32_t si, uint32_t ax_in)
 void menu_particles_tick(void)
 {
     uint32_t si = PARTICLES;
-    uint32_t n = img_w(PARTICLE_COUNT);
+    uint32_t n = gv.particle_count;
     for (uint32_t k = 0; k < n; k++, si += 0x10) {
         /* Rub out where it was. */
         uint32_t x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
@@ -5155,7 +5137,7 @@ void menu_particles_tick(void)
  * verifier has to pass what the original had or the two diverge. */
 void menu_particles_init(uint32_t ax_in)
 {
-    uint32_t n = img_w(PARTICLE_COUNT);
+    uint32_t n = gv.particle_count;
     uint32_t ax = ax_in;
     for (uint32_t i = 0; i < n; i++)
         ax = particle_init(PARTICLES + i * 0x10, ax);
@@ -5250,7 +5232,7 @@ static void player_record_init(uint32_t di)
 void play_prepare(void)
 {
     uint32_t di = NAME_TABLE;
-    for (uint32_t n = g_image[PLAYER_COUNT]; n > 0; n--, di += NAME_STRIDE) {
+    for (uint32_t n = gv.player_count; n > 0; n--, di += NAME_STRIDE) {
         player_record_init(di);
         g_image[di + 0xd2] = 0;
     }
@@ -5268,7 +5250,7 @@ void demo_start(void)
     memcpy(g_image + NAME_TABLE, g_image + 0x13f9, 12);
     player_record_init(NAME_TABLE);
     g_image[NAME_TABLE + 0xd3] = 0;
-    g_image[PLAYER_COUNT] = 1;
+    gv.player_count = 1;
 }
 
 /* ========================================================================
@@ -5484,7 +5466,7 @@ uint32_t hsc_bubble(uint32_t si, uint32_t di)
 void hsc_sort(void)
 {
     uint32_t di = 0x3ef6, si = HSC_SCRATCH;
-    for (uint32_t n = g_image[PLAYER_COUNT]; n > 0; n--) {
+    for (uint32_t n = gv.player_count; n > 0; n--) {
         memcpy(g_image + hsc_bubble(si, di), g_image + si, 0x12);
         si += 0x12;
     }
@@ -6025,7 +6007,7 @@ void screen_game_over(void)
             return;
     }
 
-    if (g_image[LIVES] == 0) {
+    if (gv.lives == 0) {
         restore_int09();                /* 1ac2:03d1 - a no-op here */
         screen_end_of_game();           /* 1ac2:51b6 */
     }
@@ -6070,7 +6052,7 @@ void ending_plot(uint32_t x, uint32_t y)
  * starting point */
 void ending_particles_init(uint32_t ax)
 {
-    uint32_t n = img_w(PARTICLE_COUNT);
+    uint32_t n = gv.particle_count;
     for (uint32_t i = 0; i < n; i++)
         ax = ending_particle_init(PARTICLES + i * 0x10, ax);
     /* 1ac2:5a43 has no `ret` of its own: it **falls through** into
@@ -6085,7 +6067,7 @@ void ending_particles_init(uint32_t ax)
 void ending_particles_tick(void)
 {
     uint32_t si = PARTICLES;
-    uint32_t n = img_w(PARTICLE_COUNT);
+    uint32_t n = gv.particle_count;
     for (uint32_t k = 0; k < n; k++, si += 0x10) {
         uint32_t x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
         uint32_t y = (img_w(si + 8) + img_w(si + 2) - img_w(si + 0x0a)) & 0xffff;
@@ -6569,8 +6551,6 @@ void screen_define_keys(void)
 #define EOG_SAVED     0x0000            /* the screen, copied into the image */
 #define EOG_BAND      0x1aef            /* the band being merged */
 #define EOG_PICTURE   0xa6d0
-#define EOG_SCREEN_AT 0x13c0
-#define EOG_BUILD_AT  0x13c2
 #define EOG_WIDTH     0x21
 #define EOG_BAND_LEN  0x1ef
 #define EOG_GROUPS    0xa8bf
@@ -6588,12 +6568,12 @@ void screen_end_of_game(void)
         si = cga_next_row(si);
     }
 
-    img_setw(EOG_SCREEN_AT, 8);
-    img_setw(EOG_BUILD_AT, EOG_WIDTH);
+    gv.eog_screen_at = (uint16_t)(8);
+    gv.eog_build_at = (uint16_t)(EOG_WIDTH);
 
     for (int32_t pass = 0x87; pass > 0; pass--) {
         /* The band as it stands, from the saved screen - not from vram. */
-        memcpy(g_image + EOG_BAND, g_image + img_w(EOG_BUILD_AT), EOG_BAND_LEN);
+        memcpy(g_image + EOG_BAND, g_image + gv.eog_build_at, EOG_BAND_LEN);
 
         uint32_t src = EOG_PICTURE, dst = EOG_BAND;
         for (int32_t i = 0; i < EOG_BAND_LEN; i++, src++, dst++) {
@@ -6607,12 +6587,12 @@ void screen_end_of_game(void)
         }
 
         /* One band on screen from the saved copy, then the merged block. */
-        di = img_w(EOG_SCREEN_AT);
-        uint32_t from = (img_w(EOG_BUILD_AT) - EOG_WIDTH) & 0xffff;
+        di = gv.eog_screen_at;
+        uint32_t from = (gv.eog_build_at - EOG_WIDTH) & 0xffff;
         for (int32_t b = 0; b < EOG_WIDTH; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[from + b];
         di = cga_next_row(di);
-        img_setw(EOG_SCREEN_AT, di);
+        gv.eog_screen_at = (uint16_t)(di);
 
         uint32_t m = EOG_BAND;
         for (int32_t r = 0x0f; r > 0; r--) {
@@ -6621,7 +6601,7 @@ void screen_end_of_game(void)
             m += EOG_WIDTH;             /* `rep movsb` carries SI forward */
             di = cga_next_row(di);
         }
-        img_setw(EOG_BUILD_AT, img_w(EOG_BUILD_AT) + EOG_WIDTH);
+        gv.eog_build_at = (uint16_t)(gv.eog_build_at + EOG_WIDTH);
 
         io_present();
         if (!io_pump())
@@ -6833,7 +6813,7 @@ int32_t ball_after_endgame(uint32_t ball)
     blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
     ball_draw(BALLS + 4, g_image[BALLS], g_image[BALLS + 1]);
     if (g_image[0x3f1b] != 1)
-        g_image[LIVES]++;               /* a free life, unless cheating */
+        gv.lives++;               /* a free life, unless cheating */
     g_image[SWEEP_Y] = 0x75;
     endgame_curtain(1);                 /* 1ac2:4636 put DS in BP */
     /* **2**: this ending arrives back in play_session as a *lost life*, not a
@@ -6996,7 +6976,7 @@ static int32_t bonus_end_level_run(void)
      * row's lodsb so the second reads the same twelve - and a blank. And si
      * walks **up** the level by 0x0c a time, not down: the loop's `pop si` at
      * 1ac2:43e7 takes the value after the second row's lodsb. */
-    uint32_t si = (img_w(LEVEL_SRC) + 0xb8) & 0xffff;
+    uint32_t si = (gv.level_src + 0xb8) & 0xffff;
     for (int32_t n = 0x0e; n > 0; n--, si = (si + 0x0c) & 0xffff) {
         banner_row(SEG_C46 + si);
         banner_row(SEG_C46 + si);
@@ -7107,8 +7087,6 @@ static int32_t bonus_end_level_run(void)
  * comparison the hall of fame uses, merged into the table, and written back to
  * popcorn.hsc.
  * ===================================================================== */
-#define CUR_PLAYER  0x3f0a
-#define LIVE_COUNT  0x3f09
 #define REC_STATE   0xc6
 #define REC_ENTS    0xd2
 
@@ -7124,24 +7102,24 @@ static int32_t bonus_end_level_run(void)
 int32_t next_player(const char *dir)
 {
     gv.game_over = 0;
-    if (g_image[LIVES] == 0) {
+    if (gv.lives == 0) {
         gv.game_over = 1;
-        if (--g_image[LIVE_COUNT] == 0) {
+        if (--gv.live_count == 0) {
             /* Everybody is out: keep this player's final score and finish. */
-            uint32_t di = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
+            uint32_t di = NAME_TABLE + gv.cur_player * NAME_STRIDE;
             memcpy(g_image + di + REC_SCORE, g_image + SCORE_TEXT, 6);
             screen_results(dir);        /* 1ac2:0d68 jmp 0xea3 */
             longjmp(g_back_to_menu, 1); /* and its ret leaves play_session */
         }
-    } else if (g_image[LIVE_COUNT] == 1 && gv.game_over != 1) {
+    } else if (gv.live_count == 1 && gv.game_over != 1) {
         return 1;                       /* 1ac2:0d79 - carry on, no intro */
     }
 
     /* Save this player. */
-    uint32_t di = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
-    g_image[di + REC_LIVES] = g_image[LIVES];
-    img_setw(di + REC_LEVEL, img_w(LEVEL_SRC));
-    g_image[di + REC_NUMBER] = g_image[LEVEL_NUMBER];
+    uint32_t di = NAME_TABLE + gv.cur_player * NAME_STRIDE;
+    g_image[di + REC_LIVES] = gv.lives;
+    img_setw(di + REC_LEVEL, gv.level_src);
+    g_image[di + REC_NUMBER] = gv.level_number;
     memcpy(g_image + di + REC_SCORE, g_image + SCORE_TEXT, 6);
     memcpy(g_image + di + REC_CELLS, g_image + LEVEL_CELLS, LEVEL_BYTES);
     memcpy(g_image + di + REC_STATE, g_image + 0x30b0, 12);
@@ -7149,7 +7127,7 @@ int32_t next_player(const char *dir)
     /* And its entities, count first. */
     g_image[di + REC_ENTS] = 0;
     uint32_t out = di + REC_ENTS + 1;
-    for (uint32_t bx = img_w(ENTITY_HEAD); bx != 0xffff;
+    for (uint32_t bx = gv.entity_head; bx != 0xffff;
          bx = img_w(bx + E_NEXT)) {
         g_image[di + REC_ENTS]++;
         memcpy(g_image + out, g_image + bx, 12);
@@ -7160,16 +7138,16 @@ int32_t next_player(const char *dir)
     /* Move on to the next player who still has lives. */
     uint32_t si;
     do {
-        g_image[CUR_PLAYER] = (uint8_t)
-            ((g_image[CUR_PLAYER] + 1) % g_image[PLAYER_COUNT]);
-        si = NAME_TABLE + g_image[CUR_PLAYER] * NAME_STRIDE;
+        gv.cur_player = (uint8_t)
+            ((gv.cur_player + 1) % gv.player_count);
+        si = NAME_TABLE + gv.cur_player * NAME_STRIDE;
     } while (g_image[si + REC_LIVES] == 0);
 
     /* Restore them. */
     memcpy(g_image + PLAYER_NAME, g_image + si, 12);
-    g_image[LIVES] = g_image[si + REC_LIVES];
-    img_setw(LEVEL_SRC, img_w(si + REC_LEVEL));
-    g_image[LEVEL_NUMBER] = g_image[si + REC_NUMBER];
+    gv.lives = g_image[si + REC_LIVES];
+    gv.level_src = (uint16_t)(img_w(si + REC_LEVEL));
+    gv.level_number = g_image[si + REC_NUMBER];
     memcpy(g_image + SCORE_TEXT, g_image + si + REC_SCORE, 6);
     memcpy(g_image + LEVEL_CELLS, g_image + si + REC_CELLS, LEVEL_BYTES);
     memcpy(g_image + 0x30b0, g_image + si + REC_STATE, 12);
@@ -7234,7 +7212,7 @@ static void results_finish(const char *dir)
 
 void screen_results(const char *dir)
 {
-    if (g_image[PLAYER_COUNT] == 1) {
+    if (gv.player_count == 1) {
         /* 1ac2:1053 - the only record's name, then its six score digits. */
         memcpy(g_image + HSC_SCRATCH, g_image + NAME_TABLE, 12);
         memcpy(g_image + HSC_SCRATCH + 12,
@@ -7251,7 +7229,7 @@ void screen_results(const char *dir)
     memcpy(g_image + di, g_image + si, 12);
     memcpy(g_image + di + 12, g_image + si + REC_SCORE, 6);
     si += NAME_STRIDE;
-    for (uint32_t n = g_image[PLAYER_COUNT] - 1; n > 0; n--,
+    for (uint32_t n = gv.player_count - 1; n > 0; n--,
          si += NAME_STRIDE) {
         di += HSC_ENTRY;
         uint32_t at = di;
@@ -7293,7 +7271,7 @@ void screen_results(const char *dir)
     d = (d + HSC_LINE) & 0xffff;                    /* 1ac2:0f99 */
 
     uint32_t rec = HSC_SCRATCH;                     /* 1ac2:0fa4, per player */
-    for (uint32_t k = g_image[PLAYER_COUNT]; k > 0; k--) {
+    for (uint32_t k = gv.player_count; k > 0; k--) {
         d = draw_run(' ', 2, d);
         d = draw_text(rec, 0x0c, d);
         d = draw_run(' ', 2, d);
@@ -7356,13 +7334,13 @@ void screen_results(const char *dir)
  */
 void demo_input_step(void)
 {
-    if (--g_image[ANIM_COUNT] != 0)
+    if (--gv.anim_count != 0)
         return;
-    g_image[ANIM_COUNT] = g_image[ANIM_RATE];
-    img_setw(ANIM_PTR, img_w(ANIM_PTR) + 2);
-    uint32_t si = img_w(ANIM_PTR);
+    gv.anim_count = gv.anim_rate;
+    gv.anim_ptr = (uint16_t)(gv.anim_ptr + 2);
+    uint32_t si = gv.anim_ptr;
     if (img_w(SEG_14A1 + si) == 0xffff)
-        img_setw(ANIM_PTR, img_w(SEG_14A1 + si + 2));
+        gv.anim_ptr = (uint16_t)(img_w(SEG_14A1 + si + 2));
 }
 
 /* 1ac2:3c35  bonus_script
@@ -7615,9 +7593,9 @@ void draw_anim_cell(uint32_t si, uint32_t x, uint32_t y)
  */
 void entity_anim_brick(uint32_t bx)
 {
-    if (g_image[ANIM_RATE] != g_image[ANIM_COUNT])
+    if (gv.anim_rate != gv.anim_count)
         return;
-    uint32_t si = img_w(SEG_14A1 + img_w(ANIM_PTR))
+    uint32_t si = img_w(SEG_14A1 + gv.anim_ptr)
                 + g_image[bx + 4] * ANIM_SPRITE_BYTES;
     draw_anim_cell(si, g_image[bx + 2], g_image[bx + 3]);
 }
@@ -7636,14 +7614,14 @@ void brick_animated(uint32_t slot, uint32_t ball)
     uint32_t piece = was & 0x0f;
 
     /* Remember what this piece turned into, indexed by the new cell value. */
-    uint32_t table = img_w(SEG_14A1 + g_image[LEVEL_NUMBER] * 4);
+    uint32_t table = img_w(SEG_14A1 + gv.level_number * 4);
     uint32_t frame = (img_w(SEG_14A1 + table)
                       + (piece << 5)) & 0xffff;
     img_setw(ANIM_PIECES + ((was + 8) & 0xff) * 2, frame);
 
     /* Draw it once where the brick was, from the script's current entry. */
     uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
-    draw_anim_cell((img_w(SEG_14A1 + img_w(ANIM_PTR))
+    draw_anim_cell((img_w(SEG_14A1 + gv.anim_ptr)
                     + (piece << 5)) & 0xffff, x, y);
 
     uint32_t si = entity_alloc();

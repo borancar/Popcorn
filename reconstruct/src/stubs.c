@@ -56,7 +56,7 @@ void entity_unknown(uint32_t bx)
 {
     note("entity_unknown", 0x1b5e);
     (void)bx;
-    g_image[ENTITY_REMOVE] = 1;
+    gv.entity_remove = 1;
 }
 
 
