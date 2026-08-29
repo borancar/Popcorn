@@ -279,7 +279,33 @@ typedef struct __attribute__((packed)) {
     uint8_t  anim_count;                /* 0x3134 the animated bricks */
     uint8_t  anim_rate;                 /* 0x3135 */
     uint16_t anim_ptr;                  /* 0x3136 */
-    uint16_t entity_free;               /* 0x3138 head of the free list - and the value entity_prev starts a walk at, so an unlink at the head has a node to write through */
+    /* 0x3138 head of the free list - **and a sentinel node for the active
+     * one**, which is the trick the whole chain is built on.
+     *
+     * entity_head is at 0x3144, and 0x3144 - 0x3138 is 0x0c, which is exactly
+     * offsetof(entity_t, next). So the address 0x3138, read as a node, has
+     * `next` *at* entity_head.
+     *
+     * That is read off the binary rather than assumed. 1ac2:323e is
+     * `mov bx, 0x3138` - the **address**, not its contents - and the loop that
+     * follows reads `[bx + 0xc]`, so its first read is the word at 0x3144. And
+     * 0x3144 is the active list's head because six routines start a walk by
+     * loading it (1ac2:1b53 is the play loop's own entity walk, 1ac2:055e is
+     * entities_clear) and the clear paths store an immediate into it at
+     * 1ac2:0554, 0591 and 0e11.
+     *
+     * Two things fall out of that and neither needs a special case:
+     *
+     *   - a walk started at 0x3138 traverses the **active** list, because the
+     *     sentinel's link is its head. entity_alloc does this to find the tail.
+     *   - entity_prev starts every walk at 0x3138, so unlinking the *first*
+     *     real node writes entity_head through the sentinel exactly as it
+     *     would write any other node's link.
+     *
+     * The chain ends in 0xffff rather than 0, because 0 is a perfectly good
+     * image offset and would be indistinguishable from a node at the start of
+     * the image. */
+    uint16_t entity_free;
     uint8_t  entity_remove;             /* 0x313a a handler asking to be taken out of the list */
     uint8_t  _pad_14[7];
     uint16_t entity_prev;               /* 0x3142 trails one node behind the walk, so the unlink needs no second pass */

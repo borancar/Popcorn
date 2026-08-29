@@ -2870,10 +2870,14 @@ void flash_bar(uint32_t pattern)
 
 uint32_t entity_alloc(void)
 {
+    /* Take the first node off the free list. */
     uint32_t si = gv.entity_free;
     gv.entity_free = (uint16_t)(entity_at(si)->next);
 
-    /* The free-list head is itself a node, walked from its own address. */
+    /* Then append it to the end of the **active** list - which is what this
+     * walk is over, though it starts at the free list's own head variable.
+     * See the note on entity_free: 0x3138 read as a node has its `next` at
+     * 0x3144, which *is* entity_head, so the sentinel's link is the list. */
     uint32_t bx = offsetof(game_vars, entity_free);
     while (entity_at(bx)->next != 0xffff)
         bx = entity_at(bx)->next;
