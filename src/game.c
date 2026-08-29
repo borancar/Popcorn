@@ -276,7 +276,7 @@ void draw_paddle(uint32_t sprite)
      * at all - this is compensation for what the redraw itself cost, which is
      * what keeps the game running at one speed whether the paddle is moving
      * or not. It is not a score. */
-    img_setw(0x1487, (img_w(0x1487) - 0x1e0) & 0xffff);
+    gv.frame_delay -= 0x1e0;            /* the uint16_t is the `& 0xffff` */
 
     /* What is on screen now becomes what has to be erased. */
     memcpy(g_image + PADDLE_ROWS_PREV, g_image + PADDLE_ROWS_CUR,
@@ -1221,7 +1221,7 @@ int32_t play_loop(void)
      * byte of the word at 0x2d0f, not the high one at 0x2d10. With the high
      * byte the width came out zero, and a zero-width paddle clamps to the
      * left wall the moment the mouse is read. */
-    g_image[0x2d3a] = g_image[PADDLE_SPRITES + 2];
+    gv.paddle_width = g_image[PADDLE_SPRITES + 2];
     gv.paddle_max = 0xac;
     gv.paddle_min = 0x08;
     gv.repeat_count = 5;
@@ -1243,7 +1243,7 @@ int32_t play_loop(void)
     }
     gv.speed_timer = 0x4e20;
     gv.entity_remove = 0;
-    g_image[0x33d5] = g_image[0x33d6] = g_image[0x3384] = 0;
+    g_image[0x33d5] = gv.bonus_live = gv.bonus_cap = 0;
     gv.paddle_morphing = 0;
     gv.net_on = gv.caught = 0;
     gv.game_over = gv.extra_on = gv.laser_on = 0;
@@ -1390,7 +1390,7 @@ frames:
          * empty loops, minus one per point of it. Kept for its shape - the
          * frame is paced on the refresh below, so this no longer sets a
          * speed, and the [0x33d6] taper rides on io_frame_pace instead. */
-        for (int32_t i = 3 - g_image[0x33d6]; i > 0; i--)
+        for (int32_t i = 3 - gv.bonus_live; i > 0; i--)
             io_delay_cycles(0xb4 * CYCLES_PER_LOOP);
 
         if (gv.extra_on != 1 && g_image[0x33d5] != 3 &&
@@ -1470,11 +1470,11 @@ void play_session(void)
         goto retry;
     }
 
-    memcpy(g_image + PLAYER_NAME, g_image + 0x344f, 12);
+    memcpy(g_image + PLAYER_NAME, gv.players[0].name, sizeof gv.players[0].name);
     memset(gv.score_text, '0', sizeof gv.score_text);
     gv.extra_at = 0x3032;               /* the first one at "20" */
-    g_image[0x3f0a] = 0;
-    g_image[0x3f09] = g_image[0x3f08];
+    gv.cur_player = 0;
+    gv.live_count = gv.player_count;
     gv.lives = 5;
 
     /* A demo starts on a random level; a game always starts on the first. */
@@ -3466,20 +3466,20 @@ void entity_ball_hold(uint32_t bx)
     }
 
     bonus_update(bx, x, ny);            /* 1ac2:3df1 */
-    if (g_image[0x33d4] == 0)
+    if (gv.hit_kind == 0)
         return;
-    if (g_image[0x33d4] == 2)
+    if (gv.hit_kind == 2)
         return;                         /* bounced: nothing more to do */
 
     /* Hit: let the ball go, and score for it unless the hit was type 1. */
     gv.entity_remove = 1;
     uint32_t ry = g_image[bx + 5];      /* 1ac2:3897 reloads it */
-    if (g_image[0x33d4] != 1) {
+    if (gv.hit_kind != 1) {
         brick_score(0, 0, 0x0303);
         ry = (ry + 4) & 0xff;
     }
     ball_place(img_w(bx + 2), (g_image[bx + 4] + 8) & 0xff, (ry + 0x0c) & 0xff);
-    if (g_image[0x33d4] != 3)
+    if (gv.hit_kind != 3)
         brick_score(0, 0, 5);
 }
 
@@ -3538,7 +3538,7 @@ void bonus_hits_ball(uint32_t bx, uint32_t ball)
         return;
     if (bxx > ((ballX + 3) & 0xff))
         return;
-    g_image[0x33d4] = 2;
+    gv.hit_kind = 2;
 }
 
 /* ------------------------------------------------------------------------
@@ -6245,7 +6245,7 @@ void int09_handler(uint32_t scan)
     if (scan == 0xc3)                   /* F9 released */
         g_image[SOUND_ON] ^= 1;
     if (make)
-        g_image[0x2d49] = (uint8_t)scan;
+        gv.last_make = (uint8_t)scan;
 
     /* The original walks the three scan codes and stores into the flags
      * *backwards* - `[KEY_ACTION + (2 - i)]` - because the two triples are
