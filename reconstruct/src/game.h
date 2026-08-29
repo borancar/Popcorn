@@ -25,6 +25,62 @@
 
 extern uint8_t *g_image;
 
+/* One ball, the 0x1e bytes at BALLS + i * 0x1e.
+ *
+ * Every byte is accounted for - the members below tile 0x00..0x1d with no
+ * gaps - which is the corroboration that the layout is right and not merely
+ * consistent. BALL_AT checks each offset and the size at compile time.
+ *
+ * The two four-word sprite arrays were reached a byte at a time, assembling
+ * and splitting words by hand (`b[B_SPRITE + r*2] | b[B_SPRITE + r*2+1] << 8`).
+ * As uint16_t they are just indexed, on the same little-endian assumption the
+ * rest of the struct makes.
+ */
+typedef struct __attribute__((packed)) {
+    uint8_t  x;                 /* 0x00 the live position */
+    uint8_t  y;                 /* 0x01 */
+    uint8_t  prev_x;            /* 0x02 where it was, so the XOR can undo it */
+    uint8_t  prev_y;            /* 0x03 */
+    uint16_t sprite[4];         /* 0x04 what is on screen now */
+    uint16_t prev_spr[4];       /* 0x0c what to erase */
+    uint8_t  dir_x;             /* 0x14 non-zero negates that axis */
+    uint8_t  dir_y;             /* 0x15 */
+    uint8_t  dy;                /* 0x16 the slope is stored (dy, dx) */
+    uint8_t  dx;                /* 0x17 */
+    uint8_t  anchor_x;          /* 0x18 where this straight segment began */
+    uint8_t  anchor_y;          /* 0x19 */
+    uint8_t  acc_x;             /* 0x1a Bresenham, counting from the anchor */
+    uint8_t  acc_y;             /* 0x1b */
+    uint8_t  state;             /* 0x1c 0 idle, 1-2 in play */
+    uint8_t  bounces;           /* 0x1d */
+} ball_t;
+
+#define BALL_AT(field, off) \
+    typedef char ball_at_##field[offsetof(ball_t, field) == (off) ? 1 : -1]
+BALL_AT(x, 0x00);        BALL_AT(y, 0x01);
+BALL_AT(prev_x, 0x02);   BALL_AT(prev_y, 0x03);
+BALL_AT(sprite, 0x04);   BALL_AT(prev_spr, 0x0c);
+BALL_AT(dir_x, 0x14);    BALL_AT(dir_y, 0x15);
+BALL_AT(dy, 0x16);       BALL_AT(dx, 0x17);
+BALL_AT(anchor_x, 0x18); BALL_AT(anchor_y, 0x19);
+BALL_AT(acc_x, 0x1a);    BALL_AT(acc_y, 0x1b);
+BALL_AT(state, 0x1c);    BALL_AT(bounces, 0x1d);
+typedef char ball_t_is_0x1e[sizeof(ball_t) == 0x1e ? 1 : -1];
+
+/* Struct-land to offset-land, for the routines that still take an image
+ * offset because that is what the original passed in a register. */
+/* A ball by its image offset, for the routines that still carry one because
+ * the original passed it in a register. */
+static inline ball_t *ball_at(uint32_t off)
+{
+    return (ball_t *)(g_image + off);
+}
+
+static inline uint32_t img_off(const void *p)
+{
+    return (uint32_t)((const uint8_t *)p - g_image);
+}
+
 /* ------------------------------------------------------------------------
  * The load image as a **structure**, laid over the same bytes as g_image.
  *
@@ -116,28 +172,28 @@ typedef struct __attribute__((packed)) {
     uint16_t extra_pos;                 /* 0x2e87 */
     uint8_t  _pad_11[0x10];
     uint16_t hit_dirs[4];               /* 0x2e99 the four directions a brick hit can send the ball, indexed by which slot matched */
-    uint8_t  _pad_12[0x5a];
+    ball_t   balls[3];                  /* 0x2ea1 the ball pool. **Three**, not four: 0x2ea1 + 3*0x1e ends exactly where backdrop_phase begins, and every loop over it is i < 3. BALL_COUNT said 4 and was never used */
     uint8_t  backdrop_phase;            /* 0x2efb the level intro's reveal, counted by kernel zero's timer */
-    uint8_t  _pad_13[0x238];
+    uint8_t  _pad_12[0x238];
     uint8_t  anim_count;                /* 0x3134 the animated bricks */
     uint8_t  anim_rate;                 /* 0x3135 */
     uint16_t anim_ptr;                  /* 0x3136 */
     uint16_t entity_free;               /* 0x3138 head of the free list - and the value entity_prev starts a walk at, so an unlink at the head has a node to write through */
     uint8_t  entity_remove;             /* 0x313a a handler asking to be taken out of the list */
-    uint8_t  _pad_14[0x7];
+    uint8_t  _pad_13[0x7];
     uint16_t entity_prev;               /* 0x3142 trails one node behind the walk, so the unlink needs no second pass */
     uint16_t entity_head;               /* 0x3144 */
-    uint8_t  _pad_15[0x23e];
+    uint8_t  _pad_14[0x23e];
     uint8_t  bonus_cap;                 /* 0x3384 */
-    uint8_t  _pad_16[0x4d];
+    uint8_t  _pad_15[0x4d];
     uint16_t rng_state;                 /* 0x33d2 */
     uint8_t  hit_kind;                  /* 0x33d4 */
-    uint8_t  _pad_17[0x1];
+    uint8_t  _pad_16[0x1];
     uint8_t  bonus_live;                /* 0x33d6 capsules on screen; the play loop's pause shortens as it rises */
-    uint8_t  _pad_18[0x1c];
+    uint8_t  _pad_17[0x1c];
     uint8_t  hatch_x;                   /* 0x33f3 */
     uint8_t  hatch_y;                   /* 0x33f4 */
-    uint8_t  _pad_19[0xb13];
+    uint8_t  _pad_18[0xb13];
     uint8_t  player_count;              /* 0x3f08 how many were entered */
     uint8_t  live_count;                /* 0x3f09 how many are still in. next_player hands over while this is more than one */
     uint8_t  cur_player;                /* 0x3f0a */
@@ -207,6 +263,7 @@ IMG_AT(net_timer, 0x2e84);
 IMG_AT(net_pos, 0x2e85);
 IMG_AT(extra_pos, 0x2e87);
 IMG_AT(hit_dirs, 0x2e99);
+IMG_AT(balls, 0x2ea1);
 IMG_AT(backdrop_phase, 0x2efb);
 IMG_AT(anim_count, 0x3134);
 IMG_AT(anim_rate, 0x3135);
@@ -320,7 +377,7 @@ extern uint32_t g_palette[4];
  * at 1ac2:1873 and stepped by the Bresenham routine at 1ac2:27d7. */
 #define BALLS         0x2ea1
 #define BALL_STRIDE   0x1e
-#define BALL_COUNT       4
+#define BALL_COUNT       3             /* was 4, and never used - the pool is three */
 #define B_X           0x00             /* the LIVE position */
 #define B_Y           0x01
 #define B_DIR_X       0x14             /* non-zero negates that axis */

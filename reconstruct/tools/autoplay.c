@@ -37,21 +37,11 @@
 #define WALL_L          9               /* the ball's turning points, */
 #define WALL_R          195             /* measured in play */
 
-#define BALLS           0x2ea1
-#define BALL_STRIDE     0x1e
-#define BALL_COUNT      4
-#define B_X             0x00
-#define B_Y             0x01
-#define B_DIRX          0x14
-#define B_DIRY          0x15
 /* Stored (dy, dx), which is the opposite of how it reads: both branches of the
  * stepper at 1ac2:27d7 come out as x_offset / y_offset = [+0x17] / [+0x16].
  * The other way round makes every predicted landing wrong by the square of the
  * slope - the paddle sits somewhere plausible and catches the ball only when
  * the geometry happens to agree, which looks exactly like randomness. */
-#define B_DY            0x16
-#define B_DX            0x17
-#define B_STATE         0x1c
 
 #define ENTITY_HEAD     0x3144
 #define E_NEXT          0x0c
@@ -140,16 +130,15 @@ static int32_t live_balls(struct ball *out)
 {
     int32_t n = 0;
     for (int32_t i = 0; i < BALL_COUNT; i++) {
-        uint32_t b = BALLS + (uint32_t)i * BALL_STRIDE;
-        uint8_t st = rd(b + B_STATE);
-        if (st != 1 && st != 2)         /* 3 is brick 9, 4 the parachute */
+        const ball_t *b = &gv.balls[i];
+        if (b->state != 1 && b->state != 2) /* 3 is brick 9, 4 the parachute */
             continue;
-        out[n].x = rd(b + B_X);
-        out[n].y = rd(b + B_Y);
-        out[n].dy_up = rd(b + B_DIRY) != 0;
-        out[n].dx_neg = rd(b + B_DIRX) != 0;
-        out[n].dx = rd(b + B_DX) ? rd(b + B_DX) : 1;
-        out[n].dy = rd(b + B_DY) ? rd(b + B_DY) : 1;
+        out[n].x = b->x;
+        out[n].y = b->y;
+        out[n].dy_up = b->dir_y != 0;
+        out[n].dx_neg = b->dir_x != 0;
+        out[n].dx = b->dx ? b->dx : 1;
+        out[n].dy = b->dy ? b->dy : 1;
         n++;
     }
     return n;
