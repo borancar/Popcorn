@@ -23,7 +23,77 @@
 #define IMAGE_LEN   0x208b0
 #define CODE_BASE   0x1ac20
 
-extern uint8_t *g_image;          /* the whole unpacked load image */
+extern uint8_t *g_image;
+
+/* ------------------------------------------------------------------------
+ * The load image as a **structure**, laid over the same bytes as g_image.
+ *
+ * The alternative - a `#define` per address and `g_image[FOO]` / `img_w(FOO)`
+ * at each use - has two problems the compiler cannot see. The width of a
+ * field is chosen at every call site rather than declared once, so a byte read
+ * as a word is a bug nothing catches; and a wrong address is simply a wrong
+ * address. Here the offset of every field is checked at **compile time**
+ * against what the disassembly says, so a mistake fails the build instead of
+ * reading the wrong byte at run time. Get one padding length wrong and every
+ * field after it shifts, and the build says which.
+ *
+ * The struct is packed and grows a field at a time: name an offset, split the
+ * padding around it, add its IMG_AT. It does not have to cover the image, and
+ * anything not yet named is still reached through g_image.
+ *
+ * **Endianness.** The fields are the image's own little-endian words, so this
+ * assumes a little-endian host, where `img_w`'s explicit `lo | hi << 8` did
+ * not. That is a deliberate trade: the program being ported is a DOS binary,
+ * every machine it ran on was little-endian, and so is every machine this is
+ * likely to be built on. It would need byte-swapping accessors on a
+ * big-endian host.
+ */
+typedef struct __attribute__((packed)) {
+    uint8_t  _pad_00[0x1485];
+    uint8_t  speed_step;                /* 0x1485 the ball's move-this-frame counter, reloaded from speed_limit */
+    uint8_t  speed_limit;               /* 0x1486 its reload value: the ball steps on (limit-1) frames in limit */
+    uint16_t frame_delay;               /* 0x1487 empty loops left this frame */
+    uint16_t frame_delay_set;           /* 0x1489 what it is reloaded with */
+    uint16_t speed_timer;               /* 0x148b frames until speed_limit rises, so a level speeds up */
+    uint8_t  _pad_01[0x18ab];
+    uint8_t  paddle_step;               /* 0x2d38 how much the width changes per morph frame */
+    uint8_t  paddle_kind;               /* 0x2d39 which of the four sprite sets is current */
+    uint8_t  paddle_width;              /* 0x2d3a in pixels */
+    uint8_t  paddle_morphing;           /* 0x2d3b a grow or shrink is running. Was two names for one byte: PADDLE_SUPPRESS, because the play loop stops drawing the paddle itself, and PADDLE_FORCE_DRAW, because draw_paddle_shifted redraws even when x has not moved */
+    uint16_t morph_owner;               /* 0x2d3c the entity running it, so a second capsule does not fight the first */
+    uint8_t  paddle_min;                /* 0x2d3e 8. Was also PADDLE_LOW */
+    uint8_t  paddle_max;                /* 0x2d3f 172, and it moves as the paddle grows. Was also PADDLE_HIGH */
+    uint8_t  _pad_02[0x114];
+    uint8_t  paddle_x;                  /* 0x2e54 left edge, pixels */
+    uint8_t  paddle_prev_x;             /* 0x2e55 where it was last frame, so the old one can be erased */
+    uint8_t  hold_offset;               /* 0x2e56 a caught ball's x relative to the paddle */
+} game_vars;
+
+/* The same bytes as g_image, which stays the buffer everything else - memcpy,
+ * the snapshot loader, the verifier, exepack - works through. */
+#define gv (*(game_vars *)g_image)
+
+/* offsetof checked at compile time. _Static_assert is C11 and this is C99, so
+ * it is the negative-array-size trick; the failure message names the field. */
+#define IMG_AT(field, off) \
+    typedef char img_at_##field[offsetof(game_vars, field) == (off) ? 1 : -1]
+
+IMG_AT(speed_step, 0x1485);
+IMG_AT(speed_limit, 0x1486);
+IMG_AT(frame_delay, 0x1487);
+IMG_AT(frame_delay_set, 0x1489);
+IMG_AT(speed_timer, 0x148b);
+IMG_AT(paddle_step, 0x2d38);
+IMG_AT(paddle_kind, 0x2d39);
+IMG_AT(paddle_width, 0x2d3a);
+IMG_AT(paddle_morphing, 0x2d3b);
+IMG_AT(morph_owner, 0x2d3c);
+IMG_AT(paddle_min, 0x2d3e);
+IMG_AT(paddle_max, 0x2d3f);
+IMG_AT(paddle_x, 0x2e54);
+IMG_AT(paddle_prev_x, 0x2e55);
+IMG_AT(hold_offset, 0x2e56);
+IMG_AT(speed_timer,     0x148b);          /* the whole unpacked load image */
 extern const char *g_dir;               /* "" - everything is relative to the
                                          * current directory, as it was in DOS */
 
@@ -118,9 +188,6 @@ extern uint32_t g_palette[4];
  * declarations: they are indices into g_image, so that a transcribed routine
  * reads the same address the disassembly shows.
  */
-#define PADDLE_X      0x2e54           /* left edge, pixels */
-#define PADDLE_MIN    0x2d3e           /* 8 */
-#define PADDLE_MAX    0x2d3f           /* 172 */
 #define PADDLE_W          28
 #define PADDLE_ROW       186
 

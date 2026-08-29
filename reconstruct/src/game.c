@@ -109,8 +109,8 @@ void input_keyboard(void)
         if (!g_image[KEY_LEFT]) {              /* neither key held */
             g_image[REPEAT_COUNT] = REPEAT_RESET;
             g_image[REPEAT_DIV] = REPEAT_RESET;
-            if (g_image[PADDLE_X] > g_image[PADDLE_MAX])
-                g_image[PADDLE_X] = g_image[PADDLE_MAX];
+            if (gv.paddle_x > gv.paddle_max)
+                gv.paddle_x = gv.paddle_max;
             return;
         }
         go_left = g_image[LAST_DIR] == 0;      /* both: the most recent wins */
@@ -122,15 +122,15 @@ void input_keyboard(void)
      * never comes up because x never gets below the minimum in the first
      * place. Transcribed as it is rather than as it should be. */
     if (!go_left) {
-        uint8_t x = (uint8_t)(g_image[PADDLE_X] + 1);
-        if (x > g_image[PADDLE_MAX])
-            x = g_image[PADDLE_MAX];
-        g_image[PADDLE_X] = x;
+        uint8_t x = (uint8_t)(gv.paddle_x + 1);
+        if (x > gv.paddle_max)
+            x = gv.paddle_max;
+        gv.paddle_x = x;
     } else {
-        uint8_t x = (uint8_t)(g_image[PADDLE_X] - 1);
-        if (x < g_image[PADDLE_MIN])
-            x = g_image[PADDLE_MIN];
-        g_image[PADDLE_X] = x;
+        uint8_t x = (uint8_t)(gv.paddle_x - 1);
+        if (x < gv.paddle_min)
+            x = gv.paddle_min;
+        gv.paddle_x = x;
     }
 }
 
@@ -153,11 +153,11 @@ void input_mouse(uint32_t mouse_x, uint32_t buttons)
     g_image[KEY_ACTION] = (buttons & 3) ? 1 : 0;
 
     uint8_t x = (uint8_t)((mouse_x >> 1) & 0xff);
-    if (x > g_image[PADDLE_MAX])
-        x = g_image[PADDLE_MAX];
-    else if (x < g_image[PADDLE_MIN])
-        x = g_image[PADDLE_MIN];
-    g_image[PADDLE_X] = x;
+    if (x > gv.paddle_max)
+        x = gv.paddle_max;
+    else if (x < gv.paddle_min)
+        x = gv.paddle_min;
+    gv.paddle_x = x;
 }
 
 /* ------------------------------------------------------------------------
@@ -258,8 +258,6 @@ void blit_xor(uint32_t pixels, uint32_t rows)
  * paddle has not moved and no redraw was forced by [0x2d3b], there is nothing
  * to do, and XOR-ing it off and back on would flicker it.
  */
-#define PADDLE_FORCE_DRAW  0x2d3b
-#define PADDLE_PREV_X      0x2e55
 #define PADDLE_ROWS_CUR    0x2e57       /* seven words */
 #define PADDLE_ROWS_PREV   0x2e65
 #define PADDLE_PIX_CUR     0x2d8c       /* PADDLE_IMAGE bytes */
@@ -267,8 +265,8 @@ void blit_xor(uint32_t pixels, uint32_t rows)
 
 void draw_paddle(uint32_t sprite)
 {
-    if (!g_image[PADDLE_FORCE_DRAW] &&
-        g_image[PADDLE_X] == g_image[PADDLE_PREV_X])
+    if (!gv.paddle_morphing &&
+        gv.paddle_x == gv.paddle_prev_x)
         return;
 
     /* `sub word [0x1487], 0x1e0`, taken only when the paddle actually moves.
@@ -288,8 +286,8 @@ void draw_paddle(uint32_t sprite)
     memcpy(g_image + PADDLE_PIX_PREV, g_image + PADDLE_PIX_CUR,
            PADDLE_IMAGE + 1);
 
-    uint32_t x = g_image[PADDLE_X];
-    g_image[PADDLE_PREV_X] = (uint8_t)x;
+    uint32_t x = gv.paddle_x;
+    gv.paddle_prev_x = (uint8_t)x;
     paddle_row_offsets(x, PADDLE_ROWS_CUR);
 
     /* Pick the copy pre-shifted to this pixel within its byte. */
@@ -1169,12 +1167,8 @@ void game_input(void)
 #define LEVEL_NUMBER    0x13cc
 #define LEVEL_NUM_TEXT  0x1410
 #define LEVEL_CELLS     0x2f10          /* the copy the level is played from */
-#define FRAME_DELAY     0x1487
-#define FRAME_DELAY_SET 0x1489
 #define BALL_ALIVE      0x2e73          /* clear when the last one is lost */
 #define GAME_OVER       0x2e78
-#define PADDLE_SUPPRESS 0x2d3b
-#define PADDLE_KIND     0x2d39
 #define PADDLE_SPRITES  0x2d0d          /* four-entry table of sprite bases */
 #define LASER_ON        0x2e7e
 #define SHOT_ON         0x2e81
@@ -1186,9 +1180,6 @@ void game_input(void)
 #define EXTRA_POS       0x2e87
 #define SERVE_TIMEOUT   0x2e7a
 #define CAUGHT          0x2e75
-#define SPEED_TIMER     0x148b
-#define SPEED_STEP      0x1485
-#define SPEED_LIMIT     0x1486
 
 static void erase_shot(uint32_t pos_var, uint32_t reload, uint32_t timer)
 {
@@ -1242,36 +1233,36 @@ int32_t play_loop(void)
         di = cga_next_row(di);
     }
 
-    g_image[PADDLE_X] = g_image[PADDLE_PREV_X] = 0x64;
-    g_image[PADDLE_KIND] = 0;
+    gv.paddle_x = gv.paddle_prev_x = 0x64;
+    gv.paddle_kind = 0;
     /* `mov ax, [di+2] / ... / mov [0x2d3a], al` - the width is the **low**
      * byte of the word at 0x2d0f, not the high one at 0x2d10. With the high
      * byte the width came out zero, and a zero-width paddle clamps to the
      * left wall the moment the mouse is read. */
     g_image[0x2d3a] = g_image[PADDLE_SPRITES + 2];
-    g_image[PADDLE_MAX] = 0xac;
-    g_image[PADDLE_MIN] = 0x08;
+    gv.paddle_max = 0xac;
+    gv.paddle_min = 0x08;
     g_image[REPEAT_COUNT] = 5;
     g_image[REPEAT_DIV] = 5;
     io_mouse_warp(0x64 * 2, 0xb8);
 
-    paddle_row_offsets(g_image[PADDLE_X], PADDLE_ROWS_CUR);
+    paddle_row_offsets(gv.paddle_x, PADDLE_ROWS_CUR);
     memcpy(g_image + PADDLE_PIX_CUR, g_image + SPRITE_BASE, 0x27 * 2);
     g_image[BALL_ALIVE] = 1;
     memcpy(g_image + BALLS + 4, g_image + 0x48fb, 8);
-    img_setw(FRAME_DELAY_SET, 0x1f4);
+    gv.frame_delay_set = 0x1f4;
     g_image[KEY_RIGHT] = g_image[KEY_LEFT] = 0;
     g_image[REPEAT_DIV] = 0;
     g_image[KEY_ACTION] = 0;
-    g_image[SPEED_STEP] = g_image[SPEED_LIMIT] = 0xfa;
+    gv.speed_step = gv.speed_limit = 0xfa;
     if (g_image[DELAY_ENTRY] != 0xc3) {
-        g_image[SPEED_STEP] = 3;
-        g_image[SPEED_LIMIT] = 3;
+        gv.speed_step = 3;
+        gv.speed_limit = 3;
     }
-    img_setw(SPEED_TIMER, 0x4e20);
+    gv.speed_timer = 0x4e20;
     g_image[ENTITY_REMOVE] = 0;
     g_image[0x33d5] = g_image[0x33d6] = g_image[0x3384] = 0;
-    g_image[PADDLE_SUPPRESS] = 0;
+    gv.paddle_morphing = 0;
     g_image[SHOT_ON] = g_image[CAUGHT] = 0;
     g_image[GAME_OVER] = g_image[EXTRA_ON] = g_image[LASER_ON] = 0;
 
@@ -1315,7 +1306,7 @@ int32_t play_loop(void)
 
 frames:
     for (;;) {                          /* one iteration is one frame */
-        img_setw(FRAME_DELAY, img_w(FRAME_DELAY_SET));
+        gv.frame_delay = gv.frame_delay_set;
         demo_input_step();
 
         if (g_image[BALL_ALIVE] == 0) {
@@ -1331,22 +1322,22 @@ frames:
         }
 
         game_input();
-        if (g_image[PADDLE_SUPPRESS] == 0)
-            draw_paddle(img_w(PADDLE_SPRITES + g_image[PADDLE_KIND] * 4));
+        if (gv.paddle_morphing == 0)
+            draw_paddle(img_w(PADDLE_SPRITES + gv.paddle_kind * 4));
         if (g_image[LASER_ON])
             laser_fire();
 
         /* Every 0x4e20 frames the ball is allowed to move one step more
          * often, up to the limit - the level speeds up the longer it runs. */
-        img_setw(SPEED_TIMER, img_w(SPEED_TIMER) - 1);
-        if (img_w(SPEED_TIMER) == 0) {
-            img_setw(SPEED_TIMER, 0x61a8);
-            if (g_image[SPEED_LIMIT] != 0xff)
-                g_image[SPEED_LIMIT]++;
-            g_image[SPEED_STEP] = g_image[SPEED_LIMIT];
+        gv.speed_timer--;
+        if (gv.speed_timer == 0) {
+            gv.speed_timer = 0x61a8;
+            if (gv.speed_limit != 0xff)
+                gv.speed_limit++;
+            gv.speed_step = gv.speed_limit;
         }
 
-        if (--g_image[SPEED_STEP] != 0) {
+        if (--gv.speed_step != 0) {
             for (int32_t i = 0; i < 3; i++) {
                 uint32_t ball = BALLS + i * BALL_STRIDE;
                 uint8_t st = g_image[ball + B_STATE];
@@ -1369,7 +1360,7 @@ frames:
                 ball_after(ball);
             }
         } else {
-            g_image[SPEED_STEP] = g_image[SPEED_LIMIT];
+            gv.speed_step = gv.speed_limit;
         }
 
         /* The entity list. [0x3142] trails one node behind so a handler that
@@ -1943,7 +1934,6 @@ void ball_after(uint32_t ball)
  */
 #define PADDLE_TOP    0xb5
 #define PADDLE_BOTTOM 0xbe
-#define PADDLE_WIDTH  0x2d3a
 #define SLOPE_TOP     0x2e2c
 #define SLOPE_SIDE    0x2e42
 #define SOUND_PADDLE     1
@@ -1985,12 +1975,12 @@ void ball_paddle(uint32_t ball)
     if (y > PADDLE_TOP && b[B_DIR_Y] != 1) {
         /* The sides. Only the two single columns just outside the paddle
          * count, which is why this is an equality and not a range. */
-        uint32_t left = (g_image[PADDLE_X] - 3) & 0xff;
+        uint32_t left = (gv.paddle_x - 3) & 0xff;
         uint32_t bx = b[B_X];
         int32_t from_left = 1;
         if (bx != left) {
             uint32_t off = (bx - left) & 0xff;
-            if (off != ((g_image[PADDLE_WIDTH] + 3) & 0xff))
+            if (off != ((gv.paddle_width + 3) & 0xff))
                 return;
             from_left = 0;
         }
@@ -1998,8 +1988,8 @@ void ball_paddle(uint32_t ball)
         b[B_DIR_Y] = (depth <= 5) ? 1 : 0;
         b[B_DIR_X] = (uint8_t)from_left;
         b[B_ANCHOR_X] = from_left
-            ? (uint8_t)(g_image[PADDLE_X] - 4)
-            : (uint8_t)(g_image[PADDLE_X] + g_image[PADDLE_WIDTH] + 1);
+            ? (uint8_t)(gv.paddle_x - 4)
+            : (uint8_t)(gv.paddle_x + gv.paddle_width + 1);
         b[B_ANCHOR_Y] = (uint8_t)y;
         b[B_ACC_X] = b[B_ACC_Y] = 1;
         b[B_BOUNCES] = 0;
@@ -2009,7 +1999,7 @@ void ball_paddle(uint32_t ball)
     }
 
     /* The top. */
-    uint32_t left = (g_image[PADDLE_X] - 3) & 0xff;
+    uint32_t left = (gv.paddle_x - 3) & 0xff;
     if (b[B_X] < left)
         return;
     uint32_t off = (b[B_X] - left) & 0xff;
@@ -2020,7 +2010,7 @@ void ball_paddle(uint32_t ball)
         paddle_bounce_up(b);
         return;
     }
-    uint32_t span = (g_image[PADDLE_WIDTH] + 3) & 0xff;
+    uint32_t span = (gv.paddle_width + 3) & 0xff;
     if (off > span)
         return;
     uint32_t from_right = (span - off) & 0xff;
@@ -2633,7 +2623,7 @@ void level_draw(void)
 {
     uint32_t hx = g_image[HATCH_X], hy = (g_image[HATCH_Y] - 1) & 0xff;
 
-    g_image[PADDLE_X] = 0xc8;
+    gv.paddle_x = 0xc8;
     for (int32_t f = 0; f < 5; f++) {
         hatch_frame(img_w(HATCH_OPEN + f * 2), hx, hy);
         for (int32_t i = 0; i < 0x12c; i++)
@@ -2653,14 +2643,14 @@ void level_draw(void)
     }
 
     img_setw(WALKER_ANIM, 0x7525);
-    g_image[PADDLE_X] = 0xc6;
+    gv.paddle_x = 0xc6;
     walker_draw(0xc8);
     img_setw(WALKER_ANIM, img_w(WALKER_ANIM) + 2);
     for (int32_t i = 0; i < 9; i++) {
         for (int32_t d = 0; d < 0x4b; d++)
             game_delay();
-        walker_step(g_image[PADDLE_X]);
-        g_image[PADDLE_X] -= 2;
+        walker_step(gv.paddle_x);
+        gv.paddle_x -= 2;
         io_present();
         if (!io_pump())
             return;
@@ -2673,15 +2663,15 @@ void level_draw(void)
             hatch_frame(img_w(HATCH_SHUT + (f >> 2) * 2), hx, hy);
         for (int32_t d = 0; d < 0x4b; d++)
             game_delay();
-        walker_step(g_image[PADDLE_X]);
-        g_image[PADDLE_X] -= 2;
+        walker_step(gv.paddle_x);
+        gv.paddle_x -= 2;
         io_present();
         if (!io_pump())
             return;
     }
-    while (g_image[PADDLE_X] >= 0x6d) {
-        walker_step(g_image[PADDLE_X]);
-        g_image[PADDLE_X] -= 2;
+    while (gv.paddle_x >= 0x6d) {
+        walker_step(gv.paddle_x);
+        gv.paddle_x -= 2;
         for (int32_t d = 0; d < 0x4b; d++)
             game_delay();
         io_present();
@@ -3650,9 +3640,9 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
     /* The paddle. */
     uint32_t y = g_image[bx + 5];
     if (y <= 0xbe && ((y + 0x0f) & 0xff) >= 0xb8) {
-        uint32_t bxx = g_image[bx + 4], px = g_image[PADDLE_X];
+        uint32_t bxx = g_image[bx + 4], px = gv.paddle_x;
         if (((bxx + 0x0f) & 0xff) >= px &&
-            bxx <= ((px + g_image[PADDLE_WIDTH]) & 0xff)) {
+            bxx <= ((px + gv.paddle_width) & 0xff)) {
             g_image[HIT_KIND] = 1;
             sprite_shift_draw(bxx, y, img_w(img_w(bx + 6)));
             return;
@@ -3793,7 +3783,7 @@ void scroll_down_band(void)
  */
 void draw_paddle_raw(uint32_t src)
 {
-    uint32_t di = (g_image[PADDLE_X] >> 2) + PADDLE_ROW_BASE;
+    uint32_t di = (gv.paddle_x >> 2) + PADDLE_ROW_BASE;
     for (int32_t r = 0; r < 0x10; r++) {
         for (int32_t b = 0; b < 7; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + r * 7 + b];
@@ -3810,18 +3800,18 @@ void draw_paddle_raw(uint32_t src)
  */
 void draw_paddle_shifted(uint32_t sprite)
 {
-    if (!g_image[PADDLE_FORCE_DRAW] &&
-        g_image[PADDLE_X] == g_image[PADDLE_PREV_X])
+    if (!gv.paddle_morphing &&
+        gv.paddle_x == gv.paddle_prev_x)
         return;
-    img_setw(FRAME_DELAY, (img_w(FRAME_DELAY) - 0x1f3) & 0xffff);
+    gv.frame_delay -= 0x1f3;          /* the uint16_t is the `& 0xffff` */
 
     memcpy(g_image + PADDLE_ROWS_PREV, g_image + PADDLE_ROWS_CUR,
            PADDLE_ROWS * 2);
     memcpy(g_image + PADDLE_PIX_PREV, g_image + PADDLE_PIX_CUR,
            PADDLE_IMAGE + 1);
 
-    uint32_t x = g_image[PADDLE_X];
-    g_image[PADDLE_PREV_X] = (uint8_t)x;
+    uint32_t x = gv.paddle_x;
+    gv.paddle_prev_x = (uint8_t)x;
     paddle_row_offsets(x, PADDLE_ROWS_CUR);
     memcpy(g_image + PADDLE_PIX_CUR, g_image + sprite, PADDLE_IMAGE + 1);
 
@@ -3923,29 +3913,28 @@ void life_lost(void)
  * ===================================================================== */
 #define HOLD_TIMER  0x2e76
 #define HOLD_RESET   0x230
-#define HOLD_OFFSET 0x2e56
 #define SOUND_CATCH      7
 
 int32_t ball_on_paddle(uint32_t ball)
 {
     uint8_t *b = g_image + ball;
-    if (g_image[PADDLE_SUPPRESS] != 0)
+    if (gv.paddle_morphing != 0)
         return 1;
 
     if (img_w(HOLD_TIMER) == HOLD_RESET) {
         /* Not holding one yet: is this ball landing on the paddle? */
         uint32_t y = b[B_Y];
-        uint32_t left = (g_image[PADDLE_X] - 3) & 0xff;
+        uint32_t left = (gv.paddle_x - 3) & 0xff;
         uint32_t off = (b[B_X] - left) & 0xff;
         if (y < PADDLE_TOP || y > PADDLE_BOTTOM || b[B_X] < left ||
-            off > ((g_image[PADDLE_WIDTH] + 3) & 0xff)) {
+            off > ((gv.paddle_width + 3) & 0xff)) {
             img_setw(HOLD_TIMER, HOLD_RESET);
             return 1;
         }
         b[B_Y] = PADDLE_TOP;
         b[B_STATE] = 2;                 /* held */
-        img_setw(HOLD_TIMER, (img_w(HOLD_TIMER) - g_image[SPEED_LIMIT]) & 0xffff);
-        g_image[HOLD_OFFSET] = (uint8_t)(b[B_X] - g_image[PADDLE_X]);
+        img_setw(HOLD_TIMER, (img_w(HOLD_TIMER) - gv.speed_limit) & 0xffff);
+        gv.hold_offset = (uint8_t)(b[B_X] - gv.paddle_x);
         ball_redraw(ball);
         g_image[SOUND_REQUEST] = SOUND_CATCH;
         return 0;
@@ -3959,7 +3948,7 @@ int32_t ball_on_paddle(uint32_t ball)
         img_setw(HOLD_TIMER, img_w(HOLD_TIMER) - 1);
         if (img_w(HOLD_TIMER) == 0) {
             release = 1;
-        } else if (((g_image[SPEED_LIMIT] - 1) & 0xff) == g_image[SPEED_STEP]) {
+        } else if (((gv.speed_limit - 1) & 0xff) == gv.speed_step) {
             /* On the frame the ball would have moved, the timer runs down
              * twice, so a held ball is let go after the same amount of play
              * however fast the level has become. */
@@ -3970,7 +3959,7 @@ int32_t ball_on_paddle(uint32_t ball)
     }
 
     if (!release) {
-        b[B_X] = (uint8_t)(g_image[PADDLE_X] + g_image[HOLD_OFFSET]);
+        b[B_X] = (uint8_t)(gv.paddle_x + gv.hold_offset);
         ball_redraw(ball);
         return 0;
     }
@@ -4048,10 +4037,10 @@ static void laser_dot_rows(uint32_t x, uint32_t y, int32_t moving)
 
 void laser_fire(void)
 {
-    if (g_image[PADDLE_SUPPRESS] == 0 && g_image[LASER_ON] != 2) {
+    if (gv.paddle_morphing == 0 && g_image[LASER_ON] != 2) {
         if (g_image[KEY_ACTION] != 1)
             return;
-        uint32_t x = (g_image[PADDLE_X] + 4) & 0xff;
+        uint32_t x = (gv.paddle_x + 4) & 0xff;
         g_image[SOUND_REQUEST] = SHOT_SOUND;
         g_image[SHOT_X] = (uint8_t)x;
         uint32_t y = g_image[SHOT_Y];
@@ -4141,10 +4130,10 @@ void entity_capsule_frames(uint32_t bx, uint32_t table)
          * sixteen bits with an `adc ch,0`, so a paddle at the right-hand edge
          * does not wrap. */
         uint32_t right = (g_image[bx + 2] + 0x0e) & 0xffff;
-        uint32_t px = g_image[PADDLE_X];
+        uint32_t px = gv.paddle_x;
         if (right >= px &&
-            (right - 0x0f) <= (px + g_image[PADDLE_WIDTH])) {
-            g_image[bx + 6] = g_image[PADDLE_KIND];
+            (right - 0x0f) <= (px + gv.paddle_width)) {
+            g_image[bx + 6] = gv.paddle_kind;
             g_image[bx + 7] = g_image[PADDLE_NEXT + g_image[bx + 4]];
             g_image[bx + 0x0a] = g_image[bx + 4];
             g_image[bx + 2] = 1;
@@ -4269,11 +4258,11 @@ void bonus_reverse(void)
  * ball, which is what the letter means. */
 void bonus_slower_ball(void)
 {
-    if (g_image[SPEED_LIMIT] != 2) {
-        g_image[SPEED_LIMIT]--;
-        g_image[SPEED_STEP] = g_image[SPEED_LIMIT];
+    if (gv.speed_limit != 2) {
+        gv.speed_limit--;
+        gv.speed_step = gv.speed_limit;
     }
-    img_setw(SPEED_TIMER, 0x4e20);
+    gv.speed_timer = 0x4e20;
 }
 
 /* The dispatch at 1ac2:337d. Kind 8 ends the level and is not here: it throws
@@ -4383,8 +4372,6 @@ void entity_multiball(uint32_t bx)
  * [0x2d3a] goes up by it and the right-hand limit at [0x2d3f] down by the
  * same, which keeps the paddle inside the playfield as it grows.
  * ===================================================================== */
-#define PADDLE_STEP  0x2d38
-#define MORPH_OWNER  0x2d3c
 /* Three sprite tables, and they are not interchangeable. 0x2d0d is the one
  * the play loop draws the paddle from and the one whose `+2` byte gives the
  * width; 0x2d25 is the shrink animation and 0x2d1d the grow. Using 0x2d0d for
@@ -4400,16 +4387,16 @@ static void morph_finish(uint32_t bx)
 
 void entity_paddle_fx(uint32_t bx)
 {
-    if (g_image[PADDLE_SUPPRESS] == 0) {
+    if (gv.paddle_morphing == 0) {
         /* Nothing is morphing. If the paddle is already the kind this capsule
          * gives, there is nothing to animate - just apply the effect. */
-        if (g_image[PADDLE_KIND] == g_image[bx + 7]) {
+        if (gv.paddle_kind == g_image[bx + 7]) {
             morph_finish(bx);
             return;
         }
-        g_image[bx + 6] = g_image[PADDLE_KIND];
-        g_image[PADDLE_SUPPRESS] = 0xff;
-        img_setw(MORPH_OWNER, bx);
+        g_image[bx + 6] = gv.paddle_kind;
+        gv.paddle_morphing = 0xff;
+        gv.morph_owner = (uint16_t)(bx);
 
         if (g_image[bx + 7] != 2) {
             /* Losing the laser: take any shot in flight off the screen. */
@@ -4437,17 +4424,17 @@ void entity_paddle_fx(uint32_t bx)
                 ball_redraw(ball);
             }
         }
-    } else if (img_w(MORPH_OWNER) != bx) {
+    } else if (gv.morph_owner != bx) {
         return;                         /* somebody else's morph */
     }
 
-    if (--g_image[PADDLE_SUPPRESS] % 0x23 != 0) {
+    if (--gv.paddle_morphing % 0x23 != 0) {
         /* Between animation steps: redraw the current frame if the paddle has
          * moved, so it still follows the player. */
-        if (g_image[PADDLE_X] == g_image[PADDLE_PREV_X])
+        if (gv.paddle_x == gv.paddle_prev_x)
             return;
         if (g_image[bx + 3] == 6) {
-            draw_paddle(img_w(PADDLE_SPRITES + g_image[PADDLE_KIND] * 4));
+            draw_paddle(img_w(PADDLE_SPRITES + gv.paddle_kind * 4));
             return;
         }
         uint32_t si = img_w(bx + 4) + g_image[bx + 3] * 2;
@@ -4465,10 +4452,10 @@ void entity_paddle_fx(uint32_t bx)
     uint32_t si, kind;
     if (g_image[bx + 2] != 0) {
         si = PADDLE_SHRINK;
-        g_image[PADDLE_STEP] = 0;
+        gv.paddle_step = 0;
         kind = g_image[bx + 6];
         if (kind == 1)
-            g_image[PADDLE_STEP] = 0xfe;    /* -2: this one shrinks */
+            gv.paddle_step = 0xfe;    /* -2: this one shrinks */
         if (kind != 0) {
             morph_begin(bx, si, kind);
             return;
@@ -4476,18 +4463,18 @@ void entity_paddle_fx(uint32_t bx)
         g_image[bx + 2] = 0;
     }
     si = PADDLE_GROW;
-    g_image[PADDLE_STEP] = 0;
+    gv.paddle_step = 0;
     kind = g_image[bx + 7];
     if (kind == 1)
-        g_image[PADDLE_STEP] = 2;
+        gv.paddle_step = 2;
     if (kind != 0) {
         morph_begin(bx, si, kind);
         return;
     }
     /* Both ends are the plain paddle: nothing to animate. */
-    g_image[PADDLE_KIND] = 0;
-    g_image[PADDLE_WIDTH] = 0x1b;
-    g_image[PADDLE_SUPPRESS] = 0;
+    gv.paddle_kind = 0;
+    gv.paddle_width = 0x1b;
+    gv.paddle_morphing = 0;
     morph_finish(bx);
 }
 
@@ -4497,7 +4484,7 @@ void morph_begin(uint32_t bx, uint32_t table, uint32_t kind)
 {
     img_setw(bx + 4, img_w(table + kind * 2));
     g_image[bx + 3] = 6;
-    g_image[PADDLE_SUPPRESS] = 0xff;
+    gv.paddle_morphing = 0xff;
     morph_step(bx);
 }
 
@@ -4508,22 +4495,22 @@ void morph_step(uint32_t bx)
     uint32_t si = img_w(bx + 4) + g_image[bx + 3] * 2;
     draw_paddle_shifted(img_w(si));
 
-    g_image[PADDLE_WIDTH] += g_image[PADDLE_STEP];
-    g_image[PADDLE_MAX] -= g_image[PADDLE_STEP];
+    gv.paddle_width += gv.paddle_step;
+    gv.paddle_max -= gv.paddle_step;
 
     if (g_image[bx + 3] != 0)
         return;
     g_image[bx + 3] = 6;
     if (g_image[bx + 2] == 1) {         /* done shrinking; grow next */
         g_image[bx + 2] = 0;
-        g_image[PADDLE_KIND] = 0;
+        gv.paddle_kind = 0;
         return;
     }
     /* Done growing: install the new paddle and apply the effect. */
     uint32_t kind = g_image[bx + 7];
-    g_image[PADDLE_KIND] = (uint8_t)kind;
-    g_image[PADDLE_WIDTH] = g_image[PADDLE_SPRITES + kind * 4 + 2];
-    g_image[PADDLE_SUPPRESS] = 0;
+    gv.paddle_kind = (uint8_t)kind;
+    gv.paddle_width = g_image[PADDLE_SPRITES + kind * 4 + 2];
+    gv.paddle_morphing = 0;
     morph_finish(bx);
 }
 
@@ -5432,7 +5419,7 @@ void cell_special(uint32_t row, uint32_t col, uint32_t di)
 void input_and_draw_paddle(void)
 {
     game_input();
-    draw_paddle(img_w(PADDLE_SPRITES + g_image[PADDLE_KIND] * 4));
+    draw_paddle(img_w(PADDLE_SPRITES + gv.paddle_kind * 4));
 }
 
 /* 1ac2:5171  cheat_match
@@ -6029,9 +6016,9 @@ void screen_game_over(void)
             img_vram_setw(di + i * 2, 0);
         di = cga_next_row(di);
     }
-    g_image[PADDLE_SUPPRESS] = 1;
+    gv.paddle_morphing = 1;
 
-    uint32_t kind = g_image[PADDLE_KIND];
+    uint32_t kind = gv.paddle_kind;
     if (kind) {
         uint32_t si = img_w(PADDLE_GROW + kind * 2);
         for (int32_t f = 0; f < 6; f++, si += 2) {
@@ -6966,16 +6953,16 @@ static int32_t bonus_end_level_run(void)
     io_wait_retrace();
     panel_reveal();
 
-    g_image[PADDLE_KIND] = 0;
-    g_image[PADDLE_MAX] = 0xac;
-    g_image[PADDLE_MIN] = 8;
-    g_image[PADDLE_WIDTH] = g_image[PADDLE_SPRITES + 2];
+    gv.paddle_kind = 0;
+    gv.paddle_max = 0xac;
+    gv.paddle_min = 8;
+    gv.paddle_width = g_image[PADDLE_SPRITES + 2];
     blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
 
     /* The wall closing in: 0x70 passes of a 26-word band scrolled up six rows
      * with a fresh cap laid on each. */
     uint32_t bp = 0x20a0;
-    g_image[PADDLE_SUPPRESS] = 0xff;
+    gv.paddle_morphing = 0xff;
     for (int32_t dh = 0x70; dh > 0; dh--) {
         io_wait_retrace();
         /* `rep movsw` at 1ac2:4282 has SI on the band's row and DI one row
@@ -6999,7 +6986,7 @@ static int32_t bonus_end_level_run(void)
             img_vram_setw(di + i * 2, 0);
         for (int32_t i = 0; i < 0x78; i++) {
             input_and_draw_paddle();
-            g_image[PADDLE_SUPPRESS] = 0;
+            gv.paddle_morphing = 0;
         }
         /* 1ac2:42cc: the band's top walks **down** a row a pass - next_row,
          * not prev_row. That is the wall closing in. */
@@ -7474,15 +7461,13 @@ void bonus_stop_monsters(void)
  * menu.
  * ===================================================================== */
 #define DEMO_BALL   (CS_BASE + 0x1784)    /* cs:[0x1784], which ball */
-#define PADDLE_LOW    0x2d3e
-#define PADDLE_HIGH   0x2d3f
 #define DEMO_CHASE_Y  0x82
 
 /* Both tails clamp the paddle to the right-hand limit before returning. */
 static void demo_clamp(void)
 {
-    if (g_image[PADDLE_X] >= g_image[PADDLE_HIGH])
-        g_image[PADDLE_X] = g_image[PADDLE_HIGH];
+    if (gv.paddle_x >= gv.paddle_max)
+        gv.paddle_x = gv.paddle_max;
 }
 
 void input_demo(void)
@@ -7513,16 +7498,16 @@ void input_demo(void)
             g_image[KEY_ACTION] = g_image[LASER_ON] != 0;
 
             uint32_t ball_x = g_image[b + B_X];
-            uint32_t paddle = g_image[PADDLE_X];
+            uint32_t paddle = gv.paddle_x;
             if (ball_x < paddle) {
-                if (paddle != g_image[PADDLE_LOW])
-                    g_image[PADDLE_X]--;
+                if (paddle != gv.paddle_min)
+                    gv.paddle_x--;
                 return;
             }
-            if (ball_x < ((paddle + g_image[PADDLE_WIDTH]) & 0xff))
+            if (ball_x < ((paddle + gv.paddle_width) & 0xff))
                 return;                         /* already under it */
-            if (paddle != g_image[PADDLE_HIGH])
-                g_image[PADDLE_X]++;
+            if (paddle != gv.paddle_max)
+                gv.paddle_x++;
             return;
         }
     }
