@@ -564,33 +564,44 @@ original shoot.
 
 - **Stretch: stop needing the packed struct at all.** The image is the port's
   authoritative store, so `game_vars` has to land on the game's own addresses
-  and most of its words sit at odd offsets. That forces `__attribute__((packed))`
-  and the explicit padding, and it is what makes the port assume a
-  little-endian host.
+  and most of its words sit at odd offsets. That forces
+  `__attribute__((packed))` and the explicit padding, and it is where the
+  little-endian assumption comes from.
 
-  The packing is not the problem, it is the symptom. It would go if the
-  *mutable* state lived in ordinary C structures and the image were kept only
-  as the read-only reference data it mostly is - the sprites, the font, the
-  level table, the strings. What stands in the way, in order of difficulty:
+  The **mechanism** for having both is easy and not the problem: one struct
+  definition, with `#ifdef` around the padding fields and the attribute -
+  packed and padded when it must overlay the image, plain and naturally
+  aligned when it need not. The work is in earning the right to compile the
+  second one.
 
-  - **Stored image offsets.** The original keeps 16-bit addresses inside its
-    own data: an entity's next pointer, a cell's address in an entity slot, a
-    ball's offset passed in a register. Those have to become indices or real
-    pointers, and each one has to be found.
-  - **The differential verifier.** It compares whole images byte for byte,
-    which only means anything while the image *is* the state. It would need
-    marshalling both ways, or to be retired once every routine is proven -
-    which is the honest prerequisite: this is work for after 166 of 166, not
-    before.
-  - **Snapshots and lockstep**, for the same reason and with the same answer.
+  Counted rather than guessed, as of this writing:
+
+  - **No raw literal address still touches a named field.** There were ten -
+    the same byte spelled two ways - and they are gone.
+  - **29 `img_off` and 21 `ball_at` calls bridge struct to offset**, and about
+    forty of those fifty are *not* fundamental. `ball_draw(img_off(b->sprite))`
+    wants a `const uint16_t *`; `ball_step(img_off(&gv.balls[i]))` wants a
+    `ball_t *`. They are offsets because the signatures take offsets, and the
+    signatures take offsets because `verify.c` dispatches routines by address
+    with the original's register arguments. Free the dispatch and they become
+    pointers.
+  - **What is left is where the original stores an image address in its own
+    data**: the entity list's `E_NEXT` links, a cell address parked in an
+    entity slot and compared against one (`cell == img_w(slot)`), a ball's
+    offset in a slot. Those 16-bit values are the game's, not the port's, and
+    they are the real blocker - 92 `img_w(<var> + …)` and 223
+    `g_image[<var> + …]` sites walk them.
+
+  So the order is: give the entity list and its slots a representation that is
+  not an image offset; free the verifier's dispatch from register-shaped
+  signatures; then the `#ifdef` is a small change and the unpacked build
+  compiles - the `ENSURE_` macros are what will say when it does.
 
   What it buys: no packing, no padding, no endianness assumption, and a port
-  that builds on a big-endian or strict-alignment target - which also makes
-  the WASM route simpler.
+  that builds on a big-endian or strict-alignment target, which also makes the
+  WASM route simpler.
 
-  What it costs, and why it is a stretch goal rather than a plan: the C stops
-  mirroring the original's memory. The addresses in the comments would still
-  be true, but the *shape* would not, and this port's whole claim is that it
-  can be read against the disassembly. That is the point where it stops being
-  a transcription and becomes a reimplementation, and it should be taken
-  deliberately, if at all.
+  What it costs: the C stops mirroring the original's memory. The addresses in
+  the comments stay true, the *shape* does not, and this port's claim is that
+  it can be read against the disassembly. That is the line between a
+  transcription and a reimplementation.
