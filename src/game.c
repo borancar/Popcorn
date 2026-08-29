@@ -1352,9 +1352,9 @@ frames:
             entity_call(bx);
             if (gv.entity_remove == 0) {
                 gv.entity_prev = (uint16_t)(bx);
-                bx = img_w(bx + E_NEXT);
+                bx = entity_at(bx)->next;
             } else {
-                uint32_t next = img_w(bx + E_NEXT);
+                uint32_t next = entity_at(bx)->next;
                 entity_unlink(bx);
                 bx = next;
             }
@@ -2871,14 +2871,14 @@ void flash_bar(uint32_t pattern)
 uint32_t entity_alloc(void)
 {
     uint32_t si = gv.entity_free;
-    gv.entity_free = (uint16_t)(img_w(si + E_NEXT));
+    gv.entity_free = (uint16_t)(entity_at(si)->next);
 
     /* The free-list head is itself a node, walked from its own address. */
     uint32_t bx = offsetof(game_vars, entity_free);
-    while (img_w(bx + E_NEXT) != 0xffff)
-        bx = img_w(bx + E_NEXT);
-    img_setw(si + E_NEXT, 0xffff);
-    img_setw(bx + E_NEXT, si);
+    while (entity_at(bx)->next != 0xffff)
+        bx = entity_at(bx)->next;
+    entity_at(si)->next = (uint16_t)(0xffff);
+    entity_at(bx)->next = (uint16_t)(si);
     return si;
 }
 
@@ -2890,8 +2890,8 @@ uint32_t entity_alloc(void)
  */
 void entity_unlink(uint32_t node)
 {
-    img_setw(gv.entity_prev + E_NEXT, img_w(node + E_NEXT));
-    img_setw(node + E_NEXT, gv.entity_free);
+    entity_at(gv.entity_prev)->next = entity_at(node)->next;
+    entity_at(node)->next = (uint16_t)(gv.entity_free);
     gv.entity_free = (uint16_t)(node);
     gv.entity_remove = 0;
 }
@@ -3412,7 +3412,7 @@ void brick_10(uint32_t slot, ball_t *ball)
  */
 void entity_call(uint32_t node)
 {
-    switch (img_w(node + E_HANDLER)) {
+    switch (entity_at(node)->handler) {
     case 0x3273: entity_capsule(node); break;
     case 0x3386: entity_paddle_fx(node); break;
     case 0x3561: entity_popup(node); break;
@@ -3822,8 +3822,8 @@ void entities_clear(void)
     uint32_t bx = gv.entity_head;
     while (bx != 0xffff) {
         entity_farewell(bx);
-        uint32_t next = img_w(bx + E_NEXT);
-        img_setw(bx + E_NEXT, gv.entity_free);
+        uint32_t next = entity_at(bx)->next;
+        entity_at(bx)->next = (uint16_t)(gv.entity_free);
         gv.entity_free = (uint16_t)(bx);
         bx = next;
     }
@@ -3853,14 +3853,14 @@ void life_lost(void)
     while (bx != 0xffff) {
         if (img_w(bx) == 0x3abf) {      /* this one stays */
             gv.entity_prev = (uint16_t)(bx);
-            bx = img_w(bx + E_NEXT);
+            bx = entity_at(bx)->next;
             continue;
         }
         entity_farewell(bx);
-        uint32_t next = img_w(bx + E_NEXT);
-        img_setw(bx + E_NEXT, gv.entity_free);
+        uint32_t next = entity_at(bx)->next;
+        entity_at(bx)->next = (uint16_t)(gv.entity_free);
         gv.entity_free = (uint16_t)(bx);
-        img_setw(gv.entity_prev + E_NEXT, next);
+        entity_at(gv.entity_prev)->next = (uint16_t)next;
         bx = next;
     }
     level_between();
@@ -7112,7 +7112,7 @@ int32_t next_player(const char *dir)
     /* And its entities, count first. */
     p->ent_count = 0;
     for (uint32_t bx = gv.entity_head; bx != 0xffff;
-         bx = img_w(bx + E_NEXT))
+         bx = entity_at(bx)->next)
         memcpy(p->ents[p->ent_count++], g_image + bx, sizeof p->ents[0]);
     entities_clear();
 
