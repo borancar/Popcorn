@@ -1428,7 +1428,6 @@ frames:
  * unwinds through really are abandoned mid-call.
  * ===================================================================== */
 #define PLAYER_NAME   0x13d5
-#define SCORE_TEXT    0x13cd
 #define LEVEL_TABLE   0x000c            /* within the 0xc46 block */
 #define LEVEL_BYTES     0xb0
 #define LEVEL_COUNT     0x32
@@ -1472,10 +1471,8 @@ void play_session(void)
     }
 
     memcpy(g_image + PLAYER_NAME, g_image + 0x344f, 12);
-    img_setw(SCORE_TEXT + 0, 0x3030);
-    img_setw(SCORE_TEXT + 2, 0x3030);
-    img_setw(SCORE_TEXT + 4, 0x3030);
-    img_setw(SCORE_TEXT + 6, 0x3032);
+    memset(gv.score_text, '0', sizeof gv.score_text);
+    gv.extra_at = 0x3032;               /* the first one at "20" */
     g_image[0x3f0a] = 0;
     g_image[0x3f09] = g_image[0x3f08];
     gv.lives = 5;
@@ -2432,19 +2429,25 @@ void score_add(void)
     for (int32_t i = 0; i < 6; i++, si++, di += 2)
         draw_char(g_image[si], di);
 
-    /* An extra life every time the score passes the threshold at [0x13d3],
-     * which then advances by two. Both are ASCII, so `inc ax` twice can carry
-     * out of '9' and the fix-up puts it back to '0' and carries by hand. The
-     * comparison is byte-swapped because the score's top two digits are stored
-     * the other way round from the threshold. */
-    uint32_t thresh = img_w(0x13d3);
-    uint32_t top = img_w(0x13cd);
-    top = ((top & 0xff) << 8) | (top >> 8);          /* `xchg bl,bh` */
+    /* An extra life every time the score reaches gv.extra_at, which then
+     * advances by two.
+     *
+     * Both are ASCII, and the two digits are the score's top two - of six, so
+     * they count in ten-thousands. Adding two to the second of them is
+     * **twenty thousand** points, and the thresholds run 02, 04, 06, 08, 10,
+     * 12 and on: an extra life every 20,000, forever. `inc ax` twice can
+     * carry out of '9', so the fix-up puts the digit back to '0' and carries
+     * into the one above by hand. */
+    uint32_t thresh = gv.extra_at;
+    /* The original loads the score's top word and `xchg bl,bh` to put it the
+     * way round the threshold is stored. Reading the two digits by name in
+     * that order is the same thing without the swap. */
+    uint32_t top = (uint32_t)(gv.score_text[0] << 8) | gv.score_text[1];
     if (top >= thresh) {
         thresh += 2;
         if ((thresh & 0xff) >= 0x3a)
             thresh = (thresh & 0xff00) + 0x100 + 0x30;
-        img_setw(0x13d3, thresh);
+        gv.extra_at = (uint16_t)thresh;
         extra_life();
     }
 }
@@ -2715,7 +2718,7 @@ void panel_draw(void)
 
     di = PANEL_SCORE;
     for (int32_t i = 0; i < 6; i++, di += 2)
-        panel_char(g_image[SCORE_TEXT + i], di);
+        panel_char(gv.score_text[i], di);
 
     /* Twelve life markers, four to a row: `al & 0xfc` steps along the row and
      * `(al & 3) * 0xa8` steps down. Ones past the lives left are blanked
@@ -7101,7 +7104,8 @@ int32_t next_player(const char *dir)
         if (--gv.live_count == 0) {
             /* Everybody is out: keep this player's final score and finish. */
             uint32_t di = NAME_TABLE + gv.cur_player * NAME_STRIDE;
-            memcpy(g_image + di + REC_SCORE, g_image + SCORE_TEXT, 6);
+            memcpy(g_image + di + REC_SCORE, gv.score_text,
+                   sizeof gv.score_text);
             screen_results(dir);        /* 1ac2:0d68 jmp 0xea3 */
             longjmp(g_back_to_menu, 1); /* and its ret leaves play_session */
         }
@@ -7114,7 +7118,7 @@ int32_t next_player(const char *dir)
     g_image[di + REC_LIVES] = gv.lives;
     img_setw(di + REC_LEVEL, gv.level_src);
     g_image[di + REC_NUMBER] = gv.level_number;
-    memcpy(g_image + di + REC_SCORE, g_image + SCORE_TEXT, 6);
+    memcpy(g_image + di + REC_SCORE, gv.score_text, sizeof gv.score_text);
     memcpy(g_image + di + REC_CELLS, &gv.level, sizeof gv.level);
     memcpy(g_image + di + REC_STATE, g_image + 0x30b0, 12);
 
@@ -7142,7 +7146,7 @@ int32_t next_player(const char *dir)
     gv.lives = g_image[si + REC_LIVES];
     gv.level_src = (uint16_t)(img_w(si + REC_LEVEL));
     gv.level_number = g_image[si + REC_NUMBER];
-    memcpy(g_image + SCORE_TEXT, g_image + si + REC_SCORE, 6);
+    memcpy(gv.score_text, g_image + si + REC_SCORE, sizeof gv.score_text);
     memcpy(&gv.level, g_image + si + REC_CELLS, sizeof gv.level);
     memcpy(g_image + 0x30b0, g_image + si + REC_STATE, 12);
 
@@ -7154,16 +7158,17 @@ int32_t next_player(const char *dir)
     panel_draw();
     level_colours();
 
-    /* Set the next extra-life threshold two thousand above the score they
-     * came back with: the two digits are pulled out with `and ax,0x0e0f`,
-     * bumped, and carried by hand. */
-    uint32_t ax = img_w(SCORE_TEXT) & 0x0e0f;
-    uint32_t ah = ((ax >> 8) + 2) & 0xff, al = ax & 0xff;
+    /* Set the next extra-life threshold **twenty** thousand above the score
+     * they came back with - the two digits are the score's top two of six, so
+     * bumping the second is 20,000, not 2,000. They are pulled out with
+     * `and ax,0x0e0f`, bumped, and carried by hand. */
+    uint32_t al = gv.score_text[0] & 0x0f;
+    uint32_t ah = ((gv.score_text[1] & 0x0e) + 2) & 0xff;
     if (ah >= 0x0a) {
         al++;
         ah = 0;
     }
-    img_setw(0x13d3, ((al + 0x30) << 8) | (ah + 0x30));
+    gv.extra_at = (uint16_t)(((al + 0x30) << 8) | (ah + 0x30));
     return 0;
 }
 
