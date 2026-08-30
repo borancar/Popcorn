@@ -375,7 +375,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         intro_reveal();
         return 1;
     case 0x108c:                        /* score_before(si, di) */
-        g_result = score_before(g_image + r[R_SI], r[R_DI]);
+        g_result = score_before(g_image + r[R_SI], g_image + r[R_DI]);
         return 1;
     case 0x34c5:                        /* morph_begin(bx, si, dx) */
         morph_begin(&entity_at(r[R_BX])->p.morph, r[R_SI], r[R_DX]);
