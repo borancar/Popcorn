@@ -562,6 +562,24 @@ original shoot.
   the side-by-side. Reaching them wants a bot that aims rather than one that
   survives, or a snapshot taken with the level number written by hand.
 
+- **A keypress ticks the menu's animation, and in the port it does not.**
+  Every key that falls through the menu's compare chain lands at `1ac2:02b4`,
+  which steps the particles and the banner once before going back to the key
+  wait at `1ac2:0206`. The port's tail only presents. So in the original the
+  decoration advances by one step per keypress on top of its idle rate, and in
+  the port it does not. Nothing measures this: no lockstep route covers the
+  menu, which is the same blind spot that hid the F8 ordering until the
+  compiler pointed at it. Wants a menu sync point in `sidebyside.py` before it
+  is worth touching.
+
+- **Last, and opt-in: let a keypress skip an animation.** The menu's
+  decoration, the level intros, the curtains - a key would cut them short
+  rather than being swallowed. This is a **deviation**, not a fidelity fix,
+  and the two must not be confused: it goes behind a flag, it goes in after
+  everything that makes the port match, and the default stays the original's
+  behaviour. Noted here so it does not get done by accident while fixing the
+  entry above, which is the opposite kind of change.
+
 - **Stretch: stop needing the packed struct at all.** The image is the port's
   authoritative store, so `game_vars` has to land on the game's own addresses
   and most of its words sit at odd offsets. That forces
@@ -576,8 +594,11 @@ original shoot.
 
   Counted rather than guessed, as of this writing:
 
-  - **No raw literal address still touches a named field.** There were ten -
-    the same byte spelled two ways - and they are gone.
+  - **No raw literal address is left at all.** There were ten that were the
+    same byte spelled two ways, and then four more that were not: `0x13c7`,
+    `0x13c8`, `0x33d5` and `0x3f1b` were real variables sitting in bytes the
+    struct called padding, which is why counting only the *named* ones missed
+    them. All fourteen have fields.
   - **29 `img_off` and 21 `ball_at` calls bridge struct to offset**, and about
     forty of those fifty are *not* fundamental. `ball_draw(img_off(b->sprite))`
     wants a `const uint16_t *`; `ball_step(img_off(&gv.balls[i]))` wants a
