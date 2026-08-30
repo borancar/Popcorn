@@ -95,7 +95,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x36fb: cells_restore(); return 1;
     case 0x30dd: pixel_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
     case 0x306b: shot_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
-    case 0x3f20: bonus_hits_ball(r[R_BX], ball_at(r[R_SI])); return 1;
+    case 0x3f20: bonus_hits_ball(&entity_at(r[R_BX])->p.bonus.sprite, ball_at(r[R_SI])); return 1;
     case 0x3f4f: sprite_shift_draw(r[R_CX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
                  return 1;
     case 0x406a: xor_sprite_20x16(r[R_CX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
@@ -152,14 +152,14 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x390d: entity_hatch(entity_at(r[R_BX])); return 1;
     case 0x39a1: bonus_release(r[R_BX]); return 1;
     case 0x39fa: entity_bonus(entity_at(r[R_BX])); return 1;
-    case 0x3df1: bonus_update(r[R_BX], r[R_CX] & 0xff, r[R_AX] & 0xff);
+    case 0x3df1: bonus_update(&entity_at(r[R_BX])->p.bonus.sprite, r[R_CX] & 0xff, r[R_AX] & 0xff);
                  return 1;
     case 0x365e: entity_soften(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x366f: entity_repeat(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x3696: entity_plain(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x36a1: entity_ball_arrive(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x36f6: entity_cells_timer(&entity_at(r[R_BX])->p.cells); return 1;
-    case 0x37e0: entity_ball_hold(entity_at(r[R_BX])); return 1;
+    case 0x37e0: entity_ball_hold(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x318b: extra_life(); return 1;
     case 0x2109: scroll_up_band(); return 1;
     case 0x2148: scroll_down_band(); return 1;

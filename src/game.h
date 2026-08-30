@@ -136,6 +136,22 @@ ENSURE_PLAYER_AT(ents, 0xd3);
  * across the fifteen handlers. Naming them wants each handler read first, so
  * until then they are payload and reached as bytes, which claims nothing.
  */
+/* The moving-sprite part of a node, at 0x04..0x09.
+ *
+ * Not a guess and not a convenience: bonus_update and bonus_hits_ball step
+ * *both* a falling capsule and a parachute carrier, and they can because
+ * these six bytes are in the same places with the same meanings in both arms.
+ * Giving them a name is what lets those two routines take it and nothing else.
+ */
+typedef struct __attribute__((packed)) {
+    uint8_t  x, y;      /* 0x04 0x05 where it is drawn */
+    uint16_t frame;     /* 0x06 a cursor *into* a list of frame pointers, so
+                         * one dereference gets the frame */
+    uint8_t  timer;     /* 0x08 two counters in one byte: the low nibble paces
+                         * the movement, the high one the frame */
+    uint8_t  period;    /* 0x09 what the low nibble reloads to */
+} ent_sprite_t;
+
 /* Every arm of the variant must fill the payload exactly - a short one would
  * silently move `next`. */
 #define ENSURE_ENTITY_ARM(arm, n) \
@@ -154,13 +170,7 @@ typedef struct __attribute__((packed)) {
                 uint16_t ball;  /* ball_arrive: the ball to put down */
                 uint8_t  count; /* repeat: how many times round again */
             } arg;
-            uint8_t  x, y;  /* 0x04 0x05 where the animation is drawn */
-            uint16_t frame; /* 0x06 a cursor *into* a list of frame pointers,
-                             * so one dereference gets the frame; walked two
-                             * at a time until the word it points at is
-                             * 0xffff */
-            uint8_t  timer; /* 0x08 counts down to the next frame */
-            uint8_t  period;/* 0x09 what timer reloads to */
+            ent_sprite_t sprite; /* 0x04..0x09 */
             uint8_t  _r[2];
 } ent_anim_t;
 
@@ -180,11 +190,7 @@ typedef struct __attribute__((packed)) {
             uint8_t  steps; /* 0x03 how long to keep going that way, from
                              * random(0x3c) + 9 - and **reused** as the x the
                              * script started from once mode becomes 4 */
-            uint8_t  x, y;  /* 0x04 0x05 */
-            uint16_t frame; /* 0x06 as anim.frame */
-            uint8_t  timer; /* 0x08 two counters in one byte: the low nibble
-                             * paces the movement, the high one the frame */
-            uint8_t  period;/* 0x09 */
+            ent_sprite_t sprite; /* 0x04..0x09, the same six bytes */
             uint16_t script;/* 0x0a cursor into the movement script */
 } ent_bonus_t;
 
@@ -901,12 +907,12 @@ void morph_begin(uint32_t bx, uint32_t table, uint32_t kind); /* 1ac2:34c5 */
 void morph_step(uint32_t bx);       /* 1ac2:34d7 */
 void entity_popup(entity_t *e);     /* 1ac2:3561 */
 void entity_capsule_frames(uint32_t bx, uint32_t table);
-void entity_ball_hold(entity_t *e); /* 1ac2:37e0 */
+void entity_ball_hold(ent_anim_t *a); /* 1ac2:37e0 */
 void ball_place(ball_t *ball, uint32_t x, uint32_t y);
-void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny); /* 1ac2:3df1 */
+void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny); /* 1ac2:3df1 */
 uint32_t pixel_xor(uint32_t x, uint32_t y);        /* 1ac2:30dd */
 void shot_xor(uint32_t x, uint32_t y);             /* 1ac2:306b */
-void bonus_hits_ball(uint32_t bx, const ball_t *ball);  /* 1ac2:3f20 */
+void bonus_hits_ball(const ent_sprite_t *s, const ball_t *ball);  /* 1ac2:3f20 */
 void entity_bonus(entity_t *e);     /* 1ac2:39fa */
 void entity_unknown(uint32_t bx);
 void entity_multiball(entity_t *e);  /* 1ac2:3717 */

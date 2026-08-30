@@ -2238,11 +2238,11 @@ static uint32_t brick_entity(uint32_t slot, uint32_t handler,
     e->handler = (uint16_t)handler;
     /* The original stores x and y with one word write from the hit slot; two
      * byte writes are the same thing and say which is which. */
-    e->p.anim.x = g_image[slot + 2];
-    e->p.anim.y = g_image[slot + 3];
-    e->p.anim.frame = (uint16_t)frames;
-    e->p.anim.timer = (uint8_t)rate;
-    e->p.anim.period = (uint8_t)rate;
+    e->p.anim.sprite.x = g_image[slot + 2];
+    e->p.anim.sprite.y = g_image[slot + 3];
+    e->p.anim.sprite.frame = (uint16_t)frames;
+    e->p.anim.sprite.timer = (uint8_t)rate;
+    e->p.anim.sprite.period = (uint8_t)rate;
     return si;
 }
 
@@ -3006,21 +3006,21 @@ void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src)
  * drawing routine they use and what they do when the list ends. */
 static int32_t entity_anim(ent_anim_t *a, void (*draw)(uint32_t, uint32_t, uint32_t))
 {
-    if (--a->timer != 0)
+    if (--a->sprite.timer != 0)
         return 0;                       /* not time for the next frame yet */
-    a->timer = a->period;
+    a->sprite.timer = a->sprite.period;
 
     /* [bx+6] points *into* a list of frame pointers, so one dereference gets
      * the frame: `[si]` where si is the cursor. Dereferencing twice reads the
      * first word of the frame's pixels as if it were an address. */
-    uint32_t cur = a->frame;
-    uint32_t x = a->x, y = a->y;
+    uint32_t cur = a->sprite.frame;
+    uint32_t x = a->sprite.x, y = a->sprite.y;
     draw(x, y, img_w(cur - 2));         /* the previous frame, to erase */
     uint32_t next = img_w(cur);
     if (next == 0xffff)
         return -1;                      /* the animation is over */
     draw(x, y, next);
-    a->frame = (uint16_t)(cur + 2);
+    a->sprite.frame = (uint16_t)(cur + 2);
     return 1;
 }
 
@@ -3047,16 +3047,16 @@ void entity_sparkle(ent_anim_t *a)
  */
 void entity_crumble(ent_anim_t *a)
 {
-    if (--a->timer != 0)
+    if (--a->sprite.timer != 0)
         return;
-    a->timer = a->period;
+    a->sprite.timer = a->sprite.period;
 
-    uint32_t cur = a->frame;
-    uint32_t x = a->x, y = a->y;
+    uint32_t cur = a->sprite.frame;
+    uint32_t x = a->sprite.x, y = a->sprite.y;
     xor_sprite_16x7(x, y, img_w(cur - 2));
     xor_sprite_16x7(x, y, img_w(cur));
-    a->frame = (uint16_t)(cur + 2);
-    if (img_w(a->frame) == 0xffff)
+    a->sprite.frame = (uint16_t)(cur + 2);
+    if (img_w(a->sprite.frame) == 0xffff)
         gv.entity_remove = 1;
 }
 
@@ -3080,19 +3080,19 @@ void bonus_release(uint32_t bx)
 
     uint32_t k = game_random(io_ticks(), 8);
     uint32_t di = BONUS_KINDS + k * 4;
-    cap->p.bonus.frame = (uint16_t)img_w(di);
-    cap->p.bonus.timer = g_image[di + 2];   /* one word in the original */
-    cap->p.bonus.period = g_image[di + 3];
+    cap->p.bonus.sprite.frame = (uint16_t)img_w(di);
+    cap->p.bonus.sprite.timer = g_image[di + 2];   /* one word in the original */
+    cap->p.bonus.sprite.period = g_image[di + 3];
 
     uint32_t al = entity_at(bx)->p.hatch.x;
     if (al) {
         al = (al - 8) & 0xff;
         cap->p.bonus.mode = 2;
     }
-    cap->p.bonus.x = (uint8_t)al;
-    cap->p.bonus.y = entity_at(bx)->p.hatch.y;
-    xor_sprite_20x16(cap->p.bonus.x, cap->p.bonus.y,
-                     img_w(cap->p.bonus.frame));
+    cap->p.bonus.sprite.x = (uint8_t)al;
+    cap->p.bonus.sprite.y = entity_at(bx)->p.hatch.y;
+    xor_sprite_20x16(cap->p.bonus.sprite.x, cap->p.bonus.sprite.y,
+                     img_w(cap->p.bonus.sprite.frame));
 }
 
 /* 1ac2:390d  entity_hatch
@@ -3313,10 +3313,10 @@ void entity_repeat(ent_anim_t *a)
         return;
     if (--a->arg.count != 0) {   /* a **byte**: 1ac2:3679 */
         gv.entity_remove = 0;
-        a->frame = 0x67ea;       /* and round the animation again */
+        a->sprite.frame = 0x67ea;       /* and round the animation again */
         return;
     }
-    xor_sprite_16x7(a->x, a->y, 0x681c);
+    xor_sprite_16x7(a->sprite.x, a->sprite.y, 0x681c);
 }
 
 /* 1ac2:3696  from brick 9 - the animation and nothing else */
@@ -3352,8 +3352,8 @@ void entity_ball_arrive(ent_anim_t *a)
     if (gv.entity_remove != 1)
         return;
 
-    ball_place(ball_at(a->arg.ball), (a->x + 8) & 0xff,
-               (a->y - 4) & 0xff);
+    ball_place(ball_at(a->arg.ball), (a->sprite.x + 8) & 0xff,
+               (a->sprite.y - 4) & 0xff);
 }
 
 /* 1ac2:36f6  from brick 9 - counts [bx+4] down and then puts the cells back */
@@ -3462,7 +3462,7 @@ void entity_call(entity_t *e)
     case 0x3696: entity_plain(&e->p.anim); break;
     case 0x36A1: entity_ball_arrive(&e->p.anim); break;
     case 0x36F6: entity_cells_timer(&e->p.cells); break;
-    case 0x37E0: entity_ball_hold(e); break;
+    case 0x37E0: entity_ball_hold(&e->p.anim); break;
     case 0x390D: entity_hatch(e); break;
     case 0x39FA: entity_bonus(e); break;
     case 0x3ABF: entity_anim_brick(&e->p.brick); break;
@@ -3482,32 +3482,32 @@ void entity_call(entity_t *e)
  * way down ([0x33d4] non-zero) it releases early, and scores 33 or 50
  * depending on what hit it.
  */
-void entity_ball_hold(entity_t *e)
+void entity_ball_hold(ent_anim_t *a)
 {
-    uint32_t y = g_image[img_off(e) + 5], x = g_image[img_off(e) + 4];
+    uint32_t y = a->sprite.y, x = a->sprite.x;
 
     /* `inc al` is inside the kind-1 branch, and the fall-through at 0x37f7
      * carries whatever AL holds - so a carrier of any other kind is updated
      * at the y it already had, not one lower. */
     uint32_t ny = y;
-    if ((g_image[img_off(e) + 8] & 0x0f) == 1)
+    if ((a->sprite.timer & 0x0f) == 1)
         ny = (y + 1) & 0xff;
 
-    if ((g_image[img_off(e) + 8] & 0x0f) == 1 && ny == 0xb8) {
+    if ((a->sprite.timer & 0x0f) == 1 && ny == 0xb8) {
         /* It has arrived at the bottom. */
-        sprite_shift_draw(x, y, img_w(img_w(img_off(e) + 6)));
+        sprite_shift_draw(x, y, img_w(a->sprite.frame));
         if (gv.net_on == 1) {
             gv.entity_remove = 1;
-            ball_place(ball_at(img_w(img_off(e) + 2)), (x + 8) & 0xff, (y + 0x0b) & 0xff);
+            ball_place(ball_at(a->arg.ball), (x + 8) & 0xff, (y + 0x0b) & 0xff);
             return;
         }
         gv.ball_alive--;
-        ball_at(img_w(img_off(e) + 2))->state = 0;
+        ball_at(a->arg.ball)->state = 0;
         gv.entity_remove = 1;
         return;
     }
 
-    bonus_update(img_off(e), x, ny);            /* 1ac2:3df1 */
+    bonus_update(&a->sprite, x, ny);            /* 1ac2:3df1 */
     if (gv.hit_kind == 0)
         return;
     if (gv.hit_kind == 2)
@@ -3515,12 +3515,12 @@ void entity_ball_hold(entity_t *e)
 
     /* Hit: let the ball go, and score for it unless the hit was type 1. */
     gv.entity_remove = 1;
-    uint32_t ry = g_image[img_off(e) + 5];      /* 1ac2:3897 reloads it */
+    uint32_t ry = a->sprite.y;      /* 1ac2:3897 reloads it */
     if (gv.hit_kind != 1) {
         brick_score(0, 0, 0x0303);
         ry = (ry + 4) & 0xff;
     }
-    ball_place(ball_at(img_w(img_off(e) + 2)), (g_image[img_off(e) + 4] + 8) & 0xff, (ry + 0x0c) & 0xff);
+    ball_place(ball_at(a->arg.ball), (a->sprite.x + 8) & 0xff, (ry + 0x0c) & 0xff);
     if (gv.hit_kind != 3)
         brick_score(0, 0, 5);
 }
@@ -3568,14 +3568,14 @@ void shot_xor(uint32_t x, uint32_t y)
  * Do a capsule's sixteen-pixel box and a ball's four overlap? Sets [0x33d4] to
  * 2 if so, which is the answer bonus_update passes back up.
  */
-void bonus_hits_ball(uint32_t bx, const ball_t *ball)
+void bonus_hits_ball(const ent_sprite_t *s, const ball_t *ball)
 {
-    uint32_t by = g_image[bx + 5], ballY = ball->y;
+    uint32_t by = s->y, ballY = ball->y;
     if (by > ((ballY + 3) & 0xff))
         return;
     if (((by + 0x0f) & 0xff) < ballY)
         return;
-    uint32_t bxx = g_image[bx + 4], ballX = ball->x;
+    uint32_t bxx = s->x, ballX = ball->x;
     if (((bxx + 0x0f) & 0xff) < ballX)
         return;
     if (bxx > ((ballX + 3) & 0xff))
@@ -3598,47 +3598,45 @@ void bonus_hits_ball(uint32_t bx, const ball_t *ball)
 /* Which ball the collision found - the original's DI across 3df1/3f20. */
 static int32_t g_hit_ball;              /* an index: 0 was the original's default */
 
-void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
+void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
 {
-    entity_t *e = entity_at(bx);
     gv.hit_kind = 0;
 
-    if ((--e->p.bonus.timer & 0x0f) == 0) {
-        e->p.bonus.timer--;
-        e->p.bonus.timer = (uint8_t)((e->p.bonus.timer & 0xf0) |
-                                     (e->p.bonus.period & 0x0f));
+    if ((--s->timer & 0x0f) == 0) {
+        s->timer--;
+        s->timer = (uint8_t)((s->timer & 0xf0) |
+                                     (s->period & 0x0f));
         /* Erase where the node still says it is - the move so far has only
          * happened in registers - then commit the new position and draw
          * there. Moving the node first and erasing after leaves the old
          * sprite on screen, which is what it did before this was read
          * properly. */
-        sprite_shift_draw(e->p.bonus.x, e->p.bonus.y,
-                          img_w(e->p.bonus.frame));
-        g_image[bx + 4] = (uint8_t)nx;
-        g_image[bx + 5] = (uint8_t)ny;
+        sprite_shift_draw(s->x, s->y,
+                          img_w(s->frame));
+        s->x = (uint8_t)nx;
+        s->y = (uint8_t)ny;
         uint32_t x = nx, y = ny;
-        if ((g_image[bx + 8] >> 4) == 0) {
-            g_image[bx + 8] = g_image[bx + 9];
-            img_setw(bx + 6, img_w(bx + 6) + 2);
-            if (img_w(img_w(bx + 6)) == 0xffff)
-                img_setw(bx + 6, img_w(img_w(bx + 6) + 2));
+        if ((s->timer >> 4) == 0) {
+            s->timer = s->period;
+            s->frame += 2;
+            if (img_w(s->frame) == 0xffff)
+                s->frame = (uint16_t)img_w(s->frame + 2);
         }
-        sprite_shift_draw(x, y, img_w(img_w(bx + 6)));   /* draw */
+        sprite_shift_draw(x, y, img_w(s->frame));       /* draw */
     }
 
     /* The laser shot, if one is in flight. */
     if (gv.laser_on == 2) {
         uint32_t sy = (gv.laser_y + 2) & 0xff;
-        uint32_t by = g_image[bx + 5];
+        uint32_t by = s->y;
         if (((sy + 1) & 0xff) >= by && sy <= ((by + 0x0f) & 0xff)) {
-            uint32_t sx = gv.laser_x, bxx = g_image[bx + 4];
+            uint32_t sx = gv.laser_x, bxx = s->x;
             int32_t hit = (sx >= bxx && sx <= ((bxx + 0x0f) & 0xff)) ||
                       (((sx + 0x13) & 0xff) >= bxx &&
                        ((sx + 0x13) & 0xff) <= ((bxx + 0x0f) & 0xff));
             if (hit) {
                 gv.hit_kind = 3;
-                sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
-                                  img_w(img_w(bx + 6)));
+                sprite_shift_draw(s->x, s->y, img_w(s->frame));
                 shot_xor(gv.laser_x, (gv.laser_y + 2) & 0xff);
                 gv.laser_y = 0xb3;
                 return;
@@ -3647,13 +3645,13 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
     }
 
     /* The paddle. */
-    uint32_t y = g_image[bx + 5];
+    uint32_t y = s->y;
     if (y <= 0xbe && ((y + 0x0f) & 0xff) >= 0xb8) {
-        uint32_t bxx = g_image[bx + 4], px = gv.paddle_x;
+        uint32_t bxx = s->x, px = gv.paddle_x;
         if (((bxx + 0x0f) & 0xff) >= px &&
             bxx <= ((px + gv.paddle_width) & 0xff)) {
             gv.hit_kind = 1;
-            sprite_shift_draw(bxx, y, img_w(img_w(bx + 6)));
+            sprite_shift_draw(bxx, y, img_w(s->frame));
             return;
         }
     }
@@ -3665,7 +3663,7 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
         ball_t *ball = &gv.balls[i];
         if (ball->state != 1)
             continue;
-        bonus_hits_ball(bx, ball);
+        bonus_hits_ball(s, ball);
         if (gv.hit_kind == 2) {
             g_hit_ball = i;
             return;
@@ -3696,16 +3694,16 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
  */
 void entity_bonus(entity_t *e)
 {
-    uint32_t x = e->p.bonus.x, y = e->p.bonus.y;
+    uint32_t x = e->p.bonus.sprite.x, y = e->p.bonus.sprite.y;
     int32_t draw = 1;
 
     /* The timer byte carries two counters: the low nibble paces the movement
      * and the high nibble the frame. */
-    if (gv.extra_on != 1 && (e->p.bonus.timer & 0x0f) == 1) {
+    if (gv.extra_on != 1 && (e->p.bonus.sprite.timer & 0x0f) == 1) {
         if (!bonus_steer(img_off(e), &x, &y))
             goto sprite;                /* 1ac2:3a52, the draw */
     }
-    bonus_update(img_off(e), x, y);             /* 1ac2:3df1 */
+    bonus_update(&e->p.bonus.sprite, x, y);             /* 1ac2:3df1 */
 
     if (gv.hit_kind == 0)
         return;                         /* 1ac2:3a24 */
@@ -3727,8 +3725,8 @@ void entity_bonus(entity_t *e)
 
 sprite:
     if (draw)
-        sprite_shift_draw(e->p.bonus.x, e->p.bonus.y,
-                          img_w(e->p.bonus.frame));
+        sprite_shift_draw(e->p.bonus.sprite.x, e->p.bonus.sprite.y,
+                          img_w(e->p.bonus.sprite.frame));
 
 settle:
     if (gv.hit_kind == 0) {       /* 1ac2:3aaa - it reached the bottom */
@@ -3744,11 +3742,11 @@ settle:
     g_image[SOUND_REQUEST] = 6;         /* 1ac2:3a67 */
     /* Collected: the node becomes a sparkle where it stands, same arm. */
     e->handler = 0x3aee;
-    e->p.anim.frame = 0xb7a4;
-    e->p.anim.timer = e->p.anim.period = 0x0f;
+    e->p.anim.sprite.frame = 0xb7a4;
+    e->p.anim.sprite.timer = e->p.anim.sprite.period = 0x0f;
     gv.bonus_live--;
-    sprite_shift_draw(e->p.anim.x, e->p.anim.y,
-                      img_w(e->p.anim.frame - 2));   /* now a sparkle */
+    sprite_shift_draw(e->p.anim.sprite.x, e->p.anim.sprite.y,
+                      img_w(e->p.anim.sprite.frame - 2));   /* now a sparkle */
     brick_score(0, 0, 0x0703);
 }
 
