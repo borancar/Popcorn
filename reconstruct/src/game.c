@@ -711,14 +711,18 @@ void intro_reveal(void)
         }
     }
 
-    uint32_t si0 = SEG_C46 + 0x4db7, bp = 0xa0;
-    for (int32_t dh = 7; dh > 0; dh--, si0 += 0x444, bp += 0x370) {
+    uint32_t bp = 0xa0;
+    for (int32_t band = 0; band < 7; band++, bp += 0x370) {
         for (uint32_t bx = 1; bx < 0x35; bx++) {
-            uint32_t si = si0 - (bx - 1), di = bp;
+            /* The slice is anchored 0x33 into the band and widens to the
+             * left, a byte a pass, which is why the original holds that far
+             * edge rather than the band's start. */
+            const uint8_t *si = &c46.reveal[band][0x33 - (bx - 1)];
+            uint32_t di = bp;
             io_wait_retrace();
             for (int32_t dl = 0x15; dl > 0; dl--) {
                 for (uint32_t i = 0; i < bx; i++)
-                    g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[si + i];
+                    g_vram[(di + i) & (CGA_SIZE - 1)] = si[i];
                 si += 0x34;
                 di = cga_next_row(di);
             }
