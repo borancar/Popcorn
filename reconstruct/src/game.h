@@ -1252,7 +1252,7 @@ int32_t  score_before(const uint8_t *a, const uint8_t *b); /* 1ac2:108c */
 void ball_after(ball_t *b);   /* 1ac2:247f */
 int32_t  ball_after_endgame(ball_t *b);  /* 1ac2:45a1 */
 void ball_bricks(ball_t *b);  /* 1ac2:254d */
-void brick_hit(hit_t *hit, uint32_t cell, ball_t *ball);
+void brick_hit(hit_t *hit, uint8_t *cell, ball_t *ball);
 void xor_sprite_16xn(uint32_t x, uint32_t y, const uint8_t *src, uint32_t rows); /* 1ac2:40f2 */
 void brick_1(hit_t *hit, ball_t *ball);     /* 1ac2:28cb */
 void brick_2(hit_t *hit, ball_t *ball);     /* 1ac2:2985 */

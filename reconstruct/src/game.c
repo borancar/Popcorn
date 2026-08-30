@@ -801,7 +801,7 @@ const char *find_exe(void)
             return candidates[i];
         }
     }
-    return NULL;
+    return (const char *)0;
 }
 
 size_t popcorn_load_image(void)
@@ -2189,7 +2189,7 @@ void ball_bricks(ball_t *b)
     for (int32_t i = 0; i < 4; i++) {
         uint32_t cell = gv.hits[i].cell;
         if (cell)
-            brick_hit(&gv.hits[i], cell, b);
+            brick_hit(&gv.hits[i], img_ptr(cell), b);
     }
 }
 
@@ -2388,10 +2388,10 @@ static uint32_t brick_tag(uint32_t v)
     return v;
 }
 
-void brick_hit(hit_t *hit, uint32_t cell, ball_t *ball)
+void brick_hit(hit_t *hit, uint8_t *cell, ball_t *ball)
 {
-    io_log_random(0x8000 | brick_tag(g_image[cell]));  /* for sidebyside */
-    switch (g_image[cell]) {
+    io_log_random(0x8000 | brick_tag(*cell));  /* for sidebyside */
+    switch (*cell) {
     case 1:  brick_1(hit, ball); break;
     case 2:  brick_2(hit, ball); break;
     case 3:  brick_3(hit, ball); break;
@@ -4081,8 +4081,8 @@ void laser_fire(void)
 
     for (int32_t i = 0; i < 2; i++) {
         uint32_t cell = gv.hits[i].cell;
-        if (cell)
-            brick_hit(&gv.hits[i], cell, NULL); /* no ball: BP is zero */
+        if (cell)                       /* BP is zero: no ball struck this */
+            brick_hit(&gv.hits[i], img_ptr(cell), (ball_t *)0);
     }
     shot_xor(gv.laser_x, (gv.laser_y + 2) & 0xff);
     gv.laser_y = 0xb3;
@@ -4321,7 +4321,7 @@ void entity_multiball(void)
     }
 
     /* Find one that is in play to copy. */
-    ball_t *src = NULL;
+    ball_t *src = (ball_t *)0;
     for (int32_t i = 0; i < 3; i++) {
         ball_t *b = &gv.balls[i];
         if (b->state != 0) {
