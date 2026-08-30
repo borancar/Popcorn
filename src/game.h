@@ -968,7 +968,9 @@ typedef struct __attribute__((packed)) {
     uint8_t  ending_mark[8][2];         /* 0x28d9 eight rows of one word, XORed at a packed position. **In this segment**, not at a plain image offset - reading it as one takes the sprite from 49KB below */
     uint8_t  _c46c[7];
     uint8_t  hole_picture[112][48];     /* 0x28f0 what shows through a hole brick 11 leaves: 12 cells of four bytes a row, 112 rows. On level 50, which is a solid wall of brick 11, it is the whole picture */
-    uint8_t  _c46d[11632];
+    uint8_t  _c46d[2714];
+    uint8_t  scroll_rows[26][49];       /* 0x488a the rows intro_scroll feeds in at the bottom, one a pass */
+    uint8_t  _c46e[7644];
     uint8_t  logo[4368];                /* 0x6b60 the logo the intro slides on. **One** block, read from both ends: two passes walk it forwards from the first word and two backwards from the last, which is why the original holds 0x6b60 for one pair and 0x7c6e for the other - and 0x7c6e is logo + 4366, the last word of exactly this many bytes */
 } seg_c46_t;
 ENSURE_SIZE(seg_c46_t, 0x7c70);
@@ -982,6 +984,7 @@ ENSURE_C46_AT(banner_xlat, 0x226c);
 ENSURE_C46_AT(blob_target, 0x2823);
 ENSURE_C46_AT(ending_mark, 0x28d9);
 ENSURE_C46_AT(hole_picture, 0x28f0);
+ENSURE_C46_AT(scroll_rows, 0x488a);
 ENSURE_C46_AT(logo, 0x6b60);
 
 /* The four colours mode 05h displays on an RGB monitor: the colour-burst-kill
