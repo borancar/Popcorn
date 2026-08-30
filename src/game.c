@@ -219,11 +219,11 @@ void restore_screen(void)
 #define PADDLE_BYTES        11          /* five words and a byte: 44 pixels */
 #define PADDLE_IMAGE      0x4d          /* PADDLE_ROWS * PADDLE_BYTES */
 
-void paddle_row_offsets(uint32_t x, uint32_t rows_out)
+void paddle_row_offsets(uint32_t x, paddle_rows_t *rows)
 {
     uint32_t off = (x >> 2) + PADDLE_ROW_BASE;
     for (int32_t r = 0; r < PADDLE_ROWS; r++) {
-        img_setw(rows_out + r * 2, off);
+        rows->at[r] = (uint16_t)off;
         off = cga_next_row(off);
     }
 }
@@ -235,13 +235,13 @@ void paddle_row_offsets(uint32_t x, uint32_t rows_out)
  * interrupts off, because it writes CGA memory without waiting for retrace and
  * a timer tick in the middle would show as a tear.
  */
-void blit_xor(uint32_t pixels, uint32_t rows)
+void blit_xor(const uint8_t *pixels, const paddle_rows_t *rows)
 {
     for (int32_t r = 0; r < PADDLE_ROWS; r++) {
-        uint32_t di = img_w(rows + r * 2);
+        uint32_t di = rows->at[r];
+        const uint8_t *row = pixels + r * PADDLE_BYTES;
         for (int32_t b = 0; b < PADDLE_BYTES; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] ^=
-                g_image[pixels + r * PADDLE_BYTES + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] ^= row[b];
     }
 }
 
@@ -255,13 +255,6 @@ void blit_xor(uint32_t pixels, uint32_t rows)
  * paddle has not moved and no redraw was forced by [0x2d3b], there is nothing
  * to do, and XOR-ing it off and back on would flicker it.
  */
-/* The four buffers are game_vars fields now; these spell the offsets the
- * routines that still take one want, and derive them rather than repeat
- * them. */
-#define PADDLE_ROWS_CUR    img_off(gv.paddle_rows[0])
-#define PADDLE_ROWS_PREV   img_off(gv.paddle_rows[1])
-#define PADDLE_PIX_CUR     img_off(gv.paddle_pix[0])
-#define PADDLE_PIX_PREV    img_off(gv.paddle_pix[1])
 
 void draw_paddle(uint32_t sprite)
 {
@@ -281,21 +274,20 @@ void draw_paddle(uint32_t sprite)
     gv.frame_delay -= 0x1e0;            /* the uint16_t is the `& 0xffff` */
 
     /* What is on screen now becomes what has to be erased. */
-    memcpy(gv.paddle_rows[1], gv.paddle_rows[0],
-           PADDLE_ROWS * 2);
+    gv.paddle_rows[1] = gv.paddle_rows[0];
     memcpy(gv.paddle_pix[1], gv.paddle_pix[0],
            PADDLE_IMAGE + 1);
 
     uint32_t x = gv.paddle_x;
     gv.paddle_prev_x = (uint8_t)x;
-    paddle_row_offsets(x, PADDLE_ROWS_CUR);
+    paddle_row_offsets(x, &gv.paddle_rows[0]);
 
     /* Pick the copy pre-shifted to this pixel within its byte. */
     memcpy(gv.paddle_pix[0],
            g_image + sprite + (x & 3) * PADDLE_IMAGE, PADDLE_IMAGE + 1);
 
-    blit_xor(PADDLE_PIX_PREV, PADDLE_ROWS_PREV);   /* erase where it was */
-    blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);     /* draw where it is */
+    blit_xor(gv.paddle_pix[1], &gv.paddle_rows[1]);   /* erase where it was */
+    blit_xor(gv.paddle_pix[0], &gv.paddle_rows[0]);     /* draw where it is */
 }
 
 /* ------------------------------------------------------------------------
@@ -1247,7 +1239,7 @@ int32_t play_loop(void)
     gv.repeat_div = 5;
     io_mouse_warp(0x64 * 2, 0xb8);
 
-    paddle_row_offsets(gv.paddle_x, PADDLE_ROWS_CUR);
+    paddle_row_offsets(gv.paddle_x, &gv.paddle_rows[0]);
     memcpy(gv.paddle_pix[0], g_image + SPRITE_BASE, 0x27 * 2);
     gv.ball_alive = 1;
     memcpy(gv.balls[0].sprite, g_image + 0x48fb, sizeof gv.balls[0].sprite);
@@ -3836,14 +3828,13 @@ void draw_paddle_shifted(uint32_t sprite)
         return;
     gv.frame_delay -= 0x1f3;          /* the uint16_t is the `& 0xffff` */
 
-    memcpy(gv.paddle_rows[1], gv.paddle_rows[0],
-           PADDLE_ROWS * 2);
+    gv.paddle_rows[1] = gv.paddle_rows[0];
     memcpy(gv.paddle_pix[1], gv.paddle_pix[0],
            PADDLE_IMAGE + 1);
 
     uint32_t x = gv.paddle_x;
     gv.paddle_prev_x = (uint8_t)x;
-    paddle_row_offsets(x, PADDLE_ROWS_CUR);
+    paddle_row_offsets(x, &gv.paddle_rows[0]);
     memcpy(gv.paddle_pix[0], g_image + sprite, PADDLE_IMAGE + 1);
 
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
@@ -3858,8 +3849,8 @@ void draw_paddle_shifted(uint32_t sprite)
         }
     }
 
-    blit_xor(PADDLE_PIX_PREV, PADDLE_ROWS_PREV);
-    blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
+    blit_xor(gv.paddle_pix[1], &gv.paddle_rows[1]);
+    blit_xor(gv.paddle_pix[0], &gv.paddle_rows[0]);
 }
 
 /* ========================================================================
@@ -6060,7 +6051,7 @@ void screen_game_over(void)
             if (!io_pump())
                 return;
         }
-        blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
+        blit_xor(gv.paddle_pix[0], &gv.paddle_rows[0]);
     }
 
     for (uint32_t si = 0x9bb0; img_w(si); si += 2) {
@@ -6875,7 +6866,7 @@ int32_t ball_after_endgame(ball_t *b)
 
     /* It reached the bottom: the level is over the other way. */
     speaker_off();
-    blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
+    blit_xor(gv.paddle_pix[0], &gv.paddle_rows[0]);
     ball_draw(gv.balls[0].sprite, gv.balls[0].x, gv.balls[0].y);
     if (gv.cheat_done != 1)
         gv.lives++;               /* a free life, unless cheating */
@@ -6986,7 +6977,7 @@ static int32_t bonus_end_level_run(void)
     gv.paddle_max = 0xac;
     gv.paddle_min = 8;
     gv.paddle_width = g_image[PADDLE_SPRITES + 2];
-    blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
+    blit_xor(gv.paddle_pix[0], &gv.paddle_rows[0]);
 
     /* The wall closing in: 0x70 passes of a 26-word band scrolled up six rows
      * with a fresh cap laid on each. */
