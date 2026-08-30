@@ -452,7 +452,7 @@ typedef struct __attribute__((packed)) {
      * jobs, so the union says so rather than two names for 0x13e9 saying
      * nothing. */
     union {
-        uint8_t name_prompt[24];
+        char    name_prompt[24];
         struct __attribute__((packed)) {
             uint8_t _np0[8];
             uint8_t player_digit;       /* 0x13e9 '1' to '9' - players[player_digit - '1'] */
@@ -464,7 +464,7 @@ typedef struct __attribute__((packed)) {
     /* 0x1407 " TABLEAU 00 ", drawn whole by the level intro, with its two
      * digits written in place. The same arrangement as the prompt above. */
     union {
-        uint8_t level_text[12];
+        char    level_text[12];
         struct __attribute__((packed)) {
             uint8_t _lt0[9];
             uint16_t level_num_text;    /* 0x1410 tens in the low byte */
@@ -1124,7 +1124,7 @@ void restore_screen(void);                              /* 1ac2:50bc */
 void paddle_row_offsets(uint32_t x, paddle_rows_t *rows); /* 1ac2:22de */
 void blit_xor(const uint8_t *pixels, const paddle_rows_t *rows); /* 1ac2:2281 */
 void draw_paddle(const uint8_t *sprite);                /* 1ac2:221a */
-void draw_char(uint8_t c, uint32_t di);           /* 1ac2:0c64 */
+void draw_char(char c, uint32_t di);              /* 1ac2:0c64 */
 uint32_t game_random(uint32_t ticks, uint32_t limit);   /* 1ac2:40c0 */
 void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
@@ -1234,7 +1234,7 @@ extern int32_t g_resume_in_bonus;       /* lockstep: rejoin inside the bonus */
 extern int32_t g_start_level;           /* --level N, or -1 for the first */
 extern int32_t g_in_bonus;              /* the end-of-level bonus is running */
 int32_t  play_loop(void);             /* 1ac2:1873 - transcribed */
-uint32_t draw_text(uint32_t src, uint32_t count, uint32_t di);  /* 1ac2:10d1 */
+uint32_t draw_text(const char *src, uint32_t count, uint32_t di); /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
 void walker_draw(uint32_t x);     /* 1ac2:1e50 */
 void walker_step(uint32_t x);     /* 1ac2:1e23 */
