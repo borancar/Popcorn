@@ -365,7 +365,6 @@ uint32_t game_random(uint32_t ticks, uint32_t limit)
 /* Data the program keeps in its own code segment, reached as `cs:[...]`.
  * There are only a handful, and they are all here: the sound state and the
  * two bytes POPSPEED patches. */
-#define CS_BASE        0x1ac20
 
 static int32_t g_speaker_on;
 
@@ -411,7 +410,7 @@ void sound_tick(void)
      * to the code segment at the top of the routine. Reading them as plain
      * image offsets lands in the sprite data and plays whatever is there. */
     uint32_t si = cv.sound_ptr;
-    uint32_t note = img_w(CS_BASE + si);
+    uint32_t note = cv_w(si);
     if (note == 0) {                    /* end of tune */
         speaker_off();
         return;
@@ -844,9 +843,9 @@ size_t popcorn_load_image(void)
  * ===================================================================== */
 
 /* Which input routine the menu is set to, and which the game will use. */
-#define INPUT_KEYBOARD  0x16d2
-#define INPUT_DEMO      0x1785          /* demo_start installs this one */
-#define INPUT_MOUSE     0x1654
+#define INPUT_KEYBOARD_FN  0x16d2
+#define INPUT_DEMO_FN      0x1785          /* demo_start installs this one */
+#define INPUT_MOUSE_FN     0x1654
 
 
 static void menu_redraw(void)
@@ -854,7 +853,7 @@ static void menu_redraw(void)
     speaker_off();
     flush_keys();                   /* 1ac2:0106 */
     restore_screen();
-    if (gv.input_selected != INPUT_KEYBOARD)
+    if (gv.input_selected_fn != INPUT_KEYBOARD_FN)
         menu_arrow();
     gv.particle_count = (uint16_t)(0x50);
     menu_particles_init(0xb800);
@@ -911,7 +910,7 @@ void game_main(const char *dir, const char *levels)
         if (!level_load_file(dir))
             return;                     /* the original exits to DOS */
     }
-    gv.input_selected = (uint16_t)(INPUT_KEYBOARD);
+    gv.input_selected_fn = INPUT_KEYBOARD_FN;
     gv.cheat_done = 0;
     cv.sound_on = 1;
     load_high_scores(dir);
@@ -964,14 +963,14 @@ void game_main(const char *dir, const char *levels)
              * throw to 1ac2:01d1, well past here. Feeding the matcher after
              * play_session instead, as this did, both reversed that and read
              * a `key` no longer guaranteed to survive the longjmp. */
-            if ((key >> 8) == 0x42) {                   /* F8: palette */
+            if ((key >> 8) == KEY_F8) {                 /* palette */
                 palette_cycle();
                 io_present();
                 continue;
             }
-            if ((key >> 8) == 0x43)                     /* F9: sound */
+            if ((key >> 8) == KEY_F9)                   /* sound */
                 cv.sound_on ^= 1;
-            if ((key >> 8) == 0x41) {                   /* F7: forget the
+            if ((key >> 8) == KEY_F7) {                 /* forget the
                                                          * cheat so far */
                 gv.cheat_done = 0;
                 gv.cheat_at = (uint16_t)img_off(gv.cheat_text);
@@ -980,48 +979,48 @@ void game_main(const char *dir, const char *levels)
                 cheat_match((uint8_t)(key & 0xff));
 
             switch (key >> 8) {
-            case 0x44:                                  /* F10 */
+            case KEY_F10:
                 /* The boss key. employee_enter is a no-op here on purpose, so
                  * nothing is stashed and screen_restore is not called either -
                  * it would put back whatever the last stash left. F10 does
                  * nothing in the port, which is the intent. */
                 employee_enter();
-                while (io_key_ready() && (io_get_key() >> 8) == 0x44)
+                while (io_key_ready() && (io_get_key() >> 8) == KEY_F10)
                     ;
                 break;
-            case 0x3d:                                  /* F3: mouse */
-                if (gv.input_selected != INPUT_MOUSE) {
-                    gv.input_selected = (uint16_t)(INPUT_MOUSE);
+            case KEY_F3:                                /* mouse */
+                if (gv.input_selected_fn != INPUT_MOUSE_FN) {
+                    gv.input_selected_fn = INPUT_MOUSE_FN;
                     menu_arrow();
                 }
                 break;
-            case 0x3e:                                  /* F4: keyboard */
-                if (gv.input_selected != INPUT_KEYBOARD) {
-                    gv.input_selected = (uint16_t)(INPUT_KEYBOARD);
+            case KEY_F4:                                /* keyboard */
+                if (gv.input_selected_fn != INPUT_KEYBOARD_FN) {
+                    gv.input_selected_fn = INPUT_KEYBOARD_FN;
                     menu_arrow();
                 }
                 break;
-            case 0x3f:                                  /* F5: define keys */
+            case KEY_F5:                                /* define keys */
                 screen_define_keys();
                 back_to_menu = 1;
                 break;
-            case 0x40:                                  /* F6: high scores */
+            case KEY_F6:                                /* high scores */
                 screen_high_scores();
                 back_to_menu = 1;
                 break;
-            case 0x3c:                                  /* F2: demo */
+            case KEY_F2:                                /* demo */
                 start_demo();
                 back_to_menu = 1;
                 break;
-            case 0x3b:                                  /* F1: play */
-                gv.input_active = (uint16_t)(gv.input_selected);
+            case KEY_F1:                                /* play */
+                gv.input_active_fn = gv.input_selected_fn;
                 speaker_on();
                 if (screen_player_names() == 0xff) {
                     back_to_menu = 1;
                     break;
                 }
                 play_prepare();
-                if (gv.input_active == 0x16d2)
+                if (gv.input_active_fn == INPUT_KEYBOARD_FN)
                     install_int09();            /* 1ac2:02ea, keyboard only */
                 /* play_session() never returns normally: it is left by the
                  * stack-throwing jump the original does at 1ac2:167e. */
@@ -1029,7 +1028,7 @@ void game_main(const char *dir, const char *levels)
                     play_session();
                 back_to_menu = 1;
                 break;
-            case 0x01:                                  /* Esc: quit */
+            case KEY_ESC:                               /* quit */
                 return;
             default:
                 break;
@@ -1103,7 +1102,7 @@ static void input_keys_mouse(void)
  * and takes the BIOS handler back so INT 16h has something to read. */
 static void input_keys_keyboard(void)
 {
-    if (gv.last_make != 1)
+    if (gv.last_make != KEY_ESC)
         return;
     screen_stash();                     /* 1ac2:4ba9 */
     restore_int09();                    /* 1ac2:03d1 */
@@ -1125,11 +1124,11 @@ static void input_keys_keyboard(void)
 
 void game_input(void)
 {
-    uint32_t which = gv.input_active;
-    if (which == INPUT_MOUSE) {
+    uint32_t which = gv.input_active_fn;
+    if (which == INPUT_MOUSE_FN) {
         input_keys_mouse();
         input_mouse(io_mouse_x(), io_mouse_buttons());
-    } else if (which == INPUT_DEMO) {
+    } else if (which == INPUT_DEMO_FN) {
         input_demo();
     } else {
         input_keys_keyboard();
@@ -1273,7 +1272,7 @@ int32_t play_loop(void)
     flush_keys();                   /* 1ac2:0106 */
 
     /* Wait for the action key, or two thousand ticks, before serving. */
-    if (gv.input_active != 0x1785) {
+    if (gv.input_active_fn != INPUT_DEMO_FN) {
         gv.serve_timeout = (uint16_t)(0x7d0);
         for (;;) {
             gv.serve_timeout = (uint16_t)(gv.serve_timeout - 1);
@@ -1354,7 +1353,7 @@ frames:
          * gv.entity_remove - twelve of them do - and the walk does the
          * unlinking, which is what makes the four details below matter.
          *
-         * entity_prev trails one node behind, so the predecessor is to hand
+         * entity_prev_ptr trails one node behind, so the predecessor is to hand
          * and the list needs no second walk to find it. It starts at the head
          * *node*, so removing the first entity is not a special case.
          *
@@ -1374,17 +1373,17 @@ frames:
          * One consequence worth knowing: entity_alloc appends to the **tail**,
          * and this walk runs to the tail, so an entity created by a handler
          * during the walk is called in the same frame it was born. */
-        gv.entity_prev = img_off(&gv.entity_head);
-        uint32_t bx = gv.entity_head.next;
-        while (bx != 0xffff) {
-            entity_call(entity_ptr(bx));
+        gv.entity_prev_ptr = img_off(&gv.entity_head);
+        uint16_t node_ptr = gv.entity_head.next_ptr;
+        while (node_ptr != SENTINEL_PTR) {
+            entity_call(entity_ptr(node_ptr));
             if (gv.entity_remove == 0) {
-                gv.entity_prev = (uint16_t)(bx);
-                bx = entity_ptr(bx)->next;
+                gv.entity_prev_ptr = node_ptr;
+                node_ptr = entity_ptr(node_ptr)->next_ptr;
             } else {
-                uint32_t next = entity_ptr(bx)->next;
-                entity_unlink(bx);
-                bx = next;
+                uint16_t next_ptr = entity_ptr(node_ptr)->next_ptr;
+                entity_unlink(entity_ptr(node_ptr));
+                node_ptr = next_ptr;
             }
         }
 
@@ -1505,7 +1504,7 @@ void play_session(void)
 
     /* A demo starts on a random level; a game always starts on the first. */
     uint32_t lv = game_random(io_ticks(), 0x1e);
-    if (gv.input_active != 0x1785)
+    if (gv.input_active_fn != INPUT_DEMO_FN)
         lv = 0;
     /* popcorn-dev --level N. The draw above still happens: it is one of the
      * PRNG's callers and skipping it would shift every number the rest of the
@@ -2236,11 +2235,11 @@ static void brick_common(ball_t *ball, uint32_t sound,
  * and leaves [si+3] holding whatever the recycled slot had. Writing the word
  * for it put the slot pointer's high byte, 0x2f, where the original had the
  * previous occupant's value - one byte, 62,536 frames in. */
-static entity_t *brick_entity(hit_t *hit, uint32_t handler,
+static entity_t *brick_entity(hit_t *hit, uint16_t handler_fn,
                              uint32_t frames, uint32_t rate)
 {
     entity_t *e = entity_alloc();
-    e->handler = (uint16_t)handler;
+    e->handler_fn = handler_fn;
     ent_sprite_t *s = &e->p.anim.sprite;
     /* The original stores x and y with one word write from the hit slot; two
      * byte writes are the same thing and say which is which. */
@@ -2282,7 +2281,7 @@ static uint32_t bonus_kind(void)
  * Both score 20 and both usually hand the brick to a crumbling entity. The
  * other path - taken while fewer than three capsules are out, and then one
  * time in three - removes the brick at once and leaves something behind:
- * brick 1 a score popup (0x3561), brick 2 a falling capsule (0x3273).
+ * brick 1 a score popup (ENTITY_POPUP_FN), brick 2 a falling capsule (ENTITY_CAPSULE_FN).
  */
 static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
 {
@@ -2290,7 +2289,7 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
 
     if (gv.bonus_cap >= 3 || game_random(io_ticks(), 3) != 0) {
         /* crumble, and it keeps the cell it is standing on */
-        brick_entity(hit, 0x3b2a, is_two ? 0x6508 : 0x65fe, 7)
+        brick_entity(hit, ENTITY_CRUMBLE_FN, is_two ? 0x6508 : 0x65fe, 7)
             ->p.anim.arg.cell = (uint16_t)hit->cell;
         *img_ptr(hit->cell) = 0;
         gv.level.bricks--;
@@ -2304,7 +2303,7 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
     xor_sprite_16x7(x, y, img_ptr(gv.cell_bitmap[is_two ? 2 : 1]));
 
     entity_t *e = entity_alloc();
-    e->handler = is_two ? 0x3273 : 0x3561;
+    e->handler_fn = is_two ? ENTITY_CAPSULE_FN : ENTITY_POPUP_FN;
     ent_fall_t *f = &e->p.fall;
     /* The original writes x and y with one word and `inc bh` to put it a row
      * lower; the fall arm has them as the two bytes they are. */
@@ -2333,7 +2332,7 @@ void brick_3(hit_t *hit, ball_t *ball)
     cv.sound_request = 4;
     if (ball)
         ball->bounces++;
-    brick_entity(hit, 0x365e, 0x66f4, 8)->p.anim.arg.cell =
+    brick_entity(hit, ENTITY_SOFTEN_FN, 0x66f4, 8)->p.anim.arg.cell =
         (uint16_t)hit->cell;
     *img_ptr(hit->cell) = 4;
 }
@@ -2368,7 +2367,7 @@ void brick_7(hit_t *hit, ball_t *ball)
 }
 
 /* 1ac2:2b36  brick 8 - the end of that chain. A hundred points, and it leaves
- * an entity running 0x366f where it was. */
+ * an entity running ENTITY_REPEAT_FN where it was. */
 void brick_8(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, 4, 0, 0x100, 0);
@@ -2377,7 +2376,7 @@ void brick_8(hit_t *hit, ball_t *ball)
     xor_sprite_16x7(x, y, img_ptr(gv.cell_bitmap[8]));
     xor_sprite_16x7(x, y, img_ptr(0x681c));
     /* four times round the animation - a **byte**, see ent_anim_t's arg */
-    brick_entity(hit, 0x366f, 0x67ea, 7)->p.anim.arg.count = 4;
+    brick_entity(hit, ENTITY_REPEAT_FN, 0x67ea, 7)->p.anim.arg.count = 4;
     gv.level.bricks--;
 }
 
@@ -2604,7 +2603,7 @@ void walker_step(uint32_t x)
     gv.walker_anim = (uint16_t)(gv.walker_anim + 2);
     walker_draw(x);
     gv.walker_anim = (uint16_t)(gv.walker_anim + 2);
-    if (img_w(gv.walker_anim) == 0xffff)
+    if (img_w(gv.walker_anim) == SENTINEL_PTR)
         gv.walker_anim = (uint16_t)(WALKER_FIRST);
 }
 
@@ -2901,19 +2900,19 @@ void flash_bar(uint32_t pattern)
 entity_t *entity_alloc(void)
 {
     /* Take the first node off the free list. */
-    uint32_t si = gv.entity_free;
-    gv.entity_free = (uint16_t)(entity_ptr(si)->next);
+    uint16_t taken_ptr = gv.entity_free_ptr;
+    gv.entity_free_ptr = entity_ptr(taken_ptr)->next_ptr;
 
     /* Then append it to the end of the **active** list - which is what this
      * walk is over, though it starts at the free list's own head variable.
-     * See the note on entity_free: 0x3138 read as a node has its `next` at
+     * See the note on entity_free_ptr: 0x3138 read as a node has its `next` at
      * 0x3144, which *is* entity_head, so the sentinel's link is the list. */
-    uint32_t bx = img_off(&gv.entity_head);
-    while (entity_ptr(bx)->next != 0xffff)
-        bx = entity_ptr(bx)->next;
-    entity_ptr(si)->next = (uint16_t)(0xffff);
-    entity_ptr(bx)->next = (uint16_t)(si);
-    return entity_ptr(si);
+    uint16_t node_ptr = img_off(&gv.entity_head);
+    while (entity_ptr(node_ptr)->next_ptr != SENTINEL_PTR)
+        node_ptr = entity_ptr(node_ptr)->next_ptr;
+    entity_ptr(taken_ptr)->next_ptr = SENTINEL_PTR;  /* the end of it */
+    entity_ptr(node_ptr)->next_ptr = taken_ptr;
+    return entity_ptr(taken_ptr);
 }
 
 /* 1ac2:3257  entity_unlink
@@ -2922,11 +2921,11 @@ entity_t *entity_alloc(void)
  * [0x3142] is the node before it, which the play loop keeps up to date as it
  * walks - a singly linked list cannot find it otherwise.
  */
-void entity_unlink(uint32_t node)
+void entity_unlink(entity_t *node)
 {
-    entity_ptr(gv.entity_prev)->next = entity_ptr(node)->next;
-    entity_ptr(node)->next = (uint16_t)(gv.entity_free);
-    gv.entity_free = (uint16_t)(node);
+    entity_ptr(gv.entity_prev_ptr)->next_ptr = node->next_ptr;
+    node->next_ptr = gv.entity_free_ptr;
+    gv.entity_free_ptr = img_off(node);
     gv.entity_remove = 0;
 }
 
@@ -3018,7 +3017,7 @@ static int32_t entity_anim(ent_anim_t *a,
     uint32_t x = a->sprite.x, y = a->sprite.y;
     draw(x, y, img_ptr(img_w(cur - 2)));  /* the previous frame, to erase */
     uint32_t next = img_w(cur);
-    if (next == 0xffff)
+    if (next == SENTINEL_PTR)
         return -1;                      /* the animation is over */
     draw(x, y, img_ptr(next));
     a->sprite.frame = (uint16_t)(cur + 2);
@@ -3057,13 +3056,13 @@ void entity_crumble(ent_anim_t *a)
     xor_sprite_16x7(x, y, img_ptr(img_w(cur - 2)));
     xor_sprite_16x7(x, y, img_ptr(img_w(cur)));
     a->sprite.frame = (uint16_t)(cur + 2);
-    if (img_w(a->sprite.frame) == 0xffff)
+    if (img_w(a->sprite.frame) == SENTINEL_PTR)
         gv.entity_remove = 1;
 }
 
 /* 1ac2:39a1  bonus_release
  *
- * Let a capsule go from the hatch: allocate an entity running 0x39fa, give it
+ * Let a capsule go from the hatch: allocate an entity running ENTITY_BONUS_FN, give it
  * a random fall speed (`random(0x3c) + 9`) and one of eight kinds from the
  * table at 0xac60, and put it where the hatch is. A kind of 0 means it starts
  * eight pixels left and is marked type 2.
@@ -3073,7 +3072,7 @@ void bonus_release(const ent_hatch_t *h)
 {
     gv.bonus_live++;
     entity_t *e = entity_alloc();
-    e->handler = 0x39fa;
+    e->handler_fn = ENTITY_BONUS_FN;
     ent_anim_t *b = &e->p.anim;
     b->arg.move.mode = 0;
     b->arg.move.steps = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
@@ -3134,7 +3133,7 @@ void entity_hatch(ent_hatch_t *h)
         bonus_release(h);
     }
     h->script += 2;
-    if (img_w(h->script) == 0xffff) {
+    if (img_w(h->script) == SENTINEL_PTR) {
         ((mark_t *)img_ptr(h->mark))->taken = 0;
         gv.entity_remove = 1;
     }
@@ -3391,7 +3390,7 @@ void brick_9(hit_t *hit, ball_t *ball)
     b->bounces = 0;
     ball_draw(b->sprite, b->x, b->y);
 
-    brick_entity(hit, 0x3696, 0x6abe, 0x32)->p.anim.arg.cell =
+    brick_entity(hit, ENTITY_PLAIN_FN, 0x6abe, 0x32)->p.anim.arg.cell =
         (uint16_t)hit->cell;
 
     /* A cell that is not this one. */
@@ -3402,11 +3401,11 @@ void brick_9(hit_t *hit, ball_t *ball)
     } while (cell == hit->cell);
 
     entity_t *timer = entity_alloc();
-    timer->handler = 0x36f6;
+    timer->handler_fn = ENTITY_CELLS_TIMER_FN;
     timer->p.cells.left = 0x514;
 
     entity_t *e = entity_alloc();
-    e->handler = 0x36a1;
+    e->handler_fn = ENTITY_BALL_ARRIVE_FN;
     ent_anim_t *a = &e->p.anim;
     a->arg.ball = img_off(ball);        /* the slot holds its address */
     a->sprite.frame = 0x6ad0;
@@ -3428,7 +3427,7 @@ void brick_10(hit_t *hit, ball_t *ball)
         return;
 
     entity_t *e = entity_alloc();
-    e->handler = 0x37e0;
+    e->handler_fn = ENTITY_BALL_HOLD_FN;
     ent_anim_t *a = &e->p.anim;
     a->arg.ball = img_off(ball);        /* likewise */
     a->sprite.frame = 0x6b88;
@@ -3456,22 +3455,22 @@ void brick_10(hit_t *hit, ball_t *ball)
  * instead; they are the ones that legitimately need more than their arm. */
 void entity_call(entity_t *e)
 {
-    switch (e->handler) {
-    case 0x3273: entity_capsule(&e->p.fall); break;
-    case 0x3386: entity_paddle_fx(&e->p.morph); break;
-    case 0x3561: entity_popup(&e->p.fall); break;
-    case 0x365E: entity_soften(&e->p.anim); break;
-    case 0x366F: entity_repeat(&e->p.anim); break;
-    case 0x3696: entity_plain(&e->p.anim); break;
-    case 0x36A1: entity_ball_arrive(&e->p.anim); break;
-    case 0x36F6: entity_cells_timer(&e->p.cells); break;
-    case 0x37E0: entity_ball_hold(&e->p.anim); break;
-    case 0x390D: entity_hatch(&e->p.hatch); break;
-    case 0x39FA: entity_bonus(&e->p.anim); break;
-    case 0x3ABF: entity_anim_brick(&e->p.brick); break;
-    case 0x3AEE: entity_sparkle(&e->p.anim); break;
-    case 0x3717: entity_multiball(); break;
-    case 0x3B2A: entity_crumble(&e->p.anim); break;
+    switch (e->handler_fn) {
+    case ENTITY_CAPSULE_FN: entity_capsule(&e->p.fall); break;
+    case ENTITY_PADDLE_FX_FN: entity_paddle_fx(&e->p.morph); break;
+    case ENTITY_POPUP_FN: entity_popup(&e->p.fall); break;
+    case ENTITY_SOFTEN_FN: entity_soften(&e->p.anim); break;
+    case ENTITY_REPEAT_FN: entity_repeat(&e->p.anim); break;
+    case ENTITY_PLAIN_FN: entity_plain(&e->p.anim); break;
+    case ENTITY_BALL_ARRIVE_FN: entity_ball_arrive(&e->p.anim); break;
+    case ENTITY_CELLS_TIMER_FN: entity_cells_timer(&e->p.cells); break;
+    case ENTITY_BALL_HOLD_FN: entity_ball_hold(&e->p.anim); break;
+    case ENTITY_HATCH_FN: entity_hatch(&e->p.hatch); break;
+    case ENTITY_BONUS_FN: entity_bonus(&e->p.anim); break;
+    case ENTITY_ANIM_BRICK_FN: entity_anim_brick(&e->p.brick); break;
+    case ENTITY_SPARKLE_FN: entity_sparkle(&e->p.anim); break;
+    case ENTITY_MULTIBALL_FN: entity_multiball(); break;
+    case ENTITY_CRUMBLE_FN: entity_crumble(&e->p.anim); break;
     default:     entity_unknown(e); break;
     }
 }
@@ -3622,7 +3621,7 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
         if ((s->timer >> 4) == 0) {
             s->timer = s->period;
             s->frame += 2;
-            if (img_w(s->frame) == 0xffff)
+            if (img_w(s->frame) == SENTINEL_PTR)
                 s->frame = (uint16_t)img_w(s->frame + 2);
         }
         sprite_shift_draw(x, y, img_ptr(img_w(s->frame)));  /* draw */
@@ -3746,7 +3745,7 @@ settle:
     /* Collected: the node becomes a sparkle where it stands. The arm is the
      * sparkle's too, unchanged - only `handler` is the node's, so this is the
      * one line here that has to look outside the capsule. */
-    entity_of(b)->handler = 0x3aee;
+    entity_of(b)->handler_fn = ENTITY_SPARKLE_FN;
     b->sprite.frame = 0xb7a4;
     b->sprite.timer = b->sprite.period = 0x0f;
     gv.bonus_live--;
@@ -3848,8 +3847,8 @@ void draw_paddle_shifted(const uint8_t *sprite)
 /* ========================================================================
  * Clearing the entity list, at the end of a level or a life.
  *
- * Two entities have to be told before they go: 0x36f6 puts the cells it hid
- * back, and 0x365e softens the brick it hardened. Everything else is simply
+ * Two entities have to be told before they go: ENTITY_CELLS_TIMER_FN puts the cells it hid
+ * back, and ENTITY_SOFTEN_FN softens the brick it hardened. Everything else is simply
  * moved to the free list.
  * ===================================================================== */
 
@@ -3857,25 +3856,25 @@ void draw_paddle_shifted(const uint8_t *sprite)
  * care. Shared by all three purges below. */
 static void entity_farewell(entity_t *e)
 {
-    if (e->handler == 0x36f6)
+    if (e->handler_fn == ENTITY_CELLS_TIMER_FN)
         cells_restore();
-    else if (e->handler == 0x365e)
+    else if (e->handler_fn == ENTITY_SOFTEN_FN)
         cell_set_three(&e->p.anim);
 }
 
 /* 1ac2:055e  entities_clear - empty the active list onto the free one */
 void entities_clear(void)
 {
-    uint32_t bx = gv.entity_head.next;
-    while (bx != 0xffff) {
-        entity_t *e = entity_ptr(bx);
+    uint16_t node_ptr = gv.entity_head.next_ptr;
+    while (node_ptr != SENTINEL_PTR) {
+        entity_t *e = entity_ptr(node_ptr);
         entity_farewell(e);
-        uint32_t next = e->next;
-        e->next = (uint16_t)(gv.entity_free);
-        gv.entity_free = (uint16_t)(bx);
-        bx = next;
+        uint16_t next_ptr = e->next_ptr;
+        e->next_ptr = gv.entity_free_ptr;
+        gv.entity_free_ptr = node_ptr;
+        node_ptr = next_ptr;
     }
-    gv.entity_head.next = (uint16_t)(0xffff);
+    gv.entity_head.next_ptr = SENTINEL_PTR;
 }
 
 /* 1ac2:0521  screen_level_done - the same, and then the between-levels
@@ -3889,28 +3888,28 @@ void screen_level_done(void)
 /* 1ac2:0735  life_lost
  *
  * Reload the level's animation script and clear the list - but **keep** any
- * entity running 0x3abf, which is why this one tracks the previous node in
+ * entity running ENTITY_ANIM_BRICK_FN, which is why this one tracks the previous node in
  * [0x3142] where the other two do not: skipping a node means unlinking around
  * it.
  */
 void life_lost(void)
 {
     level_colours();
-    gv.entity_prev = img_off(&gv.entity_head);
-    uint32_t bx = gv.entity_head.next;
-    while (bx != 0xffff) {
-        entity_t *e = entity_ptr(bx);
-        if (e->handler == 0x3abf) {     /* this one stays */
-            gv.entity_prev = (uint16_t)(bx);
-            bx = e->next;
+    gv.entity_prev_ptr = img_off(&gv.entity_head);
+    uint16_t node_ptr = gv.entity_head.next_ptr;
+    while (node_ptr != SENTINEL_PTR) {
+        entity_t *e = entity_ptr(node_ptr);
+        if (e->handler_fn == ENTITY_ANIM_BRICK_FN) {     /* this one stays */
+            gv.entity_prev_ptr = node_ptr;
+            node_ptr = e->next_ptr;
             continue;
         }
         entity_farewell(e);
-        uint32_t next = e->next;
-        e->next = (uint16_t)(gv.entity_free);
-        gv.entity_free = (uint16_t)(bx);
-        entity_ptr(gv.entity_prev)->next = (uint16_t)next;
-        bx = next;
+        uint16_t next_ptr = e->next_ptr;
+        e->next_ptr = gv.entity_free_ptr;
+        gv.entity_free_ptr = node_ptr;
+        entity_ptr(gv.entity_prev_ptr)->next_ptr = next_ptr;
+        node_ptr = next_ptr;
     }
     level_between();
 }
@@ -4107,7 +4106,7 @@ void laser_fire(void)
  * that the low three bits of the counter are clear, written the way an 8086
  * writes it.
  *
- * Caught, it turns into the paddle-morph animation at 0x3386 and scores 23;
+ * Caught, it turns into the paddle-morph animation at ENTITY_PADDLE_FX_FN and scores 23;
  * missed, it is simply dropped. Either way [0x3384] - how many capsules are
  * out - comes back down.
  * ===================================================================== */
@@ -4158,7 +4157,7 @@ void entity_capsule_frames(ent_fall_t *f, uint32_t table)
             m->bonus = kind;
             m->pending = 1;
             m->step = 6;
-            e->handler = 0x3386;        /* becomes the paddle morph */
+            e->handler_fn = ENTITY_PADDLE_FX_FN;        /* becomes the paddle morph */
             gv.bonus_cap--;
             brick_score(0, 0, 0x0302);
             return;
@@ -4230,7 +4229,7 @@ void bonus_laser(void)
 /* 1ac2:2e16  bonus 4 - more balls, run by an entity of its own */
 void bonus_multiball(void)
 {
-    entity_alloc()->handler = 0x3717;
+    entity_alloc()->handler_fn = ENTITY_MULTIBALL_FN;
 }
 
 /* 1ac2:3231  bonus 2, the E capsule - the wider paddle.
@@ -4639,11 +4638,11 @@ int32_t name_field(uint32_t di, uint8_t *abort)
             continue;
         }
 
-        if (c == 0x1b) {                /* Escape */
+        if (c == KEY_ESCAPE_CHAR) {
             *abort = 0xff;
             return 0;
         }
-        if (c == 8) {                   /* Backspace, 1ac2:1380 */
+        if (c == KEY_BACKSPACE) {        /* 1ac2:1380 */
             if (len == 0)
                 continue;
             /* What gets painted over is the **cursor's** cell, at the
@@ -4663,7 +4662,7 @@ int32_t name_field(uint32_t di, uint8_t *abort)
             *--name = 0;
             continue;
         }
-        if (c == 0x0d) {                /* Enter */
+        if (c == KEY_RETURN) {
             if (len != 0)
                 break;                  /* accept this name */
             if (gv.player_count == 0)
@@ -5021,7 +5020,7 @@ void brick_11(hit_t *hit, ball_t *ball)
  * Once in a while the play loop tries to open a hatch. One of the four marks
  * at 0x33d7 is picked at random; it is refused if that mark is already busy
  * ([si+3]) or if either of the two cells behind it still has a brick. The
- * entity it starts runs 0x390d, the hatch animation, and remembers which mark
+ * entity it starts runs ENTITY_HATCH_FN, the hatch animation, and remembers which mark
  * it belongs to so it can free it again.
  */
 void bonus_spawn(void)
@@ -5036,7 +5035,7 @@ void bonus_spawn(void)
     m->taken = 1;
     gv.bonus_pending++;
     entity_t *e = entity_alloc();
-    e->handler = 0x390d;
+    e->handler_fn = ENTITY_HATCH_FN;
     ent_hatch_t *h = &e->p.hatch;
     h->mark = img_off(m);
     h->x = m->x;
@@ -5058,7 +5057,7 @@ void menu_banner_tick(void)
 {
     if (gv.banner_state == 2) {
         gv.banner_state = 0x80;
-        gv.banner_ptr = (uint16_t)(gv.banner_ptr + 1);
+        gv.banner_ptr += 1;             /* one character along */
         uint32_t c = *img_ptr(gv.banner_ptr);
         c = ((c ^ 0xaa) - 0x20) & 0xff;
         memcpy(gv.scratch1.banner_cell, gv.banner_font[c], 6);
@@ -5266,7 +5265,7 @@ static void player_record_init(player_t *p)
     memset(p->score, '0', sizeof p->score);
     p->level = c46.levels[0];
     for (int32_t i = 0; i < 6; i++)
-        p->state[i] = 0xffff;
+        p->state[i] = SENTINEL_PTR;
 }
 
 void play_prepare(void)
@@ -5284,7 +5283,7 @@ void play_prepare(void)
 
 void demo_start(void)
 {
-    gv.input_active = (uint16_t)(INPUT_DEMO);
+    gv.input_active_fn = (uint16_t)(INPUT_DEMO_FN);
     cv.demo_ball = 0xff;
     memcpy(gv.players[0].name, gv.demo_name, sizeof gv.players[0].name);
     player_record_init(&gv.players[0]);
@@ -5588,9 +5587,9 @@ void border_row(uint32_t di)
      * What was here before called border_draw 0x1a times, which is neither
      * the count nor the operation. */
     for (int32_t n = 0x17; n > 0; n--) {
-        uint32_t si = CS_BASE + 0x506d;
+        uint32_t si = 0x506d;
         for (int32_t r = 0; r < 8; r++, si += 2) {
-            uint32_t w = img_w(si);
+            uint32_t w = cv_w(si);
             g_vram[di & (CGA_SIZE - 1)] = (uint8_t)w;
             g_vram[(di + 1) & (CGA_SIZE - 1)] = (uint8_t)(w >> 8);
             di = cga_next_row(di);
@@ -5969,7 +5968,7 @@ void ending_column(void)
          * the beginning. Hoisting it out, which is what this used to do, gave
          * each column one frame of the animation and then ran off the end. */
         const uint16_t *frames = (const uint16_t *)img_ptr(0xb7a2);
-        while (*frames != 0xffff) {
+        while (*frames != SENTINEL_PTR) {
             const uint8_t *src = img_ptr(*frames);
             uint32_t d = di;
             for (int32_t r = 0; r < 0x0f; r++) {
@@ -6804,7 +6803,7 @@ int32_t ball_after_endgame(ball_t *b)
             /* The upper chamber: the level is over. */
             speaker_off();
             ball_draw(gv.balls[0].sprite, gv.balls[0].x, gv.balls[0].y);
-            for (uint32_t si = 0x6abe; img_w(si) != 0xffff; si += 2) {
+            for (uint32_t si = 0x6abe; img_w(si) != SENTINEL_PTR; si += 2) {
                 /* 1ac2:4769. The stretch between the ball reaching the
                  * chamber and the curtain starting had no sync of its own,
                  * so it was the one part of the transition still compared by
@@ -7158,11 +7157,13 @@ int32_t next_player(const char *dir)
 
     /* And its entities, count first. */
     p->ent_count = 0;
-    for (uint32_t bx = gv.entity_head.next; bx != 0xffff;
-         bx = entity_ptr(bx)->next)
+    for (uint16_t node_ptr = gv.entity_head.next_ptr;
+         node_ptr != SENTINEL_PTR;
+         node_ptr = entity_ptr(node_ptr)->next_ptr)
         /* Twelve of the node's fourteen: the handler and the variant, but
          * not `next`, which the restore rebuilds by allocating. */
-        memcpy(p->ents[p->ent_count++], entity_ptr(bx), sizeof p->ents[0]);
+        memcpy(p->ents[p->ent_count++], entity_ptr(node_ptr),
+               sizeof p->ents[0]);
     entities_clear();
 
     /* Move on to the next player who still has lives. */
@@ -7227,11 +7228,11 @@ int32_t next_player(const char *dir)
 /* 1ac2:1066 - where both paths meet. */
 static void results_finish(const char *dir)
 {
-    if (gv.input_active == INPUT_KEYBOARD)
+    if (gv.input_active_fn == INPUT_KEYBOARD_FN)
         restore_int09();            /* 1ac2:106e */
     /* 1ac2:1071 - the demo does not enter the hall of fame, and above all
      * does not write popcorn.hsc. */
-    if (gv.input_active != INPUT_DEMO) {
+    if (gv.input_active_fn != INPUT_DEMO_FN) {
         hsc_sort();                 /* 1ac2:1079 */
         hsc_save(dir);              /* 1ac2:107c */
     }
@@ -7324,7 +7325,7 @@ void screen_results(const char *dir)
 
     /* 1ac2:102a - the keyboard handler comes out before the wait, so the
      * BIOS buffer fills again and INT 16h below has something to read. */
-    if (gv.input_active == INPUT_KEYBOARD)
+    if (gv.input_active_fn == INPUT_KEYBOARD_FN)
         restore_int09();
 
     /* 1ac2:1035 - the results stand until a key or until the two nested
@@ -7365,10 +7366,10 @@ void demo_input_step(void)
     if (--gv.anim_count != 0)
         return;
     gv.anim_count = gv.anim_rate;
-    gv.anim_ptr = (uint16_t)(gv.anim_ptr + 2);
+    gv.anim_ptr += 2;                   /* one word along */
     uint32_t si = gv.anim_ptr;
-    if (s14a1_w(si) == 0xffff)
-        gv.anim_ptr = (uint16_t)s14a1_w(si + 2);
+    if (s14a1_w(si) == SENTINEL_PTR)
+        gv.anim_ptr = s14a1_w(si + 2);
 }
 
 /* 1ac2:3c35  bonus_script
@@ -7531,25 +7532,23 @@ void input_demo(void)
  * - so the message is decoded and put on stderr rather than on the screen,
  * and everything else about the sequence behaves as it does in the original.
  */
-#define CHEAT_START  0x56a5
-#define CHEAT_TEXT   0x56b5
 
 int32_t cheat_sequence(char key)
 {
-    const uint8_t *at = img_ptr(CS_BASE + cv.cheat_cursor);
+    const uint8_t *at = cv_ptr(cv.cheat_cursor_ptr);
     uint32_t al = (uint8_t)key ^ 0xaa;
 
     if (al != at[0]) {
         /* Not the next one. The same key twice is not a failure. */
         if (al == cv.cheat_last)
             return 1;
-        cv.cheat_cursor = CHEAT_START;
+        cv.cheat_cursor_ptr = cv_off(cv.cheat_keys);
         cv.cheat_last = 0;
         return 0;
     }
 
     cv.cheat_last = (uint8_t)al;
-    cv.cheat_cursor++;
+    cv.cheat_cursor_ptr++;
     if (at[1] != 0xaa)
         return 1;                       /* more to go */
 
@@ -7558,7 +7557,7 @@ int32_t cheat_sequence(char key)
     {
         char line[256];
         uint32_t n = 0, ah = 0x20;
-        const uint8_t *s = img_ptr(CS_BASE + CHEAT_TEXT);
+        const uint8_t *s = cv.cheat_text;
         for (;;) {
             uint32_t c = (*s++ ^ ah) ^ 0xaa;
             ah = c;
@@ -7580,7 +7579,7 @@ int32_t cheat_sequence(char key)
     }
     io_get_key();
     io_cga_mode(5);
-    cv.cheat_cursor = CHEAT_START;
+    cv.cheat_cursor_ptr = cv_off(cv.cheat_keys);
     cv.cheat_last = 0xff;
     return 1;
 }
@@ -7649,7 +7648,7 @@ void brick_animated(hit_t *hit, ball_t *ball)
                               + (piece << 5)) & 0xffff), x, y);
 
     entity_t *e = entity_alloc();
-    e->handler = 0x3abf;
+    e->handler_fn = ENTITY_ANIM_BRICK_FN;
     ent_brick_t *br = &e->p.brick;
     br->x = hit->x;          /* the centre, one word in the original */
     br->y = hit->y;
