@@ -85,6 +85,21 @@ $PY snapshot.py "$D/vlife.snap" --resume "$D/level.snap" \
     --poke 0x33b1=0 --poke 0x33b2=0 --poke 0x33b3=0 --poke 0x33b4=0 \
     --poke 0x33b5=0 --poke 0x33b6=0 --poke 0x33b7=0 --poke 0x33b8=0xff
 
+# The end-of-level bonus. Reaching it needs a `+` capsule, which is 2 chances
+# in 255 and which the bot will not wait for, so the odds table is rigged the
+# same way as the extra life above - zero everything below the + and let it be
+# certain. Then play on until 1ac2:4210, which is the bonus's own body, so the
+# capture is *inside* it rather than on the way.
+#
+# Two stages because --poke seeds the written file rather than the run that
+# writes it: the first rigs the table, the second plays with it rigged.
+$PY snapshot.py "$D/plusrig.snap" --resume "$D/level.snap" --seconds 4 --bot \
+    --poke 0x33b1=0 --poke 0x33b2=0 --poke 0x33b3=0 --poke 0x33b4=0 \
+    --poke 0x33b5=0 --poke 0x33b6=0 --poke 0x33b7=0 --poke 0x33b8=0 \
+    --poke 0x33b9=0xff
+$PY snapshot.py "$D/bonus.snap" --resume "$D/plusrig.snap" \
+    --at 0x4210 --seconds 400 --bot
+
 # Two players, the second out of lives, so the next frame runs the results
 # and the hall-of-fame walk with two entries to order rather than one. The
 # player table is 0x11b bytes a player at 0x344f: copying player 1's record
