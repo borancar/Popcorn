@@ -907,12 +907,12 @@ void laser_fire(void);            /* 1ac2:2ee3 */
 void probe_cell_at(uint32_t x, uint32_t y, uint32_t slot); /* 1ac2:2755 */
 void play_teardown(void);         /* 1ac2:41d4 */
 void entity_call(entity_t *e);  /* the call at 1ac2:1b5e */
-void entity_capsule(entity_t *e);   /* 1ac2:3273 */
-void entity_paddle_fx(entity_t *e); /* 1ac2:3386 */
+void entity_capsule(ent_fall_t *f); /* 1ac2:3273 */
+void entity_paddle_fx(ent_morph_t *m); /* 1ac2:3386 */
 void morph_begin(ent_morph_t *m, uint32_t table, uint32_t kind); /* 1ac2:34c5 */
 void morph_step(ent_morph_t *m);       /* 1ac2:34d7 */
-void entity_popup(entity_t *e);     /* 1ac2:3561 */
-void entity_capsule_frames(entity_t *e, uint32_t table);
+void entity_popup(ent_fall_t *f);   /* 1ac2:3561 */
+void entity_capsule_frames(ent_fall_t *f, uint32_t table);
 void entity_ball_hold(ent_anim_t *a); /* 1ac2:37e0 */
 void ball_place(ball_t *ball, uint32_t x, uint32_t y);
 void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny); /* 1ac2:3df1 */

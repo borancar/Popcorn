@@ -169,8 +169,8 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x2ee3: laser_fire(); return 1;
     case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, r[R_SI]);
                  return 1;
-    case 0x3273: entity_capsule(entity_at(r[R_BX])); return 1;
-    case 0x3561: entity_popup(entity_at(r[R_BX])); return 1;
+    case 0x3273: entity_capsule(&entity_at(r[R_BX])->p.fall); return 1;
+    case 0x3561: entity_popup(&entity_at(r[R_BX])->p.fall); return 1;
     case 0x2daa: bonus_points(); return 1;
     case 0x2def: bonus_catch(); return 1;
     case 0x2e03: bonus_laser(); return 1;
@@ -181,7 +181,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x31e8: bonus_slower_ball(); return 1;
     case 0x41b1: fill_column(r[R_DI], r[R_AX]); return 1;
     case 0x3717: entity_multiball(); return 1;
-    case 0x3386: entity_paddle_fx(entity_at(r[R_BX])); return 1;
+    case 0x3386: entity_paddle_fx(&entity_at(r[R_BX])->p.morph); return 1;
     case 0x05f8: level_between(); return 1;
     case 0x492f: arrow_head(r[R_DI]); return 1;
     case 0x4957: arrow_tail(r[R_DI]); return 1;
