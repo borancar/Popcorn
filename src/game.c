@@ -2248,13 +2248,16 @@ static entity_t *brick_entity(hit_t *hit, uint32_t handler,
 
 /* Degrade a brick one step: the cell becomes `next`, the old picture comes off
  * and the new one goes on. Cells 5, 6 and 7 all do exactly this. */
-static void brick_degrade(hit_t *hit, uint32_t next,
-                          uint32_t old_pic, uint32_t new_pic)
+/* A brick that degrades one step: the cell becomes `to`, and the two sprites
+ * are that cell's and the one it was, both out of cell_bitmap - the original
+ * writes them as immediates, but they are entries 5 through 8 of the table
+ * every other brick is drawn from. */
+static void brick_degrade(hit_t *hit, uint32_t from, uint32_t to)
 {
-    g_image[hit->cell] = (uint8_t)next;
+    *img_ptr(hit->cell) = (uint8_t)to;
     uint32_t x = hit->x, y = hit->y;
-    xor_sprite_16x7(x, y, img_ptr(old_pic));
-    xor_sprite_16x7(x, y, img_ptr(new_pic));
+    xor_sprite_16x7(x, y, img_ptr(gv.cell_bitmap[from]));   /* rub out */
+    xor_sprite_16x7(x, y, img_ptr(gv.cell_bitmap[to]));     /* and draw */
 }
 
 /* Pick one of the bonus kinds by the cumulative weights at 0x33b1: walk the
@@ -2283,16 +2286,16 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
         /* crumble, and it keeps the cell it is standing on */
         brick_entity(hit, 0x3b2a, is_two ? 0x6508 : 0x65fe, 7)
             ->p.anim.arg.cell = (uint16_t)hit->cell;
-        g_image[hit->cell] = 0;
+        *img_ptr(hit->cell) = 0;
         gv.level.bricks--;
         return;
     }
 
     gv.level.bricks--;
-    uint32_t cell = hit->cell;
-    g_image[cell] = 0;
+    uint8_t *cell = img_ptr(hit->cell);
+    *cell = 0;
     uint32_t x = hit->x, y = hit->y;
-    xor_sprite_16x7(x, y, img_ptr(is_two ? 0x63a6 : gv.cell_bitmap[1]));
+    xor_sprite_16x7(x, y, img_ptr(gv.cell_bitmap[is_two ? 2 : 1]));
 
     entity_t *e = entity_alloc();
     e->handler = is_two ? 0x3273 : 0x3561;
@@ -2326,7 +2329,7 @@ void brick_3(hit_t *hit, ball_t *ball)
         ball->bounces++;
     brick_entity(hit, 0x365e, 0x66f4, 8)->p.anim.arg.cell =
         (uint16_t)hit->cell;
-    g_image[hit->cell] = 4;
+    *img_ptr(hit->cell) = 4;
 }
 
 /* 1ac2:3221  bricks 4 and 12 - indestructible; the ball only bounces */
@@ -2343,19 +2346,19 @@ void brick_solid(hit_t *hit, ball_t *ball)
 void brick_5(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 2);
-    brick_degrade(hit, 6, 0x6466, 0x6486);
+    brick_degrade(hit, 5, 6);
 }
 
 void brick_6(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 3);
-    brick_degrade(hit, 7, 0x6486, 0x64a6);
+    brick_degrade(hit, 6, 7);
 }
 
 void brick_7(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 5);
-    brick_degrade(hit, 8, 0x64a6, 0x64c6);
+    brick_degrade(hit, 7, 8);
 }
 
 /* 1ac2:2b36  brick 8 - the end of that chain. A hundred points, and it leaves
@@ -2363,9 +2366,9 @@ void brick_7(hit_t *hit, ball_t *ball)
 void brick_8(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, 4, 0, 0x100, 0);
-    g_image[hit->cell] = 0;
+    *img_ptr(hit->cell) = 0;
     uint32_t x = hit->x, y = hit->y;
-    xor_sprite_16x7(x, y, img_ptr(0x64c6));
+    xor_sprite_16x7(x, y, img_ptr(gv.cell_bitmap[8]));
     xor_sprite_16x7(x, y, img_ptr(0x681c));
     /* four times round the animation - a **byte**, see ent_anim_t's arg */
     brick_entity(hit, 0x366f, 0x67ea, 7)->p.anim.arg.count = 4;
@@ -3410,10 +3413,10 @@ void brick_9(hit_t *hit, ball_t *ball)
 void brick_10(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 5);
-    g_image[hit->cell] = 0;
+    *img_ptr(hit->cell) = 0;
     gv.level.bricks--;
     uint32_t x = hit->x, y = hit->y;
-    xor_sprite_16x7(x, y, img_ptr(0x63e6));
+    xor_sprite_16x7(x, y, img_ptr(gv.cell_bitmap[10]));
     if (!ball)
         return;
 
@@ -5001,7 +5004,7 @@ void brick_11(hit_t *hit, ball_t *ball)
     g_image[hit->cell] = 0x0c;
     gv.level.bricks--;
     uint32_t x = hit->x, y = hit->y;
-    xor_sprite_16x7(x, y, img_ptr(0x6406));
+    xor_sprite_16x7(x, y, img_ptr(gv.cell_bitmap[11]));
     brick_11_after(x, y);               /* 1ac2:4c4b */
 }
 
@@ -5687,7 +5690,7 @@ void screen_stash(void)
 void screen_restore(void)
 {
     io_cga_mode(0x0e);
-    set_palette_registers(0x4b9d);
+    set_palette_registers(img_ptr(0x4b9d));
     memcpy(g_vram, gv.scratch2.screen_stash, 0x7d0 * 2);
     speaker_on();
 }
@@ -6439,10 +6442,10 @@ int32_t level_load_file(const char *dir)
  * nothing on real CGA hardware - the two screens that use it (F10 and its
  * exit) look the same without it. Recorded because it runs.
  */
-void set_palette_registers(uint32_t table)
+void set_palette_registers(const uint8_t *table)
 {
     for (int32_t i = 0; i < 0x0c; i++)
-        (void)g_image[table + i];
+        (void)table[i];
 }
 
 /* ========================================================================
@@ -6867,15 +6870,14 @@ int32_t ball_after_endgame(ball_t *b)
 
 /* One row of the banner: 0x13 blank bytes, an edge, twelve translated cells,
  * an edge, and 0x13 blank again - then the whole screen scrolls up. */
-static void banner_row(uint32_t si)
+static void banner_row(const uint8_t *cells)
 {
     uint32_t di = BANNER_ROW_VRAM;
     for (int32_t i = 0; i < 0x13; i++)
         g_vram[di++ & (CGA_SIZE - 1)] = 0;
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
     for (int32_t i = 0; i < 0x0c; i++) {
-        uint32_t cell = g_image[si + i];
-        g_vram[di++ & (CGA_SIZE - 1)] = c46.banner_xlat[cell][0];
+        g_vram[di++ & (CGA_SIZE - 1)] = c46.banner_xlat[cells[i]][0];
     }
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
     for (int32_t i = 0; i < 0x13; i++)
@@ -6995,8 +6997,8 @@ static int32_t bonus_end_level_run(void)
      * 1ac2:43e7 takes the value after the second row's lodsb. */
     uint32_t si = (gv.level_src + 0xb8) & 0xffff;
     for (int32_t n = 0x0e; n > 0; n--, si = (si + 0x0c) & 0xffff) {
-        banner_row(SEG_C46 + si);
-        banner_row(SEG_C46 + si);
+        banner_row(img_ptr(SEG_C46 + si));
+        banner_row(img_ptr(SEG_C46 + si));
         banner_blank();
     }
 
@@ -7451,7 +7453,7 @@ void input_demo(void)
             screen_restore();                   /* 1ac2:4b4f */
         } else if ((key >> 8) == 0x43) {        /* F9: sound */
             cv.sound_on ^= 1;
-        } else if (!cheat_sequence((uint8_t)(key & 0xff))) {
+        } else if (!cheat_sequence((char)(key & 0xff))) {
             entities_clear();                   /* 1ac2:055e */
             longjmp(g_back_to_menu, 1);         /* sp = [0x1405]; jmp 0x1d1 */
         }
@@ -7515,12 +7517,12 @@ void input_demo(void)
 #define CHEAT_START  0x56a5
 #define CHEAT_TEXT   0x56b5
 
-int32_t cheat_sequence(uint8_t key)
+int32_t cheat_sequence(char key)
 {
-    uint32_t si = cv.cheat_cursor;
-    uint32_t al = key ^ 0xaa;
+    const uint8_t *at = img_ptr(CS_BASE + cv.cheat_cursor);
+    uint32_t al = (uint8_t)key ^ 0xaa;
 
-    if (al != g_image[CS_BASE + si]) {
+    if (al != at[0]) {
         /* Not the next one. The same key twice is not a failure. */
         if (al == cv.cheat_last)
             return 1;
@@ -7530,17 +7532,18 @@ int32_t cheat_sequence(uint8_t key)
     }
 
     cv.cheat_last = (uint8_t)al;
-    cv.cheat_cursor = (uint16_t)(si + 1);
-    if (g_image[CS_BASE + si + 1] != 0xaa)
+    cv.cheat_cursor++;
+    if (at[1] != 0xaa)
         return 1;                       /* more to go */
 
     /* The whole sequence. Mode 3, the message, a key, mode 5 again. */
     io_cga_mode(3);
     {
         char line[256];
-        uint32_t n = 0, ah = 0x20, s = CHEAT_TEXT;
+        uint32_t n = 0, ah = 0x20;
+        const uint8_t *s = img_ptr(CS_BASE + CHEAT_TEXT);
         for (;;) {
-            uint32_t c = (g_image[CS_BASE + s++] ^ ah) ^ 0xaa;
+            uint32_t c = (*s++ ^ ah) ^ 0xaa;
             ah = c;
             if (c == 0)
                 break;
@@ -7579,13 +7582,12 @@ int32_t cheat_sequence(uint8_t key)
 
 /* 1ac2:3bac  draw_anim_cell - eight rows of four bytes, copied not XORed,
  * out of the block reached as segment 0x14a1. */
-void draw_anim_cell(uint32_t si, uint32_t x, uint32_t y)
+void draw_anim_cell(const uint8_t *src, uint32_t x, uint32_t y)
 {
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 8; r++) {
         for (int32_t b = 0; b < 4; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] =
-                g_image[SEG_14A1 + si + r * 4 + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] = src[r * 4 + b];
         di = cga_next_row(di);
     }
 }
@@ -7602,7 +7604,7 @@ void entity_anim_brick(ent_brick_t *br)
         return;
     uint32_t si = img_w(SEG_14A1 + gv.anim_ptr)
                 + br->piece * ANIM_SPRITE_BYTES;
-    draw_anim_cell(si, br->x, br->y);
+    draw_anim_cell(img_ptr(SEG_14A1 + si), br->x, br->y);
 }
 
 /* 1ac2:2ccd  brick_animated - cells 16 to 21 */
@@ -7626,8 +7628,8 @@ void brick_animated(hit_t *hit, ball_t *ball)
 
     /* Draw it once where the brick was, from the script's current entry. */
     uint32_t x = hit->x, y = hit->y;
-    draw_anim_cell((img_w(SEG_14A1 + gv.anim_ptr)
-                    + (piece << 5)) & 0xffff, x, y);
+    draw_anim_cell(img_ptr(SEG_14A1 + ((img_w(SEG_14A1 + gv.anim_ptr)
+                                       + (piece << 5)) & 0xffff)), x, y);
 
     entity_t *e = entity_alloc();
     e->handler = 0x3abf;
