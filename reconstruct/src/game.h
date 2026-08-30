@@ -615,7 +615,9 @@ typedef struct __attribute__((packed)) {
     uint8_t  _pad_23b[3336];
     uint8_t  font[40][12][2];           /* 0x9020 the score panel's 8x12 font, two bits a pixel: forty glyphs of twelve rows of one word. Glyph 0, what a space maps to, is **not blank** - it is a solid block of colour 2, which is how the headings get their red ground */
     uint8_t  pause_overlay[38][50];     /* 0x93e0 what screen_stash paints over the stashed playfield. It starts exactly where the font ends */
-    uint8_t  _pad_23[2164];
+    uint8_t  _pad_23[2042];
+    uint8_t  game_over_paddle[78];      /* 0xa346 the paddle screen_game_over starts from, the same 0x4d + 1 bytes a kind's phase holds */
+    uint8_t  _pad_27[44];
     uint8_t  banner_font[129][6];       /* 0xa3c0 the menu banner's own font, and a different one: eight columns by six rows at one bit a pixel, one byte a row, scrolled a bit at a time. 129 glyphs is what banner_text indexes - its highest is 128, and the last byte of that glyph is the last non-zero byte before the ending's picture */
     uint8_t  _pad_24[23434];
     uint8_t  screen_save[2][8000];      /* 0x10250 the whole screen, and the two halves land **adjacent** here rather than 0x2000 apart: 8000 is what each half of the aperture holds, and the 192 bytes of padding at the end of each are neither saved nor restored. So this is 16,000 bytes and not a copy of the aperture */
@@ -624,6 +626,58 @@ typedef struct __attribute__((packed)) {
 /* The same bytes as g_image, which stays the buffer everything else - memcpy,
  * the snapshot loader, the verifier, exepack - works through. */
 #define gv (*(game_vars *)g_image)
+
+/* The variables the assembly kept **inside its code segment**, at `cs:[...]`
+ * rather than in the data at `ds:[...]`. game_vars overlays the data segment
+ * at image offset 0; this overlays the code segment at 0x1ac20, which is
+ * where the disassembly's `cs:[0x84]` lands.
+ *
+ * The gaps between these fields are **instructions**, not padding, which is
+ * why they are `_code` and not `_pad`: nothing is going to be discovered in
+ * them. `delay_entry` is the clearest case - it is the first byte of
+ * game_delay, and the game patches it to 0xc3 to turn the delay into a bare
+ * `ret`. A variable there is a variable stored in an opcode. */
+typedef struct __attribute__((packed)) {
+    uint8_t  _code0[0x84];
+    uint8_t  sound_on;                  /* cs:0x0084 F9 toggles this */
+    uint8_t  _code1[111];
+    uint8_t  sound_request;             /* cs:0x00f4 an id to start, 0 = nothing */
+    uint8_t  sound_timer;               /* cs:0x00f5 ticks left on the note */
+    uint16_t sound_ptr;                 /* cs:0x00f6 where in the tune we are - a **code-segment** offset, which is why the note read goes through CS_BASE */
+    uint16_t sound_tunes[7];            /* cs:0x00f8 a tune's address by id, ids 1 to 7 */
+    uint8_t  _code2[5446];
+    uint8_t  delay_entry;               /* cs:0x164c game_delay's first byte, patched to 0xc3 to disable it */
+    uint8_t  _code3[1];
+    uint16_t delay_count;               /* cs:0x164e the `mov cx,N` immediate POPSPEED writes */
+    uint8_t  _code4[308];
+    uint8_t  demo_ball;                 /* cs:0x1784 which ball the demo is chasing, 0xff for none */
+    uint8_t  _code5[14568];
+    uint16_t border_spr[8];             /* cs:0x506d the menu border's sprites */
+    uint16_t border_pos[14];            /* cs:0x507d and where each one is, updated in place */
+    uint8_t  _code6[1545];
+    uint16_t cheat_cursor;              /* cs:0x56a2 how far along the typed sequence we are, as a code-segment offset */
+    uint8_t  cheat_last;                /* cs:0x56a4 the last key accepted, so the same one twice is not a failure */
+    uint8_t  _code7[1480];
+    uint8_t  frame_phase;               /* cs:0x5c6d which corner piece the next band of the playfield surround uses */
+} code_vars;
+ENSURE_SIZE(code_vars, 0x5c6e);
+#define cv (*(code_vars *)(g_image + 0x1ac20))
+
+#define ENSURE_CODE_AT(field, off) \
+    typedef char ensure_code_at_##field[offsetof(code_vars, field) == (off) ? 1 : -1]
+ENSURE_CODE_AT(sound_on, 0x0084);
+ENSURE_CODE_AT(sound_request, 0x00f4);
+ENSURE_CODE_AT(sound_timer, 0x00f5);
+ENSURE_CODE_AT(sound_ptr, 0x00f6);
+ENSURE_CODE_AT(sound_tunes, 0x00f8);
+ENSURE_CODE_AT(delay_entry, 0x164c);
+ENSURE_CODE_AT(delay_count, 0x164e);
+ENSURE_CODE_AT(demo_ball, 0x1784);
+ENSURE_CODE_AT(border_spr, 0x506d);
+ENSURE_CODE_AT(border_pos, 0x507d);
+ENSURE_CODE_AT(cheat_cursor, 0x56a2);
+ENSURE_CODE_AT(cheat_last, 0x56a4);
+ENSURE_CODE_AT(frame_phase, 0x5c6d);
 
 /* offsetof checked at compile time. _Static_assert is C11 and this is C99, so
  * it is the negative-array-size trick; the failure message names the field. */
@@ -754,6 +808,7 @@ ENSURE_IMG_AT(mark_sprite, 0x6078);
 ENSURE_IMG_AT(curtain_image, 0x7805);
 ENSURE_IMG_AT(font, 0x9020);
 ENSURE_IMG_AT(pause_overlay, 0x93e0);
+ENSURE_IMG_AT(game_over_paddle, 0xa346);
 ENSURE_IMG_AT(banner_font, 0xa3c0);
 ENSURE_IMG_AT(screen_save, 0x10250);
 /* @generated-asserts end */
