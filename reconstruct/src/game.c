@@ -5816,14 +5816,15 @@ void border_setup(void)
 #define TALL_SPRITE_BYTES  (0x0f * 4)
 #define KBD_POLL_CYCLES    150          /* what one INT 16h AH=01 cost */
 
-int32_t tall_sprite(uint32_t *si, uint32_t di)
+int32_t tall_sprite(const uint8_t **si, uint32_t di)
 {
+    const uint8_t *src = *si;
     for (int32_t r = 0; r < 0x0f; r++) {
         for (int32_t b = 0; b < 4; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[*si + r * 4 + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] = src[r * 4 + b];
         di = cga_next_row(di);
     }
-    *si += TALL_SPRITE_BYTES;
+    *si = src + TALL_SPRITE_BYTES;
 
     for (int32_t n = 0x4b0; n > 0; n--) {
         if (io_key_ready()) {
@@ -6664,11 +6665,11 @@ void screen_end_of_game(void)
     int32_t keyed = 0;
     for (int32_t g = 0; g < 7 && !keyed; g++) {
         uint32_t at = (0x34f0 + gv.eog_groups[g].at) & 0xffff;
-        uint32_t sprite = gv.eog_groups[g].sprite;
+        const uint8_t *sprite = img_ptr(gv.eog_groups[g].sprite);
 
         if (tall_sprite(&sprite, at)) { keyed = 1; break; }
         tall_sprite(&sprite, at);       /* no test after the second */
-        uint32_t blank = img_off(gv.eog_blank[0]);
+        const uint8_t *blank = gv.eog_blank[0];
         if (tall_sprite(&blank, at)) { keyed = 1; break; }
         if (tall_sprite(&blank, at)) { keyed = 1; break; }
         if (tall_sprite(&blank, at)) { keyed = 1; break; }

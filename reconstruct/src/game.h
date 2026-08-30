@@ -1220,7 +1220,7 @@ void employee_enter(void);        /* 1ac2:4ae0 */
 void cell_hole_draw(uint32_t x, uint32_t y);  /* 1ac2:4cc1 */
 void screen_unstash(void);        /* 1ac2:4c13 */
 void border_setup(void);          /* 1ac2:4f73 */
-int32_t  tall_sprite(uint32_t *si, uint32_t di);   /* 1ac2:538d */
+int32_t  tall_sprite(const uint8_t **si, uint32_t di); /* 1ac2:538d */
 void screen_scroll_up(void);      /* 1ac2:4878 */
 void level_tally(void);           /* 1ac2:48ce */
 void screen_stash(void);          /* 1ac2:4ba9 */
