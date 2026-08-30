@@ -1346,8 +1346,8 @@ frames:
 
         /* The entity list. [0x3142] trails one node behind so a handler that
          * asks to be removed can be unlinked without walking the list again. */
-        gv.entity_prev = offsetof(game_vars, entity_free);
-        uint32_t bx = gv.entity_head;
+        gv.entity_prev = img_off(&gv.entity_head);
+        uint32_t bx = gv.entity_head.next;
         while (bx != 0xffff) {
             entity_call(bx);
             if (gv.entity_remove == 0) {
@@ -2878,7 +2878,7 @@ uint32_t entity_alloc(void)
      * walk is over, though it starts at the free list's own head variable.
      * See the note on entity_free: 0x3138 read as a node has its `next` at
      * 0x3144, which *is* entity_head, so the sentinel's link is the list. */
-    uint32_t bx = offsetof(game_vars, entity_free);
+    uint32_t bx = img_off(&gv.entity_head);
     while (entity_at(bx)->next != 0xffff)
         bx = entity_at(bx)->next;
     entity_at(si)->next = (uint16_t)(0xffff);
@@ -3823,7 +3823,7 @@ static void entity_farewell(uint32_t bx)
 /* 1ac2:055e  entities_clear - empty the active list onto the free one */
 void entities_clear(void)
 {
-    uint32_t bx = gv.entity_head;
+    uint32_t bx = gv.entity_head.next;
     while (bx != 0xffff) {
         entity_farewell(bx);
         uint32_t next = entity_at(bx)->next;
@@ -3831,7 +3831,7 @@ void entities_clear(void)
         gv.entity_free = (uint16_t)(bx);
         bx = next;
     }
-    gv.entity_head = (uint16_t)(0xffff);
+    gv.entity_head.next = (uint16_t)(0xffff);
 }
 
 /* 1ac2:0521  screen_level_done - the same, and then the between-levels
@@ -3852,8 +3852,8 @@ void screen_level_done(void)
 void life_lost(void)
 {
     level_colours();
-    gv.entity_prev = offsetof(game_vars, entity_free);
-    uint32_t bx = gv.entity_head;
+    gv.entity_prev = img_off(&gv.entity_head);
+    uint32_t bx = gv.entity_head.next;
     while (bx != 0xffff) {
         if (img_w(bx) == 0x3abf) {      /* this one stays */
             gv.entity_prev = (uint16_t)(bx);
@@ -7115,7 +7115,7 @@ int32_t next_player(const char *dir)
 
     /* And its entities, count first. */
     p->ent_count = 0;
-    for (uint32_t bx = gv.entity_head; bx != 0xffff;
+    for (uint32_t bx = gv.entity_head.next; bx != 0xffff;
          bx = entity_at(bx)->next)
         memcpy(p->ents[p->ent_count++], g_image + bx, sizeof p->ents[0]);
     entities_clear();
