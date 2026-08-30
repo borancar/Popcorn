@@ -612,11 +612,24 @@ original shoot.
 
   Counted rather than guessed, as of this writing:
 
-  - **No raw literal address is left at all.** There were ten that were the
-    same byte spelled two ways, and then four more that were not: `0x13c7`,
-    `0x13c8`, `0x33d5` and `0x3f1b` were real variables sitting in bytes the
-    struct called padding, which is why counting only the *named* ones missed
-    them. All fourteen have fields.
+  - **The `g_image + CONSTANT` idiom is gone from `game.c`.** Not only the
+    literals: every `#define NAME 0x...` that stood for an address has become
+    a field, across **three** overlays, because the program keeps variables in
+    three places -
+
+    | | | |
+    | --- | --- | --- |
+    | `game_vars` | `gv` | the data segment, at image 0 |
+    | `code_vars` | `cv` | the code segment, at `0x1ac20` - `cs:[0x84]` and its neighbours, variables the assembly stored *inside instructions* |
+    | `seg_c46_t` | `c46` | the level and ending block, at `0xc460` |
+
+    149 `ENSURE_` assertions hold their offsets, and what a wrong padding size
+    would once have hidden now fails the build - which it did, twice, while
+    this was being done.
+
+  - **What is left is `g_image + <variable>`**, five sites: `SEG_C46 +
+    gv.level_src`, `CS_BASE + si` three times, `SEG_14A1 + si`. Those are the
+    game's own 16-bit pointers and they are the real blocker, not the idiom.
   - **29 `img_off` and 21 `ball_at` calls bridge struct to offset**, and about
     forty of those fifty are *not* fundamental. `ball_draw(img_off(b->sprite))`
     wants a `const uint16_t *`; `ball_step(img_off(&gv.balls[i]))` wants a
