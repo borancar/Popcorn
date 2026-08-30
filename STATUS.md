@@ -562,6 +562,24 @@ original shoot.
   the side-by-side. Reaching them wants a bot that aims rather than one that
   survives, or a snapshot taken with the level number written by hand.
 
+- **screen_stash and screen_unstash are reached by no route, and the reason
+  is the boss key.** `1ac2:4ba9` puts the playfield aside and paints an
+  overlay over it; `1ac2:4c13` puts it back. The comment at `1ac2:4ba9` says
+  "used by the pause screen and by F10", and F10 is `employee_enter`, which
+  the port deliberately does not have. So this is a **different pause** from
+  the Esc one, and it wants implementing alongside the boss key rather than
+  before it.
+
+  Reaching them meanwhile needs a keyboard-mode capture: the Esc test lives
+  in the keyboard input routine at `1ac2:16d2`, and every level snapshot runs
+  on the mouse, so `--keys @1a62:escape` never gets to it. `make_snapshots.sh`
+  builds a keyboard route for exactly this and the sweep has not been re-run
+  since the snapshots were renamed.
+
+  They share `0x1aef` with the intro curtain, the ending's band and the
+  results sort, and those three are checked - so the union is not what is
+  unproven here, the two routines are.
+
 - **A keypress ticks the menu's animation, and in the port it does not.**
   Every key that falls through the menu's compare chain lands at `1ac2:02b4`,
   which steps the particles and the banner once before going back to the key
