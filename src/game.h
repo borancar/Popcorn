@@ -111,8 +111,10 @@ typedef struct __attribute__((packed)) {
     uint8_t  level_number;  /* 0x0f */
     uint8_t  score[6];      /* 0x10 ASCII digits, as gv.score_text is */
     level_t  level;         /* 0x16 their copy of it, cells and all */
-    uint16_t state[6];      /* 0xc6 twelve bytes from 0x30b0. Initialised to
-                             * six 0xffff, which is the "six terminators" */
+    uint16_t state[6];      /* 0xc6 cell_bitmap[24..29], the six animated
+                             * bricks' hit appearance, which is per-player.
+                             * Initialised to six 0xffff, the "six
+                             * terminators" */
     uint8_t  ent_count;     /* 0xd2 */
     uint8_t  ents[6][12];   /* 0xd3 six entities, twelve bytes each */
 } player_t;
@@ -426,7 +428,13 @@ typedef struct __attribute__((packed)) {
     uint8_t  _pad_12[16];
     uint8_t  sweep_y[4];                /* 0x2f0c the four popcorn kernels sweeping the field during the level intro; kernel zero paces the reveal */
     level_t  level;                     /* 0x2f10 the level being played, copied out of the table at 0xc46:0x000c */
-    uint8_t  _pad_13[372];
+    uint8_t  _pad_13[132];
+    /* Three tables indexed by cell value, thirty entries each, laid end to
+     * end: 0x3044 + 60 is 0x3080, 0x3080 + 60 is 0x30bc, and 0x30bc + 120 is
+     * anim_count. The asserts below are what says so. */
+    uint16_t brick_handler[30];         /* 0x3044 the routine ball_bricks dispatches to. The port transcribed the dispatch as a switch and so never reads this, but it is what sets where the next table starts */
+    uint16_t cell_bitmap[30];           /* 0x3080 the cell's bitmap. Entries 24 and up are offsets into the block reached as segment 0x14a1 rather than this one, which is the `cell >= 24` in every reader - and entries 24 to 29 are **written**, by the animated bricks: hitting one adds 8 to its value and points the new value here. That is why 0x30b0, which is entry 24, is the twelve bytes player_t saves as `state` */
+    uint16_t cell_score[30][2];         /* 0x30bc what a cell is worth to level_tally, a four-byte figure it feeds to score_add as two words */
     uint8_t  anim_count;                /* 0x3134 the animated bricks */
     uint8_t  anim_rate;                 /* 0x3135 */
     uint16_t anim_ptr;                  /* 0x3136 */
@@ -541,6 +549,9 @@ ENSURE_IMG_AT(hold_offset, 0x2e56);
 ENSURE_IMG_AT(ball_alive, 0x2e73);
 ENSURE_IMG_AT(hit_count, 0x2e74);
 ENSURE_IMG_AT(hits, 0x2e89);
+ENSURE_IMG_AT(brick_handler, 0x3044);
+ENSURE_IMG_AT(cell_bitmap, 0x3080);
+ENSURE_IMG_AT(cell_score, 0x30bc);
 ENSURE_IMG_AT(caught, 0x2e75);
 ENSURE_IMG_AT(hold_timer, 0x2e76);
 ENSURE_IMG_AT(game_over, 0x2e78);

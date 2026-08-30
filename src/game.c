@@ -1608,14 +1608,13 @@ static uint32_t cga_at(uint32_t x, uint32_t y)
  *
  * Cell 0x0c is not a brick - it hands off to 0x41e5. Cells from 0x18 up have
  * their bitmaps in the block the program reaches as segment 0x14a1 rather than
- * in the table at 0x3080.
+ * in cell_bitmap.
  */
 #define BRICK_TOP        6              /* first scan line of the field */
 #define BRICK_LEFT       2              /* bytes, so eight pixels */
 #define BRICK_COLS      12
 #define BRICK_HEIGHT     8              /* scan lines */
 #define BRICK_BYTES      4              /* 16 pixels */
-#define CELL_TABLE  0x3080              /* cell value -> bitmap pointer */
 #define SEG_14A1   0x14a10
 
 /* Returns the DI it leaves, which 1ac2:46dc depends on: the curtain lays its
@@ -1636,8 +1635,7 @@ uint32_t draw_brick_row(uint32_t y)
             cell_special(row & 0xff, c, di);
             continue;
         }
-        uint32_t idx = cell * 2;
-        uint32_t base = (idx >= 0x30 ? SEG_14A1 : 0) + img_w(CELL_TABLE + idx);
+        uint32_t base = (cell >= 24 ? SEG_14A1 : 0) + gv.cell_bitmap[cell];
         const uint8_t *src = g_image + base + sub;
         for (int32_t b = 0; b < BRICK_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
@@ -2308,7 +2306,7 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
     uint32_t cell = hit->cell;
     g_image[cell] = 0;
     uint32_t x = hit->x, y = hit->y;
-    xor_sprite_16x7(x, y, is_two ? 0x63a6 : img_w(CELL_TABLE + 2));
+    xor_sprite_16x7(x, y, is_two ? 0x63a6 : gv.cell_bitmap[1]);
 
     entity_t *e = entity_alloc();
     e->handler = is_two ? 0x3273 : 0x3561;
@@ -4601,9 +4599,7 @@ void level_between(void)
             }
             if (cell == 4)
                 continue;               /* empty */
-            uint32_t idx = cell * 2;
-            uint32_t src = (idx >= 0x30 ? SEG_14A1 : 0) +
-                           img_w(CELL_TABLE + idx);
+            uint32_t src = (cell >= 24 ? SEG_14A1 : 0) + gv.cell_bitmap[cell];
             uint32_t di = cga_at(x, y);
             for (int32_t r = 0; r < 8; r++) {
                 for (int32_t b = 0; b < 4; b++)
@@ -5673,16 +5669,16 @@ void screen_scroll_up(void)
 /* 1ac2:48ce  level_tally
  *
  * Score every brick still standing when a level is cut short: each of the
- * 0xa8 cells looks its value up in the table at 0x30bc, which holds the
- * four-byte figure to add, and then a flat thousand goes on top.
+ * 0xa8 cells looks its value up in cell_score, which holds the four-byte
+ * figure to add, and then a flat thousand goes on top.
  */
 void level_tally(void)
 {
     for (int32_t i = 0; i < 0xa8; i++) {
-        uint32_t si = 0x30bc + gv.level.cells[i] * 4;
+        uint32_t v = gv.level.cells[i];
         img_setw(SCORE_ADD + 0, 0);
-        img_setw(SCORE_ADD + 2, img_w(si));
-        img_setw(SCORE_ADD + 4, img_w(si + 2));
+        img_setw(SCORE_ADD + 2, gv.cell_score[v][0]);
+        img_setw(SCORE_ADD + 4, gv.cell_score[v][1]);
         score_add();
     }
     brick_score(0, 1, 0);
@@ -7185,7 +7181,7 @@ int32_t next_player(const char *dir)
     p->level_number = gv.level_number;
     memcpy(p->score, gv.score_text, sizeof p->score);
     p->level = gv.level;
-    memcpy(p->state, g_image + 0x30b0, sizeof p->state);
+    memcpy(p->state, &gv.cell_bitmap[24], sizeof p->state);
 
     /* And its entities, count first. */
     p->ent_count = 0;
@@ -7209,7 +7205,7 @@ int32_t next_player(const char *dir)
     gv.level_number = q->level_number;
     memcpy(gv.score_text, q->score, sizeof gv.score_text);
     gv.level = q->level;
-    memcpy(g_image + 0x30b0, q->state, sizeof q->state);
+    memcpy(&gv.cell_bitmap[24], q->state, sizeof q->state);
 
     for (uint32_t k = 0; k < q->ent_count; k++)
         memcpy(entity_alloc(), q->ents[k], sizeof q->ents[0]);
@@ -7630,7 +7626,6 @@ int32_t cheat_sequence(uint8_t key)
  * piece from the level's animation script.
  * ===================================================================== */
 #define ANIM_SPRITE_BYTES  32           /* 8 rows of 4, `dx <<= 5` */
-#define ANIM_PIECES        0x3080       /* what each hit piece became */
 
 /* 1ac2:3bac  draw_anim_cell - eight rows of four bytes, copied not XORed,
  * out of the block reached as segment 0x14a1. */
@@ -7677,7 +7672,7 @@ void brick_animated(hit_t *hit, ball_t *ball)
     uint32_t table = img_w(SEG_14A1 + gv.level_number * 4);
     uint32_t frame = (img_w(SEG_14A1 + table)
                       + (piece << 5)) & 0xffff;
-    img_setw(ANIM_PIECES + ((was + 8) & 0xff) * 2, frame);
+    gv.cell_bitmap[(was + 8) & 0xff] = (uint16_t)frame;
 
     /* Draw it once where the brick was, from the script's current entry. */
     uint32_t x = hit->x, y = hit->y;
