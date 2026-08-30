@@ -892,6 +892,41 @@ static inline uint32_t cga_next_row_ja(uint32_t di)
  * its own data as segment 0xc46, which is image offset 0xc460. */
 #define SEG_C46 0xc460
 
+/* The third segment: the block the program reaches as 0xc46, which holds the
+ * levels and everything the ending draws. Overlaid the way game_vars overlays
+ * the data and code_vars the code, and reached as `c46` so a field reads the
+ * way the disassembly writes it - 0xc46:0x28f0 is c46.hole_picture.
+ *
+ * The two signatures at the front are why a .PPC loads where it does: the
+ * file goes to +6, so its own six-byte signature lands on ppc_signature and
+ * is compared against the built-in one, and its forty-nine records land on
+ * levels[0..48]. levels[49], the wall of brick 11, is past the end of the
+ * read and survives - which is how a shipped .PPC still finishes on the
+ * original last level. */
+typedef struct __attribute__((packed)) {
+    uint8_t  signature[6];              /* 0x0000 what a .PPC has to match */
+    uint8_t  ppc_signature[6];          /* 0x0006 where the file's own lands */
+    level_t  levels[50];                /* 0x000c 50 * 0xb0, ending at 0x226c */
+    uint8_t  banner_xlat[30][2];        /* 0x226c a cell value to the character the results banner shows for it. Words, but only the low byte is ever read */
+    uint8_t  _c46a[1403];
+    uint8_t  blob_target;               /* 0x2823 the blob the ending is walking towards, written into the script itself */
+    uint8_t  _c46b[181];
+    uint8_t  ending_mark[8][2];         /* 0x28d9 eight rows of one word, XORed at a packed position. **In this segment**, not at a plain image offset - reading it as one takes the sprite from 49KB below */
+    uint8_t  _c46c[7];
+    uint8_t  hole_picture[112][48];     /* 0x28f0 what shows through a hole brick 11 leaves: 12 cells of four bytes a row, 112 rows. On level 50, which is a solid wall of brick 11, it is the whole picture */
+} seg_c46_t;
+ENSURE_SIZE(seg_c46_t, 0x3df0);
+#define c46 (*(seg_c46_t *)(g_image + SEG_C46))
+
+#define ENSURE_C46_AT(field, off) \
+    typedef char ensure_c46_at_##field[offsetof(seg_c46_t, field) == (off) ? 1 : -1]
+ENSURE_C46_AT(ppc_signature, 0x0006);
+ENSURE_C46_AT(levels, 0x000c);
+ENSURE_C46_AT(banner_xlat, 0x226c);
+ENSURE_C46_AT(blob_target, 0x2823);
+ENSURE_C46_AT(ending_mark, 0x28d9);
+ENSURE_C46_AT(hole_picture, 0x28f0);
+
 /* The four colours mode 05h displays on an RGB monitor: the colour-burst-kill
  * bit selects background / cyan / red / white regardless of the palette bit. */
 extern uint32_t g_palette[4];
