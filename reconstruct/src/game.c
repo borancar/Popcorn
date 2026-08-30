@@ -607,12 +607,13 @@ void intro_curtain(void)
             gv.scratch2.curtain_work[i] = (uint8_t)out;
         }
 
-        uint32_t si = img_off(gv.scratch2.curtain_work), di = 0x34;
+        const uint8_t *row = gv.scratch2.curtain_work;
+        uint32_t di = 0x34;
         io_wait_retrace();
         for (uint32_t r = 0; r < rows; r++) {
             for (int32_t b = 0; b < CURTAIN_ROW; b++)
-                g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
-            si += CURTAIN_ROW;
+                g_vram[(di + b) & (CGA_SIZE - 1)] = row[b];
+            row += CURTAIN_ROW;
             di = cga_next_row(di);
         }
         for (int32_t i = 0; i < 0x28; i++)
