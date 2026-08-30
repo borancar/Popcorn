@@ -3125,7 +3125,7 @@ void entity_hatch(ent_hatch_t *h)
     }
     h->script += 2;
     if (img_w(h->script) == 0xffff) {
-        g_image[h->cell + 3] = 0;
+        ((mark_t *)img_ptr(h->mark))->taken = 0;
         gv.entity_remove = 1;
     }
 }
@@ -4540,10 +4540,10 @@ void morph_step(ent_morph_t *m)
 
 void level_between(void)
 {
-    uint32_t si = img_off(gv.field_marks);
-    for (int32_t i = 0; i < 4; i++, si += 4) {
-        uint32_t x = g_image[si], y = (g_image[si + 1] - 0x0a) & 0xff;
-        g_image[si + 3] = 0;
+    for (int32_t i = 0; i < 4; i++) {
+        mark_t *m = &gv.field_marks[i];
+        uint32_t x = m->x, y = (m->y - 0x0a) & 0xff;
+        m->taken = 0;
         uint32_t di = cga_at(x, y);
         for (int32_t r = 0; r < 0x25; r++) {
             g_vram[di & (CGA_SIZE - 1)] = gv.mark_sprite[r][0];
@@ -4559,12 +4559,12 @@ void level_between(void)
         g_vram[(0x20a3 + i * 2) & (CGA_SIZE - 1)] = 0;
     }
 
-    uint32_t di_cell = img_off(gv.level.cells);
+    const uint8_t *cells = gv.level.cells;
     uint32_t y = 6;
     for (int32_t row = 0; row < 0x0e; row++, y += 8) {
         uint32_t x = 8;
-        for (int32_t col = 0; col < 0x0c; col++, di_cell++, x += 0x10) {
-            uint32_t cell = g_image[di_cell];
+        for (int32_t col = 0; col < 0x0c; col++, cells++, x += 0x10) {
+            uint32_t cell = *cells;
             if (cell == 0x0c) {
                 cell_hole_draw(x, y);
                 continue;
@@ -4608,7 +4608,7 @@ void level_between(void)
 
 int32_t name_field(uint32_t di, uint8_t *abort)
 {
-    uint32_t si = img_off(gv.players[gv.player_digit - '1'].name);
+    uint8_t *name = gv.players[gv.player_digit - '1'].name;
     uint32_t len = 0;
     *abort = 0;
 
@@ -4647,7 +4647,7 @@ int32_t name_field(uint32_t di, uint8_t *abort)
             len--;
             draw_cursor(di);
             di += 2;
-            g_image[--si] = 0;
+            *--name = 0;
             continue;
         }
         if (c == 0x0d) {                /* Enter */
@@ -4663,7 +4663,7 @@ int32_t name_field(uint32_t di, uint8_t *abort)
                   (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'));
         if (!ok || len == 0x0c)
             continue;
-        g_image[si++] = (uint8_t)c;
+        *name++ = (uint8_t)c;
         len++;
         draw_char((char)c, di);
         draw_cursor(di);
@@ -4674,8 +4674,8 @@ int32_t name_field(uint32_t di, uint8_t *abort)
      * half the space left so it sits centred in the box. */
     uint32_t pad = 0x0d - len;
     uint32_t shift = (pad - 1) >> 1;
-    for (uint32_t i = 0; i < pad; i++, si++, di += 2) {
-        g_image[si] = ' ';
+    for (uint32_t i = 0; i < pad; i++, name++, di += 2) {
+        *name = ' ';
         draw_char(' ', di);
     }
     /* 1ac2:145e - one place right per pass, and the walk is **downwards**:
@@ -4936,10 +4936,10 @@ void panel_reveal(void)
  */
 void field_marks(void)
 {
-    uint32_t si = img_off(gv.field_marks);
-    for (int32_t i = 0; i < 8; i++, si += 4) {
-        uint32_t x = g_image[si], y = (g_image[si + 1] - 0x0a) & 0xff;
-        g_image[si + 3] = 0;
+    for (int32_t i = 0; i < 8; i++) {
+        mark_t *m = &gv.field_marks[i];
+        uint32_t x = m->x, y = (m->y - 0x0a) & 0xff;
+        m->taken = 0;
         uint32_t di = cga_at(x, y);
         for (int32_t r = 0; r < 0x1f; r++) {
             g_vram[di & (CGA_SIZE - 1)] = gv.mark_sprite[r][0];
@@ -5014,21 +5014,21 @@ void brick_11(hit_t *hit, ball_t *ball)
  */
 void bonus_spawn(void)
 {
-    uint32_t si = img_off(&gv.field_marks[game_random(io_ticks(), 4)]);
-    if (g_image[si + 3] != 0)
+    mark_t *m = &gv.field_marks[game_random(io_ticks(), 4)];
+    if (m->taken != 0)
         return;                         /* that hatch is already open */
-    uint32_t di = img_off(gv.level.cells) + g_image[si + 2];
-    if (g_image[di] != 0 || g_image[di + 0x0c] != 0)
+    const uint8_t *cell = &gv.level.cells[m->cell];
+    if (cell[0] != 0 || cell[0x0c] != 0)
         return;                         /* still bricked over */
 
-    g_image[si + 3] = 1;
+    m->taken = 1;
     gv.bonus_pending++;
     entity_t *e = entity_alloc();
     e->handler = 0x390d;
     ent_hatch_t *h = &e->p.hatch;
-    h->cell = (uint16_t)si;
-    h->x = g_image[si];
-    h->y = g_image[si + 1];
+    h->mark = img_off(m);
+    h->x = m->x;
+    h->y = m->y;
     h->wait = 0;
     h->phase = 0x2bc;
     h->script = 0x604e;
