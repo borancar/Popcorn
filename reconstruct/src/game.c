@@ -922,7 +922,7 @@ void game_main(const char *dir, const char *levels)
             return;                     /* the original exits to DOS */
     }
     gv.input_selected = (uint16_t)(INPUT_KEYBOARD);
-    g_image[0x3f1b] = 0;
+    gv.cheat_done = 0;
     g_image[SOUND_ON] = 1;
     load_high_scores(dir);
     build_shifted_sprites();
@@ -967,8 +967,8 @@ void game_main(const char *dir, const char *levels)
                 palette_cycle();
                 break;
             case 0x41:                                  /* F7 */
-                g_image[0x3f1b] = 0;
-                img_setw(0x3f1c, 0x3f0b);
+                gv.cheat_done = 0;
+                gv.cheat_at = (uint16_t)img_off(gv.cheat_text);
                 break;
             case 0x44:                                  /* F10 */
                 /* The boss key. employee_enter is a no-op here on purpose, so
@@ -1025,7 +1025,7 @@ void game_main(const char *dir, const char *levels)
                 break;
             }
             /* Every key also feeds the cheat matcher at 0x5171. */
-            if (g_image[0x3f1b] != 1)
+            if (gv.cheat_done != 1)
                 cheat_match((uint8_t)(key & 0xff));
             io_present();
         }
@@ -1242,7 +1242,7 @@ int32_t play_loop(void)
     }
     gv.speed_timer = 0x4e20;
     gv.entity_remove = 0;
-    g_image[0x33d5] = gv.bonus_live = gv.bonus_cap = 0;
+    gv.bonus_pending = gv.bonus_live = gv.bonus_cap = 0;
     gv.paddle_morphing = 0;
     gv.net_on = gv.caught = 0;
     gv.game_over = gv.extra_on = gv.laser_on = 0;
@@ -1414,7 +1414,7 @@ frames:
         for (int32_t i = 3 - gv.bonus_live; i > 0; i--)
             io_delay_cycles(0xb4 * CYCLES_PER_LOOP);
 
-        if (gv.extra_on != 1 && g_image[0x33d5] != 3 &&
+        if (gv.extra_on != 1 && gv.bonus_pending != 3 &&
             game_random(io_ticks(), 0x86) == 0)
             bonus_spawn();
 
@@ -1541,7 +1541,7 @@ retry:
                 if (!lost)
                     goto level_done;
                 life_lost();                    /* 1ac2:0735 */
-                if (g_image[0x3f1b] != 1)
+                if (gv.cheat_done != 1)
                     gv.lives--;
                 if (gv.game_over == 1)
                     break;
@@ -3028,13 +3028,13 @@ static int32_t entity_anim(ent_anim_t *a, void (*draw)(uint32_t, uint32_t, uint3
 /* 1ac2:3aee  entity_sparkle
  *
  * The flash left where something was hit. When its frames run out it takes one
- * off [0x33d5] - the count of how many are on screen, which caps them - and
+ * off bonus_pending - the count of deliveries under way, which caps them - and
  * asks to be unlinked.
  */
 void entity_sparkle(ent_anim_t *a)
 {
     if (entity_anim(a, sprite_shift_draw) < 0) {
-        g_image[0x33d5]--;
+        gv.bonus_pending--;
         gv.entity_remove = 1;
     }
 }
@@ -3734,7 +3734,7 @@ settle:
     if (gv.hit_kind == 0) {       /* 1ac2:3aaa - it reached the bottom */
         if (gv.net_on != 1) {
             gv.entity_remove = 1;
-            g_image[0x33d5]--;
+            gv.bonus_pending--;
             gv.bonus_live--;
             return;
         }
@@ -5041,7 +5041,7 @@ void bonus_spawn(void)
         return;                         /* still bricked over */
 
     g_image[si + 3] = 1;
-    g_image[0x33d5]++;
+    gv.bonus_pending++;
     entity_t *e = entity_alloc();
     e->handler = 0x390d;
     ent_hatch_t *h = &e->p.hatch;
@@ -5438,22 +5438,22 @@ void input_and_draw_paddle(void)
 
 /* 1ac2:5171  cheat_match
  *
- * One character of a typed cheat. [0x3f1c] walks along the expected string;
- * a wrong character starts it over at 0x3f0b, and reaching the terminating
- * 0x0d sets [0x3f1b], which is what the menu tests.
+ * One character of a typed cheat. cheat_at walks along cheat_text; a wrong
+ * character starts it over at the beginning, and reaching the terminating
+ * return sets cheat_done, which is what the menu tests.
  */
 void cheat_match(uint8_t c)
 {
-    uint32_t bx = img_w(0x3f1c);
+    uint32_t bx = gv.cheat_at;
     if (c != g_image[bx]) {
-        img_setw(0x3f1c, 0x3f0b);       /* wrong: back to the beginning */
+        gv.cheat_at = (uint16_t)img_off(gv.cheat_text);       /* wrong: back to the beginning */
         return;
     }
     if (g_image[bx] == 0x0d) {
-        g_image[0x3f1b] = 1;            /* the whole word */
+        gv.cheat_done = 1;            /* the whole word */
         return;
     }
-    img_setw(0x3f1c, bx + 1);
+    gv.cheat_at = (uint16_t)(bx + 1);
 }
 
 /* 1ac2:5196  palette_cycle
@@ -5465,12 +5465,12 @@ void cheat_match(uint8_t c)
  */
 void palette_cycle(void)
 {
-    g_image[0x13c8] += 0x10;
-    if (g_image[0x13c8] == 0) {
-        g_image[0x13c7] ^= 4;
-        io_cga_mode(g_image[0x13c7]);
+    gv.cga_colour += 0x10;
+    if (gv.cga_colour == 0) {
+        gv.cga_mode ^= 4;
+        io_cga_mode(gv.cga_mode);
     }
-    io_cga_colour(g_image[0x13c8]);
+    io_cga_colour(gv.cga_colour);
 }
 
 /* ========================================================================
@@ -6861,7 +6861,7 @@ int32_t ball_after_endgame(ball_t *b)
     speaker_off();
     blit_xor(PADDLE_PIX_CUR, PADDLE_ROWS_CUR);
     ball_draw(gv.balls[0].sprite, gv.balls[0].x, gv.balls[0].y);
-    if (g_image[0x3f1b] != 1)
+    if (gv.cheat_done != 1)
         gv.lives++;               /* a free life, unless cheating */
     gv.sweep_y[0] = 0x75;
     endgame_curtain(1);                 /* 1ac2:4636 put DS in BP */
