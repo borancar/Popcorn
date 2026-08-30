@@ -336,7 +336,8 @@ typedef struct __attribute__((packed)) {
     uint16_t eog_build_at;              /* 0x13c2 */
     uint8_t  banner_state;              /* 0x13c4 the menu's scrolling text */
     uint16_t banner_ptr;                /* 0x13c5 where it has got to, as an image offset */
-    uint8_t  _pad_01[2];
+    uint8_t  cga_mode;                  /* 0x13c7 what was last written to port 0x3d8, the mode control. 0x0a at load: graphics, enabled. palette_cycle toggles bit 2, the colour-burst bit that is the difference between mode 04h and 05h */
+    uint8_t  cga_colour;                /* 0x13c8 what was last written to port 0x3d9, the colour select. palette_cycle adds 0x10, walking the intensity bit and then the palette bit until it wraps */
     uint8_t  lives;                     /* 0x13c9 */
     uint16_t level_src;                 /* 0x13ca offset of the current level within the 0xc46 block */
     uint8_t  level_number;              /* 0x13cc */
@@ -449,7 +450,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  _pad_15[77];
     uint16_t rng_state;                 /* 0x33d2 */
     uint8_t  hit_kind;                  /* 0x33d4 */
-    uint8_t  _pad_16[1];
+    uint8_t  bonus_pending;             /* 0x33d5 deliveries under way: bonus_spawn counts one up when it opens a hatch and entity_bonus counts it down when the capsule is gone either way, so it spans the whole journey. The play loop refuses to spawn at 3, which is what caps them */
     uint8_t  bonus_live;                /* 0x33d6 capsules on screen; the play loop's pause shortens as it rises */
     uint8_t  _pad_17[28];
     uint8_t  hatch_x;                   /* 0x33f3 */
@@ -460,6 +461,9 @@ typedef struct __attribute__((packed)) {
     uint8_t  player_count;              /* 0x3f08 how many were entered */
     uint8_t  live_count;                /* 0x3f09 how many are still in. next_player hands over while this is more than one */
     uint8_t  cur_player;                /* 0x3f0a */
+    char     cheat_text[16];            /* 0x3f0b "LACRAL software\r" - the expected keys, the return being the last of them */
+    uint8_t  cheat_done;                /* 0x3f1b set when the whole of it has been typed; the menu tests this */
+    uint16_t cheat_at;                  /* 0x3f1c how far along cheat_text the typing has got, as an image offset */
 } game_vars;
 
 /* The same bytes as g_image, which stays the buffer everything else - memcpy,
@@ -475,6 +479,8 @@ typedef struct __attribute__((packed)) {
 ENSURE_IMG_AT(eog_screen_at, 0x13c0);
 ENSURE_IMG_AT(eog_build_at, 0x13c2);
 ENSURE_IMG_AT(banner_state, 0x13c4);
+ENSURE_IMG_AT(cga_mode, 0x13c7);
+ENSURE_IMG_AT(cga_colour, 0x13c8);
 ENSURE_IMG_AT(banner_ptr, 0x13c5);
 ENSURE_IMG_AT(lives, 0x13c9);
 ENSURE_IMG_AT(level_src, 0x13ca);
@@ -543,6 +549,7 @@ ENSURE_IMG_AT(entity_prev, 0x3142);
 ENSURE_IMG_AT(bonus_cap, 0x3384);
 ENSURE_IMG_AT(rng_state, 0x33d2);
 ENSURE_IMG_AT(hit_kind, 0x33d4);
+ENSURE_IMG_AT(bonus_pending, 0x33d5);
 ENSURE_IMG_AT(bonus_live, 0x33d6);
 ENSURE_IMG_AT(hatch_x, 0x33f3);
 ENSURE_IMG_AT(hatch_y, 0x33f4);
@@ -550,6 +557,9 @@ ENSURE_IMG_AT(players, 0x344f);
 ENSURE_IMG_AT(player_count, 0x3f08);
 ENSURE_IMG_AT(live_count, 0x3f09);
 ENSURE_IMG_AT(cur_player, 0x3f0a);
+ENSURE_IMG_AT(cheat_text, 0x3f0b);
+ENSURE_IMG_AT(cheat_done, 0x3f1b);
+ENSURE_IMG_AT(cheat_at, 0x3f1c);
 /* @generated-asserts end */
 
 /* The two facts the chain rests on, checked rather than described: the head
