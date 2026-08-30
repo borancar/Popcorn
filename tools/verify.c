@@ -129,7 +129,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * keys) are **not dispatched**, because they are not transcribed: both are
      * deliberate no-ops in the port. Checking a no-op against the original
      * would report a decision as a difference. */
-    case 0x3abf: entity_anim_brick(r[R_BX]); return 1;
+    case 0x3abf: entity_anim_brick(&entity_at(r[R_BX])->p.brick); return 1;
     case 0x3bac: draw_anim_cell(r[R_SI], r[R_CX] & 0xff, r[R_AX] & 0xff);
                  return 1;
     /* The brick handlers, all of them. Only two were dispatched, so the
@@ -147,19 +147,19 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x2b9d: brick_9(r[R_SI], ball_at(r[R_BP])); return 1;
     case 0x2c59: brick_10(r[R_SI], ball_at(r[R_BP])); return 1;
     case 0x2ccd: brick_animated(r[R_SI], ball_at(r[R_BP])); return 1;
-    case 0x3aee: entity_sparkle(r[R_BX]); return 1;
-    case 0x3b2a: entity_crumble(r[R_BX]); return 1;
-    case 0x390d: entity_hatch(r[R_BX]); return 1;
+    case 0x3aee: entity_sparkle(&entity_at(r[R_BX])->p.anim); return 1;
+    case 0x3b2a: entity_crumble(&entity_at(r[R_BX])->p.anim); return 1;
+    case 0x390d: entity_hatch(entity_at(r[R_BX])); return 1;
     case 0x39a1: bonus_release(r[R_BX]); return 1;
-    case 0x39fa: entity_bonus(r[R_BX]); return 1;
+    case 0x39fa: entity_bonus(entity_at(r[R_BX])); return 1;
     case 0x3df1: bonus_update(r[R_BX], r[R_CX] & 0xff, r[R_AX] & 0xff);
                  return 1;
-    case 0x365e: entity_soften(r[R_BX]); return 1;
-    case 0x366f: entity_repeat(r[R_BX]); return 1;
-    case 0x3696: entity_plain(r[R_BX]); return 1;
-    case 0x36a1: entity_ball_arrive(r[R_BX]); return 1;
-    case 0x36f6: entity_cells_timer(r[R_BX]); return 1;
-    case 0x37e0: entity_ball_hold(r[R_BX]); return 1;
+    case 0x365e: entity_soften(&entity_at(r[R_BX])->p.anim); return 1;
+    case 0x366f: entity_repeat(&entity_at(r[R_BX])->p.anim); return 1;
+    case 0x3696: entity_plain(&entity_at(r[R_BX])->p.anim); return 1;
+    case 0x36a1: entity_ball_arrive(&entity_at(r[R_BX])->p.anim); return 1;
+    case 0x36f6: entity_cells_timer(&entity_at(r[R_BX])->p.cells); return 1;
+    case 0x37e0: entity_ball_hold(entity_at(r[R_BX])); return 1;
     case 0x318b: extra_life(); return 1;
     case 0x2109: scroll_up_band(); return 1;
     case 0x2148: scroll_down_band(); return 1;
@@ -169,8 +169,8 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x2ee3: laser_fire(); return 1;
     case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, r[R_SI]);
                  return 1;
-    case 0x3273: entity_capsule(r[R_BX]); return 1;
-    case 0x3561: entity_popup(r[R_BX]); return 1;
+    case 0x3273: entity_capsule(entity_at(r[R_BX])); return 1;
+    case 0x3561: entity_popup(entity_at(r[R_BX])); return 1;
     case 0x2daa: bonus_points(); return 1;
     case 0x2def: bonus_catch(); return 1;
     case 0x2e03: bonus_laser(); return 1;
@@ -180,8 +180,8 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x315b: bonus_reverse(); return 1;
     case 0x31e8: bonus_slower_ball(); return 1;
     case 0x41b1: fill_column(r[R_DI], r[R_AX]); return 1;
-    case 0x3717: entity_multiball(r[R_BX]); return 1;
-    case 0x3386: entity_paddle_fx(r[R_BX]); return 1;
+    case 0x3717: entity_multiball(entity_at(r[R_BX])); return 1;
+    case 0x3386: entity_paddle_fx(entity_at(r[R_BX])); return 1;
     case 0x05f8: level_between(); return 1;
     case 0x492f: arrow_head(r[R_DI]); return 1;
     case 0x4957: arrow_tail(r[R_DI]); return 1;

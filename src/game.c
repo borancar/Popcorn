@@ -1371,7 +1371,7 @@ frames:
         gv.entity_prev = img_off(&gv.entity_head);
         uint32_t bx = gv.entity_head.next;
         while (bx != 0xffff) {
-            entity_call(bx);
+            entity_call(entity_at(bx));
             if (gv.entity_remove == 0) {
                 gv.entity_prev = (uint16_t)(bx);
                 bx = entity_at(bx)->next;
@@ -3004,24 +3004,23 @@ void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src)
 /* Step a two-frame XOR animation: erase the frame before this one, draw this
  * one, advance. Shared by the handlers below, which differ only in which
  * drawing routine they use and what they do when the list ends. */
-static int32_t entity_anim(uint32_t bx, void (*draw)(uint32_t, uint32_t, uint32_t))
+static int32_t entity_anim(ent_anim_t *a, void (*draw)(uint32_t, uint32_t, uint32_t))
 {
-    entity_t *e = entity_at(bx);
-    if (--e->p.anim.timer != 0)
+    if (--a->timer != 0)
         return 0;                       /* not time for the next frame yet */
-    e->p.anim.timer = e->p.anim.period;
+    a->timer = a->period;
 
     /* [bx+6] points *into* a list of frame pointers, so one dereference gets
      * the frame: `[si]` where si is the cursor. Dereferencing twice reads the
      * first word of the frame's pixels as if it were an address. */
-    uint32_t cur = e->p.anim.frame;
-    uint32_t x = e->p.anim.x, y = e->p.anim.y;
+    uint32_t cur = a->frame;
+    uint32_t x = a->x, y = a->y;
     draw(x, y, img_w(cur - 2));         /* the previous frame, to erase */
     uint32_t next = img_w(cur);
     if (next == 0xffff)
         return -1;                      /* the animation is over */
     draw(x, y, next);
-    e->p.anim.frame = (uint16_t)(cur + 2);
+    a->frame = (uint16_t)(cur + 2);
     return 1;
 }
 
@@ -3031,9 +3030,9 @@ static int32_t entity_anim(uint32_t bx, void (*draw)(uint32_t, uint32_t, uint32_
  * off [0x33d5] - the count of how many are on screen, which caps them - and
  * asks to be unlinked.
  */
-void entity_sparkle(uint32_t bx)
+void entity_sparkle(ent_anim_t *a)
 {
-    if (entity_anim(bx, sprite_shift_draw) < 0) {
+    if (entity_anim(a, sprite_shift_draw) < 0) {
         g_image[0x33d5]--;
         gv.entity_remove = 1;
     }
@@ -3046,19 +3045,18 @@ void entity_sparkle(uint32_t bx)
  * before - so it plays its last frame and then goes, where the sparkle stops
  * one frame earlier.
  */
-void entity_crumble(uint32_t bx)
+void entity_crumble(ent_anim_t *a)
 {
-    entity_t *e = entity_at(bx);
-    if (--e->p.anim.timer != 0)
+    if (--a->timer != 0)
         return;
-    e->p.anim.timer = e->p.anim.period;
+    a->timer = a->period;
 
-    uint32_t cur = e->p.anim.frame;
-    uint32_t x = e->p.anim.x, y = e->p.anim.y;
+    uint32_t cur = a->frame;
+    uint32_t x = a->x, y = a->y;
     xor_sprite_16x7(x, y, img_w(cur - 2));
     xor_sprite_16x7(x, y, img_w(cur));
-    e->p.anim.frame = (uint16_t)(cur + 2);
-    if (img_w(e->p.anim.frame) == 0xffff)
+    a->frame = (uint16_t)(cur + 2);
+    if (img_w(a->frame) == 0xffff)
         gv.entity_remove = 1;
 }
 
@@ -3105,15 +3103,14 @@ void bonus_release(uint32_t bx)
  * only way an 8086 has. Frame 0x635c is the one where the capsule appears, and
  * that is where it calls bonus_release.
  */
-void entity_hatch(uint32_t bx)
+void entity_hatch(entity_t *e)
 {
-    /* `jne 0x390c` is the **ret**, not the `dec word [bx+6]` at 0x3909 that
+    /* `jne 0x390c` is the **ret**, not the `dec word [img_off(e)+6]` at 0x3909 that
      * sits just above it: while an extra ball is in play the hatch does
      * nothing at all. Decrementing here walks a counter that is already 0
      * round to 0xffff, which is what diverged 5,872 frames into level 4. */
     if (gv.extra_on != 0)
         return;
-    entity_t *e = entity_at(bx);
     if (e->p.hatch.wait != 0) {
         e->p.hatch.wait--;
         return;
@@ -3131,7 +3128,7 @@ void entity_hatch(uint32_t bx)
     }
     if (si == 0x635c) {
         e->p.hatch.wait = 0x12c;
-        bonus_release(bx);
+        bonus_release(img_off(e));
     }
     e->p.hatch.script += 2;
     if (img_w(e->p.hatch.script) == 0xffff) {
@@ -3300,33 +3297,32 @@ void xor_sprite_16xn(uint32_t x, uint32_t y, uint32_t src, uint32_t rows)
 
 /* 1ac2:365e  from brick 3 - when the animation ends the cell becomes a 3
  * again, so a hardened brick softens back. */
-void entity_soften(uint32_t bx)
+void entity_soften(ent_anim_t *a)
 {
-    entity_crumble(bx);
+    entity_crumble(a);
     if (gv.entity_remove == 1)
-        g_image[entity_at(bx)->p.anim.arg.cell] = 3;  /* the cell it sat on */
+        g_image[a->arg.cell] = 3;  /* the cell it sat on */
 }
 
 /* 1ac2:366f  from brick 8 - plays its animation [bx+2] times over, cancelling
  * its own removal each time round, and rubs the last frame out at the end. */
-void entity_repeat(uint32_t bx)
+void entity_repeat(ent_anim_t *a)
 {
-    entity_crumble(bx);
+    entity_crumble(a);
     if (gv.entity_remove != 1)
         return;
-    entity_t *e = entity_at(bx);
-    if (--e->p.anim.arg.count != 0) {   /* a **byte**: 1ac2:3679 */
+    if (--a->arg.count != 0) {   /* a **byte**: 1ac2:3679 */
         gv.entity_remove = 0;
-        e->p.anim.frame = 0x67ea;       /* and round the animation again */
+        a->frame = 0x67ea;       /* and round the animation again */
         return;
     }
-    xor_sprite_16x7(e->p.anim.x, e->p.anim.y, 0x681c);
+    xor_sprite_16x7(a->x, a->y, 0x681c);
 }
 
 /* 1ac2:3696  from brick 9 - the animation and nothing else */
-void entity_plain(uint32_t bx)
+void entity_plain(ent_anim_t *a)
 {
-    entity_crumble(bx);
+    entity_crumble(a);
 }
 
 /* Put a ball down at a point and set it going upwards: position, anchor and
@@ -3350,22 +3346,20 @@ void ball_place(ball_t *ball, uint32_t x, uint32_t y)
  * position, eight pixels right and four up, gives it a fresh sprite, and draws
  * it. [bx+2] is the ball, not a cell, for this one.
  */
-void entity_ball_arrive(uint32_t bx)
+void entity_ball_arrive(ent_anim_t *a)
 {
-    entity_crumble(bx);
+    entity_crumble(a);
     if (gv.entity_remove != 1)
         return;
 
-    entity_t *e = entity_at(bx);
-    ball_place(ball_at(e->p.anim.arg.ball), (e->p.anim.x + 8) & 0xff,
-               (e->p.anim.y - 4) & 0xff);
+    ball_place(ball_at(a->arg.ball), (a->x + 8) & 0xff,
+               (a->y - 4) & 0xff);
 }
 
 /* 1ac2:36f6  from brick 9 - counts [bx+4] down and then puts the cells back */
-void entity_cells_timer(uint32_t bx)
+void entity_cells_timer(ent_cells_t *c)
 {
-    entity_t *e = entity_at(bx);
-    if (--e->p.cells.left == 0)
+    if (--c->left == 0)
         cells_restore();
 }
 
@@ -3452,25 +3446,30 @@ void brick_10(uint32_t slot, ball_t *ball)
  * is the whole type system. Anything not transcribed yet is dropped rather
  * than run, which leaves it stuck in the list - so it says so once.
  */
-void entity_call(uint32_t node)
+/* The handler word chooses the arm as well as the routine, so this is the one
+ * place that knows which is which - each handler is handed the arm it owns and
+ * cannot reach the others. The four that rewrite `handler` to become a
+ * different kind of entity, or that pass the node to a helper, take the node
+ * instead; they are the ones that legitimately need more than their arm. */
+void entity_call(entity_t *e)
 {
-    switch (entity_at(node)->handler) {
-    case 0x3273: entity_capsule(node); break;
-    case 0x3386: entity_paddle_fx(node); break;
-    case 0x3561: entity_popup(node); break;
-    case 0x365E: entity_soften(node); break;
-    case 0x366F: entity_repeat(node); break;
-    case 0x3696: entity_plain(node); break;
-    case 0x36A1: entity_ball_arrive(node); break;
-    case 0x36F6: entity_cells_timer(node); break;
-    case 0x37E0: entity_ball_hold(node); break;
-    case 0x390D: entity_hatch(node); break;
-    case 0x39FA: entity_bonus(node); break;
-    case 0x3ABF: entity_anim_brick(node); break;
-    case 0x3AEE: entity_sparkle(node); break;
-    case 0x3717: entity_multiball(node); break;
-    case 0x3B2A: entity_crumble(node); break;
-    default:     entity_unknown(node); break;
+    switch (e->handler) {
+    case 0x3273: entity_capsule(e); break;
+    case 0x3386: entity_paddle_fx(e); break;
+    case 0x3561: entity_popup(e); break;
+    case 0x365E: entity_soften(&e->p.anim); break;
+    case 0x366F: entity_repeat(&e->p.anim); break;
+    case 0x3696: entity_plain(&e->p.anim); break;
+    case 0x36A1: entity_ball_arrive(&e->p.anim); break;
+    case 0x36F6: entity_cells_timer(&e->p.cells); break;
+    case 0x37E0: entity_ball_hold(e); break;
+    case 0x390D: entity_hatch(e); break;
+    case 0x39FA: entity_bonus(e); break;
+    case 0x3ABF: entity_anim_brick(&e->p.brick); break;
+    case 0x3AEE: entity_sparkle(&e->p.anim); break;
+    case 0x3717: entity_multiball(e); break;
+    case 0x3B2A: entity_crumble(&e->p.anim); break;
+    default:     entity_unknown(img_off(e)); break;
     }
 }
 
@@ -3483,32 +3482,32 @@ void entity_call(uint32_t node)
  * way down ([0x33d4] non-zero) it releases early, and scores 33 or 50
  * depending on what hit it.
  */
-void entity_ball_hold(uint32_t bx)
+void entity_ball_hold(entity_t *e)
 {
-    uint32_t y = g_image[bx + 5], x = g_image[bx + 4];
+    uint32_t y = g_image[img_off(e) + 5], x = g_image[img_off(e) + 4];
 
     /* `inc al` is inside the kind-1 branch, and the fall-through at 0x37f7
      * carries whatever AL holds - so a carrier of any other kind is updated
      * at the y it already had, not one lower. */
     uint32_t ny = y;
-    if ((g_image[bx + 8] & 0x0f) == 1)
+    if ((g_image[img_off(e) + 8] & 0x0f) == 1)
         ny = (y + 1) & 0xff;
 
-    if ((g_image[bx + 8] & 0x0f) == 1 && ny == 0xb8) {
+    if ((g_image[img_off(e) + 8] & 0x0f) == 1 && ny == 0xb8) {
         /* It has arrived at the bottom. */
-        sprite_shift_draw(x, y, img_w(img_w(bx + 6)));
+        sprite_shift_draw(x, y, img_w(img_w(img_off(e) + 6)));
         if (gv.net_on == 1) {
             gv.entity_remove = 1;
-            ball_place(ball_at(img_w(bx + 2)), (x + 8) & 0xff, (y + 0x0b) & 0xff);
+            ball_place(ball_at(img_w(img_off(e) + 2)), (x + 8) & 0xff, (y + 0x0b) & 0xff);
             return;
         }
         gv.ball_alive--;
-        ball_at(img_w(bx + 2))->state = 0;
+        ball_at(img_w(img_off(e) + 2))->state = 0;
         gv.entity_remove = 1;
         return;
     }
 
-    bonus_update(bx, x, ny);            /* 1ac2:3df1 */
+    bonus_update(img_off(e), x, ny);            /* 1ac2:3df1 */
     if (gv.hit_kind == 0)
         return;
     if (gv.hit_kind == 2)
@@ -3516,12 +3515,12 @@ void entity_ball_hold(uint32_t bx)
 
     /* Hit: let the ball go, and score for it unless the hit was type 1. */
     gv.entity_remove = 1;
-    uint32_t ry = g_image[bx + 5];      /* 1ac2:3897 reloads it */
+    uint32_t ry = g_image[img_off(e) + 5];      /* 1ac2:3897 reloads it */
     if (gv.hit_kind != 1) {
         brick_score(0, 0, 0x0303);
         ry = (ry + 4) & 0xff;
     }
-    ball_place(ball_at(img_w(bx + 2)), (g_image[bx + 4] + 8) & 0xff, (ry + 0x0c) & 0xff);
+    ball_place(ball_at(img_w(img_off(e) + 2)), (g_image[img_off(e) + 4] + 8) & 0xff, (ry + 0x0c) & 0xff);
     if (gv.hit_kind != 3)
         brick_score(0, 0, 5);
 }
@@ -3601,9 +3600,9 @@ static int32_t g_hit_ball;              /* an index: 0 was the original's defaul
 
 void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
 {
+    entity_t *e = entity_at(bx);
     gv.hit_kind = 0;
 
-    entity_t *e = entity_at(bx);
     if ((--e->p.bonus.timer & 0x0f) == 0) {
         e->p.bonus.timer--;
         e->p.bonus.timer = (uint8_t)((e->p.bonus.timer & 0xf0) |
@@ -3695,19 +3694,18 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
  * That last one is why the sound request diverged. cs:[0xf4] = 6 is raised
  * here, and a port that returned early after the bounce never raised it.
  */
-void entity_bonus(uint32_t bx)
+void entity_bonus(entity_t *e)
 {
-    entity_t *e = entity_at(bx);
     uint32_t x = e->p.bonus.x, y = e->p.bonus.y;
     int32_t draw = 1;
 
     /* The timer byte carries two counters: the low nibble paces the movement
      * and the high nibble the frame. */
     if (gv.extra_on != 1 && (e->p.bonus.timer & 0x0f) == 1) {
-        if (!bonus_steer(bx, &x, &y))
+        if (!bonus_steer(img_off(e), &x, &y))
             goto sprite;                /* 1ac2:3a52, the draw */
     }
-    bonus_update(bx, x, y);             /* 1ac2:3df1 */
+    bonus_update(img_off(e), x, y);             /* 1ac2:3df1 */
 
     if (gv.hit_kind == 0)
         return;                         /* 1ac2:3a24 */
@@ -4114,8 +4112,8 @@ void laser_fire(void)
 
 /* 1ac2:3561  entity_popup is the same routine with a different set of frames -
  * table 0x339b rather than 0x3385 - so the two share a body. */
-void entity_popup(uint32_t bx) { entity_capsule_frames(bx, 0x339b); }
-void entity_capsule(uint32_t bx) { entity_capsule_frames(bx, CAPSULE_FRAMES); }
+void entity_popup(entity_t *e) { entity_capsule_frames(img_off(e), 0x339b); }
+void entity_capsule(entity_t *e) { entity_capsule_frames(img_off(e), CAPSULE_FRAMES); }
 
 void entity_capsule_frames(uint32_t bx, uint32_t table)
 {
@@ -4319,7 +4317,7 @@ void bonus_effect(uint32_t kind)
  * Sets [0x2e73] to 3 - three balls alive - and unlinks itself; it exists only
  * to run once.
  * ===================================================================== */
-void entity_multiball(uint32_t bx)
+void entity_multiball(entity_t *e)
 {
     if (gv.ball_alive == 3) {
         gv.entity_remove = 1;
@@ -4401,19 +4399,18 @@ static void morph_finish(uint32_t bx)
     gv.entity_remove = 1;
 }
 
-void entity_paddle_fx(uint32_t bx)
+void entity_paddle_fx(entity_t *e)
 {
-    entity_t *e = entity_at(bx);
     if (gv.paddle_morphing == 0) {
         /* Nothing is morphing. If the paddle is already the kind this capsule
          * gives, there is nothing to animate - just apply the effect. */
         if (gv.paddle_kind == e->p.morph.to) {
-            morph_finish(bx);
+            morph_finish(img_off(e));
             return;
         }
         e->p.morph.from = gv.paddle_kind;
         gv.paddle_morphing = 0xff;
-        gv.morph_owner = (uint16_t)(bx);
+        gv.morph_owner = (uint16_t)(img_off(e));
 
         if (e->p.morph.to != 2) {
             /* Losing the laser: take any shot in flight off the screen. */
@@ -4441,7 +4438,7 @@ void entity_paddle_fx(uint32_t bx)
                 ball_redraw(ball);
             }
         }
-    } else if (gv.morph_owner != bx) {
+    } else if (gv.morph_owner != img_off(e)) {
         return;                         /* somebody else's morph */
     }
 
@@ -4460,7 +4457,7 @@ void entity_paddle_fx(uint32_t bx)
     }
 
     if (e->p.morph.step != 6) {
-        morph_step(bx);
+        morph_step(img_off(e));
         return;
     }
 
@@ -4475,7 +4472,7 @@ void entity_paddle_fx(uint32_t bx)
         if (kind == 1)
             gv.paddle_step = 0xfe;    /* -2: this one shrinks */
         if (kind != 0) {
-            morph_begin(bx, si, kind);
+            morph_begin(img_off(e), si, kind);
             return;
         }
         e->p.morph.pending = 0;
@@ -4486,14 +4483,14 @@ void entity_paddle_fx(uint32_t bx)
     if (kind == 1)
         gv.paddle_step = 2;
     if (kind != 0) {
-        morph_begin(bx, si, kind);
+        morph_begin(img_off(e), si, kind);
         return;
     }
     /* Both ends are the plain paddle: nothing to animate. */
     gv.paddle_kind = 0;
     gv.paddle_width = 0x1b;
     gv.paddle_morphing = 0;
-    morph_finish(bx);
+    morph_finish(img_off(e));
 }
 
 /* 1ac2:34c5  morph_begin - start a stage: remember its sprite list and run
@@ -7631,14 +7628,13 @@ void draw_anim_cell(uint32_t si, uint32_t x, uint32_t y)
  * when [0x3134] has come back round to [0x3135]. The frame is the script's
  * current entry, offset by the piece's number.
  */
-void entity_anim_brick(uint32_t bx)
+void entity_anim_brick(ent_brick_t *br)
 {
     if (gv.anim_rate != gv.anim_count)
         return;
-    entity_t *e = entity_at(bx);
     uint32_t si = img_w(SEG_14A1 + gv.anim_ptr)
-                + e->p.brick.piece * ANIM_SPRITE_BYTES;
-    draw_anim_cell(si, e->p.brick.x, e->p.brick.y);
+                + br->piece * ANIM_SPRITE_BYTES;
+    draw_anim_cell(si, br->x, br->y);
 }
 
 /* 1ac2:2ccd  brick_animated - cells 16 to 21 */

@@ -139,15 +139,9 @@ ENSURE_PLAYER_AT(ents, 0xd3);
 /* Every arm of the variant must fill the payload exactly - a short one would
  * silently move `next`. */
 #define ENSURE_ENTITY_ARM(arm, n) \
-    typedef char ensure_entity_arm_##arm[sizeof(((entity_t *)0)->p.arm) == (n) ? 1 : -1]
+    typedef char ensure_entity_arm_##arm[sizeof(ent_##arm##_t) == (n) ? 1 : -1]
 
 typedef struct __attribute__((packed)) {
-    uint16_t handler;       /* 0x00 the routine entity_call dispatches to */
-    union {                 /* 0x02 the variant, chosen by handler */
-
-        /* crumble, plain, sparkle, soften, repeat, ball_arrive, bonus - a
-         * sprite animation stepped frame by frame by entity_anim. */
-        struct {
             union {         /* 0x02 the handler's own, and **not one width**:
                              * repeat's counter is a byte, the others a word.
                              * 1ac2:3679 is `dec byte ptr [bx+2]`, and 0x03
@@ -168,12 +162,9 @@ typedef struct __attribute__((packed)) {
             uint8_t  timer; /* 0x08 counts down to the next frame */
             uint8_t  period;/* 0x09 what timer reloads to */
             uint8_t  _r[2];
-        } anim;
+} ent_anim_t;
 
-        /* capsule and popup - a sprite falling down the screen. Note x and y
-         * are at 0x02 here, not 0x04: the two families disagree, which is why
-         * this is a union and not a struct. */
-        struct {
+typedef struct __attribute__((packed)) {
             uint8_t  x, y;  /* 0x02 0x03 y is incremented as it falls */
             uint8_t  kind;  /* 0x04 which frame table it draws from */
             uint8_t  tick;  /* 0x05 masked & 7: only every eighth call moves */
@@ -181,13 +172,9 @@ typedef struct __attribute__((packed)) {
             uint8_t  cycle; /* 0x07 the next one, copied into frame each step;
                              * kind 2 cycles it 0..0x0f */
             uint8_t  _r[4];
-        } fall;
+} ent_fall_t;
 
-        /* entity_bonus - a capsule falling under one of several movement
-         * scripts. Shares x, y, frame, timer and period with `anim`, because
-         * it is stepped the same way, but 0x02 and 0x03 are two bytes here
-         * rather than anim's word, and it has a script cursor at 0x0a. */
-        struct {
+typedef struct __attribute__((packed)) {
             uint8_t  mode;  /* 0x02 how it moves: 0 right, 1 down, 2 left,
                              * 3 up, 4 follow the script at 0x0a */
             uint8_t  steps; /* 0x03 how long to keep going that way, from
@@ -199,33 +186,29 @@ typedef struct __attribute__((packed)) {
                              * paces the movement, the high one the frame */
             uint8_t  period;/* 0x09 */
             uint16_t script;/* 0x0a cursor into the movement script */
-        } bonus;
+} ent_bonus_t;
 
-        /* the hatch a capsule comes out of */
-        struct {
+typedef struct __attribute__((packed)) {
             uint16_t cell;  /* 0x02 the cell it opens in */
             uint8_t  x, y;  /* 0x04 0x05 */
             uint16_t wait;  /* 0x06 set to 0x12c and counted down */
             uint16_t phase; /* 0x08 counted down; every 0x23rd draws */
             uint16_t script;/* 0x0a cursor into a list, ending at 0xffff */
-        } hatch;
+} ent_hatch_t;
 
-        /* entity_cells_timer - nothing but a countdown */
-        struct {
+typedef struct __attribute__((packed)) {
             uint8_t  _p[2];
             uint16_t left;  /* 0x04 at zero, cells_restore puts the field back */
             uint8_t  _r[6];
-        } cells;
+} ent_cells_t;
 
-        /* entity_anim_brick - one of the six pieces of the moving picture */
-        struct {
+typedef struct __attribute__((packed)) {
             uint8_t  x, y;  /* 0x02 0x03 */
             uint8_t  piece; /* 0x04 which of the six */
             uint8_t  _r[7];
-        } brick;
+} ent_brick_t;
 
-        /* entity_paddle_fx - the grow or shrink between two paddle kinds */
-        struct {
+typedef struct __attribute__((packed)) {
             uint8_t  pending;/* 0x02 a second capsule arrived mid-morph */
             uint8_t  step;   /* 0x03 frame of the morph, counted down from 6 */
             uint16_t sprites;/* 0x04 the sprite list being walked */
@@ -234,7 +217,38 @@ typedef struct __attribute__((packed)) {
             uint8_t  _p[2];
             uint8_t  bonus;  /* 0x0a the capsule kind to apply when it lands */
             uint8_t  _r;
-        } morph;
+} ent_morph_t;
+
+typedef struct __attribute__((packed)) {
+    uint16_t handler;       /* 0x00 the routine entity_call dispatches to */
+    union {                 /* 0x02 the variant, chosen by handler */
+
+        /* crumble, plain, sparkle, soften, repeat, ball_arrive, bonus - a
+         * sprite animation stepped frame by frame by entity_anim. */
+        ent_anim_t anim;
+
+        /* capsule and popup - a sprite falling down the screen. Note x and y
+         * are at 0x02 here, not 0x04: the two families disagree, which is why
+         * this is a union and not a struct. */
+        ent_fall_t fall;
+
+        /* entity_bonus - a capsule falling under one of several movement
+         * scripts. Shares x, y, frame, timer and period with `anim`, because
+         * it is stepped the same way, but 0x02 and 0x03 are two bytes here
+         * rather than anim's word, and it has a script cursor at 0x0a. */
+        ent_bonus_t bonus;
+
+        /* the hatch a capsule comes out of */
+        ent_hatch_t hatch;
+
+        /* entity_cells_timer - nothing but a countdown */
+        ent_cells_t cells;
+
+        /* entity_anim_brick - one of the six pieces of the moving picture */
+        ent_brick_t brick;
+
+        /* entity_paddle_fx - the grow or shrink between two paddle kinds */
+        ent_morph_t morph;
 
         uint8_t raw[10];    /* for the handlers still reached by offset */
     } p;
@@ -842,18 +856,18 @@ void brick_2(uint32_t slot, ball_t *ball);     /* 1ac2:2985 */
 void brick_3(uint32_t slot, ball_t *ball);     /* 1ac2:2a3f */
 void brick_solid(uint32_t slot, ball_t *ball);       /* 1ac2:3221 */
 void brick_animated(uint32_t slot, ball_t *ball);   /* 1ac2:2ccd */
-void entity_anim_brick(uint32_t bx);                 /* 1ac2:3abf */
+void entity_anim_brick(ent_brick_t *a);                 /* 1ac2:3abf */
 void draw_anim_cell(uint32_t si, uint32_t x, uint32_t y); /* 1ac2:3bac */
 void brick_5(uint32_t slot, ball_t *ball);     /* 1ac2:2a73 */
 void brick_6(uint32_t slot, ball_t *ball);     /* 1ac2:2ab4 */
 void brick_7(uint32_t slot, ball_t *ball);     /* 1ac2:2af5 */
 void brick_8(uint32_t slot, ball_t *ball);     /* 1ac2:2b36 */
 void brick_9(uint32_t slot, ball_t *ball);     /* 1ac2:2b9d */
-void entity_soften(uint32_t bx);      /* 1ac2:365e */
-void entity_repeat(uint32_t bx);      /* 1ac2:366f */
-void entity_plain(uint32_t bx);       /* 1ac2:3696 */
-void entity_ball_arrive(uint32_t bx); /* 1ac2:36a1 */
-void entity_cells_timer(uint32_t bx); /* 1ac2:36f6 */
+void entity_soften(ent_anim_t *a);      /* 1ac2:365e */
+void entity_repeat(ent_anim_t *a);      /* 1ac2:366f */
+void entity_plain(ent_anim_t *a);       /* 1ac2:3696 */
+void entity_ball_arrive(ent_anim_t *a); /* 1ac2:36a1 */
+void entity_cells_timer(ent_cells_t *a); /* 1ac2:36f6 */
 void brick_10(uint32_t slot, ball_t *ball);    /* 1ac2:2c59 */
 void brick_11(uint32_t slot, ball_t *ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:3b64 */
@@ -880,22 +894,22 @@ void ball_paddle(ball_t *b);  /* 1ac2:2316 */
 void laser_fire(void);            /* 1ac2:2ee3 */
 void probe_cell_at(uint32_t x, uint32_t y, uint32_t slot); /* 1ac2:2755 */
 void play_teardown(void);         /* 1ac2:41d4 */
-void entity_call(uint32_t node);  /* the call at 1ac2:1b5e */
-void entity_capsule(uint32_t bx);   /* 1ac2:3273 */
-void entity_paddle_fx(uint32_t bx); /* 1ac2:3386 */
+void entity_call(entity_t *e);  /* the call at 1ac2:1b5e */
+void entity_capsule(entity_t *e);   /* 1ac2:3273 */
+void entity_paddle_fx(entity_t *e); /* 1ac2:3386 */
 void morph_begin(uint32_t bx, uint32_t table, uint32_t kind); /* 1ac2:34c5 */
 void morph_step(uint32_t bx);       /* 1ac2:34d7 */
-void entity_popup(uint32_t bx);     /* 1ac2:3561 */
+void entity_popup(entity_t *e);     /* 1ac2:3561 */
 void entity_capsule_frames(uint32_t bx, uint32_t table);
-void entity_ball_hold(uint32_t bx); /* 1ac2:37e0 */
+void entity_ball_hold(entity_t *e); /* 1ac2:37e0 */
 void ball_place(ball_t *ball, uint32_t x, uint32_t y);
 void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny); /* 1ac2:3df1 */
 uint32_t pixel_xor(uint32_t x, uint32_t y);        /* 1ac2:30dd */
 void shot_xor(uint32_t x, uint32_t y);             /* 1ac2:306b */
 void bonus_hits_ball(uint32_t bx, const ball_t *ball);  /* 1ac2:3f20 */
-void entity_bonus(uint32_t bx);     /* 1ac2:39fa */
+void entity_bonus(entity_t *e);     /* 1ac2:39fa */
 void entity_unknown(uint32_t bx);
-void entity_multiball(uint32_t bx);  /* 1ac2:3717 */
+void entity_multiball(entity_t *e);  /* 1ac2:3717 */
 void entity_unlink(uint32_t node);/* 1ac2:3257 */
 uint32_t entity_alloc(void);      /* 1ac2:3232 */
 uint32_t draw_run(uint8_t c, uint32_t count, uint32_t di); /* 1ac2:10c5 */
@@ -908,9 +922,9 @@ void cells_restore(void);         /* 1ac2:36fb */
 void bonus_spawn(void);           /* 1ac2:3d95 */
 void xor_sprite_20x16(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:406a */
 void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src);/* 1ac2:3f4f */
-void entity_sparkle(uint32_t bx); /* 1ac2:3aee */
-void entity_crumble(uint32_t bx); /* 1ac2:3b2a */
-void entity_hatch(uint32_t bx);   /* 1ac2:390d */
+void entity_sparkle(ent_anim_t *a); /* 1ac2:3aee */
+void entity_crumble(ent_anim_t *a); /* 1ac2:3b2a */
+void entity_hatch(entity_t *e);   /* 1ac2:390d */
 void bonus_release(uint32_t bx);  /* 1ac2:39a1 */
 int32_t  bonus_move_right(uint32_t bx, uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
 int32_t  bonus_move_left(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */
