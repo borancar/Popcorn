@@ -299,6 +299,15 @@ typedef struct __attribute__((packed)) {
 } paddle_rows_t;
 ENSURE_SIZE(paddle_rows_t, 14);
 
+/* One of the four popcorn kernels that sweep the field during a level's
+ * intro. Kernel zero's timer paces the whole reveal. */
+typedef struct __attribute__((packed)) {
+    uint8_t  timer;                 /* 0x00 counted up */
+    uint8_t  period;                /* 0x01 and compared against, then reset */
+    uint16_t sprite;                /* 0x02 */
+} sweep_t;
+ENSURE_SIZE(sweep_t, 4);
+
 /* One of the eight places a hatch can open along the playfield. field_marks
  * draws all eight, level_between the first four, and bonus_spawn picks one of
  * the first four at random. */
@@ -530,7 +539,7 @@ typedef struct __attribute__((packed)) {
     uint16_t hit_dirs[4];               /* 0x2e99 the four directions a brick hit can send the ball, indexed by which slot matched */
     ball_t   balls[3];                  /* 0x2ea1 the ball pool. **Three**, not four: 0x2ea1 + 3*0x1e ends exactly where backdrop_phase begins, and every loop over it is i < 3. BALL_COUNT said 4 and was never used */
     uint8_t  backdrop_phase;            /* 0x2efb the level intro's reveal, counted by kernel zero's timer */
-    uint8_t  _pad_12[16];
+    sweep_t  sweep[4];                  /* 0x2efc the four sweeping kernels - sixteen bytes, exactly the room between backdrop_phase and their y positions */
     uint8_t  sweep_y[4];                /* 0x2f0c the four popcorn kernels sweeping the field during the level intro; kernel zero paces the reveal */
     level_t  level;                     /* 0x2f10 the level being played, copied out of the table at 0xc46:0x000c */
     uint8_t  _pad_13[132];
@@ -580,7 +589,8 @@ typedef struct __attribute__((packed)) {
     };
     entity_t entities[41];              /* 0x3146 the node pool - 574 bytes is 41 of them exactly, ending where bonus_cap begins. The chain is walked by image offset, so this is what those offsets point into rather than something the walk uses */
     uint8_t  bonus_cap;                 /* 0x3384 */
-    uint8_t  _pad_15[44];
+    uint16_t capsule_frames[11];        /* 0x3385 a falling capsule's frame table by kind */
+    uint16_t popup_frames[11];          /* 0x339b and a score popup's. Twenty-two each, ending exactly at bonus_odds - which is what says both are eleven */
     uint8_t  bonus_odds[11];            /* 0x33b1 cumulative weights, ending at 0xff: bonus_kind walks them against random(0xff) and takes the index */
     uint16_t bonus_handlers[11];        /* 0x33bc what each kind does, in the same order - 0x2daa points, 0x2def catch, 0x3231 wider, 0x2e03 laser, 0x2e16 multiball, 0x3119 net, 0x315b reverse, 0x318b extra life, 0x2da0, 0x31e8 slower, 0x3200 stop monsters */
     uint16_t rng_state;                 /* 0x33d2 */
@@ -622,7 +632,9 @@ typedef struct __attribute__((packed)) {
     uint16_t hatch_shut[5];             /* 0x7717 and closing, one frame every fourth step of the walk out */
     uint8_t  _pad_30[228];
     uint8_t  curtain_image[105][27];    /* 0x7805 the POPCORN logo the intro curtain brings down: 105 rows of 27 bytes, 108 pixels wide. intro_curtain reads it **backwards** - on frame `rows` it takes the last `rows` rows and draws them from the top, so the picture comes down like a curtain. That is why the address in the original is 0x8318, which is the end of this and not the start */
-    uint8_t  _pad_23b[3336];
+    uint8_t  _pad_23b[728];
+    uint8_t  panel[93][28];             /* 0x85f0 the score panel, built here and revealed a row at a time. 93 rows is what panel_reveal's last pass reads, and it stops four bytes short of the font */
+    uint8_t  _pad_31[4];
     uint8_t  font[40][12][2];           /* 0x9020 the score panel's 8x12 font, two bits a pixel: forty glyphs of twelve rows of one word. Glyph 0, what a space maps to, is **not blank** - it is a solid block of colour 2, which is how the headings get their red ground */
     uint8_t  pause_overlay[38][50];     /* 0x93e0 what screen_stash paints over the stashed playfield. It starts exactly where the font ends */
     uint8_t  _pad_23[2042];
@@ -785,6 +797,7 @@ ENSURE_IMG_AT(extra_pos, 0x2e87);
 ENSURE_IMG_AT(hit_dirs, 0x2e99);
 ENSURE_IMG_AT(balls, 0x2ea1);
 ENSURE_IMG_AT(backdrop_phase, 0x2efb);
+ENSURE_IMG_AT(sweep, 0x2efc);
 ENSURE_IMG_AT(sweep_y, 0x2f0c);
 ENSURE_IMG_AT(level, 0x2f10);
 ENSURE_IMG_AT(anim_count, 0x3134);
@@ -796,6 +809,8 @@ ENSURE_IMG_AT(entity_remove, 0x313a);
 ENSURE_IMG_AT(entity_prev, 0x3142);
 ENSURE_IMG_AT(entities, 0x3146);
 ENSURE_IMG_AT(bonus_cap, 0x3384);
+ENSURE_IMG_AT(capsule_frames, 0x3385);
+ENSURE_IMG_AT(popup_frames, 0x339b);
 ENSURE_IMG_AT(bonus_odds, 0x33b1);
 ENSURE_IMG_AT(bonus_handlers, 0x33bc);
 ENSURE_IMG_AT(rng_state, 0x33d2);
@@ -825,6 +840,7 @@ ENSURE_IMG_AT(walker_drop, 0x75db);
 ENSURE_IMG_AT(hatch_open, 0x770d);
 ENSURE_IMG_AT(hatch_shut, 0x7717);
 ENSURE_IMG_AT(curtain_image, 0x7805);
+ENSURE_IMG_AT(panel, 0x85f0);
 ENSURE_IMG_AT(font, 0x9020);
 ENSURE_IMG_AT(pause_overlay, 0x93e0);
 ENSURE_IMG_AT(game_over_paddle, 0xa346);
@@ -909,6 +925,25 @@ static inline uint32_t cga_next_row_ja(uint32_t di)
 
 /* One of the 35 relocated segment constants: the program reaches a block of
  * its own data as segment 0xc46, which is image offset 0xc460. */
+#define SEG_14A1 0x14a10
+
+/* The fourth segment, 0x14a1: the animated bricks. It opens with one record a
+ * level, and everything else in it - the scripts, the sprites - is reached
+ * through the offsets those records hold, which is why that is all this
+ * names. */
+typedef struct __attribute__((packed)) {
+    uint16_t script;                /* 0x00 where this level's script starts */
+    uint8_t  rate;                  /* 0x02 frames between steps */
+    uint8_t  _r;
+} level_anim_t;
+ENSURE_SIZE(level_anim_t, 4);
+
+typedef struct __attribute__((packed)) {
+    level_anim_t level[50];         /* 0x0000 by level_number, 0 to 49 */
+} seg_14a1_t;
+ENSURE_SIZE(seg_14a1_t, 200);
+#define s14a1 (*(seg_14a1_t *)(g_image + SEG_14A1))
+
 #define SEG_C46 0xc460
 
 /* The third segment: the block the program reaches as 0xc46, which holds the
@@ -1285,7 +1320,7 @@ void panel_draw(void);            /* 1ac2:0b0b */
 void level_colours(void);         /* 1ac2:044b */
 void level_intro(void);           /* 1ac2:1eb9 */
 uint32_t draw_brick_row(uint32_t y);  /* 1ac2:2034 */
-void draw_sprite_20x6(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:20b9 */
+void draw_sprite_20x6(uint32_t x, uint32_t y, const uint8_t *src); /* 1ac2:20b9 */
 void cell_special(uint32_t row, uint32_t col, uint32_t di); /* 1ac2:41e5 */
 void field_backdrop(uint32_t y);  /* 1ac2:1fc1 */
 void life_lost(void);             /* 1ac2:0735 */
