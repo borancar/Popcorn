@@ -1627,8 +1627,14 @@ uint32_t draw_brick_row(uint32_t y)
             cell_special(row & 0xff, c, di);
             continue;
         }
-        uint32_t base = (cell >= 24 ? SEG_14A1 : 0) + gv.cell_bitmap[cell];
-        const uint8_t *src = g_image + base + sub;
+        /* Two different segments, not one base with an addend: an animated
+         * brick that has been hit carries its value plus eight, and cell
+         * values 24 and up name sprites in the 0x14a1 block rather than in
+         * this one. So the choice is which image the offset is *into*. */
+        const uint8_t *src = cell >= 24
+            ? img_ptr(SEG_14A1 + gv.cell_bitmap[cell])
+            : img_ptr(gv.cell_bitmap[cell]);
+        src += sub;
         for (int32_t b = 0; b < BRICK_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
     }
@@ -4574,11 +4580,14 @@ void level_between(void)
             }
             if (cell == 4)
                 continue;               /* empty */
-            uint32_t src = (cell >= 24 ? SEG_14A1 : 0) + gv.cell_bitmap[cell];
+            /* As in draw_brick_row: 24 and up are in the 0x14a1 block. */
+            const uint8_t *src = cell >= 24
+                ? img_ptr(SEG_14A1 + gv.cell_bitmap[cell])
+                : img_ptr(gv.cell_bitmap[cell]);
             uint32_t di = cga_at(x, y);
             for (int32_t r = 0; r < 8; r++) {
                 for (int32_t b = 0; b < 4; b++)
-                    g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + r * 4 + b];
+                    g_vram[(di + b) & (CGA_SIZE - 1)] = src[r * 4 + b];
                 di = cga_next_row(di);
             }
         }
