@@ -903,10 +903,10 @@ void play_teardown(void);         /* 1ac2:41d4 */
 void entity_call(entity_t *e);  /* the call at 1ac2:1b5e */
 void entity_capsule(entity_t *e);   /* 1ac2:3273 */
 void entity_paddle_fx(entity_t *e); /* 1ac2:3386 */
-void morph_begin(uint32_t bx, uint32_t table, uint32_t kind); /* 1ac2:34c5 */
-void morph_step(uint32_t bx);       /* 1ac2:34d7 */
+void morph_begin(ent_morph_t *m, uint32_t table, uint32_t kind); /* 1ac2:34c5 */
+void morph_step(ent_morph_t *m);       /* 1ac2:34d7 */
 void entity_popup(entity_t *e);     /* 1ac2:3561 */
-void entity_capsule_frames(uint32_t bx, uint32_t table);
+void entity_capsule_frames(entity_t *e, uint32_t table);
 void entity_ball_hold(ent_anim_t *a); /* 1ac2:37e0 */
 void ball_place(ball_t *ball, uint32_t x, uint32_t y);
 void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny); /* 1ac2:3df1 */
@@ -931,13 +931,13 @@ void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src);/* 1ac2:3f4f */
 void entity_sparkle(ent_anim_t *a); /* 1ac2:3aee */
 void entity_crumble(ent_anim_t *a); /* 1ac2:3b2a */
 void entity_hatch(entity_t *e);   /* 1ac2:390d */
-void bonus_release(uint32_t bx);  /* 1ac2:39a1 */
-int32_t  bonus_move_right(uint32_t bx, uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
-int32_t  bonus_move_left(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */
-int32_t  bonus_move_up(uint32_t bx, uint32_t *px, uint32_t *py);    /* 1ac2:3caf */
-int32_t  bonus_move_down(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3d3c */
-int32_t  bonus_steer(uint32_t bx, uint32_t *px, uint32_t *py);  /* 1ac2:3bf7 */
-int32_t  bonus_script(uint32_t bx, uint32_t *px, uint32_t *py); /* 1ac2:3c35 */
+void bonus_release(const ent_hatch_t *h);  /* 1ac2:39a1 */
+int32_t  bonus_move_right(ent_bonus_t *b, uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
+int32_t  bonus_move_left(ent_bonus_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */
+int32_t  bonus_move_up(ent_bonus_t *b, uint32_t *px, uint32_t *py);    /* 1ac2:3caf */
+int32_t  bonus_move_down(ent_bonus_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3d3c */
+int32_t  bonus_steer(ent_bonus_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3bf7 */
+int32_t  bonus_script(ent_bonus_t *b, uint32_t *px, uint32_t *py); /* 1ac2:3c35 */
 void demo_input_step(void);       /* 1ac2:1a6f */
 void drop_duplicate_hits(void);   /* 1ac2:27b7 */
 uint32_t hsc_bubble(uint32_t si, uint32_t di); /* 1ac2:4d5d */
