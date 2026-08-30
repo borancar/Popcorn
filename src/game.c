@@ -1805,13 +1805,12 @@ void ball_draw(const void *rows, uint32_t x, uint32_t y)
  * ball_draw and means nothing - a ball is lost by its entity handler clearing
  * [0x2e73], not here.
  */
-#define BALL_SPRITE_SRC 0x48fb
 
 int32_t ball_redraw(ball_t *b)
 {
 
     memcpy(b->prev_spr, b->sprite, sizeof b->sprite);
-    memcpy(b->sprite, g_image + BALL_SPRITE_SRC, sizeof b->sprite);
+    memcpy(b->sprite, gv.ball_start_sprite, sizeof b->sprite);
 
     uint32_t shift = (b->x & 3) * 2;
     if (shift) {
@@ -2978,22 +2977,22 @@ void xor_sprite_20x16(uint32_t x, uint32_t y, uint32_t src)
  * nothing crosses a row boundary. The original unrolls all sixteen rows; the
  * loop here is the same operation.
  */
-#define SPRITE_WORK 0x33f7
 
 void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src)
 {
-    memcpy(g_image + SPRITE_WORK, g_image + src, 0x50);
+    memcpy(gv.sprite_work, g_image + src, sizeof gv.sprite_work);
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < 0x10; r++) {
-            uint32_t p = SPRITE_WORK + r * 5, carry = 0;
+            uint8_t *row = gv.sprite_work[r];
+            uint32_t carry = 0;
             for (int32_t b = 0; b < 5; b++) {
-                uint32_t v = g_image[p + b];
-                g_image[p + b] = (uint8_t)((v >> 1) | (carry << 7));
+                uint32_t v = row[b];
+                row[b] = (uint8_t)((v >> 1) | (carry << 7));
                 carry = v & 1;
             }
         }
     }
-    xor_sprite_20x16(x, y, SPRITE_WORK);
+    xor_sprite_20x16(x, y, img_off(gv.sprite_work));
 }
 
 /* Step a two-frame XOR animation: erase the frame before this one, draw this
@@ -3329,7 +3328,7 @@ void ball_place(ball_t *ball, uint32_t x, uint32_t y)
     b->acc_x = b->acc_y = 0;
     b->state = 1;
     b->dir_y = 1;                     /* set off upwards */
-    memcpy(b->sprite, g_image + BALL_SPRITE_SRC, sizeof b->sprite);
+    memcpy(b->sprite, gv.ball_start_sprite, sizeof b->sprite);
     ball_draw(b->sprite, b->x, b->y);
 }
 
@@ -3999,15 +3998,15 @@ void read_new_key(uint32_t which)
 
 /* 1ac2:108c  score_before
  *
- * Is the six-digit score at `di - 0x12` lower than the one at `si`? The
+ * Is the six-digit score at `b` lower than the one at `a`? The
  * hall-of-fame sort walks the table with this. `scasb` compares and steps, so
  * the first digit that differs decides.
  */
-int32_t score_before(const uint8_t *a, uint32_t di)
+int32_t score_before(const uint8_t *a, const uint8_t *b)
 {
     for (int32_t i = 0; i < 6; i++)
-        if (a[i] != g_image[di + i])
-            return a[i] > g_image[di + i];
+        if (a[i] != b[i])
+            return a[i] > b[i];
     return 0;
 }
 
@@ -4353,7 +4352,7 @@ void entity_multiball(void)
         b->state = 1;
         b->bounces = 0;
 
-        memcpy(b->sprite, g_image + BALL_SPRITE_SRC, sizeof b->sprite);
+        memcpy(b->sprite, gv.ball_start_sprite, sizeof b->sprite);
         uint32_t shift = (b->x & 3) * 2;
         if (shift) {
             for (int32_t r = 0; r < 4; r++) {
@@ -7240,10 +7239,10 @@ void screen_results(const char *dir)
 {
     if (gv.player_count == 1) {
         /* 1ac2:1053 - the only record's name, then its six score digits. */
-        memcpy(g_image + HSC_SCRATCH, gv.players[0].name,
+        memcpy(gv.scratch2.hsc_scratch[0].name, gv.players[0].name,
                sizeof gv.players[0].name);
-        memcpy(g_image + HSC_SCRATCH + 12,
-               gv.players[0].score, sizeof gv.players[0].score);
+        memcpy(gv.scratch2.hsc_scratch[0].score, gv.players[0].score,
+               sizeof gv.players[0].score);
         results_finish(dir);
         return;
     }
@@ -7252,20 +7251,18 @@ void screen_results(const char *dir)
     level_intro();
 
     /* An insertion sort of the player records into hsc_scratch. */
-    uint32_t di = HSC_SCRATCH;
+    hsc_entry_t *scratch = gv.scratch2.hsc_scratch;
     const player_t *q = &gv.players[0];
-    memcpy(g_image + di, q->name, sizeof q->name);
-    memcpy(g_image + di + 12, q->score, sizeof q->score);
+    memcpy(scratch[0].name, q->name, sizeof q->name);
+    memcpy(scratch[0].score, q->score, sizeof q->score);
     for (uint32_t k = 1; k < gv.player_count; k++) {
         q = &gv.players[k];
-        di += HSC_ENTRY;
-        uint32_t at = di;
-        while (at > HSC_SCRATCH &&
-               score_before(q->score, at - HSC_ENTRY + 12))
-            at -= HSC_ENTRY;
-        memmove(g_image + at + HSC_ENTRY, g_image + at, di - at);
-        memcpy(g_image + at, q->name, sizeof q->name);
-        memcpy(g_image + at + 12, q->score, sizeof q->score);
+        uint32_t at = k;
+        while (at > 0 && score_before(q->score, scratch[at - 1].score))
+            at--;
+        memmove(&scratch[at + 1], &scratch[at], (k - at) * sizeof *scratch);
+        memcpy(scratch[at].name, q->name, sizeof q->name);
+        memcpy(scratch[at].score, q->score, sizeof q->score);
     }
 
     /* 1ac2:0f02 - the CLASSEMENT panel. The port had a sketch of this: the
@@ -7298,14 +7295,13 @@ void screen_results(const char *dir)
 
     d = (d + HSC_LINE) & 0xffff;                    /* 1ac2:0f99 */
 
-    uint32_t rec = HSC_SCRATCH;                     /* 1ac2:0fa4, per player */
-    for (uint32_t k = gv.player_count; k > 0; k--) {
+    for (uint32_t k = 0; k < gv.player_count; k++) {  /* 1ac2:0fa4 */
+        const hsc_entry_t *rec = &gv.scratch2.hsc_scratch[k];
         d = draw_run(' ', 2, d);
-        d = draw_text(rec, 0x0c, d);
+        d = draw_text(img_off(rec->name), 0x0c, d);
         d = draw_run(' ', 2, d);
-        d = draw_text(rec + 0x0c, 6, d);
+        d = draw_text(img_off(rec->score), 6, d);
         d = draw_run(' ', 2, d);
-        rec += HSC_ENTRY;
         /* 1ac2:0fca - two scan lines of bar between the rows. */
         d = (d + HSC_LINE) & 0xffff;
         for (int32_t r = 0; r < 2; r++) {

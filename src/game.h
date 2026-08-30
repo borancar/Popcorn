@@ -559,7 +559,9 @@ typedef struct __attribute__((packed)) {
     uint8_t  _pad_17[28];
     uint8_t  hatch_x;                   /* 0x33f3 */
     uint8_t  hatch_y;                   /* 0x33f4 */
-    uint8_t  _pad_18[90];
+    uint8_t  _pad_18[2];
+    uint8_t  sprite_work[16][5];        /* 0x33f7 sprite_shift_draw's buffer: a 20x16 sprite copied in and shifted right a pixel at a time, in rows of five so nothing crosses a row boundary */
+    uint8_t  _pad_25[8];
     player_t players[9];                /* 0x344f nine of them - screen_player_names stops at nine, and a tenth record would run into player_count at 0x3f08 */
     hsc_entry_t hsc[11];                /* 0x3e42 the high-score table. **Eleven**, not ten: only ten are written to popcorn.hsc, and the eleventh is the slot hsc_sort starts its cursor at and hsc_bubble compares the incoming record against. Eleven of 0x12 is 198, exactly the room there is before player_count */
     uint8_t  player_count;              /* 0x3f08 how many were entered */
@@ -698,6 +700,7 @@ ENSURE_IMG_AT(bonus_pending, 0x33d5);
 ENSURE_IMG_AT(bonus_live, 0x33d6);
 ENSURE_IMG_AT(hatch_x, 0x33f3);
 ENSURE_IMG_AT(hatch_y, 0x33f4);
+ENSURE_IMG_AT(sprite_work, 0x33f7);
 ENSURE_IMG_AT(players, 0x344f);
 ENSURE_IMG_AT(hsc, 0x3e42);
 ENSURE_IMG_AT(player_count, 0x3f08);
@@ -1025,7 +1028,7 @@ void ball_draw(const void *rows, uint32_t x, uint32_t y);    /* 1ac2:2881 */
 int32_t  ball_redraw(ball_t *b);  /* 1ac2:2827 */
 int32_t  ball_on_paddle(ball_t *b); /* 1ac2:2e1e */
 void read_new_key(uint32_t which);  /* 1ac2:1614 */
-int32_t  score_before(const uint8_t *a, uint32_t di); /* 1ac2:108c */
+int32_t  score_before(const uint8_t *a, const uint8_t *b); /* 1ac2:108c */
 void ball_after(ball_t *b);   /* 1ac2:247f */
 int32_t  ball_after_endgame(ball_t *b);  /* 1ac2:45a1 */
 void ball_bricks(ball_t *b);  /* 1ac2:254d */
