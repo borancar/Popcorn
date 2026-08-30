@@ -7555,7 +7555,7 @@ int32_t cheat_sequence(char key)
     /* The whole sequence. Mode 3, the message, a key, mode 5 again. */
     io_cga_mode(3);
     {
-        char line[256];
+        uint8_t line[256];
         uint32_t n = 0, ah = 0x20;
         const uint8_t *s = cv.cheat_text;
         for (;;) {
@@ -7564,18 +7564,14 @@ int32_t cheat_sequence(char key)
             if (c == 0)
                 break;
             if (c == 0x5c) {            /* a new line */
-                line[n] = 0;
-                fprintf(stderr, "popcorn: [message] %s\n", line);
+                io_print_dos("message", line, n);
                 n = 0;
                 continue;
             }
-            if (n < sizeof line - 1)
-                line[n++] = (char)c;
+            if (n < sizeof line)
+                line[n++] = (uint8_t)c;
         }
-        if (n) {
-            line[n] = 0;
-            fprintf(stderr, "popcorn: [message] %s\n", line);
-        }
+        io_print_dos("message", line, n);
     }
     io_get_key();
     io_cga_mode(5);

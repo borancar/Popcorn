@@ -1200,6 +1200,12 @@ void io_set_deadline(uint32_t ms, const char *shot, const char *vram);
 void io_set_deadline_image(const char *path);
 void io_set_int09_installed(int32_t on);
 
+/* DOS text is CP437 and a terminal wants UTF-8. io_cp437_utf8 appends one
+ * byte to a buffer and hands back the new length; io_print_dos does a whole
+ * line of it on stderr. */
+uint32_t io_cp437_utf8(char *out, uint32_t n, uint32_t cap, uint8_t c);
+void io_print_dos(const char *what, const uint8_t *dos, uint32_t n);
+
 /* Little-endian accessors, so a transcribed `mov ax,[0x3144]` reads the way it
  * reads in the disassembly. img_w comes back in a **pointer's width**: what it
  * reads is a word of the game's data, and the reason the port reads words at
