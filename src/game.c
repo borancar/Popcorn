@@ -2933,7 +2933,7 @@ void entity_unlink(uint32_t node)
 /* 1ac2:3668  cell_set_three - the cell an entity is sitting on becomes a 3 */
 void cell_set_three(uint32_t node)
 {
-    g_image[entity_at(node)->p.anim.arg] = 3;
+    g_image[entity_at(node)->p.anim.arg.cell] = 3;
 }
 
 /* 1ac2:36fb  cells_restore
@@ -3304,7 +3304,7 @@ void entity_soften(uint32_t bx)
 {
     entity_crumble(bx);
     if (gv.entity_remove == 1)
-        g_image[entity_at(bx)->p.anim.arg] = 3;   /* the cell it sat on */
+        g_image[entity_at(bx)->p.anim.arg.cell] = 3;  /* the cell it sat on */
 }
 
 /* 1ac2:366f  from brick 8 - plays its animation [bx+2] times over, cancelling
@@ -3315,7 +3315,7 @@ void entity_repeat(uint32_t bx)
     if (gv.entity_remove != 1)
         return;
     entity_t *e = entity_at(bx);
-    if (--e->p.anim.arg != 0) {         /* a countdown, in the low byte */
+    if (--e->p.anim.arg.count != 0) {   /* a **byte**: 1ac2:3679 */
         gv.entity_remove = 0;
         e->p.anim.frame = 0x67ea;       /* and round the animation again */
         return;
@@ -3357,7 +3357,7 @@ void entity_ball_arrive(uint32_t bx)
         return;
 
     entity_t *e = entity_at(bx);
-    ball_place(ball_at(e->p.anim.arg), (e->p.anim.x + 8) & 0xff,
+    ball_place(ball_at(e->p.anim.arg.ball), (e->p.anim.x + 8) & 0xff,
                (e->p.anim.y - 4) & 0xff);
 }
 
