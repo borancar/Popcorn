@@ -1628,10 +1628,10 @@ uint32_t draw_brick_row(uint32_t y)
     uint32_t di = cga_at(0, y) + BRICK_LEFT;
     uint32_t row = (y - BRICK_TOP) & 0xff;
     uint32_t sub = (row & 7) * 4;
-    uint32_t si = img_off(gv.level.cells) + (row >> 3) * BRICK_COLS;
+    const uint8_t *cells = &gv.level.cells[(row >> 3) * BRICK_COLS];
 
-    for (int32_t c = 0; c < BRICK_COLS; c++, si++, di += BRICK_BYTES) {
-        uint32_t cell = g_image[si];
+    for (int32_t c = 0; c < BRICK_COLS; c++, di += BRICK_BYTES) {
+        uint32_t cell = cells[c];
         if (cell == 0x0c) {
             cell_special(row & 0xff, c, di);
             continue;
