@@ -22,7 +22,7 @@
 # wait for a state that arrives when it arrives.
 set -e
 D="${1:?usage: make_snapshots.sh DIR}"
-PY=uv run
+PY="uv run"
 mkdir -p "$D"
 
 # The menu, sitting in its own animation loop.

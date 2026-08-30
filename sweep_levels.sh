@@ -15,7 +15,7 @@ set -e
 SEED="${1:?usage: sweep_levels.sh SEED.snap OUTDIR LEVEL...}"
 OUT="${2:?}"
 shift 2
-PY=uv run
+PY="uv run"
 mkdir -p "$OUT"
 for lv in "$@"; do
     prev=$((lv - 1))

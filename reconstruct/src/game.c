@@ -3340,7 +3340,7 @@ void ball_place(ball_t *ball, uint32_t x, uint32_t y)
     b->acc_x = b->acc_y = 0;
     b->state = 1;
     b->dir_y = 1;                     /* set off upwards */
-    memcpy(b + B_SPRITE, g_image + BALL_SPRITE_SRC, 8);
+    memcpy(b->sprite, g_image + BALL_SPRITE_SRC, sizeof b->sprite);
     ball_draw(b->sprite, b->x, b->y);
 }
 
