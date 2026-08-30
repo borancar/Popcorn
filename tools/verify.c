@@ -77,7 +77,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         blit_xor(g_image + r[R_SI], (const paddle_rows_t *)(g_image + r[R_DI]));
         return 1;
     case 0x221a:                        /* draw_paddle(si = sprite) */
-        draw_paddle(r[R_SI]);
+        draw_paddle(img_ptr(r[R_SI]));
         return 1;
     case 0x2881:                        /* ball_draw(si = sprite, bl, al) */
         ball_draw(g_image + r[R_SI], r[R_BX] & 0xff, r[R_AX] & 0xff);
@@ -176,8 +176,8 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x318b: extra_life(); return 1;
     case 0x2109: scroll_up_band(); return 1;
     case 0x2148: scroll_down_band(); return 1;
-    case 0x22a9: draw_paddle_raw(r[R_SI]); return 1;
-    case 0x2187: draw_paddle_shifted(r[R_SI]); return 1;
+    case 0x22a9: draw_paddle_raw(img_ptr(r[R_SI])); return 1;
+    case 0x2187: draw_paddle_shifted(img_ptr(r[R_SI])); return 1;
     case 0x2e1e: g_result = ball_on_paddle(ball_at(r[R_SI])); return 1;
     case 0x2ee3: laser_fire(); return 1;
     case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, hit_at(r[R_SI]));
