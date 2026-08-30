@@ -274,8 +274,11 @@ ENSURE_ENTITY_AT(next, 0x0c);
 
 /* A node by its image offset. The chain's links are the game's own 16-bit
  * offsets, stored in the image and ended by 0xffff, so a walk still carries
- * one - this types what it finds there. */
-static inline entity_t *entity_at(uint32_t off)
+ * one - this types what it finds there.
+ *
+ * `_ptr` throughout means the same thing as img_ptr: resolve an offset the
+ * game stored. `_at`, as in cell_at, means find something by where it is. */
+static inline entity_t *entity_ptr(uint32_t off)
 {
     return (entity_t *)(g_image + off);
 }
@@ -367,15 +370,15 @@ typedef struct __attribute__((packed)) {
 } hit_t;
 ENSURE_SIZE(hit_t, 4);
 
-/* A probe slot by its image offset, for the same reason as ball_at. */
-static inline hit_t *hit_at(uint32_t off)
+/* A probe slot by its image offset, for the same reason as ball_ptr. */
+static inline hit_t *hit_ptr(uint32_t off)
 {
     return (hit_t *)(g_image + off);
 }
 
 /* A ball by its image offset, for the routines that still carry one because
  * the original passed it in a register. */
-static inline ball_t *ball_at(uint32_t off)
+static inline ball_t *ball_ptr(uint32_t off)
 {
     return (ball_t *)(g_image + off);
 }
