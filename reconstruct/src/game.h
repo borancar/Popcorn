@@ -472,7 +472,8 @@ typedef struct __attribute__((packed)) {
         uint8_t eog_band[495];          /* screen_end_of_game's band, merged with the picture and put back */
         hsc_entry_t hsc_scratch[9];     /* screen_results insertion-sorts the players' records here, and hsc_sort feeds them into hsc from it */
     } scratch2;
-    uint8_t  _pad_21[638];
+    uint8_t  _pad_21[170];
+    uint16_t results_rows[9][26];       /* 0x2b39 the results screen's fixed rows, 26 words each - 0x34 apart, which is what the code that walks them from 0x2ba1 counts in. Nine of them end exactly at paddle_sets */
     paddle_set_t paddle_sets[4];        /* 0x2d0d the four paddle kinds, indexed by paddle_kind. Their `sprites` are 0x4903, 0x4a37, 0x4b6b and 0x4c9f - paddle_sprites[0] through [3], 0x134 apart, which is what says the bank is four sets of four phases */
     uint16_t paddle_grow[4];            /* 0x2d1d the sprite list a kind grows through, by kind. Entry 0 is zero: the plain paddle has nothing to animate */
     uint16_t paddle_shrink[4];          /* 0x2d25 and the list it shrinks through */
@@ -612,7 +613,14 @@ typedef struct __attribute__((packed)) {
      * That is the next seam. */
     uint8_t  _pad_22[4773];
     uint8_t  mark_sprite[37][2];        /* 0x6078 the mark drawn at each field position, one word a row. field_marks takes 0x1f rows of it and level_between 0x25 - the same picture, cut short */
-    uint8_t  _pad_26[5955];
+    uint8_t  _pad_26[3283];
+    uint16_t backdrop_table[8];         /* 0x6d95 the level intro's backdrop, by the top three bits of backdrop_phase */
+    uint8_t  _pad_28[2102];
+    uint16_t walker_drop[6];            /* 0x75db the six frames the creature plays once it has walked in, 7 rows of 7 at a fixed spot */
+    uint8_t  _pad_29[294];
+    uint16_t hatch_open[5];             /* 0x770d the hatch opening */
+    uint16_t hatch_shut[5];             /* 0x7717 and closing, one frame every fourth step of the walk out */
+    uint8_t  _pad_30[228];
     uint8_t  curtain_image[105][27];    /* 0x7805 the POPCORN logo the intro curtain brings down: 105 rows of 27 bytes, 108 pixels wide. intro_curtain reads it **backwards** - on frame `rows` it takes the last `rows` rows and draws them from the top, so the picture comes down like a curtain. That is why the address in the original is 0x8318, which is the end of this and not the start */
     uint8_t  _pad_23b[3336];
     uint8_t  font[40][12][2];           /* 0x9020 the score panel's 8x12 font, two bits a pixel: forty glyphs of twelve rows of one word. Glyph 0, what a space maps to, is **not blank** - it is a solid block of colour 2, which is how the headings get their red ground */
@@ -720,6 +728,7 @@ ENSURE_IMG_AT(speed_limit, 0x1486);
 ENSURE_IMG_AT(frame_delay, 0x1487);
 ENSURE_IMG_AT(frame_delay_set, 0x1489);
 ENSURE_IMG_AT(speed_timer, 0x148b);
+ENSURE_IMG_AT(results_rows, 0x2b39);
 ENSURE_IMG_AT(paddle_sets, 0x2d0d);
 ENSURE_IMG_AT(paddle_grow, 0x2d1d);
 ENSURE_IMG_AT(paddle_shrink, 0x2d25);
@@ -811,6 +820,10 @@ ENSURE_IMG_AT(life_sprite, 0x48e7);
 ENSURE_IMG_AT(ball_start_sprite, 0x48fb);
 ENSURE_IMG_AT(paddle_sprites, 0x4903);
 ENSURE_IMG_AT(mark_sprite, 0x6078);
+ENSURE_IMG_AT(backdrop_table, 0x6d95);
+ENSURE_IMG_AT(walker_drop, 0x75db);
+ENSURE_IMG_AT(hatch_open, 0x770d);
+ENSURE_IMG_AT(hatch_shut, 0x7717);
 ENSURE_IMG_AT(curtain_image, 0x7805);
 ENSURE_IMG_AT(font, 0x9020);
 ENSURE_IMG_AT(pause_overlay, 0x93e0);
@@ -920,8 +933,10 @@ typedef struct __attribute__((packed)) {
     uint8_t  ending_mark[8][2];         /* 0x28d9 eight rows of one word, XORed at a packed position. **In this segment**, not at a plain image offset - reading it as one takes the sprite from 49KB below */
     uint8_t  _c46c[7];
     uint8_t  hole_picture[112][48];     /* 0x28f0 what shows through a hole brick 11 leaves: 12 cells of four bytes a row, 112 rows. On level 50, which is a solid wall of brick 11, it is the whole picture */
+    uint8_t  _c46d[11632];
+    uint8_t  logo[4368];                /* 0x6b60 the logo the intro slides on. **One** block, read from both ends: two passes walk it forwards from the first word and two backwards from the last, which is why the original holds 0x6b60 for one pair and 0x7c6e for the other - and 0x7c6e is logo + 4366, the last word of exactly this many bytes */
 } seg_c46_t;
-ENSURE_SIZE(seg_c46_t, 0x3df0);
+ENSURE_SIZE(seg_c46_t, 0x7c70);
 #define c46 (*(seg_c46_t *)(g_image + SEG_C46))
 
 #define ENSURE_C46_AT(field, off) \
@@ -932,6 +947,7 @@ ENSURE_C46_AT(banner_xlat, 0x226c);
 ENSURE_C46_AT(blob_target, 0x2823);
 ENSURE_C46_AT(ending_mark, 0x28d9);
 ENSURE_C46_AT(hole_picture, 0x28f0);
+ENSURE_C46_AT(logo, 0x6b60);
 
 /* The four colours mode 05h displays on an RGB monitor: the colour-burst-kill
  * bit selects background / cyan / red / white regardless of the palette bit. */

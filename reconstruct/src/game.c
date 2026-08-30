@@ -679,10 +679,11 @@ void intro_logo(void)
     /* Two passes down with the direction flag set, then two up with it clear.
      * Each pair draws the slice then rubs the bar out again, so what is left
      * on screen is the picture and not the bar. */
-    logo_pass(img_ptr(SEG_C46 + 0x7c6e), 0x3f3f, 0x5b, 0, 1);
-    logo_pass(img_ptr(SEG_C46 + 0x7c6e), 0x3f3f, 0x5a, 1, 1);
-    logo_pass(img_ptr(SEG_C46 + 0x6b60), 0x3119, 0x5b, 0, 0);
-    logo_pass(img_ptr(SEG_C46 + 0x6b60), 0x1119, 0x5c, 1, 0);
+    uint8_t *top = &c46.logo[sizeof c46.logo - 2];      /* the last word */
+    logo_pass(top, 0x3f3f, 0x5b, 0, 1);
+    logo_pass(top, 0x3f3f, 0x5a, 1, 1);
+    logo_pass(c46.logo, 0x3119, 0x5b, 0, 0);
+    logo_pass(c46.logo, 0x1119, 0x5c, 1, 0);
 }
 
 /* 1ac2:55e5  intro_reveal
@@ -2507,14 +2508,13 @@ void extra_life(void)
  * the bricks land on it - which is why skipping it left the menu showing
  * through the playfield.
  */
-#define BACKDROP_TABLE 0x6d95
 #define BACKDROP_BYTES     48
 
 void field_backdrop(uint32_t y)
 {
     io_log_random(0x1fc1);              /* tagged, for sidebyside's per-frame list */
     uint32_t di = cga_at(0, y) + BRICK_LEFT;
-    uint32_t si = img_w(BACKDROP_TABLE + ((gv.backdrop_phase >> 3) & 7) * 2);
+    uint32_t si = gv.backdrop_table[(gv.backdrop_phase >> 3) & 7];
     for (int32_t r = 0; r < 8; r++) {
         for (int32_t b = 0; b < BACKDROP_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
@@ -2608,8 +2608,6 @@ static void hatch_frame(uint32_t src, uint32_t x, uint32_t y)
  * 0x1cd9. Cosmetic, but it is also what puts the bottom band of the playfield
  * on screen - the backdrop sweep only reaches y=179.
  */
-#define HATCH_OPEN  0x770d
-#define HATCH_SHUT  0x7717
 #define LIVES_MARK  0x3a7c
 
 void level_draw(void)
@@ -2619,7 +2617,7 @@ void level_draw(void)
 
     gv.paddle_x = 0xc8;
     for (int32_t f = 0; f < 5; f++) {
-        hatch_frame(img_w(HATCH_OPEN + f * 2), hx, hy);
+        hatch_frame(gv.hatch_open[f], hx, hy);
         for (int32_t i = 0; i < 0x12c; i++)
             game_delay();
     }
@@ -2654,7 +2652,7 @@ void level_draw(void)
     for (int32_t f = 0; f < 0x14; f++) {
         uint32_t ch = (uint32_t)(0x14 - f);
         if (!(ch & 3))
-            hatch_frame(img_w(HATCH_SHUT + (f >> 2) * 2), hx, hy);
+            hatch_frame(gv.hatch_shut[f >> 2], hx, hy);
         for (int32_t d = 0; d < 0x4b; d++)
             game_delay();
         walker_step(gv.paddle_x);
@@ -2674,7 +2672,7 @@ void level_draw(void)
     }
 
     for (int32_t f = 0; f < 6; f++) {
-        uint32_t src = img_w(0x75db + f * 2);
+        uint32_t src = gv.walker_drop[f];
         uint32_t d = 0x1cd9;
         for (int32_t r = 0; r < 7; r++) {
             for (int32_t b = 0; b < 7; b++)
@@ -6983,10 +6981,10 @@ static int32_t bonus_end_level_run(void)
      * (1ac2:42e5 and 1ac2:42fa), then a blank one - the transcription had
      * only the second of the three. */
     for (int32_t i = 0; i < 0x1a; i++)
-        img_vram_setw(BANNER_ROW_VRAM + i * 2, img_w(0x2b39 + i * 2));
+        img_vram_setw(BANNER_ROW_VRAM + i * 2, gv.results_rows[0][i]);
     screen_scroll_up();
     for (int32_t i = 0; i < 0x1a; i++)
-        img_vram_setw(BANNER_ROW_VRAM + i * 2, img_w(0x2b6d + i * 2));
+        img_vram_setw(BANNER_ROW_VRAM + i * 2, gv.results_rows[1][i]);
     screen_scroll_up();
     banner_blank();
 
@@ -7006,7 +7004,7 @@ static int32_t bonus_end_level_run(void)
      * 0x2cd9, at 1ac2:43ef to 1ac2:447f. The transcription went straight from
      * the level's cells to the fresh ball and had none of what follows. */
     for (int32_t r = 0; r < 7; r++) {
-        uint32_t src = 0x2ba1 + r * 0x34;
+        uint32_t src = img_off(gv.results_rows[2 + r]);
         for (int32_t i = 0; i < 0x1a; i++)
             img_vram_setw(BANNER_ROW_VRAM + i * 2, img_w(src + i * 2));
         screen_scroll_up();
