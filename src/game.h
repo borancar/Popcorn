@@ -379,7 +379,15 @@ static inline uint32_t img_off(const void *p)
  * big-endian host.
  */
 typedef struct __attribute__((packed)) {
-    uint8_t  _pad_00[5056];
+    /* 0x0000 is scratch, and two routines that cannot both be running use it
+     * for different things. The menu is not up during the ending, and the
+     * ending does not come back to the menu without going through the intro,
+     * so the six bytes and the 4950 are the same bytes at different times. */
+    union {
+        uint8_t banner_cell[6];         /* 0x0000 the character the banner is scrolling in: six rows of one byte, fetched and decoded by menu_banner_tick, read a bit at a time as the window walks */
+        uint8_t eog_saved[4950];        /* 0x0000 the end-of-game screen copied into the image, 0x96 rows of 0x21 - the picture is merged into it a band at a time and put back */
+    };
+    uint8_t  _pad_00[106];
     uint16_t eog_screen_at;             /* 0x13c0 end-of-game screen cursor */
     uint16_t eog_build_at;              /* 0x13c2 */
     uint8_t  banner_state;              /* 0x13c4 the menu's scrolling text */
@@ -546,6 +554,8 @@ typedef struct __attribute__((packed)) {
     typedef char ensure_img_at_##field[offsetof(game_vars, field) == (off) ? 1 : -1]
 
 /* @generated-asserts begin - genvars.py rewrites between these markers */
+ENSURE_IMG_AT(banner_cell, 0x0000);
+ENSURE_IMG_AT(eog_saved, 0x0000);
 ENSURE_IMG_AT(eog_screen_at, 0x13c0);
 ENSURE_IMG_AT(eog_build_at, 0x13c2);
 ENSURE_IMG_AT(banner_state, 0x13c4);

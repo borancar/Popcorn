@@ -5067,13 +5067,13 @@ void menu_banner_tick(void)
         uint32_t c = g_image[gv.banner_ptr];
         c = ((c ^ 0xaa) - 0x20) & 0xff;
         uint32_t src = 0xa3c0 + c * 6;
-        memcpy(g_image, g_image + src, 6);
+        memcpy(gv.banner_cell, g_image + src, 6);
     }
     banner_shift();                     /* 1ac2:5140 */
 
     uint32_t di = 0x38a9;
     for (int32_t i = 0; i < 6; i++) {
-        if (g_image[i] & gv.banner_state)
+        if (gv.banner_cell[i] & gv.banner_state)
             g_vram[di & (CGA_SIZE - 1)] ^= 3;
         di = cga_next_row(di);
     }
@@ -6594,7 +6594,6 @@ void screen_define_keys(void)
  * the table at 0xa8bf, each a tall sprite drawn twice, blanked from 0xabab,
  * and drawn twice more. Any key stops it; if none came, ending_column runs.
  * ===================================================================== */
-#define EOG_SAVED     0x0000            /* the screen, copied into the image */
 #define EOG_BAND      0x1aef            /* the band being merged */
 #define EOG_PICTURE   0xa6d0
 #define EOG_WIDTH     0x21
@@ -6606,10 +6605,10 @@ void screen_end_of_game(void)
 {
     /* The screen into the image - not screen to screen, and DI does not go
      * back to where it started each row. */
-    uint32_t si = 8, di = EOG_SAVED;
+    uint32_t si = 8, di = 0;
     for (int32_t n = 0x96; n > 0; n--) {
         for (int32_t b = 0; b < EOG_WIDTH; b++)
-            g_image[di + b] = g_vram[(si + b) & (CGA_SIZE - 1)];
+            gv.eog_saved[di + b] = g_vram[(si + b) & (CGA_SIZE - 1)];
         di += EOG_WIDTH;
         si = cga_next_row(si);
     }
