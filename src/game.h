@@ -23,7 +23,7 @@
 #define IMAGE_LEN   0x208b0
 #define CODE_BASE   0x1ac20
 
-extern uint8_t *g_image;
+extern uint8_t *g_image;                /* the whole unpacked load image */
 
 /* One ball, the 0x1e bytes at gv.balls[i].
  *
@@ -279,50 +279,54 @@ typedef struct __attribute__((packed)) {
     uint8_t  anim_count;                /* 0x3134 the animated bricks */
     uint8_t  anim_rate;                 /* 0x3135 */
     uint16_t anim_ptr;                  /* 0x3136 */
-    /* 0x3138 head of the free list - **and a sentinel node for the active
-     * one**, which is the trick the whole chain is built on.
+    /* 0x3138  **The list head is a node**, and these declarations are it.
      *
-     * entity_head is at 0x3144, and 0x3144 - 0x3138 is 0x0c, which is exactly
-     * offsetof(entity_t, next). So the address 0x3138, read as a node, has
-     * `next` *at* entity_head.
+     * What is at 0x3144 is not the head - it is this node's `next`, and the
+     * head is the node itself. Reading it that way is what makes the chain
+     * work without special cases: a walk starts at entity_head and follows
+     * links, and an unlink writes entity_prev->next whether the node it is
+     * removing is the first or the fortieth.
      *
-     * That is read off the binary rather than assumed. 1ac2:323e is
-     * `mov bx, 0x3138` - the **address**, not its contents - and the loop that
-     * follows reads `[bx + 0xc]`, so its first read is the word at 0x3144. And
-     * 0x3144 is the active list's head because six routines start a walk by
-     * loading it (1ac2:1b53 is the play loop's own entity walk, 1ac2:055e is
-     * entities_clear) and the clear paths store an immediate into it at
-     * 1ac2:0554, 0591 and 0e11.
+     * Read off the binary rather than assumed. 1ac2:323e is `mov bx, 0x3138`
+     * - the address, not its contents - and the loop after it reads
+     * [bx + 0xc], so its first read is the word at 0x3144. That 0x3144 is
+     * where the chain starts is settled by the six routines that begin a walk
+     * by loading it (1ac2:1b53 is the play loop's own entity walk, 1ac2:055e
+     * is entities_clear) and the clear paths that store an immediate into it
+     * at 1ac2:0554, 0591 and 0e11.
      *
-     * Two things fall out of that and neither needs a special case:
-     *
-     *   - a walk started at 0x3138 traverses the **active** list, because the
-     *     sentinel's link is its head. entity_alloc does this to find the tail.
-     *   - entity_prev starts every walk at 0x3138, so unlinking the *first*
-     *     real node writes entity_head through the sentinel exactly as it
-     *     would write any other node's link.
-     *
-     * The chain ends in 0xffff rather than 0, because 0 is a perfectly good
-     * image offset and would be indistinguishable from a node at the start of
-     * the image. */
-    uint16_t entity_free;
-    uint8_t  entity_remove;             /* 0x313a a handler asking to be taken out of the list */
-    uint8_t  _pad_14[7];
-    uint16_t entity_prev;               /* 0x3142 trails one node behind the walk, so the unlink needs no second pass */
-    uint16_t entity_head;               /* 0x3144 */
-    uint8_t  _pad_15[574];
+     * The other three variables live *inside* the head node's payload, which
+     * is why they are spelled as a union rather than described in a comment:
+     * if those seven bytes ever turn out to be doing a handler's work too,
+     * this is where it would show. The pool's first real node is one stride
+     * on - the shipped free list runs 0x3146, 0x3154, 0x3162, ... - so the
+     * head is element -1 of the array. */
+    union {
+        entity_t entity_head;           /* 0x3138 the head, as a node */
+        struct {
+            uint16_t entity_free;       /* 0x3138 = entity_head.handler:
+                                         * the free list's first node */
+            uint8_t  entity_remove;     /* 0x313a a handler asking to be
+                                         * taken out of the list */
+            uint8_t  _pad_head[7];
+            uint16_t entity_prev;       /* 0x3142 trails one node behind a
+                                         * walk, so an unlink needs no
+                                         * second pass */
+        };                              /* 0x3144 is entity_head.next */
+    };
+    uint8_t  _pad_14[574];
     uint8_t  bonus_cap;                 /* 0x3384 */
-    uint8_t  _pad_16[77];
+    uint8_t  _pad_15[77];
     uint16_t rng_state;                 /* 0x33d2 */
     uint8_t  hit_kind;                  /* 0x33d4 */
-    uint8_t  _pad_17[1];
+    uint8_t  _pad_16[1];
     uint8_t  bonus_live;                /* 0x33d6 capsules on screen; the play loop's pause shortens as it rises */
-    uint8_t  _pad_18[28];
+    uint8_t  _pad_17[28];
     uint8_t  hatch_x;                   /* 0x33f3 */
     uint8_t  hatch_y;                   /* 0x33f4 */
-    uint8_t  _pad_19[90];
+    uint8_t  _pad_18[90];
     player_t players[9];                /* 0x344f nine of them - screen_player_names stops at nine, and a tenth record would run into player_count at 0x3f08 */
-    uint8_t  _pad_20[198];
+    uint8_t  _pad_19[198];
     uint8_t  player_count;              /* 0x3f08 how many were entered */
     uint8_t  live_count;                /* 0x3f09 how many are still in. next_player hands over while this is more than one */
     uint8_t  cur_player;                /* 0x3f0a */
@@ -337,6 +341,7 @@ typedef struct __attribute__((packed)) {
 #define ENSURE_IMG_AT(field, off) \
     typedef char ensure_img_at_##field[offsetof(game_vars, field) == (off) ? 1 : -1]
 
+/* @generated-asserts begin - genvars.py rewrites between these markers */
 ENSURE_IMG_AT(eog_screen_at, 0x13c0);
 ENSURE_IMG_AT(eog_build_at, 0x13c2);
 ENSURE_IMG_AT(banner_state, 0x13c4);
@@ -401,10 +406,10 @@ ENSURE_IMG_AT(level, 0x2f10);
 ENSURE_IMG_AT(anim_count, 0x3134);
 ENSURE_IMG_AT(anim_rate, 0x3135);
 ENSURE_IMG_AT(anim_ptr, 0x3136);
+ENSURE_IMG_AT(entity_head, 0x3138);
 ENSURE_IMG_AT(entity_free, 0x3138);
 ENSURE_IMG_AT(entity_remove, 0x313a);
 ENSURE_IMG_AT(entity_prev, 0x3142);
-ENSURE_IMG_AT(entity_head, 0x3144);
 ENSURE_IMG_AT(bonus_cap, 0x3384);
 ENSURE_IMG_AT(rng_state, 0x33d2);
 ENSURE_IMG_AT(hit_kind, 0x33d4);
@@ -415,7 +420,16 @@ ENSURE_IMG_AT(players, 0x344f);
 ENSURE_IMG_AT(player_count, 0x3f08);
 ENSURE_IMG_AT(live_count, 0x3f09);
 ENSURE_IMG_AT(cur_player, 0x3f0a);
-ENSURE_IMG_AT(speed_timer,     0x148b);          /* the whole unpacked load image */
+/* @generated-asserts end */
+
+/* The two facts the chain rests on, checked rather than described: the head
+ * node sits at 0x3138, and its `next` therefore lands on 0x3144 - the word
+ * every walk starts from. Change the declarations inside the union, or the
+ * seven bytes of payload between entity_remove and entity_prev, and the second
+ * one stops holding; after that entity_alloc appends to the wrong place and
+ * entity_unlink corrupts the list, both silently. This way the build stops. */
+typedef char ensure_head_next_lands_on_3144[
+    offsetof(game_vars, entity_head.next) == 0x3144 ? 1 : -1];
 extern const char *g_dir;               /* "" - everything is relative to the
                                          * current directory, as it was in DOS */
 
