@@ -303,17 +303,20 @@ void draw_paddle(const uint8_t *sprite)
 #define FONT_ROWS      12
 #define FONT_GLYPH     24
 
-static uint32_t glyph_of(uint8_t c)
+static uint32_t glyph_of(char c)
 {
-    if (c == ':')  return 0x26;
-    if (c == 0xff) return 0x27;         /* the text-entry cursor */
-    if (c == '-')  return 0x0b;
-    if (c >= '0' && c <= '9') return c - 0x2f;
-    if (c >= 'A' && c <= 'Z') return c - 0x35;
+    /* The cursor is 0xff, which is not a character and is negative in a
+     * signed char, so the comparisons are done on the byte. */
+    uint8_t u = (uint8_t)c;
+    if (u == ':')  return 0x26;
+    if (u == 0xff) return 0x27;         /* the text-entry cursor */
+    if (u == '-')  return 0x0b;
+    if (u >= '0' && u <= '9') return u - 0x2f;
+    if (u >= 'A' && u <= 'Z') return u - 0x35;
     return 0;                           /* space, and everything unmapped */
 }
 
-void draw_char(uint8_t c, uint32_t di)
+void draw_char(char c, uint32_t di)
 {
     const uint8_t (*g)[2] = gv.font[glyph_of(c)];
     for (int32_t r = 0; r < FONT_ROWS; r++) {
@@ -1197,7 +1200,7 @@ int32_t play_loop(void)
         g_vram[di & (CGA_SIZE - 1)] = 0xaa;
         g_vram[(di + 1) & (CGA_SIZE - 1)] = 0xaa;
     }
-    draw_text(img_off(gv.level_text), 0xc, 0x377e);
+    draw_text(gv.level_text, 0xc, 0x377e);
     di = 0x377e + 0x1e0;
     for (int32_t i = 0; i < 12; i++, di += 2) {
         g_vram[di & (CGA_SIZE - 1)] = 0xaa;
@@ -2454,7 +2457,7 @@ void score_add(void)
     /* Redraw the six digits into the panel. */
     uint32_t di = 0x15d2;
     for (int32_t i = 0; i < 6; i++, di += 2)
-        draw_char(gv.score_text[i], di);
+        draw_char((char)gv.score_text[i], di);
 
     /* An extra life every time the score reaches gv.extra_at, which then
      * advances by two.
@@ -2812,10 +2815,10 @@ uint32_t draw_run(uint8_t c, uint32_t count, uint32_t di)
  * the same reason as draw_run. `lodsb` advances SI too, so a caller that
  * wants it preserved pushes it - which is what the high-score table does
  * around every run of spaces between its columns. */
-uint32_t draw_text(uint32_t src, uint32_t count, uint32_t di)
+uint32_t draw_text(const char *src, uint32_t count, uint32_t di)
 {
     for (uint32_t i = 0; i < count; i++, di = (di + 2) & 0xffff)
-        draw_char(g_image[src + i], di);
+        draw_char(src[i], di);
     return di;
 }
 
@@ -2827,7 +2830,7 @@ uint32_t draw_text(uint32_t src, uint32_t count, uint32_t di)
  */
 void draw_cursor(uint32_t di)
 {
-    draw_char(0xff, di + 2);
+    draw_char((char)0xff, di + 2);   /* the cursor, not a character */
 }
 
 /* 1ac2:1642  define_keys_prompt
@@ -4658,7 +4661,7 @@ int32_t name_field(uint32_t di, uint8_t *abort)
             continue;
         g_image[si++] = (uint8_t)c;
         len++;
-        draw_char((uint8_t)c, di);
+        draw_char((char)c, di);
         draw_cursor(di);
         di += 2;
     }
@@ -4741,7 +4744,7 @@ uint8_t screen_player_names(void)
         uint32_t top = di;                      /* pushed at 1ac2:10f2 */
         uint32_t label = name_bar(top, 0xaaaa); /* pushed at 1ac2:110e */
 
-        draw_text(img_off(gv.name_prompt), NAME_WIDTH, label);
+        draw_text(gv.name_prompt, NAME_WIDTH, label);
         name_bar((label + 0x1e0) & 0xffff, 0xaaaa);
 
         uint8_t abort = 0;
@@ -6474,7 +6477,7 @@ void screen_high_scores(void)
     uint32_t di = 0x2142;
     di = draw_run(' ', 7, di);
     for (const char *p = "HIGH SCORE"; *p; p++, di = (di + 2) & 0xffff)
-        draw_char((uint8_t)*p, di);
+        draw_char(*p, di);
     di = draw_run(' ', 7, di);
 
     di = (di + HSC_LINE) & 0xffff;              /* the rule */
@@ -6487,14 +6490,13 @@ void screen_high_scores(void)
 
     di = (di + HSC_LINE) & 0xffff;
 
-    uint32_t si = img_off(gv.hsc);
     for (int32_t row = 0; row < HSC_COUNT; row++) {
+        const hsc_entry_t *e = &gv.hsc[row];
         di = draw_run(' ', 2, di);
-        di = draw_text(si, 12, di);
+        di = draw_text(e->name, 12, di);
         di = draw_run(' ', 2, di);
-        di = draw_text(si + 12, 6, di);
+        di = draw_text((const char *)e->score, 6, di);
         di = draw_run(' ', 2, di);
-        si += HSC_ENTRY;
 
         di = (di + HSC_LINE) & 0xffff;
         di = hsc_bar(di);                       /* two scan lines between */
@@ -7258,7 +7260,7 @@ void screen_results(const char *dir)
     d = (d + HSC_LINE) & 0xffff;                    /* the heading */
     d = draw_run(' ', 7, d);
     for (const char *p2 = "CLASSEMENT"; *p2; p2++, d = (d + 2) & 0xffff)
-        draw_char((uint8_t)*p2, d);
+        draw_char(*p2, d);
     d = draw_run(' ', 7, d);                        /* 1ac2:0f6e */
 
     d = (d + HSC_LINE) & 0xffff;                    /* 1ac2:0f79, the rule */
@@ -7274,9 +7276,9 @@ void screen_results(const char *dir)
     for (uint32_t k = 0; k < gv.player_count; k++) {  /* 1ac2:0fa4 */
         const hsc_entry_t *rec = &gv.scratch2.hsc_scratch[k];
         d = draw_run(' ', 2, d);
-        d = draw_text(img_off(rec->name), 0x0c, d);
+        d = draw_text(rec->name, 0x0c, d);
         d = draw_run(' ', 2, d);
-        d = draw_text(img_off(rec->score), 6, d);
+        d = draw_text((const char *)rec->score, 6, d);
         d = draw_run(' ', 2, d);
         /* 1ac2:0fca - two scan lines of bar between the rows. */
         d = (d + HSC_LINE) & 0xffff;

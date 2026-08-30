@@ -92,7 +92,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x044b: level_colours(); return 1;
     case 0x10c5: draw_run((uint8_t)(r[R_AX] & 0xff), r[R_DX] & 0xff,
                           r[R_DI]); return 1;
-    case 0x10d1: draw_text(r[R_SI], r[R_DX] & 0xff, r[R_DI]); return 1;
+    case 0x10d1: draw_text((const char *)img_ptr(r[R_SI]), r[R_DX] & 0xff, r[R_DI]); return 1;
     case 0x14a7: draw_cursor(r[R_DI]); return 1;
     case 0x3146: flash_bar(r[R_DX]); return 1;
     case 0x3232: entity_alloc(); return 1;
@@ -241,7 +241,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         walker_draw(r[R_CX] & 0xff);
         return 1;
     case 0x0c64:                        /* draw_char(al, di) */
-        draw_char((uint8_t)(r[R_AX] & 0xff), r[R_DI]);
+        draw_char((char)(r[R_AX] & 0xff), r[R_DI]);
         return 1;
     case 0x1712:                        /* input_keyboard, no arguments */
         input_keyboard();
