@@ -319,6 +319,14 @@ typedef struct __attribute__((packed)) {
 } mark_t;
 ENSURE_SIZE(mark_t, 4);
 
+/* One of the ending's seven groups: where on screen it goes and which tall
+ * sprite it starts from. */
+typedef struct __attribute__((packed)) {
+    uint16_t at;                    /* 0x00 added to 0x34f0 */
+    uint16_t sprite;                /* 0x02 tall_sprite carries this forward */
+} eog_group_t;
+ENSURE_SIZE(eog_group_t, 4);
+
 /* One of the eight capsules a hatch can release: the sprite it animates
  * through and the pace it does it at. */
 typedef struct __attribute__((packed)) {
@@ -652,7 +660,10 @@ typedef struct __attribute__((packed)) {
     uint8_t  game_over_paddle[78];      /* 0xa346 the paddle screen_game_over starts from, the same 0x4d + 1 bytes a kind's phase holds */
     uint8_t  _pad_27[44];
     uint8_t  banner_font[129][6];       /* 0xa3c0 the menu banner's own font, and a different one: eight columns by six rows at one bit a pixel, one byte a row, scrolled a bit at a time. 129 glyphs is what banner_text indexes - its highest is 128, and the last byte of that glyph is the last non-zero byte before the ending's picture */
-    uint8_t  _pad_24[1434];
+    uint8_t  _pad_24[10];
+    uint8_t  eog_overlay[495];          /* 0xa6d0 what screen_end_of_game merges into each band of the saved screen - the same 495 bytes every pass, since the source restarts and only the destination walks */
+    eog_group_t eog_groups[7];          /* 0xa8bf ending exactly where the overlay does */
+    uint8_t  _pad_33[901];
     bonus_kind_t bonus_kinds[8];        /* 0xac60 the eight capsules, and bonus_release picks one with random(8). Thirty-two bytes ending at 0xac80, which is kind 0's own sprite - the table abuts the data it points into */
     uint8_t  _pad_32[21968];
     uint8_t  screen_save[2][8000];      /* 0x10250 the whole screen, and the two halves land **adjacent** here rather than 0x2000 apart: 8000 is what each half of the aperture holds, and the 192 bytes of padding at the end of each are neither saved nor restored. So this is 16,000 bytes and not a copy of the aperture */
@@ -860,6 +871,8 @@ ENSURE_IMG_AT(font, 0x9020);
 ENSURE_IMG_AT(pause_overlay, 0x93e0);
 ENSURE_IMG_AT(game_over_paddle, 0xa346);
 ENSURE_IMG_AT(banner_font, 0xa3c0);
+ENSURE_IMG_AT(eog_overlay, 0xa6d0);
+ENSURE_IMG_AT(eog_groups, 0xa8bf);
 ENSURE_IMG_AT(bonus_kinds, 0xac60);
 ENSURE_IMG_AT(screen_save, 0x10250);
 /* @generated-asserts end */

@@ -6557,10 +6557,8 @@ void screen_define_keys(void)
  * and drawn twice more. Any key stops it; if none came, ending_column runs.
  * ===================================================================== */
 #define EOG_BAND      img_off(gv.scratch2.eog_band)
-#define EOG_PICTURE   0xa6d0
 #define EOG_WIDTH     0x21
 #define EOG_BAND_LEN  0x1ef
-#define EOG_GROUPS    0xa8bf
 #define EOG_BLANK     0xabab
 
 void screen_end_of_game(void)
@@ -6582,7 +6580,7 @@ void screen_end_of_game(void)
         /* The band as it stands, from the saved screen - not from vram. */
         memcpy(gv.scratch2.eog_band, g_image + gv.eog_build_at, EOG_BAND_LEN);
 
-        uint32_t src = EOG_PICTURE, dst = EOG_BAND;
+        uint32_t src = img_off(gv.eog_overlay), dst = EOG_BAND;
         for (int32_t i = 0; i < EOG_BAND_LEN; i++, src++, dst++) {
             uint32_t old = g_image[dst], add = g_image[src], out = old;
             for (int32_t shift = 6; shift >= 0; shift -= 2) {
@@ -6629,13 +6627,10 @@ void screen_end_of_game(void)
     /* The ending. Seven groups, each drawn twice, blanked, and drawn twice
      * more - SI carries forward inside tall_sprite, so every call is the next
      * frame rather than the same one again. */
-    uint32_t bx = EOG_GROUPS;
     int32_t keyed = 0;
-    for (int32_t dh = 7; dh > 0 && !keyed; dh--) {
-        uint32_t at = (0x34f0 + img_w(bx)) & 0xffff;
-        bx += 2;
-        uint32_t sprite = img_w(bx);
-        bx += 2;
+    for (int32_t g = 0; g < 7 && !keyed; g++) {
+        uint32_t at = (0x34f0 + gv.eog_groups[g].at) & 0xffff;
+        uint32_t sprite = gv.eog_groups[g].sprite;
 
         if (tall_sprite(&sprite, at)) { keyed = 1; break; }
         tall_sprite(&sprite, at);       /* no test after the second */
