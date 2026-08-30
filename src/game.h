@@ -623,9 +623,11 @@ typedef struct __attribute__((packed)) {
      * That is the next seam. */
     uint8_t  _pad_22[4773];
     uint8_t  mark_sprite[37][2];        /* 0x6078 the mark drawn at each field position, one word a row. field_marks takes 0x1f rows of it and level_between 0x25 - the same picture, cut short */
-    uint8_t  _pad_26[3283];
-    uint16_t backdrop_table[8];         /* 0x6d95 the level intro's backdrop, by the top three bits of backdrop_phase */
-    uint8_t  _pad_28[2102];
+    uint8_t  _pad_26[3188];
+    uint8_t  intro_feed[19][5];         /* 0x6d36 the five-byte rows level_intro feeds in under the panel, one a pass - nineteen of them, ending exactly at backdrop_table */
+    uint16_t backdrop_table[5];         /* 0x6d95 the level intro's backdrop by phase. **Five**, not eight: the entries are 0x6d9f, 0x6f1f, 0x709f, 0x721f and 0x739f - 0x180 apart, which is one frame - and the three words after them are pixels. backdrop_phase wraps at 0x27, so `phase >> 3` is 0 to 4 and the `& 7` beside it can never reach the rest */
+    uint8_t  backdrop[5][384];          /* 0x6d9f what those five point at: 8 rows of 48, the full 192-pixel width. level_intro's first loop feeds backdrop[0] in 48 bytes at a time, which is the same frame read a row a pass */
+    uint8_t  _pad_28[188];
     uint16_t walker_drop[6];            /* 0x75db the six frames the creature plays once it has walked in, 7 rows of 7 at a fixed spot */
     uint8_t  _pad_29[294];
     uint16_t hatch_open[5];             /* 0x770d the hatch opening */
@@ -835,7 +837,9 @@ ENSURE_IMG_AT(life_sprite, 0x48e7);
 ENSURE_IMG_AT(ball_start_sprite, 0x48fb);
 ENSURE_IMG_AT(paddle_sprites, 0x4903);
 ENSURE_IMG_AT(mark_sprite, 0x6078);
+ENSURE_IMG_AT(intro_feed, 0x6d36);
 ENSURE_IMG_AT(backdrop_table, 0x6d95);
+ENSURE_IMG_AT(backdrop, 0x6d9f);
 ENSURE_IMG_AT(walker_drop, 0x75db);
 ENSURE_IMG_AT(hatch_open, 0x770d);
 ENSURE_IMG_AT(hatch_shut, 0x7717);
