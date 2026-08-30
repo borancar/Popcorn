@@ -1675,7 +1675,7 @@ static void intro_pause(int32_t n)
 void level_intro(void)
 {
     /* The panel scrolls up, a fresh row feeding in at the bottom. */
-    uint32_t si = 0x6d9f;
+    const uint8_t *feed = gv.backdrop[0];
     for (int32_t bl = 8; bl > 0; bl--) {
         /* 1ac2:1ec4. The intro runs *before* the play loop, so io_frame_sync
          * has not started and none of this is compared by anything - the same
@@ -1683,20 +1683,20 @@ void level_intro(void)
         io_frame_sync_extra(SYNC_INTRO);
         scroll_up_band();               /* 1ac2:2109 */
         for (int32_t i = 0; i < 0x18 * 2; i++)
-            g_vram[(0x3ef2 + i) & (CGA_SIZE - 1)] = g_image[si + i];
-        si += 0x18 * 2;
+            g_vram[(0x3ef2 + i) & (CGA_SIZE - 1)] = feed[i];
+        feed += 0x18 * 2;
         io_delay_cycles(0x7d0 * CYCLES_PER_LOOP);
         io_present();
         if (!io_pump())
             return;
     }
-    si = 0x6d36;
+    feed = gv.intro_feed[0];
     for (int32_t bl = 0x13; bl > 0; bl--) {
         io_frame_sync_extra(SYNC_INTRO);        /* 1ac2:1ee0 */
         scroll_up_band();
         for (int32_t i = 0; i < 5; i++)
-            g_vram[(0x3f08 + i) & (CGA_SIZE - 1)] = g_image[si + i];
-        si += 5;
+            g_vram[(0x3f08 + i) & (CGA_SIZE - 1)] = feed[i];
+        feed += 5;
         io_delay_cycles(0x8fc * CYCLES_PER_LOOP);
         io_present();
         if (!io_pump())
@@ -2511,11 +2511,11 @@ void field_backdrop(uint32_t y)
 {
     io_log_random(0x1fc1);              /* tagged, for sidebyside's per-frame list */
     uint32_t di = cga_at(0, y) + BRICK_LEFT;
-    uint32_t si = gv.backdrop_table[(gv.backdrop_phase >> 3) & 7];
+    const uint8_t *src = img_ptr(gv.backdrop_table[(gv.backdrop_phase >> 3) & 7]);
     for (int32_t r = 0; r < 8; r++) {
         for (int32_t b = 0; b < BACKDROP_BYTES; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
-        si += BACKDROP_BYTES;
+            g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
+        src += BACKDROP_BYTES;
         di = cga_next_row(di);
     }
     /* `shr al,1` three times looking for a set bit, then `cmp al,4`: the
@@ -7608,8 +7608,8 @@ void brick_animated(hit_t *hit, ball_t *ball)
     uint32_t piece = was & 0x0f;
 
     /* Remember what this piece turned into, indexed by the new cell value. */
-    uint32_t table = img_w(SEG_14A1 + gv.level_number * 4);
-    uint32_t frame = (img_w(SEG_14A1 + table)
+    uint32_t script = s14a1.level[gv.level_number].script;
+    uint32_t frame = (img_w(SEG_14A1 + script)
                       + (piece << 5)) & 0xffff;
     gv.cell_bitmap[(was + 8) & 0xff] = (uint16_t)frame;
 
