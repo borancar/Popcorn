@@ -3075,9 +3075,9 @@ void bonus_release(const ent_hatch_t *h)
     gv.bonus_live++;
     entity_t *e = entity_alloc();
     e->handler = 0x39fa;
-    ent_bonus_t *b = &e->p.bonus;
-    b->mode = 0;
-    b->steps = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
+    ent_anim_t *b = &e->p.anim;
+    b->arg.move.mode = 0;
+    b->arg.move.steps = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
 
     uint32_t k = game_random(io_ticks(), 8);
     uint32_t di = BONUS_KINDS + k * 4;
@@ -3088,7 +3088,7 @@ void bonus_release(const ent_hatch_t *h)
     uint32_t al = h->x;
     if (al) {
         al = (al - 8) & 0xff;
-        b->mode = 2;
+        b->arg.move.mode = 2;
     }
     b->sprite.x = (uint8_t)al;
     b->sprite.y = h->y;
@@ -3159,7 +3159,7 @@ static uint32_t cell_index(uint32_t y, uint32_t x)
 }
 
 /* 1ac2:3c66  bonus_move_right */
-int32_t bonus_move_right(ent_bonus_t *b, uint32_t *px, uint32_t *py)
+int32_t bonus_move_right(ent_anim_t *b, uint32_t *px, uint32_t *py)
 {
     (void)b;
     uint32_t y = *py, x = *px;
@@ -3175,7 +3175,7 @@ int32_t bonus_move_right(ent_bonus_t *b, uint32_t *px, uint32_t *py)
 }
 
 /* 1ac2:3cf3  bonus_move_left */
-int32_t bonus_move_left(ent_bonus_t *b, uint32_t *px, uint32_t *py)
+int32_t bonus_move_left(ent_anim_t *b, uint32_t *px, uint32_t *py)
 {
     (void)b;
     uint32_t y = *py, x = *px;
@@ -3191,7 +3191,7 @@ int32_t bonus_move_left(ent_bonus_t *b, uint32_t *px, uint32_t *py)
 }
 
 /* 1ac2:3caf  bonus_move_up */
-int32_t bonus_move_up(ent_bonus_t *b, uint32_t *px, uint32_t *py)
+int32_t bonus_move_up(ent_anim_t *b, uint32_t *px, uint32_t *py)
 {
     (void)b;
     uint32_t y = *py, x = *px;
@@ -3219,14 +3219,14 @@ int32_t bonus_move_up(ent_bonus_t *b, uint32_t *px, uint32_t *py)
  * two random() draws that never happened, and every draw after that offset.
  */
 /* 1ac2:3d3c  bonus_move_down */
-int32_t bonus_move_down(ent_bonus_t *b, uint32_t *px, uint32_t *py)
+int32_t bonus_move_down(ent_anim_t *b, uint32_t *px, uint32_t *py)
 {
     uint32_t y = *py, x = *px;
 
     if (y >= 0x78) {                    /* 1ac2:3d80 */
-        b->mode = 4;            /* follow a script from here on */
+        b->arg.move.mode = 4;            /* follow a script from here on */
         b->script = 0x8320;
-        b->steps = (uint8_t)x;
+        b->arg.move.steps = (uint8_t)x;
         (*py)++;
         return 1;
     }
@@ -3250,14 +3250,14 @@ int32_t bonus_move_down(ent_bonus_t *b, uint32_t *px, uint32_t *py)
  */
 #define BONUS_MOVES 0x3447
 
-int32_t bonus_steer(ent_bonus_t *b, uint32_t *px, uint32_t *py)
+int32_t bonus_steer(ent_anim_t *b, uint32_t *px, uint32_t *py)
 {
-    if (b->mode == 4)
+    if (b->arg.move.mode == 4)
         return bonus_script(b, px, py);
 
-    if (--b->steps != 0) {
+    if (--b->arg.move.steps != 0) {
         int32_t moved;
-        switch (b->mode) {
+        switch (b->arg.move.mode) {
         case 0:  moved = bonus_move_right(b, px, py); break;
         case 1:  moved = bonus_move_down(b, px, py);  break;
         case 2:  moved = bonus_move_left(b, px, py);  break;
@@ -3267,12 +3267,12 @@ int32_t bonus_steer(ent_bonus_t *b, uint32_t *px, uint32_t *py)
         if (moved)
             return 1;
     }
-    b->mode = (uint8_t)game_random(io_ticks(), 4);
-    if (b->mode == 1) {
-        b->steps = 0xff;
+    b->arg.move.mode = (uint8_t)game_random(io_ticks(), 4);
+    if (b->arg.move.mode == 1) {
+        b->arg.move.steps = 0xff;
         return 1;
     }
-    b->steps = (uint8_t)game_random(io_ticks(), 0x3d);
+    b->arg.move.steps = (uint8_t)game_random(io_ticks(), 0x3d);
     return 1;
 }
 
@@ -3696,16 +3696,16 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
  */
 void entity_bonus(entity_t *e)
 {
-    uint32_t x = e->p.bonus.sprite.x, y = e->p.bonus.sprite.y;
+    uint32_t x = e->p.anim.sprite.x, y = e->p.anim.sprite.y;
     int32_t draw = 1;
 
     /* The timer byte carries two counters: the low nibble paces the movement
      * and the high nibble the frame. */
-    if (gv.extra_on != 1 && (e->p.bonus.sprite.timer & 0x0f) == 1) {
-        if (!bonus_steer(&e->p.bonus, &x, &y))
+    if (gv.extra_on != 1 && (e->p.anim.sprite.timer & 0x0f) == 1) {
+        if (!bonus_steer(&e->p.anim, &x, &y))
             goto sprite;                /* 1ac2:3a52, the draw */
     }
-    bonus_update(&e->p.bonus.sprite, x, y);             /* 1ac2:3df1 */
+    bonus_update(&e->p.anim.sprite, x, y);             /* 1ac2:3df1 */
 
     if (gv.hit_kind == 0)
         return;                         /* 1ac2:3a24 */
@@ -3727,8 +3727,8 @@ void entity_bonus(entity_t *e)
 
 sprite:
     if (draw)
-        sprite_shift_draw(e->p.bonus.sprite.x, e->p.bonus.sprite.y,
-                          img_w(e->p.bonus.sprite.frame));
+        sprite_shift_draw(e->p.anim.sprite.x, e->p.anim.sprite.y,
+                          img_w(e->p.anim.sprite.frame));
 
 settle:
     if (gv.hit_kind == 0) {       /* 1ac2:3aaa - it reached the bottom */
@@ -7388,13 +7388,13 @@ void demo_input_step(void)
  *
  * The x is clamped to 8..0xb8, which are the same walls everything else uses.
  */
-int32_t bonus_script(ent_bonus_t *b, uint32_t *px, uint32_t *py)
+int32_t bonus_script(ent_anim_t *b, uint32_t *px, uint32_t *py)
 {
     uint32_t si = b->script;
     b->script = (uint16_t)(si + 2);
     uint32_t word = img_w(si);
     uint32_t al = word & 0xff, ah = (word >> 8) & 0xff;
-    uint32_t cl = b->steps;
+    uint32_t cl = b->arg.move.steps;
 
     if (al & 0x80) {                    /* a leftward step */
         uint32_t mag = (uint32_t)(-(int32_t)(int8_t)al) & 0xff;
