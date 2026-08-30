@@ -19,7 +19,21 @@ rules this checks are what keeps those honest:
      being put where a pointer goes.
   3. Reading one must go through a `_ptr` accessor.  A bare `g_image[x]` on
      a stored pointer is the same mistake with the arithmetic inlined.
-  4. What an accessor is called with must be **simple** - a name, a field, a
+  4. Casting one **to an integer** is a smell.  A pointer of the game's is
+     sixteen bits wide by definition, so `(uint16_t)x_ptr` either says nothing
+     or is covering for something else being the wrong width - a local
+     declared uint32_t, most often.  Declare the local uint16_t and the cast
+     goes.  Casting what img_ptr *returns* to a typed C pointer is a different
+     thing and is fine.
+  5. The only pointer constant is `SENTINEL_PTR`.  An address written into a
+     call - `img_ptr(0x6b9c)`, or a #define standing for one - is a place in
+     the image that has not been given a field yet, and naming it is the fix.
+  6. A `_fn` field holds a **routine's** address - something the game calls
+     rather than reads - and only an `_FN` constant or another `_fn` is one.
+     Constants are fine here, unlike for data pointers: a routine's address is
+     fixed in the image and there is nothing to give it a field.  Casting one
+     is the same smell as casting a pointer.
+  7. What an accessor is called with must be **simple** - a name, a field, a
      subscript.  `img_w(table + index * 2)` is doing pointer arithmetic
      without a pointer type: `table` is an array of somethings, and the C
      that means it is `img_w(table[index])`.
@@ -66,7 +80,7 @@ PTR_FUNCS = {"img_ptr", "entity_ptr", "ball_ptr", "hit_ptr", "s14a1_ptr"}
 # pointers are loaded and stored.
 WORD_FUNCS = {"img_w", "s14a1_w", "img_setw"}
 # The other direction.
-OFF_FUNCS = {"img_off"}
+OFF_FUNCS = {"img_off", "cv_off"}
 
 ACCESSORS = PTR_FUNCS | WORD_FUNCS
 
@@ -145,6 +159,22 @@ def struct_fields(paths):
     return names
 
 
+def fn_fields(paths):
+    """Every struct field named `*_fn` - a routine the game calls through."""
+    names = set()
+    for path in paths:
+        src = open(path, "rb").read()
+        tree = Parser(C).parse(src)
+        for n in walk(tree.root_node):
+            if n.type != "field_declaration":
+                continue
+            for sub in walk(n):
+                if sub.type == "field_identifier" \
+                        and text(sub, src).endswith("_fn"):
+                    names.add(text(sub, src))
+    return names
+
+
 def ptr_fields(paths):
     """Every struct field already named `*_ptr`."""
     names = set()
@@ -163,7 +193,7 @@ def ptr_fields(paths):
     return names
 
 
-def check(path, known_ptr_fields, findings, candidates):
+def check(path, known_ptr_fields, known_fn_fields, findings, candidates):
     src = open(path, "rb").read()
     tree = Parser(C).parse(src)
     rel = os.path.relpath(path)
@@ -186,6 +216,13 @@ def check(path, known_ptr_fields, findings, candidates):
                         "%s(%s) - the offset is computed in the call; give "
                         "the thing it indexes a type and subscript it"
                         % (name, text(arg, src)))
+                if is_constant(arg, src):
+                    add("pointer-constant", arg,
+                        "%s(%s) - the only pointer constant this program has "
+                        "is SENTINEL_PTR. An address written into a call is a "
+                        "field of the struct that has not been named yet"
+                        % (name, text(arg, src)))
+
                 inner = inner_word_call(arg, src)
                 if name in PTR_FUNCS and inner is not None:
                     add("pointer-to-pointer", n,
@@ -205,9 +242,23 @@ def check(path, known_ptr_fields, findings, candidates):
             rhs = n.child_by_field_name("right")
             if lhs is None or rhs is None:
                 continue
+            op = n.child_by_field_name("operator")
+            compound = op is not None and text(op, src) != "="
+
             field = root_name(lhs, src)
+            if field in known_fn_fields:
+                rname = root_name(rhs, src)
+                ok = rname is not None and (rname.endswith("_FN")
+                                            or rname.endswith("_fn"))
+                if not ok:
+                    add("routine-from-elsewhere", n,
+                        "%s = %s - a `_fn` holds a routine's address, and the "
+                        "only things that are one are an _FN constant or "
+                        "another _fn" % (text(lhs, src), text(rhs, src)))
+
             if field in known_ptr_fields:
-                how = classify_store(rhs, field, known_ptr_fields, src)
+                how = ("advanced" if compound
+                       else classify_store(rhs, field, known_ptr_fields, src))
                 if how == "made":
                     pass                # img_off: a C pointer written down
                 elif how == "copied":
@@ -216,6 +267,9 @@ def check(path, known_ptr_fields, findings, candidates):
                         "rather than made with img_off. Legitimate, and worth "
                         "seeing: it is where one of its pointers comes from"
                         % (text(lhs, src), text(rhs, src)))
+                elif how == "terminator":
+                    pass                # 0xffff ends a chain. Zero cannot:
+                                        # zero is a real offset here
                 elif how == "advanced":
                     add("pointer-advanced", n,
                         "%s = %s - a cursor stepped. The arithmetic is on an "
@@ -226,6 +280,34 @@ def check(path, known_ptr_fields, findings, candidates):
                     add("store-without-img_off", n,
                         "%s = %s - a plain number put where one of the game's "
                         "pointers goes" % (text(lhs, src), text(rhs, src)))
+
+        if n.type == "cast_expression":
+            val0 = n.child_by_field_name("value")
+            if val0 is not None:
+                fnname = next((text(k, src) for k in walk(val0)
+                               if k.type in ("identifier", "field_identifier")
+                               and (text(k, src).endswith("_fn")
+                                    or text(k, src).endswith("_FN"))), None)
+                if fnname:
+                    add("cast-of-a-routine", n,
+                        "%s - a routine's address has the width the game gave "
+                        "it; casting it says nothing" % text(n, src))
+
+            typ = n.child_by_field_name("type")
+            to_pointer = typ is not None and any(
+                k.type in ("pointer_declarator", "abstract_pointer_declarator")
+                for k in walk(typ))
+            val = n.child_by_field_name("value")
+            if val is not None and not to_pointer:
+                who = next((text(k, src) for k in walk(val)
+                            if k.type in ("identifier", "field_identifier")
+                            and text(k, src).endswith("_ptr")), None)
+                if who:
+                    add("cast-of-a-pointer", n,
+                        "%s - one of the game's pointers is 16 bits wide by "
+                        "definition; a cast either says nothing or is hiding "
+                        "that something else is the wrong width"
+                        % text(n, src))
 
         if n.type == "subscript_expression":
             base = n.child_by_field_name("argument")
@@ -239,6 +321,28 @@ def check(path, known_ptr_fields, findings, candidates):
                 add("read-without-ptr", n,
                     "g_image[%s] - reading through one of the game's "
                     "pointers without a _ptr accessor" % text(idx, src))
+
+
+def is_constant(node, src):
+    """A literal address, or a #define standing for one.
+
+    SENTINEL_PTR is the exception and the only one: it is what ends a chain
+    and it is not an address.  Everything else written as a constant where a
+    pointer goes is a place in the image with no name.
+    """
+    while node.type in ("cast_expression", "parenthesized_expression"):
+        kids = [c for c in node.named_children
+                if c.type not in ("type_descriptor", "primitive_type",
+                                  "type_identifier", "sized_type_specifier")]
+        if not kids:
+            return False
+        node = kids[0]
+    if node.type == "number_literal":
+        return True
+    if node.type == "identifier":
+        name = text(node, src)
+        return name != "SENTINEL_PTR" and name.isupper() and "_" in name + "_"
+    return False
 
 
 def inner_word_call(node, src):
@@ -296,6 +400,10 @@ def classify_store(rhs, field, known, src):
                      node.child_by_field_name("right")):
             if side is not None and root_name(side, src) == field:
                 return "advanced"
+    lit = text(node, src)
+    if lit == "SENTINEL_PTR" or (node.type == "number_literal"
+                                 and lit.lower() in ("0xffff", "65535")):
+        return "terminator"             # what ends a chain, not a pointer
     who = root_name(node, src)
     if who and (who.endswith("_ptr") or who in known):
         return "copied"
@@ -335,16 +443,19 @@ def main():
         raise SystemExit("no such file: " + ", ".join(missing))
 
     known = ptr_fields(a.files)
+    known_fn = fn_fields(a.files)
     fields = struct_fields(a.files)
     findings, candidates = [], {}
     for f in a.files:
-        check(f, known, findings, candidates)
+        check(f, known, known_fn, findings, candidates)
 
     if not a.candidates:
         by_rule = {}
         for rule, path, line, msg in findings:
             by_rule.setdefault(rule, []).append((path, line, msg))
-        order = ["store-without-img_off", "compound-offset",
+        order = ["store-without-img_off", "routine-from-elsewhere",
+                 "cast-of-a-routine", "pointer-constant",
+                 "cast-of-a-pointer", "compound-offset",
                  "pointer-advanced", "pointer-from-data",
                  "pointer-to-pointer"]
         for rule in sorted(by_rule, key=lambda r: (order.index(r)
@@ -375,8 +486,8 @@ def main():
            "not the rename, but each one is a pointer the routine is "
            "holding in an integer", local_side)
 
-    print("\n%d flagged, %d fields already named _ptr"
-          % (len(findings), len(known)))
+    print("\n%d flagged, %d fields named _ptr, %d named _fn"
+          % (len(findings), len(known), len(known_fn)))
     if a.strict and findings:
         return 1
     return 0
