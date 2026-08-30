@@ -18,6 +18,12 @@ dependencies = [
     "unicorn",
     "pygame-ce",
     "numpy",
+
+    # check_pointers.py parses game.c with a real C grammar. A regex over
+    # `img_w(` cannot tell an argument from the expression inside it, and
+    # telling those apart is the whole job.
+    "tree-sitter",
+    "tree-sitter-c",
 ]
 
 # Scripts in a directory, not a package: there is nothing here to install.
