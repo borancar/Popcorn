@@ -509,24 +509,22 @@ void build_shifted_sprites(void)
 
 /* 1ac2:4d96  load_high_scores
  *
- * Opens the name at [0x141c] - "popcorn.hsc", with the drive letter the
+ * Opens gv.hsc_file - "popcorn.hsc", with the drive letter the
  * program is running from patched into [0x141b] - and reads 0xb4 bytes into
- * [0x3e42]. A missing file is not an error: the table keeps whatever the
+ * gv.hsc. A missing file is not an error: the table keeps whatever the
  * image shipped with, which is a full set of default entries.
  */
-#define HSC_NAME   0x141c
-#define HSC_TABLE  0x3e42
-#define HSC_LEN     0xb4
+#define HSC_LEN     0xb4                /* ten entries; the eleventh is not saved */
 
 void load_high_scores(const char *dir)
 {
     char path[512];
-    const char *name = (const char *)(g_image + HSC_NAME);
+    const char *name = gv.hsc_file;
     snprintf(path, sizeof path, "%s%s", dir ? dir : "", name);
     FILE *f = fopen(path, "rb");
     if (!f)
         return;
-    fread(g_image + HSC_TABLE, 1, HSC_LEN, f);
+    fread(gv.hsc, 1, HSC_LEN, f);
     fclose(f);
 }
 
@@ -860,7 +858,7 @@ static void menu_redraw(void)
     gv.particle_count = (uint16_t)(0x50);
     menu_particles_init(0xb800);
     gv.banner_state = 2;
-    gv.banner_ptr = (uint16_t)(0x3f1e);
+    gv.banner_ptr = (uint16_t)img_off(gv.banner_text);
 }
 
 void game_main(const char *dir, const char *levels)
@@ -885,21 +883,22 @@ void game_main(const char *dir, const char *levels)
     read_speed_setting(0);
     /* `POPCORN POPTAB` loads POPTAB.PPC over the built-in table. The original
      * builds the name from the PSP command tail at 1ac2:0157 - copy it to
-     * 0x1428, skip a leading dot, and append ".PPC" unless it already has an
+     * gv.level_file, skip a leading dot, and append ".PPC" unless it already has
+     * an
      * extension - and calls the loader at 1ac2:0187 before anything is drawn.
      * Reading the tail is the machine's job and is not transcribed, so the
      * name is built here from --cmdline. */
     if (levels && *levels) {
-        char *name = (char *)(g_image + 0x1428);
+        char *name = gv.level_file;
         size_t n = 0;
-        while (levels[n] && n < 60) {
+        while (levels[n] && n < sizeof gv.level_file - 5) {
             name[n] = levels[n];
             n++;
         }
         name[n] = 0;
         /* 1ac2:0160 - leading dots are stepped over when looking for an
          * extension, and stay in the name that is opened: the loader at
-         * 1ac2:08c8 opens 0x1428 itself. So `.LTF` becomes `.LTF.PPC` rather
+         * 1ac2:08c8 opens gv.level_file itself. So `.LTF` becomes `.LTF.PPC` rather
          * than being taken as already extended. It fails either way; matching
          * it costs two lines and means the name-building is the original's
          * rather than nearly it. */
@@ -2498,10 +2497,9 @@ void extra_life(void)
         return;
     uint32_t n = (gv.lives - 1) & 0xff;
     uint32_t di = 0x3a7c + (n & 0xfc) + (n & 3) * 0xf0;
-    uint32_t si = 0x48e7;
     for (int32_t r = 0; r < 5; r++) {
         for (int32_t b = 0; b < 4; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + r * 4 + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] = gv.life_sprite[r][b];
         /* `sub di, 4` only puts back what `rep movsw` advanced, and what
          * follows is the ordinary step to the next scan line. */
         di = cga_next_row(di);
@@ -2721,7 +2719,6 @@ void level_draw(void)
 #define PANEL_NAME    0x86ee            /* row 9, byte 2 */
 #define PANEL_SCORE   0x8962            /* row 31, byte 14 */
 #define PANEL_LIVES   0x8cc0            /* row 62, byte 8 */
-#define LIFE_SPRITE   0x48e7
 #define PANEL_ON_SCREEN 0x3f24          /* bottom-right, and it grows upwards */
 /* `cmp bx, 0x5e` - the reveal runs for bx = 1..0x5d, ninety-three passes.
  * Ninety-two leaves the whole panel one scan line lower than it belongs, and
@@ -2765,7 +2762,7 @@ void panel_draw(void)
         for (int32_t r = 0; r < 5; r++, d += PANEL_STRIDE) {
             for (int32_t b = 0; b < 4; b++)
                 g_image[d + b] = lit
-                    ? g_image[LIFE_SPRITE + r * 4 + b] : 0;
+                    ? gv.life_sprite[r][b] : 0;
         }
     }
 
@@ -4803,8 +4800,9 @@ uint8_t screen_player_names(void)
 /* ========================================================================
  * 1ac2:1354  frame_band
  *
- * One horizontal band of the playfield surround: three bytes from 0x48d2
- * chosen by cs:[0x5c6d], 0x17 words of `ax`, then three more from 0x48bd. The
+ * One horizontal band of the playfield surround: one row of
+ * frame_corner_left chosen by cs:[0x5c6d], 0x17 words of `ax`, then the same
+ * row of frame_corner_right. The
  * counter advances every call, so consecutive bands use different corner
  * pieces and the border does not repeat.
  * ===================================================================== */
@@ -4812,16 +4810,16 @@ uint8_t screen_player_names(void)
 
 uint32_t frame_band(uint32_t di, uint32_t fill)
 {
-    uint32_t n = g_image[FRAME_PHASE] * 3;
+    uint32_t phase = g_image[FRAME_PHASE];
     for (int32_t i = 0; i < 3; i++)
-        g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[0x48d2 + n + i];
+        g_vram[(di + i) & (CGA_SIZE - 1)] = gv.frame_corner_left[phase][i];
     di += 3;
     for (int32_t i = 0; i < 0x17; i++, di += 2) {
         g_vram[di & (CGA_SIZE - 1)] = (uint8_t)fill;
         g_vram[(di + 1) & (CGA_SIZE - 1)] = (uint8_t)(fill >> 8);
     }
     for (int32_t i = 0; i < 3; i++)
-        g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[0x48bd + n + i];
+        g_vram[(di + i) & (CGA_SIZE - 1)] = gv.frame_corner_right[phase][i];
     g_image[FRAME_PHASE]++;
     return di + 3;
 }
@@ -4930,21 +4928,19 @@ void panel_reveal(void)
     }
 
     /* And the corner pieces down each side. `si` is set once, before the
-     * loop, and `rep movsb` carries it forward - so these are two 21-byte
-     * sprites read straight through, three bytes per row, not one row drawn
-     * seven times. */
+     * loop, and `rep movsb` carries it forward - so these are the two 21-byte
+     * tables read straight through, three bytes per row, not one row drawn
+     * seven times. frame_band takes a single row out of the same two. */
     di = 0;
-    uint32_t si = 0x48d2;
     for (int32_t r = 0; r < 7; r++) {
         for (int32_t i = 0; i < 3; i++)
-            g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[si++];
+            g_vram[(di + i) & (CGA_SIZE - 1)] = gv.frame_corner_left[r][i];
         di = cga_next_row(di);
     }
     di = 0x31;
-    si = 0x48bd;
     for (int32_t r = 0; r < 7; r++) {
         for (int32_t i = 0; i < 3; i++)
-            g_vram[(di + i) & (CGA_SIZE - 1)] = g_image[si++];
+            g_vram[(di + i) & (CGA_SIZE - 1)] = gv.frame_corner_right[r][i];
         di = cga_next_row(di);
     }
 }
@@ -5315,13 +5311,12 @@ void demo_start(void)
 #define ARROW_MOUSE 0x0bfe
 #define ARROW_KEYS  0x088e
 
-/* 1ac2:492f  arrow_head - nine rows of five bytes from 0x4890 */
+/* 1ac2:492f  arrow_head - the nine rows of arrow_head_sprite */
 void arrow_head(uint32_t di)
 {
-    uint32_t si = 0x4890;
     for (int32_t r = 0; r < 9; r++) {
         for (int32_t b = 0; b < 5; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[si + r * 5 + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] ^= gv.arrow_head_sprite[r][b];
         di = cga_next_row(di);
     }
 }
@@ -5517,7 +5512,7 @@ uint32_t hsc_bubble(uint32_t si, uint32_t di)
 /* 1ac2:4d37  hsc_sort - the whole table, once per player who just finished */
 void hsc_sort(void)
 {
-    uint32_t di = 0x3ef6, si = HSC_SCRATCH;
+    uint32_t di = img_off(&gv.hsc[10]), si = HSC_SCRATCH;
     for (uint32_t n = gv.player_count; n > 0; n--) {
         memcpy(g_image + hsc_bubble(si, di), g_image + si, 0x12);
         si += 0x12;
@@ -5525,16 +5520,16 @@ void hsc_sort(void)
 }
 
 /* 1ac2:4dbb  hsc_save - write the table back to popcorn.hsc, 0xb4 bytes from
- * 0x3e42. The drive check at 0x4e04 comes first, and a failure is silent. */
+ * gv.hsc. The drive check at 0x4e04 comes first, and a failure is silent. */
 void hsc_save(const char *dir)
 {
     char path[512];
     snprintf(path, sizeof path, "%s%s", dir ? dir : "",
-             (const char *)(g_image + HSC_NAME));
+             gv.hsc_file);
     FILE *f = fopen(path, "wb");
     if (!f)
         return;
-    fwrite(g_image + HSC_TABLE, 1, HSC_LEN, f);
+    fwrite(gv.hsc, 1, HSC_LEN, f);
     fclose(f);
 }
 
@@ -6441,8 +6436,7 @@ int32_t level_load_file(const char *dir)
      * file from the current directory, because in DOS the game and its files
      * were the current directory; here one directory holds the lot and it
      * does not move when the shell does. */
-    const char *name = (const char *)(g_image + 0x1428);
-    FILE *f = ppc_open(dir, name);
+    FILE *f = ppc_open(dir, gv.level_file);
     if (!f) {
         fputs("****** Fichier des Tableaux non trouve ******\n", stderr);
         return 0;
@@ -6522,7 +6516,7 @@ void screen_high_scores(void)
 
     di = (di + HSC_LINE) & 0xffff;
 
-    uint32_t si = HSC_TABLE;
+    uint32_t si = img_off(gv.hsc);
     for (int32_t row = 0; row < HSC_COUNT; row++) {
         di = draw_run(' ', 2, di);
         di = draw_text(si, 12, di);

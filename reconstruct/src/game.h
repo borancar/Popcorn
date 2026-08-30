@@ -299,6 +299,14 @@ typedef struct __attribute__((packed)) {
 } paddle_rows_t;
 ENSURE_SIZE(paddle_rows_t, 14);
 
+/* One line of the high-score table. The score is six ASCII digits and is
+ * compared as digits, which is why hsc_bubble can `scasb` it. */
+typedef struct __attribute__((packed)) {
+    char    name[12];               /* 0x00 */
+    uint8_t score[6];               /* 0x0c */
+} hsc_entry_t;
+ENSURE_SIZE(hsc_entry_t, 0x12);
+
 /* One corner's probe of the brick field. probe_cell_at fills four of these,
  * one per corner of the ball, and ball_bricks reads them to decide which way
  * it leaves and which bricks were struck. */
@@ -389,7 +397,9 @@ typedef struct __attribute__((packed)) {
     uint16_t level_num_text;            /* 0x1410 the level number as two ASCII digits, tens in the low byte */
     uint8_t  _pad_04[1];
     uint16_t particle_count;            /* 0x1413 the menu's fountain */
-    uint8_t  _pad_05[83];
+    uint8_t  _pad_05[7];
+    char     hsc_file[12];              /* 0x141c "popcorn.hsc", the name the table is saved under */
+    char     level_file[64];            /* 0x1428 the .PPC to load, built from the command tail. 64 is what there is: walker_anim follows it */
     uint16_t walker_anim;               /* 0x1468 a pointer into the walking figure's frame list, stepped by two */
     uint8_t  _pad_06[27];
     uint8_t  speed_step;                /* 0x1485 the ball's move-this-frame counter, reloaded from speed_limit */
@@ -510,14 +520,18 @@ typedef struct __attribute__((packed)) {
     uint8_t  hatch_y;                   /* 0x33f4 */
     uint8_t  _pad_18[90];
     player_t players[9];                /* 0x344f nine of them - screen_player_names stops at nine, and a tenth record would run into player_count at 0x3f08 */
-    uint8_t  _pad_19[198];
+    hsc_entry_t hsc[11];                /* 0x3e42 the high-score table. **Eleven**, not ten: only ten are written to popcorn.hsc, and the eleventh is the slot hsc_sort starts its cursor at and hsc_bubble compares the incoming record against. Eleven of 0x12 is 198, exactly the room there is before player_count */
     uint8_t  player_count;              /* 0x3f08 how many were entered */
     uint8_t  live_count;                /* 0x3f09 how many are still in. next_player hands over while this is more than one */
     uint8_t  cur_player;                /* 0x3f0a */
     char     cheat_text[16];            /* 0x3f0b "LACRAL software\r" - the expected keys, the return being the last of them */
     uint8_t  cheat_done;                /* 0x3f1b set when the whole of it has been typed; the menu tests this */
     uint16_t cheat_at;                  /* 0x3f1c how far along cheat_text the typing has got, as an image offset */
-    uint8_t  _pad_20[2525];
+    uint8_t  banner_text[2418];         /* 0x3f1e the menu's scrolling text - the authors' message, in the game's own character encoding rather than ASCII, ended by a zero. banner_ptr walks it, and the menu starts the demo when it reaches the end */
+    uint8_t  arrow_head_sprite[9][5];   /* 0x4890 the menu arrow's head, XORed in by arrow_head */
+    uint8_t  frame_corner_right[7][3];  /* 0x48bd the right-hand corner pieces of the playfield surround */
+    uint8_t  frame_corner_left[7][3];   /* 0x48d2 and the left. Read two ways: field_backdrop draws all seven rows straight down each side, and frame_band takes the one row its phase names, so consecutive bands differ and the border does not repeat */
+    uint8_t  life_sprite[5][4];         /* 0x48e7 the spare-life marker in the panel */
     uint8_t  ball_start_sprite[8];      /* 0x48fb the four words a ball's `sprite` starts as, copied into balls[0] when a level begins */
     uint8_t  paddle_sprites[4][4][0x4d];/* 0x4903 the paddle images: four sets, and within each the four pixel phases. Only phase 0 of each is in the file - build_shifted_sprites makes the other three at startup, which is why they are consecutive and why `sprite + (x & 3) * 0x4d` indexes them */
 } game_vars;
@@ -546,6 +560,8 @@ ENSURE_IMG_AT(extra_at, 0x13d3);
 ENSURE_IMG_AT(name_index, 0x13e9);
 ENSURE_IMG_AT(level_num_text, 0x1410);
 ENSURE_IMG_AT(particle_count, 0x1413);
+ENSURE_IMG_AT(hsc_file, 0x141c);
+ENSURE_IMG_AT(level_file, 0x1428);
 ENSURE_IMG_AT(walker_anim, 0x1468);
 ENSURE_IMG_AT(speed_step, 0x1485);
 ENSURE_IMG_AT(speed_limit, 0x1486);
@@ -620,12 +636,18 @@ ENSURE_IMG_AT(bonus_live, 0x33d6);
 ENSURE_IMG_AT(hatch_x, 0x33f3);
 ENSURE_IMG_AT(hatch_y, 0x33f4);
 ENSURE_IMG_AT(players, 0x344f);
+ENSURE_IMG_AT(hsc, 0x3e42);
 ENSURE_IMG_AT(player_count, 0x3f08);
 ENSURE_IMG_AT(live_count, 0x3f09);
 ENSURE_IMG_AT(cur_player, 0x3f0a);
 ENSURE_IMG_AT(cheat_text, 0x3f0b);
 ENSURE_IMG_AT(cheat_done, 0x3f1b);
 ENSURE_IMG_AT(cheat_at, 0x3f1c);
+ENSURE_IMG_AT(banner_text, 0x3f1e);
+ENSURE_IMG_AT(arrow_head_sprite, 0x4890);
+ENSURE_IMG_AT(frame_corner_right, 0x48bd);
+ENSURE_IMG_AT(frame_corner_left, 0x48d2);
+ENSURE_IMG_AT(life_sprite, 0x48e7);
 ENSURE_IMG_AT(ball_start_sprite, 0x48fb);
 ENSURE_IMG_AT(paddle_sprites, 0x4903);
 /* @generated-asserts end */
