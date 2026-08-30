@@ -1,0 +1,13 @@
+# clangd formats on save by default, and its LLVM style is not this project's:
+# it reindents to two spaces, moves every brace and sorts the includes. That
+# rewrote all of game.c once.
+#
+# Formatting is not cosmetic here. The struct overlays line their field
+# comments up in columns so an offset can be read down the page, the tables in
+# the block comments are drawn by hand, and a routine is meant to sit next to
+# the disassembly it came from. A reformat also buries real changes: one pass
+# turned a 57-line diff into a 10,129-line one.
+#
+# So: off. Match the surrounding code by hand.
+DisableFormat: true
+SortIncludes: Never

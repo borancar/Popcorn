@@ -1311,7 +1311,7 @@ uint32_t pixel_xor(uint32_t x, uint32_t y);        /* 1ac2:30dd */
 void shot_xor(uint32_t x, uint32_t y);             /* 1ac2:306b */
 void bonus_hits_ball(const ent_sprite_t *s, const ball_t *ball);  /* 1ac2:3f20 */
 void entity_bonus(ent_anim_t *b);   /* 1ac2:39fa */
-void entity_unknown(uint32_t bx);
+void entity_unknown(entity_t *e);
 void entity_multiball(void);  /* 1ac2:3717 */
 void entity_unlink(uint32_t node);/* 1ac2:3257 */
 entity_t *entity_alloc(void);      /* 1ac2:3232 */
@@ -1337,7 +1337,7 @@ int32_t  bonus_steer(ent_anim_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3bf7 *
 int32_t  bonus_script(ent_anim_t *b, uint32_t *px, uint32_t *py); /* 1ac2:3c35 */
 void demo_input_step(void);       /* 1ac2:1a6f */
 void drop_duplicate_hits(void);   /* 1ac2:27b7 */
-uint32_t hsc_bubble(uint32_t si, uint32_t di); /* 1ac2:4d5d */
+hsc_entry_t *hsc_bubble(const hsc_entry_t *a, hsc_entry_t *b); /* 1ac2:4d5d */
 void game_input(void);            /* calls whichever routine [0x2d45] names */
 void io_mouse_warp(uint32_t x, uint32_t y);
 uint32_t io_ticks(void);
