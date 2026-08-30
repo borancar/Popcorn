@@ -136,17 +136,17 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * heart of the game - what happens when the ball meets a cell - could not
      * be checked at all. SI is the hit record and BP the ball, or zero when
      * something other than a ball did the hitting. */
-    case 0x28cb: brick_1(r[R_SI], ball_at(r[R_BP])); return 1;
-    case 0x2985: brick_2(r[R_SI], ball_at(r[R_BP])); return 1;
-    case 0x2a3f: brick_3(r[R_SI], ball_at(r[R_BP])); return 1;
-    case 0x3221: brick_solid(r[R_SI], ball_at(r[R_BP])); return 1;
-    case 0x2a73: brick_5(r[R_SI], ball_at(r[R_BP])); return 1;
-    case 0x2ab4: brick_6(r[R_SI], ball_at(r[R_BP])); return 1;
-    case 0x2af5: brick_7(r[R_SI], ball_at(r[R_BP])); return 1;
-    case 0x2b36: brick_8(r[R_SI], ball_at(r[R_BP])); return 1;
-    case 0x2b9d: brick_9(r[R_SI], ball_at(r[R_BP])); return 1;
-    case 0x2c59: brick_10(r[R_SI], ball_at(r[R_BP])); return 1;
-    case 0x2ccd: brick_animated(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x28cb: brick_1(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
+    case 0x2985: brick_2(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
+    case 0x2a3f: brick_3(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
+    case 0x3221: brick_solid(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
+    case 0x2a73: brick_5(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
+    case 0x2ab4: brick_6(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
+    case 0x2af5: brick_7(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
+    case 0x2b36: brick_8(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
+    case 0x2b9d: brick_9(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
+    case 0x2c59: brick_10(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
+    case 0x2ccd: brick_animated(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
     case 0x3aee: entity_sparkle(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x3b2a: entity_crumble(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x390d: entity_hatch(&entity_at(r[R_BX])->p.hatch); return 1;
@@ -167,7 +167,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x2187: draw_paddle_shifted(r[R_SI]); return 1;
     case 0x2e1e: g_result = ball_on_paddle(ball_at(r[R_SI])); return 1;
     case 0x2ee3: laser_fire(); return 1;
-    case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, r[R_SI]);
+    case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, hit_at(r[R_SI]));
                  return 1;
     case 0x3273: entity_capsule(&entity_at(r[R_BX])->p.fall); return 1;
     case 0x3561: entity_popup(&entity_at(r[R_BX])->p.fall); return 1;
@@ -196,7 +196,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x0598: field_marks(); return 1;
     case 0x0911: panel_reveal(); return 1;
     case 0x1354: frame_band(r[R_DI], r[R_AX]); return 1;
-    case 0x2d68: brick_11(r[R_SI], ball_at(r[R_BP])); return 1;
+    case 0x2d68: brick_11(hit_at(r[R_SI]), ball_at(r[R_BP])); return 1;
     case 0x3d95: bonus_spawn(); return 1;
     case 0x0cc5: play_prepare(); return 1;
     case 0x1509: demo_start(); return 1;

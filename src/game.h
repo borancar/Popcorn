@@ -287,6 +287,26 @@ static inline entity_t *entity_of(void *arm)
     return (entity_t *)((uint8_t *)arm - offsetof(entity_t, p));
 }
 
+/* One corner's probe of the brick field. probe_cell_at fills four of these,
+ * one per corner of the ball, and ball_bricks reads them to decide which way
+ * it leaves and which bricks were struck. */
+typedef struct __attribute__((packed)) {
+    uint16_t cell;          /* 0x00 the cell's image address, 0 for no brick */
+    union {                 /* 0x02 the brick's centre. Written as two bytes
+                             * and compared as one word at 1ac2:27b7, which is
+                             * what makes "the same brick" a single compare */
+        struct { uint8_t x, y; };
+        uint16_t centre;
+    };
+} hit_t;
+ENSURE_SIZE(hit_t, 4);
+
+/* A probe slot by its image offset, for the same reason as ball_at. */
+static inline hit_t *hit_at(uint32_t off)
+{
+    return (hit_t *)(g_image + off);
+}
+
 /* A ball by its image offset, for the routines that still carry one because
  * the original passed it in a register. */
 static inline ball_t *ball_at(uint32_t off)
@@ -399,7 +419,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  net_timer;                 /* 0x2e84 its redraw counter, reloaded with 0xc8 */
     uint16_t net_pos;                   /* 0x2e85 where it is drawn */
     uint16_t extra_pos;                 /* 0x2e87 */
-    uint8_t  _pad_11[16];
+    hit_t    hits[4];                   /* 0x2e89 the ball's four corners, in the order probe_cell_at fills them: top-left, top-right, bottom-right, bottom-left */
     uint16_t hit_dirs[4];               /* 0x2e99 the four directions a brick hit can send the ball, indexed by which slot matched */
     ball_t   balls[3];                  /* 0x2ea1 the ball pool. **Three**, not four: 0x2ea1 + 3*0x1e ends exactly where backdrop_phase begins, and every loop over it is i < 3. BALL_COUNT said 4 and was never used */
     uint8_t  backdrop_phase;            /* 0x2efb the level intro's reveal, counted by kernel zero's timer */
@@ -520,6 +540,7 @@ ENSURE_IMG_AT(paddle_prev_x, 0x2e55);
 ENSURE_IMG_AT(hold_offset, 0x2e56);
 ENSURE_IMG_AT(ball_alive, 0x2e73);
 ENSURE_IMG_AT(hit_count, 0x2e74);
+ENSURE_IMG_AT(hits, 0x2e89);
 ENSURE_IMG_AT(caught, 0x2e75);
 ENSURE_IMG_AT(hold_timer, 0x2e76);
 ENSURE_IMG_AT(game_over, 0x2e78);
@@ -871,27 +892,27 @@ int32_t  score_before(const uint8_t *a, uint32_t di); /* 1ac2:108c */
 void ball_after(ball_t *b);   /* 1ac2:247f */
 int32_t  ball_after_endgame(ball_t *b);  /* 1ac2:45a1 */
 void ball_bricks(ball_t *b);  /* 1ac2:254d */
-void brick_hit(uint32_t slot, uint32_t cell, ball_t *ball);
+void brick_hit(hit_t *hit, uint32_t cell, ball_t *ball);
 void xor_sprite_16xn(uint32_t x, uint32_t y, uint32_t src, uint32_t rows); /* 1ac2:40f2 */
-void brick_1(uint32_t slot, ball_t *ball);     /* 1ac2:28cb */
-void brick_2(uint32_t slot, ball_t *ball);     /* 1ac2:2985 */
-void brick_3(uint32_t slot, ball_t *ball);     /* 1ac2:2a3f */
-void brick_solid(uint32_t slot, ball_t *ball);       /* 1ac2:3221 */
-void brick_animated(uint32_t slot, ball_t *ball);   /* 1ac2:2ccd */
+void brick_1(hit_t *hit, ball_t *ball);     /* 1ac2:28cb */
+void brick_2(hit_t *hit, ball_t *ball);     /* 1ac2:2985 */
+void brick_3(hit_t *hit, ball_t *ball);     /* 1ac2:2a3f */
+void brick_solid(hit_t *hit, ball_t *ball);       /* 1ac2:3221 */
+void brick_animated(hit_t *hit, ball_t *ball);   /* 1ac2:2ccd */
 void entity_anim_brick(ent_brick_t *a);                 /* 1ac2:3abf */
 void draw_anim_cell(uint32_t si, uint32_t x, uint32_t y); /* 1ac2:3bac */
-void brick_5(uint32_t slot, ball_t *ball);     /* 1ac2:2a73 */
-void brick_6(uint32_t slot, ball_t *ball);     /* 1ac2:2ab4 */
-void brick_7(uint32_t slot, ball_t *ball);     /* 1ac2:2af5 */
-void brick_8(uint32_t slot, ball_t *ball);     /* 1ac2:2b36 */
-void brick_9(uint32_t slot, ball_t *ball);     /* 1ac2:2b9d */
+void brick_5(hit_t *hit, ball_t *ball);     /* 1ac2:2a73 */
+void brick_6(hit_t *hit, ball_t *ball);     /* 1ac2:2ab4 */
+void brick_7(hit_t *hit, ball_t *ball);     /* 1ac2:2af5 */
+void brick_8(hit_t *hit, ball_t *ball);     /* 1ac2:2b36 */
+void brick_9(hit_t *hit, ball_t *ball);     /* 1ac2:2b9d */
 void entity_soften(ent_anim_t *a);      /* 1ac2:365e */
 void entity_repeat(ent_anim_t *a);      /* 1ac2:366f */
 void entity_plain(ent_anim_t *a);       /* 1ac2:3696 */
 void entity_ball_arrive(ent_anim_t *a); /* 1ac2:36a1 */
 void entity_cells_timer(ent_cells_t *a); /* 1ac2:36f6 */
-void brick_10(uint32_t slot, ball_t *ball);    /* 1ac2:2c59 */
-void brick_11(uint32_t slot, ball_t *ball);    /* 1ac2:2d68 */
+void brick_10(hit_t *hit, ball_t *ball);    /* 1ac2:2c59 */
+void brick_11(hit_t *hit, ball_t *ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:3b64 */
 void score_add(void);             /* 1ac2:413d */
 void extra_life(void);            /* 1ac2:318b */
@@ -914,7 +935,7 @@ void draw_paddle_raw(uint32_t src);      /* 1ac2:22a9 */
 void draw_paddle_shifted(uint32_t src);  /* 1ac2:2187 */
 void ball_paddle(ball_t *b);  /* 1ac2:2316 */
 void laser_fire(void);            /* 1ac2:2ee3 */
-void probe_cell_at(uint32_t x, uint32_t y, uint32_t slot); /* 1ac2:2755 */
+void probe_cell_at(uint32_t x, uint32_t y, hit_t *hit);    /* 1ac2:2755 */
 void play_teardown(void);         /* 1ac2:41d4 */
 void entity_call(entity_t *e);  /* the call at 1ac2:1b5e */
 void entity_capsule(ent_fall_t *f); /* 1ac2:3273 */

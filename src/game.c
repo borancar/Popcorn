@@ -2055,25 +2055,27 @@ void ball_paddle(ball_t *b)
  * A hit records the cell's address in the slot and the brick's centre after
  * it, and counts itself in [0x2e74].
  */
-#define HIT_SLOTS  0x2e89               /* four of four bytes */
-
-void probe_cell_at(uint32_t x, uint32_t y, uint32_t slot)
+void probe_cell_at(uint32_t x, uint32_t y, hit_t *hit)
 {
     if (x > 0xbf || y > 0xc4) {
-        img_setw(slot, 0);
+        hit->cell = 0;
         return;
     }
-    uint32_t row = y & 0xf8;
-    uint32_t di = row + (row >> 1) + (x >> 4) + img_off(gv.level.cells);
-    uint32_t cell = g_image[di];
-    if (cell == 0x0c || cell == 0) {
-        img_setw(slot, 0);
+    /* The original spells the row stride as `row + row / 2` with row = y & 0xf8,
+     * which is (y >> 3) * 12 - twelve columns of sixteen pixels, fourteen rows
+     * of eight. It is an array index. */
+    uint8_t *cell = &gv.level.cells[(y >> 3) * 12 + (x >> 4)];
+    if (*cell == 0x0c || *cell == 0) {
+        hit->cell = 0;
         return;
     }
-    img_setw(slot, di);
+    /* The slot keeps the cell's *address*, not its index: the brick handlers
+     * are handed it and write through it, and 1ac2:27b7 compares slots by it.
+     * That 16-bit value is the game's own, so it stays an image offset. */
+    hit->cell = (uint16_t)img_off(cell);
     gv.hit_count++;
-    g_image[slot + 2] = (uint8_t)((x & 0xf0) + 8);   /* the brick's */
-    g_image[slot + 3] = (uint8_t)((y & 0xf8) + 6);   /* centre */
+    hit->x = (uint8_t)((x & 0xf0) + 8);              /* the brick's */
+    hit->y = (uint8_t)((y & 0xf8) + 6);              /* centre */
 }
 
 /* 1ac2:27b7  drop_duplicate_hits
@@ -2085,15 +2087,12 @@ void probe_cell_at(uint32_t x, uint32_t y, uint32_t slot)
 void drop_duplicate_hits(void)
 {
     for (int32_t i = 0; i < 3; i++) {
-        uint32_t si = HIT_SLOTS + i * 4;
-        if (!img_w(si))
+        if (!gv.hits[i].cell)
             continue;
-        uint32_t centre = img_w(si + 2);
-        for (int32_t j = i + 1; j < 4; j++) {
-            uint32_t di = HIT_SLOTS + j * 4;
-            if (img_w(di) && img_w(di + 2) == centre)
-                img_setw(di, 0);
-        }
+        uint32_t centre = gv.hits[i].centre;
+        for (int32_t j = i + 1; j < 4; j++)
+            if (gv.hits[j].cell && gv.hits[j].centre == centre)
+                gv.hits[j].cell = 0;
     }
 }
 
@@ -2138,17 +2137,17 @@ void ball_bricks(ball_t *b)
     gv.hit_count = 0;
 
     uint32_t x = (b->x - 8) & 0xff, y = (b->y - 6) & 0xff;
-    probe_cell_at(x, y, HIT_SLOTS + 0);
-    probe_cell_at((x + 3) & 0xff, y, HIT_SLOTS + 4);
-    probe_cell_at((x + 3) & 0xff, (y + 3) & 0xff, HIT_SLOTS + 8);
-    probe_cell_at(x, (y + 3) & 0xff, HIT_SLOTS + 12);
+    probe_cell_at(x, y, &gv.hits[0]);
+    probe_cell_at((x + 3) & 0xff, y, &gv.hits[1]);
+    probe_cell_at((x + 3) & 0xff, (y + 3) & 0xff, &gv.hits[2]);
+    probe_cell_at(x, (y + 3) & 0xff, &gv.hits[3]);
 
     uint32_t n = gv.hit_count;
     if (n == 0)
         return;
 
-    uint32_t s0 = img_w(HIT_SLOTS + 0), s1 = img_w(HIT_SLOTS + 4);
-    uint32_t s2 = img_w(HIT_SLOTS + 8), s3 = img_w(HIT_SLOTS + 12);
+    uint32_t s0 = gv.hits[0].cell, s1 = gv.hits[1].cell;
+    uint32_t s2 = gv.hits[2].cell, s3 = gv.hits[3].cell;
 
     /* The second half of that condition reads **[0x2e99]**, which is not slot
      * 3 at [0x2e95] but the first word of the direction table - and that word
@@ -2173,7 +2172,7 @@ void ball_bricks(ball_t *b)
     } else {
         /* One corner, or all four: leave in the direction its slot names. */
         int32_t i = 0;
-        while (i < 4 && !img_w(HIT_SLOTS + i * 4))
+        while (i < 4 && !gv.hits[i].cell)
             i++;
         if (i < 4) {
             uint32_t d = gv.hit_dirs[i];
@@ -2188,13 +2187,13 @@ void ball_bricks(ball_t *b)
     if (n == 3) {
         if (s0) {
             if (s2) {
-                img_setw(HIT_SLOTS + 4, 0);
-                img_setw(HIT_SLOTS + 12, 0);
+                gv.hits[1].cell = 0;
+                gv.hits[3].cell = 0;
             } else {
-                img_setw(HIT_SLOTS + 0, 0);
+                gv.hits[0].cell = 0;
             }
         } else {
-            img_setw(HIT_SLOTS + 8, 0);
+            gv.hits[2].cell = 0;
         }
     }
 
@@ -2202,9 +2201,9 @@ void ball_bricks(ball_t *b)
     drop_duplicate_hits();
 
     for (int32_t i = 0; i < 4; i++) {
-        uint32_t cell = img_w(HIT_SLOTS + i * 4);
+        uint32_t cell = gv.hits[i].cell;
         if (cell)
-            brick_hit(HIT_SLOTS + i * 4, cell, b);
+            brick_hit(&gv.hits[i], cell, b);
     }
 }
 
@@ -2247,7 +2246,7 @@ static void brick_common(ball_t *ball, uint32_t sound,
  * and leaves [si+3] holding whatever the recycled slot had. Writing the word
  * for it put the slot pointer's high byte, 0x2f, where the original had the
  * previous occupant's value - one byte, 62,536 frames in. */
-static entity_t *brick_entity(uint32_t slot, uint32_t handler,
+static entity_t *brick_entity(hit_t *hit, uint32_t handler,
                              uint32_t frames, uint32_t rate)
 {
     entity_t *e = entity_alloc();
@@ -2255,8 +2254,8 @@ static entity_t *brick_entity(uint32_t slot, uint32_t handler,
     ent_sprite_t *s = &e->p.anim.sprite;
     /* The original stores x and y with one word write from the hit slot; two
      * byte writes are the same thing and say which is which. */
-    s->x = g_image[slot + 2];
-    s->y = g_image[slot + 3];
+    s->x = hit->x;
+    s->y = hit->y;
     s->frame = (uint16_t)frames;
     s->timer = (uint8_t)rate;
     s->period = (uint8_t)rate;
@@ -2265,11 +2264,11 @@ static entity_t *brick_entity(uint32_t slot, uint32_t handler,
 
 /* Degrade a brick one step: the cell becomes `next`, the old picture comes off
  * and the new one goes on. Cells 5, 6 and 7 all do exactly this. */
-static void brick_degrade(uint32_t slot, uint32_t next,
+static void brick_degrade(hit_t *hit, uint32_t next,
                           uint32_t old_pic, uint32_t new_pic)
 {
-    g_image[img_w(slot)] = (uint8_t)next;
-    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
+    g_image[hit->cell] = (uint8_t)next;
+    uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, old_pic);
     xor_sprite_16x7(x, y, new_pic);
 }
@@ -2292,23 +2291,23 @@ static uint32_t bonus_kind(void)
  * time in three - removes the brick at once and leaves something behind:
  * brick 1 a score popup (0x3561), brick 2 a falling capsule (0x3273).
  */
-static void brick_1_or_2(uint32_t slot, ball_t *ball, int32_t is_two)
+static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 2);
 
     if (gv.bonus_cap >= 3 || game_random(io_ticks(), 3) != 0) {
         /* crumble, and it keeps the cell it is standing on */
-        brick_entity(slot, 0x3b2a, is_two ? 0x6508 : 0x65fe, 7)
-            ->p.anim.arg.cell = (uint16_t)img_w(slot);
-        g_image[img_w(slot)] = 0;
+        brick_entity(hit, 0x3b2a, is_two ? 0x6508 : 0x65fe, 7)
+            ->p.anim.arg.cell = (uint16_t)hit->cell;
+        g_image[hit->cell] = 0;
         gv.level.bricks--;
         return;
     }
 
     gv.level.bricks--;
-    uint32_t cell = img_w(slot);
+    uint32_t cell = hit->cell;
     g_image[cell] = 0;
-    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
+    uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, is_two ? 0x63a6 : img_w(CELL_TABLE + 2));
 
     entity_t *e = entity_alloc();
@@ -2316,7 +2315,7 @@ static void brick_1_or_2(uint32_t slot, ball_t *ball, int32_t is_two)
     ent_fall_t *f = &e->p.fall;
     /* The original writes x and y with one word and `inc bh` to put it a row
      * lower; the fall arm has them as the two bytes they are. */
-    uint32_t centre = img_w(slot + 2);
+    uint32_t centre = hit->centre;
     f->x = (uint8_t)centre;
     f->y = (uint8_t)((centre >> 8) + 1);
     f->kind = (uint8_t)bonus_kind();
@@ -2332,24 +2331,24 @@ static void brick_1_or_2(uint32_t slot, ball_t *ball, int32_t is_two)
     gv.bonus_cap++;
 }
 
-void brick_1(uint32_t slot, ball_t *ball) { brick_1_or_2(slot, ball, 0); }
-void brick_2(uint32_t slot, ball_t *ball) { brick_1_or_2(slot, ball, 1); }
+void brick_1(hit_t *hit, ball_t *ball) { brick_1_or_2(hit, ball, 0); }
+void brick_2(hit_t *hit, ball_t *ball) { brick_1_or_2(hit, ball, 1); }
 
 /* 1ac2:2a3f  brick 3 - hardens into a 4, which nothing can break */
-void brick_3(uint32_t slot, ball_t *ball)
+void brick_3(hit_t *hit, ball_t *ball)
 {
     g_image[SOUND_REQUEST] = 4;
     if (ball)
         ball->bounces++;
-    brick_entity(slot, 0x365e, 0x66f4, 8)->p.anim.arg.cell =
-        (uint16_t)img_w(slot);
-    g_image[img_w(slot)] = 4;
+    brick_entity(hit, 0x365e, 0x66f4, 8)->p.anim.arg.cell =
+        (uint16_t)hit->cell;
+    g_image[hit->cell] = 4;
 }
 
 /* 1ac2:3221  bricks 4 and 12 - indestructible; the ball only bounces */
-void brick_solid(uint32_t slot, ball_t *ball)
+void brick_solid(hit_t *hit, ball_t *ball)
 {
-    (void)slot;
+    (void)hit;
     g_image[SOUND_REQUEST] = SOUND_BOUNCE;
     if (ball)
         ball->bounces++;
@@ -2357,35 +2356,35 @@ void brick_solid(uint32_t slot, ball_t *ball)
 
 /* 1ac2:2a73, 1ac2:2ab4, 1ac2:2af5  bricks 5, 6, 7 - one step down the
  * chain per hit */
-void brick_5(uint32_t slot, ball_t *ball)
+void brick_5(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 2);
-    brick_degrade(slot, 6, 0x6466, 0x6486);
+    brick_degrade(hit, 6, 0x6466, 0x6486);
 }
 
-void brick_6(uint32_t slot, ball_t *ball)
+void brick_6(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 3);
-    brick_degrade(slot, 7, 0x6486, 0x64a6);
+    brick_degrade(hit, 7, 0x6486, 0x64a6);
 }
 
-void brick_7(uint32_t slot, ball_t *ball)
+void brick_7(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 5);
-    brick_degrade(slot, 8, 0x64a6, 0x64c6);
+    brick_degrade(hit, 8, 0x64a6, 0x64c6);
 }
 
 /* 1ac2:2b36  brick 8 - the end of that chain. A hundred points, and it leaves
  * an entity running 0x366f where it was. */
-void brick_8(uint32_t slot, ball_t *ball)
+void brick_8(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, 4, 0, 0x100, 0);
-    g_image[img_w(slot)] = 0;
-    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
+    g_image[hit->cell] = 0;
+    uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, 0x64c6);
     xor_sprite_16x7(x, y, 0x681c);
     /* four times round the animation - a **byte**, see ent_anim_t's arg */
-    brick_entity(slot, 0x366f, 0x67ea, 7)->p.anim.arg.count = 4;
+    brick_entity(hit, 0x366f, 0x67ea, 7)->p.anim.arg.count = 4;
     gv.level.bricks--;
 }
 
@@ -2402,31 +2401,31 @@ static uint32_t brick_tag(uint32_t v)
     return v;
 }
 
-void brick_hit(uint32_t slot, uint32_t cell, ball_t *ball)
+void brick_hit(hit_t *hit, uint32_t cell, ball_t *ball)
 {
     io_log_random(0x8000 | brick_tag(g_image[cell]));  /* for sidebyside */
     switch (g_image[cell]) {
-    case 1:  brick_1(slot, ball); break;
-    case 2:  brick_2(slot, ball); break;
-    case 3:  brick_3(slot, ball); break;
+    case 1:  brick_1(hit, ball); break;
+    case 2:  brick_2(hit, ball); break;
+    case 3:  brick_3(hit, ball); break;
     case 4:
-    case 12: brick_solid(slot, ball); break;
-    case 5:  brick_5(slot, ball); break;
-    case 6:  brick_6(slot, ball); break;
-    case 7:  brick_7(slot, ball); break;
-    case 8:  brick_8(slot, ball); break;
-    case 9:  brick_9(slot, ball); break;
-    case 10: brick_10(slot, ball); break;
-    case 11: brick_11(slot, ball); break;
+    case 12: brick_solid(hit, ball); break;
+    case 5:  brick_5(hit, ball); break;
+    case 6:  brick_6(hit, ball); break;
+    case 7:  brick_7(hit, ball); break;
+    case 8:  brick_8(hit, ball); break;
+    case 9:  brick_9(hit, ball); break;
+    case 10: brick_10(hit, ball); break;
+    case 11: brick_11(hit, ball); break;
     case 16: case 17: case 18:
     case 19: case 20: case 21:
-        brick_animated(slot, ball); break;   /* 1ac2:2ccd */
+        brick_animated(hit, ball); break;   /* 1ac2:2ccd */
     /* An animated brick that has already been hit carries its cell value
      * plus eight, and the table sends all six of those back to the solid
      * handler: it bounces the ball and nothing more. */
     case 24: case 25: case 26:
     case 27: case 28: case 29:
-        brick_solid(slot, ball); break;      /* 1ac2:3221 */
+        brick_solid(hit, ball); break;      /* 1ac2:3221 */
     default: break;                     /* 0, 13-15 and 22-23 have none */
     }
 }
@@ -3392,7 +3391,7 @@ void entity_cells_timer(ent_cells_t *c)
  * quotient is the row and the remainder the column, so x = column * 16 + 8 and
  * y = row * 8 + 6, which is the same grid as everywhere else read backwards.
  */
-void brick_9(uint32_t slot, ball_t *ball)
+void brick_9(hit_t *hit, ball_t *ball)
 {
     if (!ball)
         return;
@@ -3407,15 +3406,15 @@ void brick_9(uint32_t slot, ball_t *ball)
     b->bounces = 0;
     ball_draw(b->sprite, b->x, b->y);
 
-    brick_entity(slot, 0x3696, 0x6abe, 0x32)->p.anim.arg.cell =
-        (uint16_t)img_w(slot);
+    brick_entity(hit, 0x3696, 0x6abe, 0x32)->p.anim.arg.cell =
+        (uint16_t)hit->cell;
 
     /* A cell that is not this one. */
     uint32_t cell, idx;
     do {
         idx = gv.level.teleport[game_random(io_ticks(), n)];
         cell = img_off(gv.level.cells) + idx;
-    } while (cell == img_w(slot));
+    } while (cell == hit->cell);
 
     entity_t *timer = entity_alloc();
     timer->handler = 0x36f6;
@@ -3433,12 +3432,12 @@ void brick_9(uint32_t slot, ball_t *ball)
 
 /* 1ac2:2c59  brick 10 - fifty points, and the ball goes into state 4 while an
  * entity runs at where the brick was. */
-void brick_10(uint32_t slot, ball_t *ball)
+void brick_10(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 5);
-    g_image[img_w(slot)] = 0;
+    g_image[hit->cell] = 0;
     gv.level.bricks--;
-    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
+    uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, 0x63e6);
     if (!ball)
         return;
@@ -4096,15 +4095,15 @@ void laser_fire(void)
     /* Probe the two cells the shot covers. */
     gv.hit_count = 0;
     uint32_t py = (x - 8) & 0xff, px = (y - 6) & 0xff;
-    probe_cell_at(py, px, HIT_SLOTS + 0);
-    probe_cell_at((py + 0x13) & 0xff, px, HIT_SLOTS + 4);
+    probe_cell_at(py, px, &gv.hits[0]);
+    probe_cell_at((py + 0x13) & 0xff, px, &gv.hits[1]);
     if (gv.hit_count == 0)
         return;
 
     for (int32_t i = 0; i < 2; i++) {
-        uint32_t cell = img_w(HIT_SLOTS + i * 4);
+        uint32_t cell = gv.hits[i].cell;
         if (cell)
-            brick_hit(HIT_SLOTS + i * 4, cell, NULL); /* no ball: BP is zero */
+            brick_hit(&gv.hits[i], cell, NULL); /* no ball: BP is zero */
     }
     shot_xor(gv.laser_x, (gv.laser_y + 2) & 0xff);
     gv.laser_y = 0xb3;
@@ -5022,7 +5021,7 @@ void panel_finish(void)
 
 /* 1ac2:2d68  brick 11 - 72 points, and the cell becomes 0x0c, which is not a
  * brick at all: the drawing code has a special case for it. */
-void brick_11(uint32_t slot, ball_t *ball)
+void brick_11(hit_t *hit, ball_t *ball)
 {
     /* **Not** brick_common. 1ac2:2d68 scores and asks for a sound and then
      * never touches the ball: there is no `inc [di+0x1d]` and no bp anywhere
@@ -5033,9 +5032,9 @@ void brick_11(uint32_t slot, ball_t *ball)
     (void)ball;
     brick_score(0, 0, 0x0207);
     g_image[SOUND_REQUEST] = SOUND_BRICK;
-    g_image[img_w(slot)] = 0x0c;
+    g_image[hit->cell] = 0x0c;
     gv.level.bricks--;
-    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
+    uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, 0x6406);
     brick_11_after(x, y);               /* 1ac2:4c4b */
 }
@@ -7662,14 +7661,14 @@ void entity_anim_brick(ent_brick_t *br)
 }
 
 /* 1ac2:2ccd  brick_animated - cells 16 to 21 */
-void brick_animated(uint32_t slot, ball_t *ball)
+void brick_animated(hit_t *hit, ball_t *ball)
 {
     brick_score(0, 0, 0x0303);
     g_image[SOUND_REQUEST] = 3;
     if (ball)
         ball->bounces++;
 
-    uint32_t cell = img_w(slot);
+    uint32_t cell = hit->cell;
     uint32_t was = g_image[cell];
     g_image[cell] = (uint8_t)(was + 8);  /* marked, not cleared */
     uint32_t piece = was & 0x0f;
@@ -7681,15 +7680,15 @@ void brick_animated(uint32_t slot, ball_t *ball)
     img_setw(ANIM_PIECES + ((was + 8) & 0xff) * 2, frame);
 
     /* Draw it once where the brick was, from the script's current entry. */
-    uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
+    uint32_t x = hit->x, y = hit->y;
     draw_anim_cell((img_w(SEG_14A1 + gv.anim_ptr)
                     + (piece << 5)) & 0xffff, x, y);
 
     entity_t *e = entity_alloc();
     e->handler = 0x3abf;
     ent_brick_t *br = &e->p.brick;
-    br->x = g_image[slot + 2];          /* the centre, one word in the original */
-    br->y = g_image[slot + 3];
+    br->x = hit->x;          /* the centre, one word in the original */
+    br->y = hit->y;
     br->piece = (uint8_t)piece;
     gv.level.bricks--;
 }
