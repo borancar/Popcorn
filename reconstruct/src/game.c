@@ -1154,7 +1154,6 @@ void game_input(void)
  * taken out of the list by setting [0x313a], and the unlink needs the node
  * *before* it, which is why [0x3142] trails one step behind.
  * ===================================================================== */
-#define PADDLE_SPRITES  0x2d0d          /* four-entry table of sprite bases */
 
 /* One step of the safety net's crawl: blank the two bytes it occupies, move a
  * row down, and reload the counter.
@@ -1220,7 +1219,7 @@ int32_t play_loop(void)
      * byte of the word at 0x2d0f, not the high one at 0x2d10. With the high
      * byte the width came out zero, and a zero-width paddle clamps to the
      * left wall the moment the mouse is read. */
-    gv.paddle_width = g_image[PADDLE_SPRITES + 2];
+    gv.paddle_width = gv.paddle_sets[0].width;
     gv.paddle_max = 0xac;
     gv.paddle_min = 0x08;
     gv.repeat_count = 5;
@@ -1304,7 +1303,7 @@ frames:
 
         game_input();
         if (gv.paddle_morphing == 0)
-            draw_paddle(img_ptr(img_w(PADDLE_SPRITES + gv.paddle_kind * 4)));
+            draw_paddle(img_ptr(gv.paddle_sets[gv.paddle_kind].sprites));
         if (gv.laser_on)
             laser_fire();
 
@@ -2195,15 +2194,13 @@ void ball_bricks(ball_t *b)
  * sound, and reset the ball's bounce counter, so that a brick hit does not
  * count towards the every-0x23-bounces slope shuffle.
  * ===================================================================== */
-#define SCORE_ADD  0x1415               /* six bytes, most significant first */
 #define SOUND_BRICK      3
-#define BONUS_ODDS 0x33b1               /* cumulative weights for the kinds */
 
 static void brick_score(uint32_t a, uint32_t b, uint32_t c)
 {
-    img_setw(SCORE_ADD + 0, a);
-    img_setw(SCORE_ADD + 2, b);
-    img_setw(SCORE_ADD + 4, c);
+    img_setw(img_off(gv.score_add) + 0, a);
+    img_setw(img_off(gv.score_add) + 2, b);
+    img_setw(img_off(gv.score_add) + 4, c);
     score_add();                        /* 1ac2:413d */
 }
 
@@ -2258,7 +2255,7 @@ static uint32_t bonus_kind(void)
 {
     uint32_t r = game_random(io_ticks(), 0xff);
     uint32_t i = 0;
-    while (g_image[BONUS_ODDS + i] < r)
+    while (gv.bonus_odds[i] < r)
         i++;
     return i;
 }
@@ -2540,7 +2537,6 @@ void field_backdrop(uint32_t y)
  * the ball on. 1ac2:1c4f drives it, 1ac2:1e23 steps it, 1ac2:1e50 draws one
  * frame.
  * ===================================================================== */
-#define WALKER_WORK   0x146a            /* 0x15 bytes, shifted in place */
 #define WALKER_ROW    0x1cc0            /* the paddle row */
 #define WALKER_FIRST  0x7521            /* where the frame list restarts */
 
@@ -2554,14 +2550,15 @@ void field_backdrop(uint32_t y)
 void walker_draw(uint32_t x)
 {
     uint32_t src = img_w(gv.walker_anim);
-    memcpy(g_image + WALKER_WORK, g_image + src, 0x15);
+    memcpy(gv.walker_work, g_image + src, sizeof gv.walker_work);
 
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < 7; r++) {
-            uint32_t p = WALKER_WORK + r * 3, carry = 0;
+            uint8_t *row = gv.walker_work[r];
+            uint32_t carry = 0;
             for (int32_t b = 0; b < 3; b++) {
-                uint32_t v = g_image[p + b];
-                g_image[p + b] = (uint8_t)((v >> 1) | (carry << 7));
+                uint32_t v = row[b];
+                row[b] = (uint8_t)((v >> 1) | (carry << 7));
                 carry = v & 1;
             }
         }
@@ -2569,9 +2566,9 @@ void walker_draw(uint32_t x)
 
     uint32_t di = (x >> 2) + WALKER_ROW;
     for (int32_t r = 0; r < 7; r++) {
-        g_vram[di & (CGA_SIZE - 1)] ^= g_image[WALKER_WORK + r * 3];
-        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[WALKER_WORK + r * 3 + 1];
-        g_vram[(di + 2) & (CGA_SIZE - 1)] ^= g_image[WALKER_WORK + r * 3 + 2];
+        g_vram[di & (CGA_SIZE - 1)] ^= gv.walker_work[r][0];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= gv.walker_work[r][1];
+        g_vram[(di + 2) & (CGA_SIZE - 1)] ^= gv.walker_work[r][2];
         di = cga_next_row(di);
     }
 }
@@ -2619,7 +2616,8 @@ static void hatch_frame(uint32_t src, uint32_t x, uint32_t y)
 
 void level_draw(void)
 {
-    uint32_t hx = gv.hatch_x, hy = (gv.hatch_y - 1) & 0xff;
+    /* The paddle's own hatch is the last of the eight field marks. */
+    uint32_t hx = gv.field_marks[7].x, hy = (gv.field_marks[7].y - 1) & 0xff;
 
     gv.paddle_x = 0xc8;
     for (int32_t f = 0; f < 5; f++) {
@@ -4103,7 +4101,6 @@ void laser_fire(void)
  * out - comes back down.
  * ===================================================================== */
 #define CAPSULE_FRAMES 0x3385           /* by kind: a table of frame tables */
-#define PADDLE_NEXT    0x2d2d           /* kind -> the paddle kind it gives */
 
 /* 1ac2:3561  entity_popup is the same routine with a different set of frames -
  * table 0x339b rather than 0x3385 - so the two share a body. */
@@ -4147,7 +4144,7 @@ void entity_capsule_frames(ent_fall_t *f, uint32_t table)
             entity_t *e = entity_of(f);
             ent_morph_t *m = &e->p.morph;
             m->from = gv.paddle_kind;
-            m->to = g_image[PADDLE_NEXT + kind];
+            m->to = gv.paddle_next[kind];
             m->bonus = kind;
             m->pending = 1;
             m->step = 6;
@@ -4386,8 +4383,6 @@ void entity_multiball(void)
  * the play loop draws the paddle from and the one whose `+2` byte gives the
  * width; 0x2d25 is the shrink animation and 0x2d1d the grow. Using 0x2d0d for
  * the grow draws a full-size paddle at every frame of it. */
-#define PADDLE_SHRINK 0x2d25
-#define PADDLE_GROW   0x2d1d
 
 static void morph_finish(ent_morph_t *m)
 {
@@ -4449,7 +4444,7 @@ void entity_paddle_fx(ent_morph_t *m)
         if (gv.paddle_x == gv.paddle_prev_x)
             return;
         if (m->step == 6) {
-            draw_paddle(img_ptr(img_w(PADDLE_SPRITES + gv.paddle_kind * 4)));
+            draw_paddle(img_ptr(gv.paddle_sets[gv.paddle_kind].sprites));
             return;
         }
         uint32_t si = m->sprites + m->step * 2;
@@ -4467,7 +4462,7 @@ void entity_paddle_fx(ent_morph_t *m)
      * new one. */
     uint32_t si, kind;
     if (m->pending != 0) {
-        si = PADDLE_SHRINK;
+        si = img_off(gv.paddle_shrink);
         gv.paddle_step = 0;
         kind = m->from;
         if (kind == 1)
@@ -4478,7 +4473,7 @@ void entity_paddle_fx(ent_morph_t *m)
         }
         m->pending = 0;
     }
-    si = PADDLE_GROW;
+    si = img_off(gv.paddle_grow);
     gv.paddle_step = 0;
     kind = m->to;
     if (kind == 1)
@@ -4525,7 +4520,7 @@ void morph_step(ent_morph_t *m)
     /* Done growing: install the new paddle and apply the effect. */
     uint32_t kind = m->to;
     gv.paddle_kind = (uint8_t)kind;
-    gv.paddle_width = g_image[PADDLE_SPRITES + kind * 4 + 2];
+    gv.paddle_width = gv.paddle_sets[kind].width;
     gv.paddle_morphing = 0;
     morph_finish(m);
 }
@@ -4543,18 +4538,17 @@ void morph_step(ent_morph_t *m)
  * 0x14a1 instead of from the image, which is what the `cmp dl,0x30 / push ds`
  * around the copy is for - 0x30 because the index has already been doubled.
  * ===================================================================== */
-#define FIELD_MARKS 0x33d7              /* four (x, y, ...) records of 4 */
 
 void level_between(void)
 {
-    uint32_t si = FIELD_MARKS;
+    uint32_t si = img_off(gv.field_marks);
     for (int32_t i = 0; i < 4; i++, si += 4) {
         uint32_t x = g_image[si], y = (g_image[si + 1] - 0x0a) & 0xff;
         g_image[si + 3] = 0;
-        uint32_t src = 0x6078, di = cga_at(x, y);
+        uint32_t di = cga_at(x, y);
         for (int32_t r = 0; r < 0x25; r++) {
-            g_vram[di & (CGA_SIZE - 1)] = g_image[src + r * 2];
-            g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[src + r * 2 + 1];
+            g_vram[di & (CGA_SIZE - 1)] = gv.mark_sprite[r][0];
+            g_vram[(di + 1) & (CGA_SIZE - 1)] = gv.mark_sprite[r][1];
             di = cga_next_row(di);
         }
     }
@@ -4939,19 +4933,19 @@ void panel_reveal(void)
 /* 1ac2:0598  field_marks
  *
  * The eight marks along the playfield from the table at 0x33d7, each 0x1f rows
- * of one word from 0x6078. level_between draws the first four of the same
+ * of one word from mark_sprite. level_between draws the first four of the same
  * table 0x25 rows tall; this draws all eight, shorter.
  */
 void field_marks(void)
 {
-    uint32_t si = FIELD_MARKS;
+    uint32_t si = img_off(gv.field_marks);
     for (int32_t i = 0; i < 8; i++, si += 4) {
         uint32_t x = g_image[si], y = (g_image[si + 1] - 0x0a) & 0xff;
         g_image[si + 3] = 0;
         uint32_t di = cga_at(x, y);
         for (int32_t r = 0; r < 0x1f; r++) {
-            g_vram[di & (CGA_SIZE - 1)] = g_image[0x6078 + r * 2];
-            g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[0x6078 + r * 2 + 1];
+            g_vram[di & (CGA_SIZE - 1)] = gv.mark_sprite[r][0];
+            g_vram[(di + 1) & (CGA_SIZE - 1)] = gv.mark_sprite[r][1];
             di = cga_next_row(di);
         }
     }
@@ -5022,7 +5016,7 @@ void brick_11(hit_t *hit, ball_t *ball)
  */
 void bonus_spawn(void)
 {
-    uint32_t si = FIELD_MARKS + game_random(io_ticks(), 4) * 4;
+    uint32_t si = img_off(&gv.field_marks[game_random(io_ticks(), 4)]);
     if (g_image[si + 3] != 0)
         return;                         /* that hatch is already open */
     uint32_t di = img_off(gv.level.cells) + g_image[si + 2];
@@ -5420,7 +5414,7 @@ void cell_special(uint32_t row, uint32_t col, uint32_t di)
 void input_and_draw_paddle(void)
 {
     game_input();
-    draw_paddle(img_ptr(img_w(PADDLE_SPRITES + gv.paddle_kind * 4)));
+    draw_paddle(img_ptr(gv.paddle_sets[gv.paddle_kind].sprites));
 }
 
 /* 1ac2:5171  cheat_match
@@ -5651,9 +5645,9 @@ void level_tally(void)
 {
     for (int32_t i = 0; i < 0xa8; i++) {
         uint32_t v = gv.level.cells[i];
-        img_setw(SCORE_ADD + 0, 0);
-        img_setw(SCORE_ADD + 2, gv.cell_score[v][0]);
-        img_setw(SCORE_ADD + 4, gv.cell_score[v][1]);
+        img_setw(img_off(gv.score_add) + 0, 0);
+        img_setw(img_off(gv.score_add) + 2, gv.cell_score[v][0]);
+        img_setw(img_off(gv.score_add) + 4, gv.cell_score[v][1]);
         score_add();
     }
     brick_score(0, 1, 0);
@@ -6019,7 +6013,7 @@ void screen_game_over(void)
 
     uint32_t kind = gv.paddle_kind;
     if (kind) {
-        uint32_t si = img_w(PADDLE_GROW + kind * 2);
+        uint32_t si = gv.paddle_grow[kind];
         for (int32_t f = 0; f < 6; f++, si += 2) {
             io_wait_retrace();
             draw_paddle_shifted(img_ptr(img_w(si)));
@@ -6952,7 +6946,7 @@ static int32_t bonus_end_level_run(void)
     gv.paddle_kind = 0;
     gv.paddle_max = 0xac;
     gv.paddle_min = 8;
-    gv.paddle_width = g_image[PADDLE_SPRITES + 2];
+    gv.paddle_width = gv.paddle_sets[0].width;
     blit_xor(gv.paddle_pix[0], &gv.paddle_rows[0]);
 
     /* The wall closing in: 0x70 passes of a 26-word band scrolled up six rows

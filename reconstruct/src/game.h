@@ -299,6 +299,26 @@ typedef struct __attribute__((packed)) {
 } paddle_rows_t;
 ENSURE_SIZE(paddle_rows_t, 14);
 
+/* One of the eight places a hatch can open along the playfield. field_marks
+ * draws all eight, level_between the first four, and bonus_spawn picks one of
+ * the first four at random. */
+typedef struct __attribute__((packed)) {
+    uint8_t x;                      /* 0x00 */
+    uint8_t y;                      /* 0x01 the draw takes 0x0a off this */
+    uint8_t cell;                   /* 0x02 where in level.cells the hatch is */
+    uint8_t taken;                  /* 0x03 a hatch is open here; the redraws clear it */
+} mark_t;
+ENSURE_SIZE(mark_t, 4);
+
+/* One of the four paddle kinds: where its four pixel phases start, and how
+ * wide it is. The table at 0x2d0d is four of these, indexed by paddle_kind. */
+typedef struct __attribute__((packed)) {
+    uint16_t sprites;               /* 0x00 into paddle_sprites */
+    uint8_t  width;                 /* 0x02 pixels */
+    uint8_t  _r;
+} paddle_set_t;
+ENSURE_SIZE(paddle_set_t, 4);
+
 /* One line of the high-score table. The score is six ASCII digits and is
  * compared as digits, which is why hsc_bubble can `scasb` it. */
 typedef struct __attribute__((packed)) {
@@ -426,11 +446,13 @@ typedef struct __attribute__((packed)) {
         };
     };
     uint16_t particle_count;            /* 0x1413 the menu's fountain */
-    uint8_t  _pad_05[7];
+    uint8_t  score_add[6];              /* 0x1415 what score_add is about to add, six digits most significant first */
+    uint8_t  _pad_05[1];
     char     hsc_file[12];              /* 0x141c "popcorn.hsc", the name the table is saved under */
     char     level_file[64];            /* 0x1428 the .PPC to load, built from the command tail. 64 is what there is: walker_anim follows it */
     uint16_t walker_anim;               /* 0x1468 a pointer into the walking figure's frame list, stepped by two */
-    uint8_t  _pad_06[27];
+    uint8_t  walker_work[7][3];         /* 0x146a walker_draw's buffer: one 12x7 frame copied in and shifted, three bytes a row */
+    uint8_t  _pad_06[6];
     uint8_t  speed_step;                /* 0x1485 the ball's move-this-frame counter, reloaded from speed_limit */
     uint8_t  speed_limit;               /* 0x1486 its reload value: the ball steps on (limit-1) frames in limit */
     uint16_t frame_delay;               /* 0x1487 empty loops left this frame */
@@ -448,7 +470,11 @@ typedef struct __attribute__((packed)) {
         uint8_t eog_band[495];          /* screen_end_of_game's band, merged with the picture and put back */
         hsc_entry_t hsc_scratch[9];     /* screen_results insertion-sorts the players' records here, and hsc_sort feeds them into hsc from it */
     } scratch2;
-    uint8_t  _pad_21[681];
+    uint8_t  _pad_21[638];
+    paddle_set_t paddle_sets[4];        /* 0x2d0d the four paddle kinds, indexed by paddle_kind. Their `sprites` are 0x4903, 0x4a37, 0x4b6b and 0x4c9f - paddle_sprites[0] through [3], 0x134 apart, which is what says the bank is four sets of four phases */
+    uint16_t paddle_grow[4];            /* 0x2d1d the sprite list a kind grows through, by kind. Entry 0 is zero: the plain paddle has nothing to animate */
+    uint16_t paddle_shrink[4];          /* 0x2d25 and the list it shrinks through */
+    uint8_t  paddle_next[11];           /* 0x2d2d the paddle kind a capsule gives, by capsule kind. Only the first four are non-zero; the rest are the capsules that do something other than change the paddle */
     uint8_t  paddle_step;               /* 0x2d38 how much the width changes per morph frame */
     uint8_t  paddle_kind;               /* 0x2d39 which of the four sprite sets is current */
     uint8_t  paddle_width;              /* 0x2d3a in pixels */
@@ -551,15 +577,14 @@ typedef struct __attribute__((packed)) {
     };
     uint8_t  _pad_14[574];
     uint8_t  bonus_cap;                 /* 0x3384 */
-    uint8_t  _pad_15[77];
+    uint8_t  _pad_15[44];
+    uint8_t  bonus_odds[11];            /* 0x33b1 cumulative weights, ending at 0xff: bonus_kind walks them against random(0xff) and takes the index */
+    uint16_t bonus_handlers[11];        /* 0x33bc what each kind does, in the same order - 0x2daa points, 0x2def catch, 0x3231 wider, 0x2e03 laser, 0x2e16 multiball, 0x3119 net, 0x315b reverse, 0x318b extra life, 0x2da0, 0x31e8 slower, 0x3200 stop monsters */
     uint16_t rng_state;                 /* 0x33d2 */
     uint8_t  hit_kind;                  /* 0x33d4 */
     uint8_t  bonus_pending;             /* 0x33d5 deliveries under way: bonus_spawn counts one up when it opens a hatch and entity_bonus counts it down when the capsule is gone either way, so it spans the whole journey. The play loop refuses to spawn at 3, which is what caps them */
     uint8_t  bonus_live;                /* 0x33d6 capsules on screen; the play loop's pause shortens as it rises */
-    uint8_t  _pad_17[28];
-    uint8_t  hatch_x;                   /* 0x33f3 */
-    uint8_t  hatch_y;                   /* 0x33f4 */
-    uint8_t  _pad_18[2];
+    mark_t   field_marks[8];            /* 0x33d7 and the last of the eight is the paddle's own hatch: what level_draw called hatch_x and hatch_y are field_marks[7].x and .y, the same two bytes */
     uint8_t  sprite_work[16][5];        /* 0x33f7 sprite_shift_draw's buffer: a 20x16 sprite copied in and shifted right a pixel at a time, in rows of five so nothing crosses a row boundary */
     uint8_t  _pad_25[8];
     player_t players[9];                /* 0x344f nine of them - screen_player_names stops at nine, and a tenth record would run into player_count at 0x3f08 */
@@ -583,7 +608,9 @@ typedef struct __attribute__((packed)) {
      * at 0xa3c0, the ending's picture at 0xa6d0 and the capsule kinds at
      * 0xac60 are all in here, named where they are used and nowhere else.
      * That is the next seam. */
-    uint8_t  _pad_22[10802];
+    uint8_t  _pad_22[4773];
+    uint8_t  mark_sprite[37][2];        /* 0x6078 the mark drawn at each field position, one word a row. field_marks takes 0x1f rows of it and level_between 0x25 - the same picture, cut short */
+    uint8_t  _pad_26[5955];
     uint8_t  curtain_image[105][27];    /* 0x7805 the POPCORN logo the intro curtain brings down: 105 rows of 27 bytes, 108 pixels wide. intro_curtain reads it **backwards** - on frame `rows` it takes the last `rows` rows and draws them from the top, so the picture comes down like a curtain. That is why the address in the original is 0x8318, which is the end of this and not the start */
     uint8_t  _pad_23b[3336];
     uint8_t  font[40][12][2];           /* 0x9020 the score panel's 8x12 font, two bits a pixel: forty glyphs of twelve rows of one word. Glyph 0, what a space maps to, is **not blank** - it is a solid block of colour 2, which is how the headings get their red ground */
@@ -624,6 +651,8 @@ ENSURE_IMG_AT(menu_sp, 0x1405);
 ENSURE_IMG_AT(level_text, 0x1407);
 ENSURE_IMG_AT(level_num_text, 0x1410);
 ENSURE_IMG_AT(particle_count, 0x1413);
+ENSURE_IMG_AT(score_add, 0x1415);
+ENSURE_IMG_AT(walker_work, 0x146a);
 ENSURE_IMG_AT(hsc_file, 0x141c);
 ENSURE_IMG_AT(level_file, 0x1428);
 ENSURE_IMG_AT(walker_anim, 0x1468);
@@ -632,6 +661,10 @@ ENSURE_IMG_AT(speed_limit, 0x1486);
 ENSURE_IMG_AT(frame_delay, 0x1487);
 ENSURE_IMG_AT(frame_delay_set, 0x1489);
 ENSURE_IMG_AT(speed_timer, 0x148b);
+ENSURE_IMG_AT(paddle_sets, 0x2d0d);
+ENSURE_IMG_AT(paddle_grow, 0x2d1d);
+ENSURE_IMG_AT(paddle_shrink, 0x2d25);
+ENSURE_IMG_AT(paddle_next, 0x2d2d);
 ENSURE_IMG_AT(paddle_step, 0x2d38);
 ENSURE_IMG_AT(paddle_kind, 0x2d39);
 ENSURE_IMG_AT(paddle_width, 0x2d3a);
@@ -694,12 +727,13 @@ ENSURE_IMG_AT(entity_free, 0x3138);
 ENSURE_IMG_AT(entity_remove, 0x313a);
 ENSURE_IMG_AT(entity_prev, 0x3142);
 ENSURE_IMG_AT(bonus_cap, 0x3384);
+ENSURE_IMG_AT(bonus_odds, 0x33b1);
+ENSURE_IMG_AT(bonus_handlers, 0x33bc);
 ENSURE_IMG_AT(rng_state, 0x33d2);
 ENSURE_IMG_AT(hit_kind, 0x33d4);
 ENSURE_IMG_AT(bonus_pending, 0x33d5);
 ENSURE_IMG_AT(bonus_live, 0x33d6);
-ENSURE_IMG_AT(hatch_x, 0x33f3);
-ENSURE_IMG_AT(hatch_y, 0x33f4);
+ENSURE_IMG_AT(field_marks, 0x33d7);
 ENSURE_IMG_AT(sprite_work, 0x33f7);
 ENSURE_IMG_AT(players, 0x344f);
 ENSURE_IMG_AT(hsc, 0x3e42);
@@ -716,6 +750,7 @@ ENSURE_IMG_AT(frame_corner_left, 0x48d2);
 ENSURE_IMG_AT(life_sprite, 0x48e7);
 ENSURE_IMG_AT(ball_start_sprite, 0x48fb);
 ENSURE_IMG_AT(paddle_sprites, 0x4903);
+ENSURE_IMG_AT(mark_sprite, 0x6078);
 ENSURE_IMG_AT(curtain_image, 0x7805);
 ENSURE_IMG_AT(font, 0x9020);
 ENSURE_IMG_AT(pause_overlay, 0x93e0);
