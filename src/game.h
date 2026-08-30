@@ -1267,7 +1267,7 @@ void entity_ball_arrive(ent_anim_t *a); /* 1ac2:36a1 */
 void entity_cells_timer(ent_cells_t *a); /* 1ac2:36f6 */
 void brick_10(hit_t *hit, ball_t *ball);    /* 1ac2:2c59 */
 void brick_11(hit_t *hit, ball_t *ball);    /* 1ac2:2d68 */
-void xor_sprite_16x7(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:3b64 */
+void xor_sprite_16x7(uint32_t x, uint32_t y, const uint8_t *src); /* 1ac2:3b64 */
 void score_add(void);             /* 1ac2:413d */
 void extra_life(void);            /* 1ac2:318b */
 void fill_column(uint32_t di, uint32_t value);  /* 1ac2:41b1 */

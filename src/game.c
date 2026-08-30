@@ -2250,8 +2250,8 @@ static void brick_degrade(hit_t *hit, uint32_t next,
 {
     g_image[hit->cell] = (uint8_t)next;
     uint32_t x = hit->x, y = hit->y;
-    xor_sprite_16x7(x, y, old_pic);
-    xor_sprite_16x7(x, y, new_pic);
+    xor_sprite_16x7(x, y, img_ptr(old_pic));
+    xor_sprite_16x7(x, y, img_ptr(new_pic));
 }
 
 /* Pick one of the bonus kinds by the cumulative weights at 0x33b1: walk the
@@ -2289,7 +2289,7 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
     uint32_t cell = hit->cell;
     g_image[cell] = 0;
     uint32_t x = hit->x, y = hit->y;
-    xor_sprite_16x7(x, y, is_two ? 0x63a6 : gv.cell_bitmap[1]);
+    xor_sprite_16x7(x, y, img_ptr(is_two ? 0x63a6 : gv.cell_bitmap[1]));
 
     entity_t *e = entity_alloc();
     e->handler = is_two ? 0x3273 : 0x3561;
@@ -2362,8 +2362,8 @@ void brick_8(hit_t *hit, ball_t *ball)
     brick_common(ball, 4, 0, 0x100, 0);
     g_image[hit->cell] = 0;
     uint32_t x = hit->x, y = hit->y;
-    xor_sprite_16x7(x, y, 0x64c6);
-    xor_sprite_16x7(x, y, 0x681c);
+    xor_sprite_16x7(x, y, img_ptr(0x64c6));
+    xor_sprite_16x7(x, y, img_ptr(0x681c));
     /* four times round the animation - a **byte**, see ent_anim_t's arg */
     brick_entity(hit, 0x366f, 0x67ea, 7)->p.anim.arg.count = 4;
     gv.level.bricks--;
@@ -2418,12 +2418,12 @@ void brick_hit(hit_t *hit, uint32_t cell, ball_t *ball)
  * apart but only seven of them are drawn - the eighth is the gap between
  * rows - so this both draws a brick and, run again, rubs it out.
  */
-void xor_sprite_16x7(uint32_t x, uint32_t y, uint32_t src)
+void xor_sprite_16x7(uint32_t x, uint32_t y, const uint8_t *src)
 {
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 7; r++) {
         for (int32_t b = 0; b < 4; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[src + r * 4 + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] ^= src[r * 4 + b];
         di = cga_next_row(di);
     }
 }
@@ -3043,8 +3043,8 @@ void entity_crumble(ent_anim_t *a)
 
     uint32_t cur = a->sprite.frame;
     uint32_t x = a->sprite.x, y = a->sprite.y;
-    xor_sprite_16x7(x, y, img_w(cur - 2));
-    xor_sprite_16x7(x, y, img_w(cur));
+    xor_sprite_16x7(x, y, img_ptr(img_w(cur - 2)));
+    xor_sprite_16x7(x, y, img_ptr(img_w(cur)));
     a->sprite.frame = (uint16_t)(cur + 2);
     if (img_w(a->sprite.frame) == 0xffff)
         gv.entity_remove = 1;
@@ -3301,7 +3301,7 @@ void entity_repeat(ent_anim_t *a)
         a->sprite.frame = 0x67ea;       /* and round the animation again */
         return;
     }
-    xor_sprite_16x7(a->sprite.x, a->sprite.y, 0x681c);
+    xor_sprite_16x7(a->sprite.x, a->sprite.y, img_ptr(0x681c));
 }
 
 /* 1ac2:3696  from brick 9 - the animation and nothing else */
@@ -3408,7 +3408,7 @@ void brick_10(hit_t *hit, ball_t *ball)
     g_image[hit->cell] = 0;
     gv.level.bricks--;
     uint32_t x = hit->x, y = hit->y;
-    xor_sprite_16x7(x, y, 0x63e6);
+    xor_sprite_16x7(x, y, img_ptr(0x63e6));
     if (!ball)
         return;
 
@@ -4995,7 +4995,7 @@ void brick_11(hit_t *hit, ball_t *ball)
     g_image[hit->cell] = 0x0c;
     gv.level.bricks--;
     uint32_t x = hit->x, y = hit->y;
-    xor_sprite_16x7(x, y, 0x6406);
+    xor_sprite_16x7(x, y, img_ptr(0x6406));
     brick_11_after(x, y);               /* 1ac2:4c4b */
 }
 
@@ -6787,8 +6787,8 @@ int32_t ball_after_endgame(ball_t *b)
                 io_frame_sync_extra(SYNC_CURTAIN);
                 for (int32_t i = 0; i < 0x147; i++)
                     game_delay();
-                xor_sprite_16x7(0x60, 0x38, img_w(si - 2));
-                xor_sprite_16x7(0x60, 0x38, img_w(si));
+                xor_sprite_16x7(0x60, 0x38, img_ptr(img_w(si - 2)));
+                xor_sprite_16x7(0x60, 0x38, img_ptr(img_w(si)));
             }
             level_tally();
             /* No `[0x2f0c] = 0x75` here: 1ac2:4791 goes straight from the
