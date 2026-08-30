@@ -415,7 +415,19 @@ typedef struct __attribute__((packed)) {
     uint16_t frame_delay;               /* 0x1487 empty loops left this frame */
     uint16_t frame_delay_set;           /* 0x1489 what it is reloaded with */
     uint16_t speed_timer;               /* 0x148b frames until speed_limit rises, so a level speeds up */
-    uint8_t  _pad_07[6315];
+    uint8_t  _pad_07[1634];
+    /* 0x1aef is the general scratch, and four routines spend it on different
+     * things at times that cannot overlap: the intro curtain runs before a
+     * game, the pause and the ending during and after one, and the results
+     * screen between. As with 0x0000, a union says that and four names for
+     * one address would not. */
+    union {
+        uint8_t curtain_work[2835];     /* intro_curtain: 0x1b rows of 0x69, decoded in place and then blitted */
+        uint8_t screen_stash[4000];     /* screen_stash puts 2000 bytes of playfield here for the pause. screen_restore reads 4000 - that is employee_enter's boss screen, which the port does not stash, and it is the largest claim anyone makes on this buffer */
+        uint8_t eog_band[495];          /* screen_end_of_game's band, merged with the picture and put back */
+        hsc_entry_t hsc_scratch[9];     /* screen_results insertion-sorts the players' records here, and hsc_sort feeds them into hsc from it */
+    };
+    uint8_t  _pad_21[681];
     uint8_t  paddle_step;               /* 0x2d38 how much the width changes per morph frame */
     uint8_t  paddle_kind;               /* 0x2d39 which of the four sprite sets is current */
     uint8_t  paddle_width;              /* 0x2d3a in pixels */
@@ -582,6 +594,10 @@ ENSURE_IMG_AT(paddle_step, 0x2d38);
 ENSURE_IMG_AT(paddle_kind, 0x2d39);
 ENSURE_IMG_AT(paddle_width, 0x2d3a);
 ENSURE_IMG_AT(paddle_morphing, 0x2d3b);
+ENSURE_IMG_AT(curtain_work, 0x1aef);
+ENSURE_IMG_AT(screen_stash, 0x1aef);
+ENSURE_IMG_AT(eog_band, 0x1aef);
+ENSURE_IMG_AT(hsc_scratch, 0x1aef);
 ENSURE_IMG_AT(morph_owner, 0x2d3c);
 ENSURE_IMG_AT(paddle_min, 0x2d3e);
 ENSURE_IMG_AT(paddle_max, 0x2d3f);
