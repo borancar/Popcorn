@@ -581,7 +581,9 @@ typedef struct __attribute__((packed)) {
      * at 0xa3c0, the ending's picture at 0xa6d0 and the capsule kinds at
      * 0xac60 are all in here, named where they are used and nowhere else.
      * That is the next seam. */
-    uint8_t  _pad_22[16973];
+    uint8_t  _pad_22[10802];
+    uint8_t  curtain_image[105][27];    /* 0x7805 the POPCORN logo the intro curtain brings down: 105 rows of 27 bytes, 108 pixels wide. intro_curtain reads it **backwards** - on frame `rows` it takes the last `rows` rows and draws them from the top, so the picture comes down like a curtain. That is why the address in the original is 0x8318, which is the end of this and not the start */
+    uint8_t  _pad_23b[3336];
     uint8_t  font[40][12][2];           /* 0x9020 the score panel's 8x12 font, two bits a pixel: forty glyphs of twelve rows of one word. Glyph 0, what a space maps to, is **not blank** - it is a solid block of colour 2, which is how the headings get their red ground */
     uint8_t  pause_overlay[38][50];     /* 0x93e0 what screen_stash paints over the stashed playfield. It starts exactly where the font ends */
     uint8_t  _pad_23[2164];
@@ -711,6 +713,7 @@ ENSURE_IMG_AT(frame_corner_left, 0x48d2);
 ENSURE_IMG_AT(life_sprite, 0x48e7);
 ENSURE_IMG_AT(ball_start_sprite, 0x48fb);
 ENSURE_IMG_AT(paddle_sprites, 0x4903);
+ENSURE_IMG_AT(curtain_image, 0x7805);
 ENSURE_IMG_AT(font, 0x9020);
 ENSURE_IMG_AT(pause_overlay, 0x93e0);
 ENSURE_IMG_AT(banner_font, 0xa3c0);
