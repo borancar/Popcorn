@@ -915,7 +915,7 @@ void shot_xor(uint32_t x, uint32_t y);             /* 1ac2:306b */
 void bonus_hits_ball(const ent_sprite_t *s, const ball_t *ball);  /* 1ac2:3f20 */
 void entity_bonus(entity_t *e);     /* 1ac2:39fa */
 void entity_unknown(uint32_t bx);
-void entity_multiball(entity_t *e);  /* 1ac2:3717 */
+void entity_multiball(void);  /* 1ac2:3717 */
 void entity_unlink(uint32_t node);/* 1ac2:3257 */
 uint32_t entity_alloc(void);      /* 1ac2:3232 */
 uint32_t draw_run(uint8_t c, uint32_t count, uint32_t di); /* 1ac2:10c5 */
@@ -930,7 +930,7 @@ void xor_sprite_20x16(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:406a */
 void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src);/* 1ac2:3f4f */
 void entity_sparkle(ent_anim_t *a); /* 1ac2:3aee */
 void entity_crumble(ent_anim_t *a); /* 1ac2:3b2a */
-void entity_hatch(entity_t *e);   /* 1ac2:390d */
+void entity_hatch(ent_hatch_t *h);   /* 1ac2:390d */
 void bonus_release(const ent_hatch_t *h);  /* 1ac2:39a1 */
 int32_t  bonus_move_right(ent_bonus_t *b, uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
 int32_t  bonus_move_left(ent_bonus_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */

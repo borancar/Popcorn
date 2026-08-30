@@ -149,7 +149,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x2ccd: brick_animated(r[R_SI], ball_at(r[R_BP])); return 1;
     case 0x3aee: entity_sparkle(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x3b2a: entity_crumble(&entity_at(r[R_BX])->p.anim); return 1;
-    case 0x390d: entity_hatch(entity_at(r[R_BX])); return 1;
+    case 0x390d: entity_hatch(&entity_at(r[R_BX])->p.hatch); return 1;
     case 0x39a1: bonus_release(&entity_at(r[R_BX])->p.hatch); return 1;
     case 0x39fa: entity_bonus(entity_at(r[R_BX])); return 1;
     case 0x3df1: bonus_update(&entity_at(r[R_BX])->p.bonus.sprite, r[R_CX] & 0xff, r[R_AX] & 0xff);
@@ -180,7 +180,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x315b: bonus_reverse(); return 1;
     case 0x31e8: bonus_slower_ball(); return 1;
     case 0x41b1: fill_column(r[R_DI], r[R_AX]); return 1;
-    case 0x3717: entity_multiball(entity_at(r[R_BX])); return 1;
+    case 0x3717: entity_multiball(); return 1;
     case 0x3386: entity_paddle_fx(entity_at(r[R_BX])); return 1;
     case 0x05f8: level_between(); return 1;
     case 0x492f: arrow_head(r[R_DI]); return 1;
