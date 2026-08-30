@@ -560,7 +560,6 @@ void load_high_scores(const char *dir)
  * seven rows, which is exactly the leading edge.
  */
 #define CURTAIN_SRC   0x8318            /* read backwards from here */
-#define CURTAIN_WORK  0x1aef            /* scratch, 0x1b * 0x69 bytes */
 #define CURTAIN_ROW      0x1b           /* 27 bytes: 108 pixels */
 
 void intro_curtain(void)
@@ -602,10 +601,10 @@ void intro_curtain(void)
 
     for (uint32_t rows = 1; rows != 0x6a; rows++) {
         uint32_t n = (CURTAIN_ROW * (rows & 0xff)) & 0xffff;
-        memcpy(g_image + CURTAIN_WORK, g_image + CURTAIN_SRC - n, n);
+        memcpy(gv.curtain_work, g_image + CURTAIN_SRC - n, n);
 
         for (uint32_t i = 0; i < n && i < 0xbd; i++) {
-            uint32_t al = g_image[CURTAIN_WORK + i], out = 0;
+            uint32_t al = gv.curtain_work[i], out = 0;
             for (int32_t k = 0; k < 4; k++) {
                 uint32_t hi = (al >> 7) & 1;
                 al = (al << 1) & 0xff;
@@ -614,10 +613,10 @@ void intro_curtain(void)
                 out = hi ? (((out << 1) | 1) << 1 | lo) & 0xff
                          : (out << 2) & 0xff;
             }
-            g_image[CURTAIN_WORK + i] = (uint8_t)out;
+            gv.curtain_work[i] = (uint8_t)out;
         }
 
-        uint32_t si = CURTAIN_WORK, di = 0x34;
+        uint32_t si = img_off(gv.curtain_work), di = 0x34;
         io_wait_retrace();
         for (uint32_t r = 0; r < rows; r++) {
             for (int32_t b = 0; b < CURTAIN_ROW; b++)
@@ -5475,7 +5474,7 @@ void palette_cycle(void)
  * ===================================================================== */
 #define HSC_ENTRY   0x12                /* twelve of name and six of score */
 #define HSC_COUNT     10
-#define HSC_SCRATCH 0x1aef              /* the records hsc_sort sorts */
+#define HSC_SCRATCH img_off(gv.hsc_scratch)
 #define BORDER_SPR (CS_BASE + 0x506d)   /* eight words, in the code segment */
 #define BORDER_POS (CS_BASE + 0x507d)   /* fourteen positions, likewise */
 
@@ -5671,14 +5670,14 @@ void level_tally(void)
 
 /* 1ac2:4ba9  screen_stash
  *
- * Put the playing screen aside in the buffer at 0x1aef and paint the overlay
+ * Put the playing screen aside in screen_stash and paint the overlay
  * at 0x93e0 over it - 0x26 rows of 0x32 bytes. Used by the pause screen and
  * by F10.
  */
 void screen_stash(void)
 {
     speaker_off();
-    uint32_t di = 0x1aef;
+    uint32_t di = img_off(gv.screen_stash);
     uint32_t si = 0x1900;
     for (int32_t half = 0; half < 2; half++) {
         for (int32_t r = 0; r < 0x14; r++) {
@@ -5708,7 +5707,7 @@ void screen_restore(void)
 {
     io_cga_mode(0x0e);
     set_palette_registers(0x4b9d);
-    memcpy(g_vram, g_image + 0x1aef, 0x7d0 * 2);
+    memcpy(g_vram, gv.screen_stash, 0x7d0 * 2);
     speaker_on();
 }
 
@@ -5760,7 +5759,7 @@ void cell_hole_draw(uint32_t x, uint32_t y)
  * the speaker on again */
 void screen_unstash(void)
 {
-    uint32_t si = 0x1aef;
+    uint32_t si = img_off(gv.screen_stash);
     uint32_t di = 0x1900;
     for (int32_t half = 0; half < 2; half++) {
         for (int32_t r = 0; r < 0x14; r++) {
@@ -6594,7 +6593,7 @@ void screen_define_keys(void)
  * the table at 0xa8bf, each a tall sprite drawn twice, blanked from 0xabab,
  * and drawn twice more. Any key stops it; if none came, ending_column runs.
  * ===================================================================== */
-#define EOG_BAND      0x1aef            /* the band being merged */
+#define EOG_BAND      img_off(gv.eog_band)
 #define EOG_PICTURE   0xa6d0
 #define EOG_WIDTH     0x21
 #define EOG_BAND_LEN  0x1ef
@@ -7214,15 +7213,15 @@ int32_t next_player(const char *dir)
  *
  * With one player there is nothing to compare, so it jumps straight to
  * 0x1053. With more, the field is cleared, the level intro runs on it, and
- * the players are sorted into 0x1aef by score - the same `score_before` the
+ * the players are sorted into hsc_scratch by score - the same `score_before` the
  * hall of fame uses - and shown on a bar.
  *
  * 0x1053 is a **jump** target, not a call, so a map that follows calls counts
  * its bytes as part of this routine and a coverage figure reads 100% with
- * none of it written. What it does matters: the scratch at 0x1aef that
+ * none of it written. What it does matters: hsc_scratch, that
  * `hsc_sort` reads is built here, and with one player it is built *only*
  * here - the multi-player path jumps to 0x1066 instead, past the copy,
- * because it has already filled 0x1aef itself. The port had the one-player
+ * because it has already filled hsc_scratch itself. The port had the one-player
  * branch calling hsc_sort with no copy at all, so it sorted whatever was left
  * in the scratch and the player's own score never entered the table.
  *
@@ -7262,7 +7261,7 @@ void screen_results(const char *dir)
     memset(gv.level.cells, 0, sizeof gv.level.cells);
     level_intro();
 
-    /* An insertion sort of the player records into the scratch at 0x1aef. */
+    /* An insertion sort of the player records into hsc_scratch. */
     uint32_t di = HSC_SCRATCH;
     const player_t *q = &gv.players[0];
     memcpy(g_image + di, q->name, sizeof q->name);
