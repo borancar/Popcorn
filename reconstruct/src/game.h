@@ -1247,7 +1247,7 @@ void ball_after(ball_t *b);   /* 1ac2:247f */
 int32_t  ball_after_endgame(ball_t *b);  /* 1ac2:45a1 */
 void ball_bricks(ball_t *b);  /* 1ac2:254d */
 void brick_hit(hit_t *hit, uint32_t cell, ball_t *ball);
-void xor_sprite_16xn(uint32_t x, uint32_t y, uint32_t src, uint32_t rows); /* 1ac2:40f2 */
+void xor_sprite_16xn(uint32_t x, uint32_t y, const uint8_t *src, uint32_t rows); /* 1ac2:40f2 */
 void brick_1(hit_t *hit, ball_t *ball);     /* 1ac2:28cb */
 void brick_2(hit_t *hit, ball_t *ball);     /* 1ac2:2985 */
 void brick_3(hit_t *hit, ball_t *ball);     /* 1ac2:2a3f */
@@ -1317,7 +1317,7 @@ void cell_set_three(uint32_t node);/* 1ac2:3668 */
 void cells_restore(void);         /* 1ac2:36fb */
 
 void bonus_spawn(void);           /* 1ac2:3d95 */
-void xor_sprite_20x16(uint32_t x, uint32_t y, uint32_t src); /* 1ac2:406a */
+void xor_sprite_20x16(uint32_t x, uint32_t y, const uint8_t *src); /* 1ac2:406a */
 void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src);/* 1ac2:3f4f */
 void entity_sparkle(ent_anim_t *a); /* 1ac2:3aee */
 void entity_crumble(ent_anim_t *a); /* 1ac2:3b2a */

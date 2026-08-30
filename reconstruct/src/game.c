@@ -2311,7 +2311,7 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
      * that was just picked, as the x instead put it wherever the random
      * number landed. */
     xor_sprite_16xn(centre & 0xff, ((centre >> 8) + 1) & 0xff,
-                    is_two ? 0x4e13 : 0x5863, 6);
+                    img_ptr(is_two ? 0x4e13 : 0x5863), 6);
     gv.bonus_cap++;
 }
 
@@ -2682,11 +2682,11 @@ void level_draw(void)
     }
 
     for (int32_t f = 0; f < 6; f++) {
-        uint32_t src = gv.walker_drop[f];
+        const uint8_t *src = img_ptr(gv.walker_drop[f]);
         uint32_t d = 0x1cd9;
         for (int32_t r = 0; r < 7; r++) {
             for (int32_t b = 0; b < 7; b++)
-                g_vram[(d + b) & (CGA_SIZE - 1)] = g_image[src + r * 7 + b];
+                g_vram[(d + b) & (CGA_SIZE - 1)] = src[r * 7 + b];
             d = cga_next_row(d);
         }
         for (int32_t i = 0; i < 0x147; i++)
@@ -2956,12 +2956,12 @@ void cells_restore(void)
  * ===================================================================== */
 
 /* 1ac2:406a  xor_sprite_20x16 - sixteen rows of five bytes, XORed in */
-void xor_sprite_20x16(uint32_t x, uint32_t y, uint32_t src)
+void xor_sprite_20x16(uint32_t x, uint32_t y, const uint8_t *src)
 {
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 0x10; r++) {
         for (int32_t b = 0; b < 5; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[src + r * 5 + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] ^= src[r * 5 + b];
         di = cga_next_row(di);
     }
 }
@@ -2989,7 +2989,7 @@ void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src)
             }
         }
     }
-    xor_sprite_20x16(x, y, img_off(gv.sprite_work));
+    xor_sprite_20x16(x, y, gv.sprite_work[0]);
 }
 
 /* Step a two-frame XOR animation: erase the frame before this one, draw this
@@ -3081,7 +3081,7 @@ void bonus_release(const ent_hatch_t *h)
     b->sprite.x = (uint8_t)al;
     b->sprite.y = h->y;
     xor_sprite_20x16(b->sprite.x, b->sprite.y,
-                     img_w(b->sprite.frame));
+                     img_ptr(img_w(b->sprite.frame)));
 }
 
 /* 1ac2:390d  entity_hatch
@@ -3108,14 +3108,18 @@ void entity_hatch(ent_hatch_t *h)
     if (h->phase % 0x23 != 0)
         return;
 
-    uint32_t si = img_w(h->script);
+    uint32_t frame = img_w(h->script);
+    const uint8_t *src = img_ptr(frame);
     uint32_t di = cga_at(h->x, (h->y - 0x0a) & 0xff);
     for (int32_t r = 0; r < 0x25; r++) {
-        g_vram[di & (CGA_SIZE - 1)] = g_image[si + r * 2];
-        g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[si + r * 2 + 1];
+        g_vram[di & (CGA_SIZE - 1)] = src[r * 2];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = src[r * 2 + 1];
         di = cga_next_row(di);
     }
-    if (si == 0x635c) {
+    /* The last frame of the opening is what releases the capsule, and the
+     * original tests the **offset** rather than the pointer - so that stays
+     * as it is. */
+    if (frame == 0x635c) {
         h->wait = 0x12c;
         bonus_release(h);
     }
@@ -3135,15 +3139,15 @@ void entity_hatch(ent_hatch_t *h)
  * is there, and otherwise take the step. Returning "blocked" is the original's
  * carry, and bonus_steer picks a new direction when it comes back set.
  *
- * The cell index is the same arithmetic as everywhere else - `(y >> 3) * 12 +
+ * The cell is found by the same arithmetic as everywhere else - `(y >> 3) * 12 +
  * (x >> 4)` - written as `(al & 0xf8) + ((al & 0xf8) >> 1)`, and the extra
  * cells each one checks (`+0x0c` one row down, `+1` one column right) are the
  * rest of the capsule's footprint.
  */
-static uint32_t cell_index(uint32_t y, uint32_t x)
+static const uint8_t *cell_at(uint32_t y, uint32_t x)
 {
     uint32_t row = y & 0xf8;
-    return img_off(gv.level.cells) + row + (row >> 1) + ((x >> 4) & 0x0f);
+    return &gv.level.cells[row + (row >> 1) + ((x >> 4) & 0x0f)];
 }
 
 /* 1ac2:3c66  bonus_move_right */
@@ -3153,10 +3157,10 @@ int32_t bonus_move_right(ent_anim_t *b, uint32_t *px, uint32_t *py)
     uint32_t y = *py, x = *px;
     if (x >= 0xb8)
         return 0;
-    uint32_t di = cell_index((y - 6) & 0xff, (x + 8) & 0xff);
-    if (g_image[di] || g_image[di + 0x0c])
+    const uint8_t *cell = cell_at((y - 6) & 0xff, (x + 8) & 0xff);
+    if (cell[0] || cell[0x0c])
         return 0;
-    if ((((y - 6) & 7) != 0) && g_image[di + 0x18])
+    if ((((y - 6) & 7) != 0) && cell[0x18])
         return 0;
     (*px)++;
     return 1;
@@ -3169,10 +3173,10 @@ int32_t bonus_move_left(ent_anim_t *b, uint32_t *px, uint32_t *py)
     uint32_t y = *py, x = *px;
     if (x <= 8)
         return 0;
-    uint32_t di = cell_index((y - 6) & 0xff, (x - 9) & 0xff);
-    if (g_image[di] || g_image[di + 0x0c])
+    const uint8_t *cell = cell_at((y - 6) & 0xff, (x - 9) & 0xff);
+    if (cell[0] || cell[0x0c])
         return 0;
-    if ((((y - 6) & 7) != 0) && g_image[di + 0x18])
+    if ((((y - 6) & 7) != 0) && cell[0x18])
         return 0;
     (*px)--;
     return 1;
@@ -3185,10 +3189,10 @@ int32_t bonus_move_up(ent_anim_t *b, uint32_t *px, uint32_t *py)
     uint32_t y = *py, x = *px;
     if (y <= 6)
         return 0;
-    uint32_t di = cell_index((y - 7) & 0xff, (x - 8) & 0xff);
-    if (g_image[di])
+    const uint8_t *cell = cell_at((y - 7) & 0xff, (x - 8) & 0xff);
+    if (cell[0])
         return 0;
-    if ((((x - 8) & 0x0f) != 0) && g_image[di + 1])
+    if ((((x - 8) & 0x0f) != 0) && cell[1])
         return 0;
     (*py)--;
     return 1;
@@ -3219,10 +3223,10 @@ int32_t bonus_move_down(ent_anim_t *b, uint32_t *px, uint32_t *py)
         return 1;
     }
 
-    uint32_t di = cell_index((y + 0x0a) & 0xff, (x - 8) & 0xff);
-    if (g_image[di])
+    const uint8_t *cell = cell_at((y + 0x0a) & 0xff, (x - 8) & 0xff);
+    if (cell[0])
         return 0;
-    if ((((x - 8) & 0x0f) != 0) && g_image[di + 1])
+    if ((((x - 8) & 0x0f) != 0) && cell[1])
         return 0;
     (*py)++;
     return 1;
@@ -3264,12 +3268,12 @@ int32_t bonus_steer(ent_anim_t *b, uint32_t *px, uint32_t *py)
 }
 
 /* 1ac2:40f2  xor_sprite_16xn - like 0x3b64 but the caller says how many rows */
-void xor_sprite_16xn(uint32_t x, uint32_t y, uint32_t src, uint32_t rows)
+void xor_sprite_16xn(uint32_t x, uint32_t y, const uint8_t *src, uint32_t rows)
 {
     uint32_t di = cga_at(x, y);
     for (uint32_t r = 0; r < rows; r++) {
         for (int32_t b = 0; b < 4; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] ^= g_image[src + r * 4 + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] ^= src[r * 4 + b];
         di = cga_next_row(di);
     }
 }
@@ -4113,7 +4117,7 @@ void entity_capsule_frames(ent_fall_t *f, uint32_t table)
 
     uint32_t y = f->y;
     f->y++;
-    xor_sprite_16xn(f->x, y, src, rows & 0xff);
+    xor_sprite_16xn(f->x, y, img_ptr(src), rows & 0xff);
 
     y = f->y;
     if (y == 0xc5) {                    /* fallen past the paddle */
@@ -4159,7 +4163,7 @@ void entity_capsule_frames(ent_fall_t *f, uint32_t table)
             f->cycle++;
     }
     di = base + f->frame * 4;
-    xor_sprite_16xn(f->x, y, img_w(di), img_w(di + 2) & 0xff);
+    xor_sprite_16xn(f->x, y, img_ptr(img_w(di)), img_w(di + 2) & 0xff);
 }
 
 /* ========================================================================
