@@ -228,8 +228,29 @@ typedef struct __attribute__((packed)) {
             uint8_t  _r;
 } ent_morph_t;
 
+
+/* The handlers a node dispatches to. The game keeps the routine's own
+ * address in the node and rewrites it to change the node's kind, so these
+ * are `_FN`: a routine's address, fixed in the image, with nothing to give
+ * it a field. Each name is the C function it reaches. */
+#define ENTITY_CAPSULE_FN        0x3273
+#define ENTITY_PADDLE_FX_FN      0x3386
+#define ENTITY_POPUP_FN          0x3561
+#define ENTITY_SOFTEN_FN         0x365e
+#define ENTITY_REPEAT_FN         0x366f
+#define ENTITY_PLAIN_FN          0x3696
+#define ENTITY_BALL_ARRIVE_FN    0x36a1
+#define ENTITY_CELLS_TIMER_FN    0x36f6
+#define ENTITY_MULTIBALL_FN      0x3717
+#define ENTITY_BALL_HOLD_FN      0x37e0
+#define ENTITY_HATCH_FN          0x390d
+#define ENTITY_BONUS_FN          0x39fa
+#define ENTITY_ANIM_BRICK_FN     0x3abf
+#define ENTITY_SPARKLE_FN        0x3aee
+#define ENTITY_CRUMBLE_FN        0x3b2a
+
 typedef struct __attribute__((packed)) {
-    uint16_t handler;       /* 0x00 the routine entity_call dispatches to */
+    uint16_t handler_fn;    /* 0x00 the routine entity_call dispatches to, as the address the game holds. Rewritten in place to change what the node is */
     union {                 /* 0x02 the variant, chosen by handler */
 
         /* crumble, plain, sparkle, soften, repeat, ball_arrive, ball_hold -
@@ -258,7 +279,7 @@ typedef struct __attribute__((packed)) {
 
         uint8_t raw[10];    /* for the handlers still reached by offset */
     } p;
-    uint16_t next;          /* 0x0c 0xffff ends the chain */
+    uint16_t next_ptr;      /* 0x0c the next node, as the game's own 16-bit pointer. 0xffff ends the chain - **not** zero, because zero is a valid offset here */
 } entity_t;
 
 ENSURE_ENTITY_ARM(anim, 10);   ENSURE_ENTITY_ARM(fall, 10);
@@ -268,9 +289,9 @@ ENSURE_ENTITY_ARM(brick, 10);  ENSURE_ENTITY_ARM(morph, 10);
 ENSURE_SIZE(entity_t, 0x0e);
 #define ENSURE_ENTITY_AT(field, off) \
     typedef char ensure_entity_at_##field[offsetof(entity_t, field) == (off) ? 1 : -1]
-ENSURE_ENTITY_AT(handler, 0x00);
+ENSURE_ENTITY_AT(handler_fn, 0x00);
 ENSURE_ENTITY_AT(p, 0x02);
-ENSURE_ENTITY_AT(next, 0x0c);
+ENSURE_ENTITY_AT(next_ptr, 0x0c);
 
 /* A node by its image offset. The chain's links are the game's own 16-bit
  * offsets, stored in the image and ended by 0xffff, so a walk still carries
@@ -382,6 +403,32 @@ static inline ball_t *ball_ptr(uint32_t off)
 {
     return (ball_t *)(g_image + off);
 }
+
+/* Scan codes, as the menu and the name entry test them. The high byte of what
+ * INT 16h returns is the scan code and the low byte the character, which is
+ * why the menu switches on `key >> 8` and the name field on `key & 0xff`. */
+#define KEY_ESC          0x01
+#define KEY_F1           0x3b
+#define KEY_F2           0x3c
+#define KEY_F3           0x3d
+#define KEY_F4           0x3e
+#define KEY_F5           0x3f
+#define KEY_F6           0x40
+#define KEY_F7           0x41
+#define KEY_F8           0x42
+#define KEY_F9           0x43
+#define KEY_F10          0x44
+/* And the three characters the name field reads, which are ASCII and not
+ * scan codes. */
+#define KEY_BACKSPACE    0x08
+#define KEY_RETURN       0x0d
+#define KEY_ESCAPE_CHAR  0x1b
+
+/* What ends one of the game's chains and lists. It has to be 0xffff and
+ * **cannot** be zero: zero is a real offset in this program - scratch1 is at
+ * it - so a terminator of zero and a valid pointer would be the same value.
+ * Spelled as -1 in the pointer's own width, which is what it is. */
+#define SENTINEL_PTR ((uint16_t)-1U)
 
 /* The inverse of img_off: what the game stores as a 16-bit offset, as the
  * pointer it means. The call sites are where an `img_w` out of the game's own
@@ -516,8 +563,8 @@ typedef struct __attribute__((packed)) {
     uint8_t  paddle_max;                /* 0x2d3f 172, and it moves as the paddle grows. Was also PADDLE_HIGH */
     uint8_t  repeat_count;              /* 0x2d40 frames until the held key moves the paddle again */
     uint8_t  _pad_08[4];
-    uint16_t input_active;              /* 0x2d45 the input routine in use: 0x1654 mouse, 0x16d2 keyboard, 0x1785 demo */
-    uint16_t input_selected;            /* 0x2d47 what the menu has chosen, copied to input_active at F1 */
+    uint16_t input_active_fn;           /* 0x2d45 the input routine in use, as the address the game calls through: 0x1654 mouse, 0x16d2 keyboard, 0x1785 demo. `_fn` because it is a **routine**, not data - a pointer the game calls rather than reads */
+    uint16_t input_selected_fn;         /* 0x2d47 what the menu has chosen, copied to input_active_fn at F1 */
     uint8_t  last_make;                 /* 0x2d49 the last make code the INT 09h handler saw; 1 is Esc, which pauses */
     uint8_t  last_dir;                  /* 0x2d4a which of left/right was pressed most recently, for when both are held */
     uint8_t  repeat_div;                /* 0x2d4b the reload for repeat_count; falls to 1, so a held key accelerates */
@@ -577,7 +624,7 @@ typedef struct __attribute__((packed)) {
      * What is at 0x3144 is not the head - it is this node's `next`, and the
      * head is the node itself. Reading it that way is what makes the chain
      * work without special cases: a walk starts at entity_head and follows
-     * links, and an unlink writes entity_prev->next whether the node it is
+     * links, and an unlink writes entity_prev_ptr->next_ptr whether the node it is
      * removing is the first or the fortieth.
      *
      * Read off the binary rather than assumed. 1ac2:323e is `mov bx, 0x3138`
@@ -597,15 +644,15 @@ typedef struct __attribute__((packed)) {
     union {
         entity_t entity_head;           /* 0x3138 the head, as a node */
         struct {
-            uint16_t entity_free;       /* 0x3138 = entity_head.handler:
+            uint16_t entity_free_ptr;       /* 0x3138 = entity_head.handler:
                                          * the free list's first node */
             uint8_t  entity_remove;     /* 0x313a a handler asking to be
                                          * taken out of the list */
             uint8_t  _pad_head[7];
-            uint16_t entity_prev;       /* 0x3142 trails one node behind a
+            uint16_t entity_prev_ptr;       /* 0x3142 trails one node behind a
                                          * walk, so an unlink needs no
                                          * second pass */
-        };                              /* 0x3144 is entity_head.next */
+        };                              /* 0x3144 is entity_head.next_ptr */
     };
     entity_t entities[41];              /* 0x3146 the node pool - 574 bytes is 41 of them exactly, ending where bonus_cap begins. The chain is walked by image offset, so this is what those offsets point into rather than something the walk uses */
     uint8_t  bonus_cap;                 /* 0x3384 */
@@ -706,13 +753,36 @@ typedef struct __attribute__((packed)) {
     uint16_t border_spr[8];             /* cs:0x506d the menu border's sprites */
     uint16_t border_pos[14];            /* cs:0x507d and where each one is, updated in place */
     uint8_t  _code6[1545];
-    uint16_t cheat_cursor;              /* cs:0x56a2 how far along the typed sequence we are, as a code-segment offset */
+    uint16_t cheat_cursor_ptr;          /* cs:0x56a2 how far along cheat_keys the typing has got, as a code-segment offset */
     uint8_t  cheat_last;                /* cs:0x56a4 the last key accepted, so the same one twice is not a failure */
-    uint8_t  _code7[1480];
+    uint8_t  cheat_keys[16];            /* cs:0x56a5 the sequence to type, each byte xored with 0xaa: "pop_corn LACRAL". A **second** cheat, and not the one cheat_match walks */
+    uint8_t  cheat_text[510];           /* cs:0x56b5 the authors' message, each byte xored with 0xaa and with the plain byte before it, ended by a zero. It runs right up to cheat_sequence itself at cs:0x58b3 */
+    uint8_t  _code7[954];
     uint8_t  frame_phase;               /* cs:0x5c6d which corner piece the next band of the playfield surround uses */
 } code_vars;
 ENSURE_SIZE(code_vars, 0x5c6e);
 #define cv (*(code_vars *)(g_image + 0x1ac20))
+
+/* Its own img_ptr and img_w, for the same reason s14a1 has them: the offsets
+ * the game keeps into its code segment - the sound cursor, the cheat cursor,
+ * the border tables - are relative to **this** segment. `CS_BASE + x` was
+ * that conversion done by hand at every site. */
+static inline uint8_t *cv_ptr(uint32_t off)
+{
+    return (uint8_t *)&cv + off;
+}
+
+static inline uint16_t cv_w(uint32_t off)
+{
+    const uint8_t *p = cv_ptr(off);
+    return (uint16_t)(p[0] | (p[1] << 8));
+}
+
+/* And back: a pointer into the code segment as the offset the game keeps. */
+static inline uint16_t cv_off(const void *p)
+{
+    return (uint16_t)((const uint8_t *)p - (const uint8_t *)&cv);
+}
 
 #define ENSURE_CODE_AT(field, off) \
     typedef char ensure_code_at_##field[offsetof(code_vars, field) == (off) ? 1 : -1]
@@ -726,8 +796,10 @@ ENSURE_CODE_AT(delay_count, 0x164e);
 ENSURE_CODE_AT(demo_ball, 0x1784);
 ENSURE_CODE_AT(border_spr, 0x506d);
 ENSURE_CODE_AT(border_pos, 0x507d);
-ENSURE_CODE_AT(cheat_cursor, 0x56a2);
+ENSURE_CODE_AT(cheat_cursor_ptr, 0x56a2);
 ENSURE_CODE_AT(cheat_last, 0x56a4);
+ENSURE_CODE_AT(cheat_keys, 0x56a5);
+ENSURE_CODE_AT(cheat_text, 0x56b5);
 ENSURE_CODE_AT(frame_phase, 0x5c6d);
 
 /* offsetof checked at compile time. _Static_assert is C11 and this is C99, so
@@ -783,8 +855,8 @@ ENSURE_IMG_AT(morph_owner, 0x2d3c);
 ENSURE_IMG_AT(paddle_min, 0x2d3e);
 ENSURE_IMG_AT(paddle_max, 0x2d3f);
 ENSURE_IMG_AT(repeat_count, 0x2d40);
-ENSURE_IMG_AT(input_active, 0x2d45);
-ENSURE_IMG_AT(input_selected, 0x2d47);
+ENSURE_IMG_AT(input_active_fn, 0x2d45);
+ENSURE_IMG_AT(input_selected_fn, 0x2d47);
 ENSURE_IMG_AT(last_make, 0x2d49);
 ENSURE_IMG_AT(last_dir, 0x2d4a);
 ENSURE_IMG_AT(repeat_div, 0x2d4b);
@@ -833,9 +905,9 @@ ENSURE_IMG_AT(anim_count, 0x3134);
 ENSURE_IMG_AT(anim_rate, 0x3135);
 ENSURE_IMG_AT(anim_ptr, 0x3136);
 ENSURE_IMG_AT(entity_head, 0x3138);
-ENSURE_IMG_AT(entity_free, 0x3138);
+ENSURE_IMG_AT(entity_free_ptr, 0x3138);
 ENSURE_IMG_AT(entity_remove, 0x313a);
-ENSURE_IMG_AT(entity_prev, 0x3142);
+ENSURE_IMG_AT(entity_prev_ptr, 0x3142);
 ENSURE_IMG_AT(entities, 0x3146);
 ENSURE_IMG_AT(bonus_cap, 0x3384);
 ENSURE_IMG_AT(capsule_frames, 0x3385);
@@ -886,11 +958,11 @@ ENSURE_IMG_AT(screen_save, 0x10250);
 /* The two facts the chain rests on, checked rather than described: the head
  * node sits at 0x3138, and its `next` therefore lands on 0x3144 - the word
  * every walk starts from. Change the declarations inside the union, or the
- * seven bytes of payload between entity_remove and entity_prev, and the second
+ * seven bytes of payload between entity_remove and entity_prev_ptr, and the second
  * one stops holding; after that entity_alloc appends to the wrong place and
  * entity_unlink corrupts the list, both silently. This way the build stops. */
 typedef char ensure_head_next_lands_on_3144[
-    offsetof(game_vars, entity_head.next) == 0x3144 ? 1 : -1];
+    offsetof(game_vars, entity_head.next_ptr) == 0x3144 ? 1 : -1];
 extern const char *g_dir;               /* "" - everything is relative to the
                                          * current directory, as it was in DOS */
 
@@ -989,10 +1061,12 @@ static inline uint8_t *s14a1_ptr(uint32_t off)
     return (uint8_t *)&s14a1 + off;
 }
 
-static inline uint32_t s14a1_w(uint32_t off)
+/* A word out of the block - which is one of the game's pointers, so it comes
+ * back in a pointer's width. */
+static inline uint16_t s14a1_w(uint32_t off)
 {
     const uint8_t *p = s14a1_ptr(off);
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8);
+    return (uint16_t)(p[0] | (p[1] << 8));
 }
 
 #define SEG_C46 0xc460
@@ -1127,10 +1201,12 @@ void io_set_deadline_image(const char *path);
 void io_set_int09_installed(int32_t on);
 
 /* Little-endian accessors, so a transcribed `mov ax,[0x3144]` reads the way it
- * reads in the disassembly. */
-static inline uint32_t img_w(uint32_t off)
+ * reads in the disassembly. img_w comes back in a **pointer's width**: what it
+ * reads is a word of the game's data, and the reason the port reads words at
+ * all is that the game keeps its pointers in them. */
+static inline uint16_t img_w(uint32_t off)
 {
-    return (uint32_t)g_image[off] | ((uint32_t)g_image[off + 1] << 8);
+    return (uint16_t)(g_image[off] | (g_image[off + 1] << 8));
 }
 static inline void img_setw(uint32_t off, uint32_t v)
 {
@@ -1335,7 +1411,7 @@ void bonus_hits_ball(const ent_sprite_t *s, const ball_t *ball);  /* 1ac2:3f20 *
 void entity_bonus(ent_anim_t *b);   /* 1ac2:39fa */
 void entity_unknown(entity_t *e);
 void entity_multiball(void);  /* 1ac2:3717 */
-void entity_unlink(uint32_t node);/* 1ac2:3257 */
+void entity_unlink(entity_t *node); /* 1ac2:3257 */
 entity_t *entity_alloc(void);      /* 1ac2:3232 */
 uint32_t draw_run(uint8_t c, uint32_t count, uint32_t di); /* 1ac2:10c5 */
 void draw_cursor(uint32_t di);    /* 1ac2:14a7 */
