@@ -6335,17 +6335,19 @@ int32_t drive_writable(void) { return 1; }
  * ===================================================================== */
 void intro_paddle(void)
 {
-    /* Out of the wall. */
-    uint32_t bp = 0x490a;
-    for (uint32_t bh = 1; bh <= 8; bh++, bp--) {
-        uint32_t si = bp;
-        for (int32_t bl = 4; bl > 0; bl--, si += PADDLE_IMAGE) {
+    /* Out of the wall. `bh` bytes of the paddle show, and the source backs up
+     * one a pass - 0x490a is paddle_sprites[0][0] plus seven - so the edge
+     * that is against the wall stays put while more of it appears. Each pass
+     * plays the four pixel phases in turn. */
+    for (uint32_t bh = 1; bh <= 8; bh++) {
+        for (int32_t phase = 0; phase < 4; phase++) {
             io_wait_retrace();
-            uint32_t di = 0x1900, s = si;
+            uint32_t di = 0x1900;
+            const uint8_t *s = &gv.paddle_sprites[0][phase][8 - bh];
             for (int32_t dl = 7; dl > 0; dl--) {
                 for (uint32_t b = 0; b < bh; b++)
-                    g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[s + b];
-                s += 0x0b;
+                    g_vram[(di + b) & (CGA_SIZE - 1)] = s[b];
+                s += PADDLE_BYTES;
                 di = cga_next_row(di);
             }
             for (int32_t i = 0; i < 0x19; i++)
@@ -6356,17 +6358,17 @@ void intro_paddle(void)
         }
     }
 
-    /* And across. */
+    /* And across, whole this time and from the start of the sprite. */
     for (uint32_t bh = 0; bh < 0x16; bh++) {
-        uint32_t si = 0x4903;
-        for (int32_t bl = 4; bl > 0; bl--, si += PADDLE_IMAGE) {
+        for (int32_t phase = 0; phase < 4; phase++) {
             io_wait_retrace();
-            uint32_t di = (0x1900 + bh) & 0xffff, s = si;
+            uint32_t di = (0x1900 + bh) & 0xffff;
+            const uint8_t *s = gv.paddle_sprites[0][phase];
             for (int32_t dl = 7; dl > 0; dl--) {
                 g_vram[di & (CGA_SIZE - 1)] = 0;
                 for (int32_t b = 0; b < 8; b++)
-                    g_vram[(di + 1 + b) & (CGA_SIZE - 1)] = g_image[s + b];
-                s += 0x0b;
+                    g_vram[(di + 1 + b) & (CGA_SIZE - 1)] = s[b];
+                s += PADDLE_BYTES;
                 di = cga_next_row(di);
             }
             for (int32_t i = 0; i < 0x19; i++)
