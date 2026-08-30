@@ -1377,12 +1377,12 @@ frames:
         gv.entity_prev = img_off(&gv.entity_head);
         uint32_t bx = gv.entity_head.next;
         while (bx != 0xffff) {
-            entity_call(entity_at(bx));
+            entity_call(entity_ptr(bx));
             if (gv.entity_remove == 0) {
                 gv.entity_prev = (uint16_t)(bx);
-                bx = entity_at(bx)->next;
+                bx = entity_ptr(bx)->next;
             } else {
-                uint32_t next = entity_at(bx)->next;
+                uint32_t next = entity_ptr(bx)->next;
                 entity_unlink(bx);
                 bx = next;
             }
@@ -2902,18 +2902,18 @@ entity_t *entity_alloc(void)
 {
     /* Take the first node off the free list. */
     uint32_t si = gv.entity_free;
-    gv.entity_free = (uint16_t)(entity_at(si)->next);
+    gv.entity_free = (uint16_t)(entity_ptr(si)->next);
 
     /* Then append it to the end of the **active** list - which is what this
      * walk is over, though it starts at the free list's own head variable.
      * See the note on entity_free: 0x3138 read as a node has its `next` at
      * 0x3144, which *is* entity_head, so the sentinel's link is the list. */
     uint32_t bx = img_off(&gv.entity_head);
-    while (entity_at(bx)->next != 0xffff)
-        bx = entity_at(bx)->next;
-    entity_at(si)->next = (uint16_t)(0xffff);
-    entity_at(bx)->next = (uint16_t)(si);
-    return entity_at(si);
+    while (entity_ptr(bx)->next != 0xffff)
+        bx = entity_ptr(bx)->next;
+    entity_ptr(si)->next = (uint16_t)(0xffff);
+    entity_ptr(bx)->next = (uint16_t)(si);
+    return entity_ptr(si);
 }
 
 /* 1ac2:3257  entity_unlink
@@ -2924,8 +2924,8 @@ entity_t *entity_alloc(void)
  */
 void entity_unlink(uint32_t node)
 {
-    entity_at(gv.entity_prev)->next = entity_at(node)->next;
-    entity_at(node)->next = (uint16_t)(gv.entity_free);
+    entity_ptr(gv.entity_prev)->next = entity_ptr(node)->next;
+    entity_ptr(node)->next = (uint16_t)(gv.entity_free);
     gv.entity_free = (uint16_t)(node);
     gv.entity_remove = 0;
 }
@@ -3352,7 +3352,7 @@ void entity_ball_arrive(ent_anim_t *a)
     if (gv.entity_remove != 1)
         return;
 
-    ball_place(ball_at(a->arg.ball), (a->sprite.x + 8) & 0xff,
+    ball_place(ball_ptr(a->arg.ball), (a->sprite.x + 8) & 0xff,
                (a->sprite.y - 4) & 0xff);
 }
 
@@ -3501,11 +3501,11 @@ void entity_ball_hold(ent_anim_t *a)
         sprite_shift_draw(x, y, img_ptr(img_w(a->sprite.frame)));
         if (gv.net_on == 1) {
             gv.entity_remove = 1;
-            ball_place(ball_at(a->arg.ball), (x + 8) & 0xff, (y + 0x0b) & 0xff);
+            ball_place(ball_ptr(a->arg.ball), (x + 8) & 0xff, (y + 0x0b) & 0xff);
             return;
         }
         gv.ball_alive--;
-        ball_at(a->arg.ball)->state = 0;
+        ball_ptr(a->arg.ball)->state = 0;
         gv.entity_remove = 1;
         return;
     }
@@ -3523,7 +3523,7 @@ void entity_ball_hold(ent_anim_t *a)
         brick_score(0, 0, 0x0303);
         ry = (ry + 4) & 0xff;
     }
-    ball_place(ball_at(a->arg.ball), (a->sprite.x + 8) & 0xff, (ry + 0x0c) & 0xff);
+    ball_place(ball_ptr(a->arg.ball), (a->sprite.x + 8) & 0xff, (ry + 0x0c) & 0xff);
     if (gv.hit_kind != 3)
         brick_score(0, 0, 5);
 }
@@ -3868,7 +3868,7 @@ void entities_clear(void)
 {
     uint32_t bx = gv.entity_head.next;
     while (bx != 0xffff) {
-        entity_t *e = entity_at(bx);
+        entity_t *e = entity_ptr(bx);
         entity_farewell(e);
         uint32_t next = e->next;
         e->next = (uint16_t)(gv.entity_free);
@@ -3899,7 +3899,7 @@ void life_lost(void)
     gv.entity_prev = img_off(&gv.entity_head);
     uint32_t bx = gv.entity_head.next;
     while (bx != 0xffff) {
-        entity_t *e = entity_at(bx);
+        entity_t *e = entity_ptr(bx);
         if (e->handler == 0x3abf) {     /* this one stays */
             gv.entity_prev = (uint16_t)(bx);
             bx = e->next;
@@ -3909,7 +3909,7 @@ void life_lost(void)
         uint32_t next = e->next;
         e->next = (uint16_t)(gv.entity_free);
         gv.entity_free = (uint16_t)(bx);
-        entity_at(gv.entity_prev)->next = (uint16_t)next;
+        entity_ptr(gv.entity_prev)->next = (uint16_t)next;
         bx = next;
     }
     level_between();
@@ -7159,8 +7159,10 @@ int32_t next_player(const char *dir)
     /* And its entities, count first. */
     p->ent_count = 0;
     for (uint32_t bx = gv.entity_head.next; bx != 0xffff;
-         bx = entity_at(bx)->next)
-        memcpy(p->ents[p->ent_count++], g_image + bx, sizeof p->ents[0]);
+         bx = entity_ptr(bx)->next)
+        /* Twelve of the node's fourteen: the handler and the variant, but
+         * not `next`, which the restore rebuilds by allocating. */
+        memcpy(p->ents[p->ent_count++], entity_ptr(bx), sizeof p->ents[0]);
     entities_clear();
 
     /* Move on to the next player who still has lives. */

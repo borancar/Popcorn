@@ -61,14 +61,14 @@ static int64_t g_result = -1;
 /* The ball a brick handler was struck by, or none. See the note on 0x28cb. */
 static ball_t *ball_or_none(uint32_t off)
 {
-    return off ? ball_at(off) : NULL;
+    return off ? ball_ptr(off) : NULL;
 }
 
 static int32_t dispatch(uint32_t routine, const uint16_t *r)
 {
     switch (routine) {
     case 0x27d7:                        /* ball_step(si = the ball) */
-        ball_step(ball_at(r[R_SI]));
+        ball_step(ball_ptr(r[R_SI]));
         return 1;
     case 0x22de:                        /* paddle_row_offsets(bl, di) */
         paddle_row_offsets(r[R_BX] & 0xff, (paddle_rows_t *)(g_image + r[R_DI]));
@@ -87,7 +87,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * and still say the opposite thing, and until this was reported the
      * harness called that agreement. */
     case 0x2827:                        /* ball_redraw(si = the ball) */
-        g_result = ball_redraw(ball_at(r[R_SI]));
+        g_result = ball_redraw(ball_ptr(r[R_SI]));
         return 1;
     case 0x044b: level_colours(); return 1;
     case 0x10c5: draw_run((uint8_t)(r[R_AX] & 0xff), r[R_DX] & 0xff,
@@ -97,11 +97,11 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x3146: flash_bar(r[R_DX]); return 1;
     case 0x3232: entity_alloc(); return 1;
     case 0x3257: entity_unlink(r[R_BX]); return 1;
-    case 0x3668: cell_set_three(&entity_at(r[R_BX])->p.anim); return 1;
+    case 0x3668: cell_set_three(&entity_ptr(r[R_BX])->p.anim); return 1;
     case 0x36fb: cells_restore(); return 1;
     case 0x30dd: pixel_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
     case 0x306b: shot_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
-    case 0x3f20: bonus_hits_ball(&entity_at(r[R_BX])->p.anim.sprite, ball_at(r[R_SI])); return 1;
+    case 0x3f20: bonus_hits_ball(&entity_ptr(r[R_BX])->p.anim.sprite, ball_ptr(r[R_SI])); return 1;
     case 0x3f4f: sprite_shift_draw(r[R_CX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]));
                  return 1;
     case 0x406a: xor_sprite_20x16(r[R_CX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]));
@@ -135,7 +135,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * keys) are **not dispatched**, because they are not transcribed: both are
      * deliberate no-ops in the port. Checking a no-op against the original
      * would report a decision as a difference. */
-    case 0x3abf: entity_anim_brick(&entity_at(r[R_BX])->p.brick); return 1;
+    case 0x3abf: entity_anim_brick(&entity_ptr(r[R_BX])->p.brick); return 1;
     case 0x3bac: draw_anim_cell(s14a1_ptr(r[R_SI]), r[R_CX] & 0xff, r[R_AX] & 0xff);
                  return 1;
     /* The brick handlers, all of them. Only two were dispatched, so the
@@ -144,46 +144,46 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * something other than a ball did the hitting. */
     /* BP is the ball, and the original passes **zero** for "no ball": an
      * animated brick can be struck by the moving picture rather than by a
-     * ball, and cell_special goes the same way. ball_at(0) is a perfectly
+     * ball, and cell_special goes the same way. ball_ptr(0) is a perfectly
      * good pointer to image offset 0, so every `if (ball)` in the brick
      * handlers passes and they bounce and score with a ball made of the
      * image's first thirty bytes - writing bounces at 0x1d, which is what
      * three of the level 8 comparisons were reporting. */
-    case 0x28cb: brick_1(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
-    case 0x2985: brick_2(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
-    case 0x2a3f: brick_3(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
-    case 0x3221: brick_solid(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
-    case 0x2a73: brick_5(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
-    case 0x2ab4: brick_6(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
-    case 0x2af5: brick_7(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
-    case 0x2b36: brick_8(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
-    case 0x2b9d: brick_9(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
-    case 0x2c59: brick_10(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
-    case 0x2ccd: brick_animated(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
-    case 0x3aee: entity_sparkle(&entity_at(r[R_BX])->p.anim); return 1;
-    case 0x3b2a: entity_crumble(&entity_at(r[R_BX])->p.anim); return 1;
-    case 0x390d: entity_hatch(&entity_at(r[R_BX])->p.hatch); return 1;
-    case 0x39a1: bonus_release(&entity_at(r[R_BX])->p.hatch); return 1;
-    case 0x39fa: entity_bonus(&entity_at(r[R_BX])->p.anim); return 1;
-    case 0x3df1: bonus_update(&entity_at(r[R_BX])->p.anim.sprite, r[R_CX] & 0xff, r[R_AX] & 0xff);
+    case 0x28cb: brick_1(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x2985: brick_2(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x2a3f: brick_3(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x3221: brick_solid(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x2a73: brick_5(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x2ab4: brick_6(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x2af5: brick_7(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x2b36: brick_8(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x2b9d: brick_9(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x2c59: brick_10(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x2ccd: brick_animated(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x3aee: entity_sparkle(&entity_ptr(r[R_BX])->p.anim); return 1;
+    case 0x3b2a: entity_crumble(&entity_ptr(r[R_BX])->p.anim); return 1;
+    case 0x390d: entity_hatch(&entity_ptr(r[R_BX])->p.hatch); return 1;
+    case 0x39a1: bonus_release(&entity_ptr(r[R_BX])->p.hatch); return 1;
+    case 0x39fa: entity_bonus(&entity_ptr(r[R_BX])->p.anim); return 1;
+    case 0x3df1: bonus_update(&entity_ptr(r[R_BX])->p.anim.sprite, r[R_CX] & 0xff, r[R_AX] & 0xff);
                  return 1;
-    case 0x365e: entity_soften(&entity_at(r[R_BX])->p.anim); return 1;
-    case 0x366f: entity_repeat(&entity_at(r[R_BX])->p.anim); return 1;
-    case 0x3696: entity_plain(&entity_at(r[R_BX])->p.anim); return 1;
-    case 0x36a1: entity_ball_arrive(&entity_at(r[R_BX])->p.anim); return 1;
-    case 0x36f6: entity_cells_timer(&entity_at(r[R_BX])->p.cells); return 1;
-    case 0x37e0: entity_ball_hold(&entity_at(r[R_BX])->p.anim); return 1;
+    case 0x365e: entity_soften(&entity_ptr(r[R_BX])->p.anim); return 1;
+    case 0x366f: entity_repeat(&entity_ptr(r[R_BX])->p.anim); return 1;
+    case 0x3696: entity_plain(&entity_ptr(r[R_BX])->p.anim); return 1;
+    case 0x36a1: entity_ball_arrive(&entity_ptr(r[R_BX])->p.anim); return 1;
+    case 0x36f6: entity_cells_timer(&entity_ptr(r[R_BX])->p.cells); return 1;
+    case 0x37e0: entity_ball_hold(&entity_ptr(r[R_BX])->p.anim); return 1;
     case 0x318b: extra_life(); return 1;
     case 0x2109: scroll_up_band(); return 1;
     case 0x2148: scroll_down_band(); return 1;
     case 0x22a9: draw_paddle_raw(img_ptr(r[R_SI])); return 1;
     case 0x2187: draw_paddle_shifted(img_ptr(r[R_SI])); return 1;
-    case 0x2e1e: g_result = ball_on_paddle(ball_at(r[R_SI])); return 1;
+    case 0x2e1e: g_result = ball_on_paddle(ball_ptr(r[R_SI])); return 1;
     case 0x2ee3: laser_fire(); return 1;
-    case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, hit_at(r[R_SI]));
+    case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, hit_ptr(r[R_SI]));
                  return 1;
-    case 0x3273: entity_capsule(&entity_at(r[R_BX])->p.fall); return 1;
-    case 0x3561: entity_popup(&entity_at(r[R_BX])->p.fall); return 1;
+    case 0x3273: entity_capsule(&entity_ptr(r[R_BX])->p.fall); return 1;
+    case 0x3561: entity_popup(&entity_ptr(r[R_BX])->p.fall); return 1;
     case 0x2daa: bonus_points(); return 1;
     case 0x2def: bonus_catch(); return 1;
     case 0x2e03: bonus_laser(); return 1;
@@ -194,7 +194,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x31e8: bonus_slower_ball(); return 1;
     case 0x41b1: fill_column(r[R_DI], r[R_AX]); return 1;
     case 0x3717: entity_multiball(); return 1;
-    case 0x3386: entity_paddle_fx(&entity_at(r[R_BX])->p.morph); return 1;
+    case 0x3386: entity_paddle_fx(&entity_ptr(r[R_BX])->p.morph); return 1;
     case 0x05f8: level_between(); return 1;
     case 0x492f: arrow_head(r[R_DI]); return 1;
     case 0x4957: arrow_tail(r[R_DI]); return 1;
@@ -209,7 +209,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x0598: field_marks(); return 1;
     case 0x0911: panel_reveal(); return 1;
     case 0x1354: frame_band(r[R_DI], r[R_AX]); return 1;
-    case 0x2d68: brick_11(hit_at(r[R_SI]), ball_or_none(r[R_BP])); return 1;
+    case 0x2d68: brick_11(hit_ptr(r[R_SI]), ball_or_none(r[R_BP])); return 1;
     case 0x3d95: bonus_spawn(); return 1;
     case 0x0cc5: play_prepare(); return 1;
     case 0x1509: demo_start(); return 1;
@@ -220,13 +220,13 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         draw_sprite_20x6(r[R_BX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]));
         return 1;
     case 0x247f:                        /* ball_after(si = the ball) */
-        ball_after(ball_at(r[R_SI]));
+        ball_after(ball_ptr(r[R_SI]));
         return 1;
     case 0x2316:                        /* ball_paddle(si = the ball) */
-        ball_paddle(ball_at(r[R_SI]));
+        ball_paddle(ball_ptr(r[R_SI]));
         return 1;
     case 0x254d:                        /* ball_bricks(si = the ball) */
-        ball_bricks(ball_at(r[R_SI]));
+        ball_bricks(ball_ptr(r[R_SI]));
         return 1;
     case 0x413d:                        /* score_add, no arguments */
         score_add();
@@ -378,10 +378,10 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         g_result = score_before(g_image + r[R_SI], g_image + r[R_DI]);
         return 1;
     case 0x34c5:                        /* morph_begin(bx, si, dx) */
-        morph_begin(&entity_at(r[R_BX])->p.morph, r[R_SI], r[R_DX]);
+        morph_begin(&entity_ptr(r[R_BX])->p.morph, r[R_SI], r[R_DX]);
         return 1;
     case 0x34d7:                        /* morph_step(bx) */
-        morph_step(&entity_at(r[R_BX])->p.morph);
+        morph_step(&entity_ptr(r[R_BX])->p.morph);
         return 1;
     case 0x3bf7: {                      /* bonus_steer(bx, cl, al) */
         /* entity_bonus hands these in CL and AL - the capsule's x
@@ -390,7 +390,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
          * twice from the PRNG where the original drew nothing. The
          * failure that reported was the harness's, not the port's. */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_steer(&entity_at(r[R_BX])->p.anim, &x, &y);
+        g_result = bonus_steer(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     case 0x3c35: {                      /* bonus_script(bx, cl, al) */
@@ -400,7 +400,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
          * twice from the PRNG where the original drew nothing. The
          * failure that reported was the harness's, not the port's. */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_script(&entity_at(r[R_BX])->p.anim, &x, &y);
+        g_result = bonus_script(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     /* The four directions a falling capsule can step, 1ac2:3447's table.
@@ -413,26 +413,26 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * arithmetic in it; the step itself is one `inc` behind that decision. */
     case 0x3c66: {                      /* bonus_move_right(bx, cl, al) */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_move_right(&entity_at(r[R_BX])->p.anim, &x, &y);
+        g_result = bonus_move_right(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     case 0x3caf: {                      /* bonus_move_up */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_move_up(&entity_at(r[R_BX])->p.anim, &x, &y);
+        g_result = bonus_move_up(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     case 0x3cf3: {                      /* bonus_move_left */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_move_left(&entity_at(r[R_BX])->p.anim, &x, &y);
+        g_result = bonus_move_left(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     case 0x3d3c: {                      /* bonus_move_down */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_move_down(&entity_at(r[R_BX])->p.anim, &x, &y);
+        g_result = bonus_move_down(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     case 0x45a1:                        /* ball_after_endgame(si) */
-        g_result = ball_after_endgame(ball_at(r[R_SI]));
+        g_result = ball_after_endgame(ball_ptr(r[R_SI]));
         return 1;
     case 0x4d5d:                        /* hsc_bubble(si, di) */
         g_result = img_off(hsc_bubble((const hsc_entry_t *)img_ptr(r[R_SI]),
