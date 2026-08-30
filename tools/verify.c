@@ -455,7 +455,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         cheat_match(r[R_AX] & 0xff);
         return 1;
     case 0x538d: {                      /* tall_sprite(si, di) */
-        uint32_t si = r[R_SI];
+        const uint8_t *si = img_ptr(r[R_SI]);
         g_result = tall_sprite(&si, r[R_DI]);
         return 1;
     }
