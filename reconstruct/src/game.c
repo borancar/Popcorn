@@ -3294,7 +3294,7 @@ void entity_soften(ent_anim_t *a)
 {
     entity_crumble(a);
     if (gv.entity_remove == 1)
-        g_image[a->arg.cell] = 3;  /* the cell it sat on */
+        *img_ptr(a->arg.cell) = 3;    /* the cell it sat on */
 }
 
 /* 1ac2:366f  from brick 8 - plays its animation [bx+2] times over, cancelling
@@ -3465,7 +3465,7 @@ void entity_call(entity_t *e)
     case 0x3AEE: entity_sparkle(&e->p.anim); break;
     case 0x3717: entity_multiball(); break;
     case 0x3B2A: entity_crumble(&e->p.anim); break;
-    default:     entity_unknown(img_off(e)); break;
+    default:     entity_unknown(e); break;
     }
 }
 
@@ -4563,12 +4563,11 @@ void level_between(void)
         g_vram[(0x20a3 + i * 2) & (CGA_SIZE - 1)] = 0;
     }
 
-    const uint8_t *cells = gv.level.cells;
     uint32_t y = 6;
     for (int32_t row = 0; row < 0x0e; row++, y += 8) {
         uint32_t x = 8;
-        for (int32_t col = 0; col < 0x0c; col++, cells++, x += 0x10) {
-            uint32_t cell = *cells;
+        for (int32_t col = 0; col < 0x0c; col++, x += 0x10) {
+            uint32_t cell = gv.level.cells[row * 12 + col];
             if (cell == 0x0c) {
                 cell_hole_draw(x, y);
                 continue;
@@ -5001,7 +5000,7 @@ void brick_11(hit_t *hit, ball_t *ball)
     (void)ball;
     brick_score(0, 0, 0x0207);
     cv.sound_request = SOUND_BRICK;
-    g_image[hit->cell] = 0x0c;
+    *img_ptr(hit->cell) = 0x0c;
     gv.level.bricks--;
     uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, img_ptr(gv.cell_bitmap[11]));
@@ -5467,41 +5466,41 @@ void palette_cycle(void)
 /* 1ac2:4d5d  hsc_bubble - one pass of the sort, from the bottom up.
  * `scasb` compares a name's six score digits against the entry above it and
  * swaps the whole nine-word record when the lower one is bigger. */
-uint32_t hsc_bubble(uint32_t si, uint32_t di)
+hsc_entry_t *hsc_bubble(const hsc_entry_t *a, hsc_entry_t *b)
 {
     /* Returns where the new record belongs. hsc_sort's `rep movsw` at
-     * 1ac2:4d4c runs **before** its `pop di`, so the destination is whatever
-     * DI this leaves - not the 0x3ef6 it started from. */
-    si += 0x0c;
-    di += 0x0c;
+     * 1ac2:4d4c runs **before** its `pop di`, so the destination is wherever
+     * this leaves the cursor - not the entry it started from.
+     *
+     * The original's `di - 0x12` is the record **above** b, because DI has
+     * already been advanced 0x0c onto the score field; as records that is
+     * b[-1]. And the `sub di, 0x18` that follows a `rep movsw` which itself
+     * advanced 0x12 is one record back, not one and a half: taking that
+     * instruction at face value moved the window six bytes too far a pass
+     * and shifted the wrong record. */
     for (int32_t n = 0x0a; n > 0; n--) {
         int32_t higher = 0;
         for (int32_t i = 0; i < 6; i++) {
-            if (g_image[si + i] != g_image[di - 0x12 + i]) {
-                higher = g_image[si + i] > g_image[di - 0x12 + i];
+            if (a->score[i] != b[-1].score[i]) {
+                higher = a->score[i] > b[-1].score[i];
                 break;
             }
         }
         if (!higher)
-            return di - 0x0c;           /* 1ac2:4d78 */
-        memmove(g_image + di - 0x0c, g_image + di - 0x1e, 0x12);
-        /* 1ac2:4d8a is `sub di, 0x18`, but on a DI the `rep movsw` has just
-         * advanced by 0x12 - so the step from the top of the loop is 0x12,
-         * not 0x18. Taking the instruction at face value moved the window six
-         * bytes too far each pass and shifted the wrong record. */
-        di -= 0x12;
+            return b;                   /* 1ac2:4d78 */
+        b[0] = b[-1];
+        b--;
     }
-    return di - 0x0c;                   /* 1ac2:4d92 */
+    return b;                           /* 1ac2:4d92 */
 }
 
 /* 1ac2:4d37  hsc_sort - the whole table, once per player who just finished */
 void hsc_sort(void)
 {
-    uint32_t di = img_off(&gv.hsc[10]), si = HSC_SCRATCH;
-    for (uint32_t n = gv.player_count; n > 0; n--) {
-        memcpy(g_image + hsc_bubble(si, di), g_image + si, 0x12);
-        si += 0x12;
-    }
+    hsc_entry_t *b = &gv.hsc[10];
+    const hsc_entry_t *a = gv.scratch2.hsc_scratch;
+    for (uint32_t n = gv.player_count; n > 0; n--, a++)
+        *hsc_bubble(a, b) = *a;
 }
 
 /* 1ac2:4dbb  hsc_save - write the table back to popcorn.hsc, 0xb4 bytes from
@@ -7615,9 +7614,9 @@ void brick_animated(hit_t *hit, ball_t *ball)
     if (ball)
         ball->bounces++;
 
-    uint32_t cell = hit->cell;
-    uint32_t was = g_image[cell];
-    g_image[cell] = (uint8_t)(was + 8);  /* marked, not cleared */
+    uint8_t *cell = img_ptr(hit->cell);
+    uint32_t was = *cell;
+    *cell = (uint8_t)(was + 8);         /* marked, not cleared */
     uint32_t piece = was & 0x0f;
 
     /* Remember what this piece turned into, indexed by the new cell value. */

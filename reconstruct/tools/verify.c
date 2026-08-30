@@ -435,7 +435,8 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         g_result = ball_after_endgame(ball_at(r[R_SI]));
         return 1;
     case 0x4d5d:                        /* hsc_bubble(si, di) */
-        g_result = hsc_bubble(r[R_SI], r[R_DI]);
+        g_result = img_off(hsc_bubble((const hsc_entry_t *)img_ptr(r[R_SI]),
+                                     (hsc_entry_t *)img_ptr(r[R_DI])));
         return 1;
     case 0x4fa7:                        /* border_step(di) */
         g_result = border_step(r[R_DI]);
