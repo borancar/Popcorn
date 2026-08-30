@@ -3456,9 +3456,9 @@ void brick_10(uint32_t slot, ball_t *ball)
 void entity_call(entity_t *e)
 {
     switch (e->handler) {
-    case 0x3273: entity_capsule(e); break;
-    case 0x3386: entity_paddle_fx(e); break;
-    case 0x3561: entity_popup(e); break;
+    case 0x3273: entity_capsule(&e->p.fall); break;
+    case 0x3386: entity_paddle_fx(&e->p.morph); break;
+    case 0x3561: entity_popup(&e->p.fall); break;
     case 0x365E: entity_soften(&e->p.anim); break;
     case 0x366F: entity_repeat(&e->p.anim); break;
     case 0x3696: entity_plain(&e->p.anim); break;
@@ -4114,23 +4114,23 @@ void laser_fire(void)
 
 /* 1ac2:3561  entity_popup is the same routine with a different set of frames -
  * table 0x339b rather than 0x3385 - so the two share a body. */
-void entity_popup(entity_t *e) { entity_capsule_frames(e, 0x339b); }
-void entity_capsule(entity_t *e) { entity_capsule_frames(e, CAPSULE_FRAMES); }
+void entity_popup(ent_fall_t *f) { entity_capsule_frames(f, 0x339b); }
+void entity_capsule(ent_fall_t *f) { entity_capsule_frames(f, CAPSULE_FRAMES); }
 
-void entity_capsule_frames(entity_t *e, uint32_t table)
+void entity_capsule_frames(ent_fall_t *f, uint32_t table)
 {
-    if ((--e->p.fall.tick & 7) != 0)
+    if ((--f->tick & 7) != 0)
         return;                         /* not this tick */
 
-    uint32_t base = img_w(table + e->p.fall.kind * 2);
-    uint32_t di = base + e->p.fall.frame * 4;
+    uint32_t base = img_w(table + f->kind * 2);
+    uint32_t di = base + f->frame * 4;
     uint32_t src = img_w(di), rows = img_w(di + 2);
 
-    uint32_t y = e->p.fall.y;
-    e->p.fall.y++;
-    xor_sprite_16xn(e->p.fall.x, y, src, rows & 0xff);
+    uint32_t y = f->y;
+    f->y++;
+    xor_sprite_16xn(f->x, y, src, rows & 0xff);
 
-    y = e->p.fall.y;
+    y = f->y;
     if (y == 0xc5) {                    /* fallen past the paddle */
         gv.bonus_cap--;
         gv.entity_remove = 1;
@@ -4141,7 +4141,7 @@ void entity_capsule_frames(entity_t *e, uint32_t table)
         /* Level with the paddle: does it overlap? The comparison is done in
          * sixteen bits with an `adc ch,0`, so a paddle at the right-hand edge
          * does not wrap. */
-        uint32_t right = (e->p.fall.x + 0x0e) & 0xffff;
+        uint32_t right = (f->x + 0x0e) & 0xffff;
         uint32_t px = gv.paddle_x;
         if (right >= px &&
             (right - 0x0f) <= (px + gv.paddle_width)) {
@@ -4150,12 +4150,14 @@ void entity_capsule_frames(entity_t *e, uint32_t table)
              * bytes are read as the morph arm from here on - fall.frame and
              * morph.from are the same byte, fall.cycle and morph.to the
              * next. */
-            uint8_t kind = e->p.fall.kind;
-            e->p.morph.from = gv.paddle_kind;
-            e->p.morph.to = g_image[PADDLE_NEXT + kind];
-            e->p.morph.bonus = kind;
-            e->p.morph.pending = 1;
-            e->p.morph.step = 6;
+            uint8_t kind = f->kind;
+            entity_t *e = entity_of(f);
+            ent_morph_t *m = &e->p.morph;
+            m->from = gv.paddle_kind;
+            m->to = g_image[PADDLE_NEXT + kind];
+            m->bonus = kind;
+            m->pending = 1;
+            m->step = 6;
             e->handler = 0x3386;        /* becomes the paddle morph */
             gv.bonus_cap--;
             brick_score(0, 0, 0x0302);
@@ -4164,15 +4166,15 @@ void entity_capsule_frames(entity_t *e, uint32_t table)
     }
 
     /* Still falling: step the animation. Kind 2 cycles its frame 0..0x0f. */
-    e->p.fall.frame = e->p.fall.cycle;
+    f->frame = f->cycle;
     if ((y & 3) == 2) {
-        if (e->p.fall.cycle == 0x0f)
-            e->p.fall.cycle = 0;
+        if (f->cycle == 0x0f)
+            f->cycle = 0;
         else
-            e->p.fall.cycle++;
+            f->cycle++;
     }
-    di = base + e->p.fall.frame * 4;
-    xor_sprite_16xn(e->p.fall.x, y, img_w(di), img_w(di + 2) & 0xff);
+    di = base + f->frame * 4;
+    xor_sprite_16xn(f->x, y, img_w(di), img_w(di + 2) & 0xff);
 }
 
 /* ========================================================================
@@ -4400,26 +4402,31 @@ static void morph_finish(ent_morph_t *m)
     gv.entity_remove = 1;
 }
 
-void entity_paddle_fx(entity_t *e)
+void entity_paddle_fx(ent_morph_t *m)
 {
+    /* The morph is the node's, not the arm's: morph_owner is what stops a
+     * second capsule from fighting the first, and what it holds is the
+     * original's BX. */
+    const uint16_t self = (uint16_t)img_off(entity_of(m));
+
     if (gv.paddle_morphing == 0) {
         /* Nothing is morphing. If the paddle is already the kind this capsule
          * gives, there is nothing to animate - just apply the effect. */
-        if (gv.paddle_kind == e->p.morph.to) {
-            morph_finish(&e->p.morph);
+        if (gv.paddle_kind == m->to) {
+            morph_finish(m);
             return;
         }
-        e->p.morph.from = gv.paddle_kind;
+        m->from = gv.paddle_kind;
         gv.paddle_morphing = 0xff;
-        gv.morph_owner = (uint16_t)(img_off(e));
+        gv.morph_owner = self;
 
-        if (e->p.morph.to != 2) {
+        if (m->to != 2) {
             /* Losing the laser: take any shot in flight off the screen. */
             if (gv.laser_on == 2)
                 shot_xor(gv.laser_x, (gv.laser_y + 2) & 0xff);
             gv.laser_on = 0;
         }
-        if (e->p.morph.to != 3) {
+        if (m->to != 3) {
             /* Losing the catch: release anything held. */
             gv.caught = 0;
             gv.hold_timer = (uint16_t)(0x460);
@@ -4439,7 +4446,7 @@ void entity_paddle_fx(entity_t *e)
                 ball_redraw(ball);
             }
         }
-    } else if (gv.morph_owner != img_off(e)) {
+    } else if (gv.morph_owner != self) {
         return;                         /* somebody else's morph */
     }
 
@@ -4448,17 +4455,17 @@ void entity_paddle_fx(entity_t *e)
          * moved, so it still follows the player. */
         if (gv.paddle_x == gv.paddle_prev_x)
             return;
-        if (e->p.morph.step == 6) {
+        if (m->step == 6) {
             draw_paddle(img_w(PADDLE_SPRITES + gv.paddle_kind * 4));
             return;
         }
-        uint32_t si = e->p.morph.sprites + e->p.morph.step * 2;
+        uint32_t si = m->sprites + m->step * 2;
         draw_paddle_shifted(img_w(si));
         return;
     }
 
-    if (e->p.morph.step != 6) {
-        morph_step(&e->p.morph);
+    if (m->step != 6) {
+        morph_step(m);
         return;
     }
 
@@ -4466,32 +4473,32 @@ void entity_paddle_fx(entity_t *e)
      * `pending` is 1 while shrinking the old paddle and 0 while growing the
      * new one. */
     uint32_t si, kind;
-    if (e->p.morph.pending != 0) {
+    if (m->pending != 0) {
         si = PADDLE_SHRINK;
         gv.paddle_step = 0;
-        kind = e->p.morph.from;
+        kind = m->from;
         if (kind == 1)
             gv.paddle_step = 0xfe;    /* -2: this one shrinks */
         if (kind != 0) {
-            morph_begin(&e->p.morph, si, kind);
+            morph_begin(m, si, kind);
             return;
         }
-        e->p.morph.pending = 0;
+        m->pending = 0;
     }
     si = PADDLE_GROW;
     gv.paddle_step = 0;
-    kind = e->p.morph.to;
+    kind = m->to;
     if (kind == 1)
         gv.paddle_step = 2;
     if (kind != 0) {
-        morph_begin(&e->p.morph, si, kind);
+        morph_begin(m, si, kind);
         return;
     }
     /* Both ends are the plain paddle: nothing to animate. */
     gv.paddle_kind = 0;
     gv.paddle_width = 0x1b;
     gv.paddle_morphing = 0;
-    morph_finish(&e->p.morph);
+    morph_finish(m);
 }
 
 /* 1ac2:34c5  morph_begin - start a stage: remember its sprite list and run
