@@ -129,6 +129,14 @@ the useful skill is getting a routine to run at all. Three things do it:
   wanted one normally. Most of the game had never been compared at all,
   because the bot could not get there.
 
+  **Level 3 is in the standard set for a reason.** Its four-hit brick ends in
+  the spinning 100 at `1ac2:366f`, whose counter at `[bx+2]` is a **byte** and
+  whose `[bx+3]` holds whatever the recycled entity slot left there. Read that
+  pair as a word and the counter never reaches zero, so the sprite is never
+  taken off the screen - a divergence no other route in the sweep reaches, and
+  one `verify.py` cannot see at all because it plays out across frames rather
+  than inside a routine.
+
 - **Two counters decide a two-player game**, and only one of them is obvious.
   `[0x3f08]` is how many players were entered and `[0x3f09]` how many are
   still in. `next_player` hands over to the next player while `[0x3f09]` is

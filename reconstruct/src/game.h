@@ -148,10 +148,18 @@ typedef struct __attribute__((packed)) {
         /* crumble, plain, sparkle, soften, repeat, ball_arrive, bonus - a
          * sprite animation stepped frame by frame by entity_anim. */
         struct {
-            uint16_t arg;   /* 0x02 the handler's own: soften keeps the cell
-                             * to harden, ball_arrive the ball to put down,
-                             * repeat a countdown in the low byte. crumble,
-                             * plain and sparkle do not use it */
+            union {         /* 0x02 the handler's own, and **not one width**:
+                             * repeat's counter is a byte, the others a word.
+                             * 1ac2:3679 is `dec byte ptr [bx+2]`, and 0x03
+                             * holds whatever the recycled slot left there -
+                             * see brick_entity - so reading the pair as a
+                             * word never reaches zero and the entity is never
+                             * removed. crumble, plain and sparkle do not use
+                             * it at all. */
+                uint16_t cell;  /* soften: the cell to harden */
+                uint16_t ball;  /* ball_arrive: the ball to put down */
+                uint8_t  count; /* repeat: how many times round again */
+            } arg;
             uint8_t  x, y;  /* 0x04 0x05 where the animation is drawn */
             uint16_t frame; /* 0x06 a cursor *into* a list of frame pointers,
                              * so one dereference gets the frame; walked two

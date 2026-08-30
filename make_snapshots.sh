@@ -32,10 +32,16 @@ $PY snapshot.py "$D/menu.snap" --seconds 25
 # moving and entities are live. Everything below resumes from this.
 $PY snapshot.py "$D/level.snap" --keys @0206:f1 --seconds 45 --bot
 
-# Level 10 and level 49 from their own first frame. Poking the level *before*
+# Levels 3, 10 and 49 from their own first frame. Poking the level *before*
 # and clearing it makes play_session load the wanted one the way it normally
 # would; 0x1c3f is the level intro, so the snapshot lands at a level start.
-for lv in 10 49; do
+#
+# Level 3 is here for the four-hit brick: its last hit leaves the spinning 100
+# at 1ac2:366f, whose counter at [bx+2] is a **byte** and whose [bx+3] holds
+# whatever the recycled entity slot left behind. Reading that pair as a word
+# means the counter never reaches zero and the sprite is never taken off the
+# screen - which is a divergence no other route here reaches.
+for lv in 3 10 49; do
     prev=$((lv - 1)); off=$((0xc + prev * 176))
     $PY snapshot.py "$D/level$lv.snap" --resume "$D/level.snap" \
         --at 0x1c3f --seconds 30 --poke 0x13cc=$prev \

@@ -29,7 +29,7 @@ CHEAT="$CHEAT,@0206:return"
 # Fail now rather than forty minutes in. A route whose file is missing runs
 # anyway and reports every routine as unreached, which reads as a coverage
 # result rather than as a typo.
-for f in menu level level10 level49 ending capsule tall particles marks \
+for f in menu level level3 level10 level49 ending capsule tall particles marks \
          vlife twoplayer cleared holes lastball; do
     [ -f "$D/$f.snap" ] || {
         echo "missing $D/$f.snap - run make_snapshots.sh $D first" >&2
@@ -44,6 +44,7 @@ uv run verify_all.py --chase --summary "$OUT" \
     --snapshot "$D/menu.snap=@0206:f2" \
     --snapshot "$D/menu.snap=$CHEAT" \
     --snapshot "$D/menu.snap=@0206:f2,@1785:p,@1785:o,@1785:p" \
+    --snapshot "$D/level3.snap" \
     --snapshot "$D/level10.snap=@1a62:escape,@1a62:space" \
     --snapshot "$D/level10.snap" \
     --snapshot "$D/level49.snap" \
