@@ -485,25 +485,20 @@ void read_speed_setting(uint32_t speed)
  * bits of the row come in as zero. That is why sprite sets are laid out as
  * four consecutive 0x4d-byte images: `sprite + (x & 3) * 0x4d` indexes them.
  */
-#define SPRITE_BASE   0x4903
-#define SPRITE_SETS        4
-#define SPRITE_SET_LEN 0x134            /* four images of 0x4d */
-
 void build_shifted_sprites(void)
 {
-    uint32_t bp = SPRITE_BASE;
-    for (int32_t set = 0; set < SPRITE_SETS; set++, bp += SPRITE_SET_LEN) {
-        uint32_t si = bp;
-        for (int32_t shift = 0; shift < 3; shift++, si += PADDLE_IMAGE) {
-            uint32_t di = si + PADDLE_IMAGE;
-            memcpy(g_image + di, g_image + si, PADDLE_IMAGE);
+    for (int32_t set = 0; set < 4; set++) {
+        for (int32_t phase = 1; phase < 4; phase++) {
+            uint8_t *out = gv.paddle_sprites[set][phase];
+            memcpy(out, gv.paddle_sprites[set][phase - 1], PADDLE_IMAGE);
             for (int32_t row = 0; row < PADDLE_ROWS; row++) {
-                uint32_t r = di + row * PADDLE_BYTES;
+                uint8_t *r = out + row * PADDLE_BYTES;
+                /* One pixel is two bits, so the shift is done twice. */
                 for (int32_t twice = 0; twice < 2; twice++) {
                     uint32_t carry = 0;
                     for (int32_t b = 0; b < PADDLE_BYTES; b++) {
-                        uint32_t v = g_image[r + b];
-                        g_image[r + b] = (uint8_t)((v >> 1) | (carry << 7));
+                        uint32_t v = r[b];
+                        r[b] = (uint8_t)((v >> 1) | (carry << 7));
                         carry = v & 1;
                     }
                 }
@@ -1240,9 +1235,9 @@ int32_t play_loop(void)
     io_mouse_warp(0x64 * 2, 0xb8);
 
     paddle_row_offsets(gv.paddle_x, &gv.paddle_rows[0]);
-    memcpy(gv.paddle_pix[0], g_image + SPRITE_BASE, 0x27 * 2);
+    memcpy(gv.paddle_pix[0], gv.paddle_sprites[0][0], 0x27 * 2);
     gv.ball_alive = 1;
-    memcpy(gv.balls[0].sprite, g_image + 0x48fb, sizeof gv.balls[0].sprite);
+    memcpy(gv.balls[0].sprite, gv.ball_start_sprite, sizeof gv.balls[0].sprite);
     gv.frame_delay_set = 0x1f4;
     gv.key_right = gv.key_left = 0;
     gv.repeat_div = 0;
@@ -1290,7 +1285,7 @@ int32_t play_loop(void)
             game_input();
             if (gv.key_action == 1)
                 break;
-            draw_paddle(img_ptr(SPRITE_BASE));
+            draw_paddle(gv.paddle_sprites[0][0]);
             io_present();
             if (!io_pump())
                 return 1;
@@ -7096,7 +7091,7 @@ static int32_t bonus_end_level_run(void)
      * top of the funnel: eight bytes of sprite record copied in from 0x48fb,
      * and the position **set** to (0x70, 0xb4) - both the live pair at +0 and
      * the drawn pair at +2. */
-    memcpy(gv.balls[0].sprite, g_image + 0x48fb, sizeof gv.balls[0].sprite);
+    memcpy(gv.balls[0].sprite, gv.ball_start_sprite, sizeof gv.balls[0].sprite);
     b->x = b->prev_x = 0x70;
     b->y = b->prev_y = 0xb4;
     b->dy = 1;

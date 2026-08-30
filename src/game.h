@@ -517,6 +517,9 @@ typedef struct __attribute__((packed)) {
     char     cheat_text[16];            /* 0x3f0b "LACRAL software\r" - the expected keys, the return being the last of them */
     uint8_t  cheat_done;                /* 0x3f1b set when the whole of it has been typed; the menu tests this */
     uint16_t cheat_at;                  /* 0x3f1c how far along cheat_text the typing has got, as an image offset */
+    uint8_t  _pad_20[2525];
+    uint8_t  ball_start_sprite[8];      /* 0x48fb the four words a ball's `sprite` starts as, copied into balls[0] when a level begins */
+    uint8_t  paddle_sprites[4][4][0x4d];/* 0x4903 the paddle images: four sets, and within each the four pixel phases. Only phase 0 of each is in the file - build_shifted_sprites makes the other three at startup, which is why they are consecutive and why `sprite + (x & 3) * 0x4d` indexes them */
 } game_vars;
 
 /* The same bytes as g_image, which stays the buffer everything else - memcpy,
@@ -623,6 +626,8 @@ ENSURE_IMG_AT(cur_player, 0x3f0a);
 ENSURE_IMG_AT(cheat_text, 0x3f0b);
 ENSURE_IMG_AT(cheat_done, 0x3f1b);
 ENSURE_IMG_AT(cheat_at, 0x3f1c);
+ENSURE_IMG_AT(ball_start_sprite, 0x48fb);
+ENSURE_IMG_AT(paddle_sprites, 0x4903);
 /* @generated-asserts end */
 
 /* The two facts the chain rests on, checked rather than described: the head
