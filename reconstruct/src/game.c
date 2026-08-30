@@ -3103,7 +3103,7 @@ void bonus_release(const ent_hatch_t *h)
  * only way an 8086 has. Frame 0x635c is the one where the capsule appears, and
  * that is where it calls bonus_release.
  */
-void entity_hatch(entity_t *e)
+void entity_hatch(ent_hatch_t *h)
 {
     /* `jne 0x390c` is the **ret**, not the `dec word [bx+6]` at 0x3909 that
      * sits just above it: while an extra ball is in play the hatch does
@@ -3111,28 +3111,28 @@ void entity_hatch(entity_t *e)
      * round to 0xffff, which is what diverged 5,872 frames into level 4. */
     if (gv.extra_on != 0)
         return;
-    if (e->p.hatch.wait != 0) {
-        e->p.hatch.wait--;
+    if (h->wait != 0) {
+        h->wait--;
         return;
     }
-    e->p.hatch.phase--;
-    if (e->p.hatch.phase % 0x23 != 0)
+    h->phase--;
+    if (h->phase % 0x23 != 0)
         return;
 
-    uint32_t si = img_w(e->p.hatch.script);
-    uint32_t di = cga_at(e->p.hatch.x, (e->p.hatch.y - 0x0a) & 0xff);
+    uint32_t si = img_w(h->script);
+    uint32_t di = cga_at(h->x, (h->y - 0x0a) & 0xff);
     for (int32_t r = 0; r < 0x25; r++) {
         g_vram[di & (CGA_SIZE - 1)] = g_image[si + r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[si + r * 2 + 1];
         di = cga_next_row(di);
     }
     if (si == 0x635c) {
-        e->p.hatch.wait = 0x12c;
-        bonus_release(&e->p.hatch);
+        h->wait = 0x12c;
+        bonus_release(h);
     }
-    e->p.hatch.script += 2;
-    if (img_w(e->p.hatch.script) == 0xffff) {
-        g_image[e->p.hatch.cell + 3] = 0;
+    h->script += 2;
+    if (img_w(h->script) == 0xffff) {
+        g_image[h->cell + 3] = 0;
         gv.entity_remove = 1;
     }
 }
@@ -3461,11 +3461,11 @@ void entity_call(entity_t *e)
     case 0x36A1: entity_ball_arrive(&e->p.anim); break;
     case 0x36F6: entity_cells_timer(&e->p.cells); break;
     case 0x37E0: entity_ball_hold(&e->p.anim); break;
-    case 0x390D: entity_hatch(e); break;
+    case 0x390D: entity_hatch(&e->p.hatch); break;
     case 0x39FA: entity_bonus(e); break;
     case 0x3ABF: entity_anim_brick(&e->p.brick); break;
     case 0x3AEE: entity_sparkle(&e->p.anim); break;
-    case 0x3717: entity_multiball(e); break;
+    case 0x3717: entity_multiball(); break;
     case 0x3B2A: entity_crumble(&e->p.anim); break;
     default:     entity_unknown(img_off(e)); break;
     }
@@ -4312,7 +4312,7 @@ void bonus_effect(uint32_t kind)
  * Sets [0x2e73] to 3 - three balls alive - and unlinks itself; it exists only
  * to run once.
  * ===================================================================== */
-void entity_multiball(entity_t *e)
+void entity_multiball(void)
 {
     if (gv.ball_alive == 3) {
         gv.entity_remove = 1;
