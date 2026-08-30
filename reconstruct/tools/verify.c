@@ -232,7 +232,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         score_add();
         return 1;
     case 0x3b64:                        /* xor_sprite_16x7(cl, al, si) */
-        xor_sprite_16x7(r[R_CX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
+        xor_sprite_16x7(r[R_CX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]));
         return 1;
     case 0x1fc1:                        /* field_backdrop(al = y) */
         field_backdrop(r[R_AX] & 0xff);
