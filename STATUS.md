@@ -562,6 +562,26 @@ original shoot.
   the side-by-side. Reaching them wants a bot that aims rather than one that
   survives, or a snapshot taken with the level number written by hand.
 
+- **Screen positions written as bare offsets, which should be `cga_at`.**
+  `di = 0x177e`, `d = 0x1cd9`, `di = 0x20f2`, `bp = 0x3ef2` and a few dozen
+  more are positions on the screen, and `cga_at(x, y)` is what computes one:
+  `0x20f2` is `cga_at(8, 7)`, `0xf2` the same x a scan line up, `8` is
+  `cga_at(32, 0)`. Writing them that way says where they are instead of
+  leaving the interlace to be decoded by hand.
+
+  The work is **extracting the x and y**, not the substitution: each offset
+  has to be decoded and checked against what the routine draws, and a few are
+  not positions at all. It pairs with the decimal sweep below, since the x and
+  y that come out are quantities.
+
+  This matters beyond legibility. `eog_saved` lives at image offset 0, so
+  every screen offset is also a valid image offset, and the two kinds of
+  address are indistinguishable as bare numbers - `eog_screen_at` is a VRAM
+  offset and `eog_build_at` an image one, initialised on consecutive lines,
+  and only the disassembly separates them. The same coincidence made
+  `ball_at(0)` look like a ball and put three of level 9's comparisons wrong.
+  `cga_at` on one side and `img_ptr` on the other make the kinds visible.
+
 - **Geometry in hex, which should be decimal.** Rows, columns, widths, pixel
   counts and scan lines are quantities, and a great many of them are still
   written as hex because that is how the disassembly spells every immediate.
