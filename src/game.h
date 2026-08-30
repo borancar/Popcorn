@@ -993,7 +993,9 @@ typedef struct __attribute__((packed)) {
     uint8_t  banner_xlat[30][2];        /* 0x226c a cell value to the character the results banner shows for it. Words, but only the low byte is ever read */
     uint8_t  _c46a[1403];
     uint8_t  blob_target;               /* 0x2823 the blob the ending is walking towards, written into the script itself */
-    uint8_t  _c46b[181];
+    uint8_t  _c46b[1];
+    uint8_t  walk_script[120];          /* 0x2825 one byte a step for the ending's walk: 0x18 passes of five, and a zero step is skipped. It ends exactly where blob_script begins */
+    uint8_t  blob_script[60];           /* 0x289d the blobs' packed positions, zero-terminated, ending exactly at ending_mark */
     uint8_t  ending_mark[8][2];         /* 0x28d9 eight rows of one word, XORed at a packed position. **In this segment**, not at a plain image offset - reading it as one takes the sprite from 49KB below */
     uint8_t  _c46c[7];
     uint8_t  hole_picture[112][48];     /* 0x28f0 what shows through a hole brick 11 leaves: 12 cells of four bytes a row, 112 rows. On level 50, which is a solid wall of brick 11, it is the whole picture */
@@ -1001,8 +1003,9 @@ typedef struct __attribute__((packed)) {
     uint8_t  scroll_rows[26][49];       /* 0x488a the rows intro_scroll feeds in at the bottom, one a pass */
     uint8_t  reveal[7][1092];           /* 0x4d84 the picture intro_reveal wipes on, seven bands of 0x444. It starts where scroll_rows ends and finishes one byte before logo, so the three fill the block between them exactly. The original's 0x4db7 is band + 0x33: the slice starts there and widens leftwards */
     uint8_t  logo[4368];                /* 0x6b60 the logo the intro slides on. **One** block, read from both ends: two passes walk it forwards from the first word and two backwards from the last, which is why the original holds 0x6b60 for one pair and 0x7c6e for the other - and 0x7c6e is logo + 4366, the last word of exactly this many bytes */
+    uint8_t  ending_band[91][26];       /* 0x7c70 the band screen_all_levels_done wipes on, straight after the logo */
 } seg_c46_t;
-ENSURE_SIZE(seg_c46_t, 0x7c70);
+ENSURE_SIZE(seg_c46_t, 0x85ae);
 #define c46 (*(seg_c46_t *)(g_image + SEG_C46))
 
 #define ENSURE_C46_AT(field, off) \
@@ -1015,7 +1018,10 @@ ENSURE_C46_AT(ending_mark, 0x28d9);
 ENSURE_C46_AT(hole_picture, 0x28f0);
 ENSURE_C46_AT(scroll_rows, 0x488a);
 ENSURE_C46_AT(reveal, 0x4d84);
+ENSURE_C46_AT(walk_script, 0x2825);
+ENSURE_C46_AT(blob_script, 0x289d);
 ENSURE_C46_AT(logo, 0x6b60);
+ENSURE_C46_AT(ending_band, 0x7c70);
 
 /* The four colours mode 05h displays on an RGB monitor: the colour-burst-kill
  * bit selects background / cyan / red / white regardless of the palette bit. */
