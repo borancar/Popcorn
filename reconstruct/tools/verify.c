@@ -71,10 +71,10 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         ball_step(ball_at(r[R_SI]));
         return 1;
     case 0x22de:                        /* paddle_row_offsets(bl, di) */
-        paddle_row_offsets(r[R_BX] & 0xff, r[R_DI]);
+        paddle_row_offsets(r[R_BX] & 0xff, (paddle_rows_t *)(g_image + r[R_DI]));
         return 1;
     case 0x2281:                        /* blit_xor(si = pixels, di = rows) */
-        blit_xor(r[R_SI], r[R_DI]);
+        blit_xor(g_image + r[R_SI], (const paddle_rows_t *)(g_image + r[R_DI]));
         return 1;
     case 0x221a:                        /* draw_paddle(si = sprite) */
         draw_paddle(r[R_SI]);

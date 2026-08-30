@@ -289,6 +289,16 @@ static inline entity_t *entity_of(void *arm)
     return (entity_t *)((uint8_t *)arm - offsetof(entity_t, p));
 }
 
+/* The seven video-memory offsets a paddle is drawn at, one per scan line.
+ * A struct rather than a bare uint16_t[7] so that a pointer to it can be
+ * passed: 0x2e57 is odd, and a `uint16_t *` into a packed struct is an
+ * unaligned pointer GCC will not hand out quietly. A pointer to a packed
+ * struct has alignment 1, so it is honest about the same fact. */
+typedef struct __attribute__((packed)) {
+    uint16_t at[7];                 /* PADDLE_ROWS */
+} paddle_rows_t;
+ENSURE_SIZE(paddle_rows_t, 14);
+
 /* One corner's probe of the brick field. probe_cell_at fills four of these,
  * one per corner of the ball, and ball_bricks reads them to decide which way
  * it leaves and which bricks were struck. */
@@ -411,7 +421,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  paddle_x;                  /* 0x2e54 left edge, pixels */
     uint8_t  paddle_prev_x;             /* 0x2e55 where it was last frame, so the old one can be erased */
     uint8_t  hold_offset;               /* 0x2e56 a caught ball's x relative to the paddle */
-    uint16_t paddle_rows[2][7];         /* 0x2e57 where each of the paddle's seven rows lands in video memory, now and last frame, to match paddle_pix */
+    paddle_rows_t paddle_rows[2];       /* 0x2e57 where each of the paddle's seven rows lands in video memory, now and last frame, to match paddle_pix */
     uint8_t  ball_alive;                /* 0x2e73 clear when the last ball is lost */
     uint8_t  hit_count;                 /* 0x2e74 */
     uint8_t  caught;                    /* 0x2e75 the C capsule: the ball sticks to the paddle */
@@ -790,8 +800,8 @@ void input_keyboard(void);                              /* 1ac2:1712 */
 void input_mouse(uint32_t mouse_x, uint32_t buttons);   /* 1ac2:169f */
 void save_screen(void);                                 /* 1ac2:5099 */
 void restore_screen(void);                              /* 1ac2:50bc */
-void paddle_row_offsets(uint32_t x, uint32_t rows_out); /* 1ac2:22de */
-void blit_xor(uint32_t pixels, uint32_t rows);          /* 1ac2:2281 */
+void paddle_row_offsets(uint32_t x, paddle_rows_t *rows); /* 1ac2:22de */
+void blit_xor(const uint8_t *pixels, const paddle_rows_t *rows); /* 1ac2:2281 */
 void draw_paddle(uint32_t sprite);                      /* 1ac2:221a */
 void draw_char(uint8_t c, uint32_t di);           /* 1ac2:0c64 */
 uint32_t game_random(uint32_t ticks, uint32_t limit);   /* 1ac2:40c0 */
