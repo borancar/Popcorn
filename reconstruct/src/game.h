@@ -917,7 +917,7 @@ void entity_bonus(entity_t *e);     /* 1ac2:39fa */
 void entity_unknown(uint32_t bx);
 void entity_multiball(void);  /* 1ac2:3717 */
 void entity_unlink(uint32_t node);/* 1ac2:3257 */
-uint32_t entity_alloc(void);      /* 1ac2:3232 */
+entity_t *entity_alloc(void);      /* 1ac2:3232 */
 uint32_t draw_run(uint8_t c, uint32_t count, uint32_t di); /* 1ac2:10c5 */
 void draw_cursor(uint32_t di);    /* 1ac2:14a7 */
 void define_keys_prompt(uint32_t src, uint32_t dst);            /* 1ac2:1642 */
