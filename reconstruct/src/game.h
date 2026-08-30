@@ -1208,11 +1208,11 @@ void screen_stash(void);          /* 1ac2:4ba9 */
 void screen_restore(void);        /* 1ac2:4b4f */
 void demo_start(void);
 void input_demo(void);            /* 1ac2:1785 */
-int32_t  cheat_sequence(uint8_t key); /* 1ac2:58b3 */            /* 1ac2:1509 */
+int32_t  cheat_sequence(char key);    /* 1ac2:58b3 */            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
 
 int32_t  level_load_file(const char *dir);  /* 1ac2:08c8 */
-void set_palette_registers(uint32_t table);  /* 1ac2:4b7a */
+void set_palette_registers(const uint8_t *table); /* 1ac2:4b7a */
 uint8_t screen_player_names(void);  /* 1ac2:10de */
 int32_t  name_field(uint32_t di, uint8_t *abort); /* 1ac2:13b8 */
 void play_frame(void);            /* 1ac2:1212 */
@@ -1260,7 +1260,7 @@ void brick_3(hit_t *hit, ball_t *ball);     /* 1ac2:2a3f */
 void brick_solid(hit_t *hit, ball_t *ball);       /* 1ac2:3221 */
 void brick_animated(hit_t *hit, ball_t *ball);   /* 1ac2:2ccd */
 void entity_anim_brick(ent_brick_t *a);                 /* 1ac2:3abf */
-void draw_anim_cell(uint32_t si, uint32_t x, uint32_t y); /* 1ac2:3bac */
+void draw_anim_cell(const uint8_t *src, uint32_t x, uint32_t y); /* 1ac2:3bac */
 void brick_5(hit_t *hit, ball_t *ball);     /* 1ac2:2a73 */
 void brick_6(hit_t *hit, ball_t *ball);     /* 1ac2:2ab4 */
 void brick_7(hit_t *hit, ball_t *ball);     /* 1ac2:2af5 */
