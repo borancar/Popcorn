@@ -452,6 +452,27 @@ void io_script_key_shift(uint32_t scan, uint32_t ms, int32_t shift)
  * events get this from SDL; a scripted one had nothing, so --keys could press
  * F1 but could not type a player's name - name_field reads the ASCII byte and
  * saw zero every time. Set 1 scan codes, the printable half of the keyboard. */
+/* What shift does to a symbol on the US layout the BIOS assumes.
+ *
+ * Letters fold to upper case and everything else was left alone, which made
+ * `_` impossible to type: it is shift and the minus key, and both paths
+ * handed the game a plain `-`. That is not cosmetic - the demo's cheat is
+ * "pop_corn LACRAL", and a key that is not the next one in the sequence ends
+ * the demo, so the fourth character sent you back to the menu every time. */
+static uint32_t shifted_symbol(uint32_t a)
+{
+    switch (a) {
+    case '1': return '!';   case '2': return '@';   case '3': return '#';
+    case '4': return '$';   case '5': return '%';   case '6': return '^';
+    case '7': return '&';   case '8': return '*';   case '9': return '(';
+    case '0': return ')';   case '-': return '_';   case '=': return '+';
+    case '[': return '{';   case ']': return '}';   case ';': return ':';
+    case '\'': return '"'; case '`': return '~';   case '\\': return '|';
+    case ',': return '<';   case '.': return '>';   case '/': return '?';
+    default:  return a;
+    }
+}
+
 static uint32_t ascii_of_scan(uint32_t sc)
 {
     static const char t[0x3a] = {
@@ -484,7 +505,9 @@ static void script_pump(void)
          * presses it with shift, which is how a mixed-case string like the
          * cheat gets typed by a script. */
         uint32_t a = ascii_of_scan(sc);
-        if (!script[i].shift && a >= 'A' && a <= 'Z')
+        if (script[i].shift)
+            a = shifted_symbol(a);
+        else if (a >= 'A' && a <= 'Z')
             a += 32;
         key_push(sc, a);
         if (sc == gv.key_scan_l) gv.key_left = 1;
@@ -737,6 +760,8 @@ int32_t io_pump(void)
                         caps = !caps;   /* shift and caps lock cancel out */
                     if (caps && ascii >= 'a' && ascii <= 'z')
                         ascii = (uint32_t)SDL_toupper((int32_t)ascii);
+                    else if (caps)
+                        ascii = shifted_symbol(ascii);
                 } else if (ev.key.scancode == SDL_SCANCODE_RETURN)
                     ascii = 0x0d;
                 else if (ev.key.scancode == SDL_SCANCODE_ESCAPE)
@@ -752,6 +777,65 @@ int32_t io_pump(void)
         }
     }
     return !quit_requested;
+}
+
+/* ------------------------------------------------------------------------
+ * DOS text.
+ *
+ * Everything the program has to say is **CP437**, the character set the
+ * machine drew it in: 0x82 is an e-acute, 0x85 an a-grave. The port has no
+ * text mode to draw it in and prints it instead, and printing those bytes raw
+ * drops every accent on a terminal that reads UTF-8 - which turned the
+ * authors' own statement into a page with holes in it.
+ *
+ * This is the upper half. The lower half is ASCII and needs nothing.
+ * ------------------------------------------------------------------------ */
+static const uint16_t cp437_high[128] = {
+    0x00c7, 0x00fc, 0x00e9, 0x00e2, 0x00e4, 0x00e0, 0x00e5, 0x00e7,
+    0x00ea, 0x00eb, 0x00e8, 0x00ef, 0x00ee, 0x00ec, 0x00c4, 0x00c5,
+    0x00c9, 0x00e6, 0x00c6, 0x00f4, 0x00f6, 0x00f2, 0x00fb, 0x00f9,
+    0x00ff, 0x00d6, 0x00dc, 0x00a2, 0x00a3, 0x00a5, 0x20a7, 0x0192,
+    0x00e1, 0x00ed, 0x00f3, 0x00fa, 0x00f1, 0x00d1, 0x00aa, 0x00ba,
+    0x00bf, 0x2310, 0x00ac, 0x00bd, 0x00bc, 0x00a1, 0x00ab, 0x00bb,
+    0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x2561, 0x2562, 0x2556,
+    0x2555, 0x2563, 0x2551, 0x2557, 0x255d, 0x255c, 0x255b, 0x2510,
+    0x2514, 0x2534, 0x252c, 0x251c, 0x2500, 0x253c, 0x255e, 0x255f,
+    0x255a, 0x2554, 0x2569, 0x2566, 0x2560, 0x2550, 0x256c, 0x2567,
+    0x2568, 0x2564, 0x2565, 0x2559, 0x2558, 0x2552, 0x2553, 0x256b,
+    0x256a, 0x2518, 0x250c, 0x2588, 0x2584, 0x258c, 0x2590, 0x2580,
+    0x03b1, 0x00df, 0x0393, 0x03c0, 0x03a3, 0x03c3, 0x00b5, 0x03c4,
+    0x03a6, 0x0398, 0x03a9, 0x03b4, 0x221e, 0x03c6, 0x03b5, 0x2229,
+    0x2261, 0x00b1, 0x2265, 0x2264, 0x2320, 0x2321, 0x00f7, 0x2248,
+    0x00b0, 0x2219, 0x00b7, 0x221a, 0x207f, 0x00b2, 0x25a0, 0x00a0,
+};
+
+uint32_t io_cp437_utf8(char *out, uint32_t n, uint32_t cap, uint8_t c)
+{
+    uint32_t u = c < 0x80 ? c : cp437_high[c - 0x80];
+    if (u < 0x80) {
+        if (n + 1 < cap)
+            out[n++] = (char)u;
+    } else if (u < 0x800) {
+        if (n + 2 < cap) {
+            out[n++] = (char)(0xc0 | (u >> 6));
+            out[n++] = (char)(0x80 | (u & 0x3f));
+        }
+    } else if (n + 3 < cap) {
+        out[n++] = (char)(0xe0 | (u >> 12));
+        out[n++] = (char)(0x80 | ((u >> 6) & 0x3f));
+        out[n++] = (char)(0x80 | (u & 0x3f));
+    }
+    return n;
+}
+
+void io_print_dos(const char *what, const uint8_t *dos, uint32_t n)
+{
+    char line[1024];
+    uint32_t k = 0;
+    for (uint32_t i = 0; i < n; i++)
+        k = io_cp437_utf8(line, k, sizeof line, dos[i]);
+    line[k] = 0;
+    fprintf(stderr, "popcorn: [%s] %s\n", what, line);
 }
 
 /* The PC speaker holds a note until it is told otherwise, and so must this.
