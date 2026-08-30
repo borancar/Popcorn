@@ -3046,7 +3046,6 @@ void entity_crumble(ent_anim_t *a)
  * table at 0xac60, and put it where the hatch is. A kind of 0 means it starts
  * eight pixels left and is marked type 2.
  */
-#define BONUS_KINDS 0xac60
 
 void bonus_release(const ent_hatch_t *h)
 {
@@ -3057,11 +3056,10 @@ void bonus_release(const ent_hatch_t *h)
     b->arg.move.mode = 0;
     b->arg.move.steps = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
 
-    uint32_t k = game_random(io_ticks(), 8);
-    uint32_t di = BONUS_KINDS + k * 4;
-    b->sprite.frame = (uint16_t)img_w(di);
-    b->sprite.timer = g_image[di + 2];   /* one word in the original */
-    b->sprite.period = g_image[di + 3];
+    const bonus_kind_t *kind = &gv.bonus_kinds[game_random(io_ticks(), 8)];
+    b->sprite.frame = kind->frame;
+    b->sprite.timer = kind->timer;       /* one word in the original */
+    b->sprite.period = kind->period;
 
     uint32_t al = h->x;
     if (al) {
