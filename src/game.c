@@ -255,10 +255,13 @@ void blit_xor(uint32_t pixels, uint32_t rows)
  * paddle has not moved and no redraw was forced by [0x2d3b], there is nothing
  * to do, and XOR-ing it off and back on would flicker it.
  */
-#define PADDLE_ROWS_CUR    0x2e57       /* seven words */
-#define PADDLE_ROWS_PREV   0x2e65
-#define PADDLE_PIX_CUR     0x2d8c       /* PADDLE_IMAGE bytes */
-#define PADDLE_PIX_PREV    0x2ddc
+/* The four buffers are game_vars fields now; these spell the offsets the
+ * routines that still take one want, and derive them rather than repeat
+ * them. */
+#define PADDLE_ROWS_CUR    img_off(gv.paddle_rows[0])
+#define PADDLE_ROWS_PREV   img_off(gv.paddle_rows[1])
+#define PADDLE_PIX_CUR     img_off(gv.paddle_pix[0])
+#define PADDLE_PIX_PREV    img_off(gv.paddle_pix[1])
 
 void draw_paddle(uint32_t sprite)
 {
@@ -278,9 +281,9 @@ void draw_paddle(uint32_t sprite)
     gv.frame_delay -= 0x1e0;            /* the uint16_t is the `& 0xffff` */
 
     /* What is on screen now becomes what has to be erased. */
-    memcpy(g_image + PADDLE_ROWS_PREV, g_image + PADDLE_ROWS_CUR,
+    memcpy(gv.paddle_rows[1], gv.paddle_rows[0],
            PADDLE_ROWS * 2);
-    memcpy(g_image + PADDLE_PIX_PREV, g_image + PADDLE_PIX_CUR,
+    memcpy(gv.paddle_pix[1], gv.paddle_pix[0],
            PADDLE_IMAGE + 1);
 
     uint32_t x = gv.paddle_x;
@@ -288,7 +291,7 @@ void draw_paddle(uint32_t sprite)
     paddle_row_offsets(x, PADDLE_ROWS_CUR);
 
     /* Pick the copy pre-shifted to this pixel within its byte. */
-    memcpy(g_image + PADDLE_PIX_CUR,
+    memcpy(gv.paddle_pix[0],
            g_image + sprite + (x & 3) * PADDLE_IMAGE, PADDLE_IMAGE + 1);
 
     blit_xor(PADDLE_PIX_PREV, PADDLE_ROWS_PREV);   /* erase where it was */
@@ -1245,7 +1248,7 @@ int32_t play_loop(void)
     io_mouse_warp(0x64 * 2, 0xb8);
 
     paddle_row_offsets(gv.paddle_x, PADDLE_ROWS_CUR);
-    memcpy(g_image + PADDLE_PIX_CUR, g_image + SPRITE_BASE, 0x27 * 2);
+    memcpy(gv.paddle_pix[0], g_image + SPRITE_BASE, 0x27 * 2);
     gv.ball_alive = 1;
     memcpy(gv.balls[0].sprite, g_image + 0x48fb, sizeof gv.balls[0].sprite);
     gv.frame_delay_set = 0x1f4;
@@ -1947,8 +1950,8 @@ void ball_after(ball_t *b)
  */
 #define PADDLE_TOP    0xb5
 #define PADDLE_BOTTOM 0xbe
-#define SLOPE_TOP     0x2e2c
-#define SLOPE_SIDE    0x2e42
+#define SLOPE_TOP     img_off(gv.slope_top)
+#define SLOPE_SIDE    img_off(gv.slope_side)
 #define SOUND_PADDLE     1
 
 /* The common tail of every top-of-paddle bounce: reverse vertically, anchor
@@ -3833,22 +3836,23 @@ void draw_paddle_shifted(uint32_t sprite)
         return;
     gv.frame_delay -= 0x1f3;          /* the uint16_t is the `& 0xffff` */
 
-    memcpy(g_image + PADDLE_ROWS_PREV, g_image + PADDLE_ROWS_CUR,
+    memcpy(gv.paddle_rows[1], gv.paddle_rows[0],
            PADDLE_ROWS * 2);
-    memcpy(g_image + PADDLE_PIX_PREV, g_image + PADDLE_PIX_CUR,
+    memcpy(gv.paddle_pix[1], gv.paddle_pix[0],
            PADDLE_IMAGE + 1);
 
     uint32_t x = gv.paddle_x;
     gv.paddle_prev_x = (uint8_t)x;
     paddle_row_offsets(x, PADDLE_ROWS_CUR);
-    memcpy(g_image + PADDLE_PIX_CUR, g_image + sprite, PADDLE_IMAGE + 1);
+    memcpy(gv.paddle_pix[0], g_image + sprite, PADDLE_IMAGE + 1);
 
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < PADDLE_ROWS; r++) {
-            uint32_t p = PADDLE_PIX_CUR + r * PADDLE_BYTES, carry = 0;
+            uint8_t *row = &gv.paddle_pix[0][r * PADDLE_BYTES];
+            uint32_t carry = 0;
             for (int32_t b = 0; b < PADDLE_BYTES; b++) {
-                uint32_t v = g_image[p + b];
-                g_image[p + b] = (uint8_t)((v >> 1) | (carry << 7));
+                uint32_t v = row[b];
+                row[b] = (uint8_t)((v >> 1) | (carry << 7));
                 carry = v & 1;
             }
         }
@@ -6034,7 +6038,7 @@ void ending_column(void)
  * ===================================================================== */
 void screen_game_over(void)
 {
-    memcpy(g_image + PADDLE_PIX_CUR, g_image + 0xa346, 0x27 * 2);
+    memcpy(gv.paddle_pix[0], g_image + 0xa346, 0x27 * 2);
 
     uint32_t di = 0x1cc2;
     for (int32_t r = 0; r < 8; r++) {
