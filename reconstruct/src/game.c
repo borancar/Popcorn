@@ -2998,21 +2998,22 @@ void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src)
  * drawing routine they use and what they do when the list ends. */
 static int32_t entity_anim(uint32_t bx, void (*draw)(uint32_t, uint32_t, uint32_t))
 {
-    if (--g_image[bx + 8] != 0)
+    entity_t *e = entity_at(bx);
+    if (--e->p.anim.timer != 0)
         return 0;                       /* not time for the next frame yet */
-    g_image[bx + 8] = g_image[bx + 9];
+    e->p.anim.timer = e->p.anim.period;
 
     /* [bx+6] points *into* a list of frame pointers, so one dereference gets
      * the frame: `[si]` where si is the cursor. Dereferencing twice reads the
      * first word of the frame's pixels as if it were an address. */
-    uint32_t cur = img_w(bx + 6);
-    uint32_t x = g_image[bx + 4], y = g_image[bx + 5];
+    uint32_t cur = e->p.anim.frame;
+    uint32_t x = e->p.anim.x, y = e->p.anim.y;
     draw(x, y, img_w(cur - 2));         /* the previous frame, to erase */
     uint32_t next = img_w(cur);
     if (next == 0xffff)
         return -1;                      /* the animation is over */
     draw(x, y, next);
-    img_setw(bx + 6, cur + 2);
+    e->p.anim.frame = (uint16_t)(cur + 2);
     return 1;
 }
 
@@ -3039,16 +3040,17 @@ void entity_sparkle(uint32_t bx)
  */
 void entity_crumble(uint32_t bx)
 {
-    if (--g_image[bx + 8] != 0)
+    entity_t *e = entity_at(bx);
+    if (--e->p.anim.timer != 0)
         return;
-    g_image[bx + 8] = g_image[bx + 9];
+    e->p.anim.timer = e->p.anim.period;
 
-    uint32_t cur = img_w(bx + 6);
-    uint32_t x = g_image[bx + 4], y = g_image[bx + 5];
+    uint32_t cur = e->p.anim.frame;
+    uint32_t x = e->p.anim.x, y = e->p.anim.y;
     xor_sprite_16x7(x, y, img_w(cur - 2));
     xor_sprite_16x7(x, y, img_w(cur));
-    img_setw(bx + 6, cur + 2);
-    if (img_w(img_w(bx + 6)) == 0xffff)
+    e->p.anim.frame = (uint16_t)(cur + 2);
+    if (img_w(e->p.anim.frame) == 0xffff)
         gv.entity_remove = 1;
 }
 
@@ -3290,7 +3292,7 @@ void entity_soften(uint32_t bx)
 {
     entity_crumble(bx);
     if (gv.entity_remove == 1)
-        g_image[img_w(bx + 2)] = 3;
+        g_image[entity_at(bx)->p.anim.arg] = 3;   /* the cell it sat on */
 }
 
 /* 1ac2:366f  from brick 8 - plays its animation [bx+2] times over, cancelling
@@ -3300,12 +3302,13 @@ void entity_repeat(uint32_t bx)
     entity_crumble(bx);
     if (gv.entity_remove != 1)
         return;
-    if (--g_image[bx + 2] != 0) {
+    entity_t *e = entity_at(bx);
+    if (--e->p.anim.arg != 0) {         /* a countdown, in the low byte */
         gv.entity_remove = 0;
-        img_setw(bx + 6, 0x67ea);
+        e->p.anim.frame = 0x67ea;       /* and round the animation again */
         return;
     }
-    xor_sprite_16x7(g_image[bx + 4], g_image[bx + 5], 0x681c);
+    xor_sprite_16x7(e->p.anim.x, e->p.anim.y, 0x681c);
 }
 
 /* 1ac2:3696  from brick 9 - the animation and nothing else */
@@ -3341,15 +3344,16 @@ void entity_ball_arrive(uint32_t bx)
     if (gv.entity_remove != 1)
         return;
 
-    ball_place(ball_at(img_w(bx + 2)), (g_image[bx + 4] + 8) & 0xff,
-               (g_image[bx + 5] - 4) & 0xff);
+    entity_t *e = entity_at(bx);
+    ball_place(ball_at(e->p.anim.arg), (e->p.anim.x + 8) & 0xff,
+               (e->p.anim.y - 4) & 0xff);
 }
 
 /* 1ac2:36f6  from brick 9 - counts [bx+4] down and then puts the cells back */
 void entity_cells_timer(uint32_t bx)
 {
-    img_setw(bx + 4, img_w(bx + 4) - 1);
-    if (img_w(bx + 4) == 0)
+    entity_t *e = entity_at(bx);
+    if (--e->p.cells.left == 0)
         cells_restore();
 }
 
@@ -4098,18 +4102,19 @@ void entity_capsule(uint32_t bx) { entity_capsule_frames(bx, CAPSULE_FRAMES); }
 
 void entity_capsule_frames(uint32_t bx, uint32_t table)
 {
-    if ((--g_image[bx + 5] & 7) != 0)
+    entity_t *e = entity_at(bx);
+    if ((--e->p.fall.tick & 7) != 0)
         return;                         /* not this tick */
 
-    uint32_t base = img_w(table + g_image[bx + 4] * 2);
-    uint32_t di = base + g_image[bx + 6] * 4;
+    uint32_t base = img_w(table + e->p.fall.kind * 2);
+    uint32_t di = base + e->p.fall.frame * 4;
     uint32_t src = img_w(di), rows = img_w(di + 2);
 
-    uint32_t y = g_image[bx + 3];
-    g_image[bx + 3]++;
-    xor_sprite_16xn(g_image[bx + 2], y, src, rows & 0xff);
+    uint32_t y = e->p.fall.y;
+    e->p.fall.y++;
+    xor_sprite_16xn(e->p.fall.x, y, src, rows & 0xff);
 
-    y = g_image[bx + 3];
+    y = e->p.fall.y;
     if (y == 0xc5) {                    /* fallen past the paddle */
         gv.bonus_cap--;
         gv.entity_remove = 1;
@@ -4120,16 +4125,22 @@ void entity_capsule_frames(uint32_t bx, uint32_t table)
         /* Level with the paddle: does it overlap? The comparison is done in
          * sixteen bits with an `adc ch,0`, so a paddle at the right-hand edge
          * does not wrap. */
-        uint32_t right = (g_image[bx + 2] + 0x0e) & 0xffff;
+        uint32_t right = (e->p.fall.x + 0x0e) & 0xffff;
         uint32_t px = gv.paddle_x;
         if (right >= px &&
             (right - 0x0f) <= (px + gv.paddle_width)) {
-            g_image[bx + 6] = gv.paddle_kind;
-            g_image[bx + 7] = g_image[PADDLE_NEXT + g_image[bx + 4]];
-            g_image[bx + 0x0a] = g_image[bx + 4];
-            g_image[bx + 2] = 1;
-            g_image[bx + 3] = 6;
-            img_setw(bx + 0, 0x3386);   /* becomes the paddle morph */
+            /* Caught. The node stays where it is and becomes a different
+             * kind of entity: the handler is rewritten and the same ten
+             * bytes are read as the morph arm from here on - fall.frame and
+             * morph.from are the same byte, fall.cycle and morph.to the
+             * next. */
+            uint8_t kind = e->p.fall.kind;
+            e->p.morph.from = gv.paddle_kind;
+            e->p.morph.to = g_image[PADDLE_NEXT + kind];
+            e->p.morph.bonus = kind;
+            e->p.morph.pending = 1;
+            e->p.morph.step = 6;
+            e->handler = 0x3386;        /* becomes the paddle morph */
             gv.bonus_cap--;
             brick_score(0, 0, 0x0302);
             return;
@@ -4137,15 +4148,15 @@ void entity_capsule_frames(uint32_t bx, uint32_t table)
     }
 
     /* Still falling: step the animation. Kind 2 cycles its frame 0..0x0f. */
-    g_image[bx + 6] = g_image[bx + 7];
+    e->p.fall.frame = e->p.fall.cycle;
     if ((y & 3) == 2) {
-        if (g_image[bx + 7] == 0x0f)
-            g_image[bx + 7] = 0;
+        if (e->p.fall.cycle == 0x0f)
+            e->p.fall.cycle = 0;
         else
-            g_image[bx + 7]++;
+            e->p.fall.cycle++;
     }
-    di = base + g_image[bx + 6] * 4;
-    xor_sprite_16xn(g_image[bx + 2], y, img_w(di), img_w(di + 2) & 0xff);
+    di = base + e->p.fall.frame * 4;
+    xor_sprite_16xn(e->p.fall.x, y, img_w(di), img_w(di + 2) & 0xff);
 }
 
 /* ========================================================================
@@ -7603,9 +7614,10 @@ void entity_anim_brick(uint32_t bx)
 {
     if (gv.anim_rate != gv.anim_count)
         return;
+    entity_t *e = entity_at(bx);
     uint32_t si = img_w(SEG_14A1 + gv.anim_ptr)
-                + g_image[bx + 4] * ANIM_SPRITE_BYTES;
-    draw_anim_cell(si, g_image[bx + 2], g_image[bx + 3]);
+                + e->p.brick.piece * ANIM_SPRITE_BYTES;
+    draw_anim_cell(si, e->p.brick.x, e->p.brick.y);
 }
 
 /* 1ac2:2ccd  brick_animated - cells 16 to 21 */

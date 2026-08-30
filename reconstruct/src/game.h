@@ -136,17 +136,94 @@ ENSURE_PLAYER_AT(ents, 0xd3);
  * across the fifteen handlers. Naming them wants each handler read first, so
  * until then they are payload and reached as bytes, which claims nothing.
  */
+/* Every arm of the variant must fill the payload exactly - a short one would
+ * silently move `next`. */
+#define ENSURE_ENTITY_ARM(arm, n) \
+    typedef char ensure_entity_arm_##arm[sizeof(((entity_t *)0)->p.arm) == (n) ? 1 : -1]
+
 typedef struct __attribute__((packed)) {
     uint16_t handler;       /* 0x00 the routine entity_call dispatches to */
-    uint8_t  payload[10];   /* 0x02 whatever that handler keeps here */
+    union {                 /* 0x02 the variant, chosen by handler */
+
+        /* crumble, plain, sparkle, soften, repeat, ball_arrive, bonus - a
+         * sprite animation stepped frame by frame by entity_anim. */
+        struct {
+            uint16_t arg;   /* 0x02 the handler's own: soften keeps the cell
+                             * to harden, ball_arrive the ball to put down,
+                             * repeat a countdown in the low byte. crumble,
+                             * plain and sparkle do not use it */
+            uint8_t  x, y;  /* 0x04 0x05 where the animation is drawn */
+            uint16_t frame; /* 0x06 a cursor *into* a list of frame pointers,
+                             * so one dereference gets the frame; walked two
+                             * at a time until the word it points at is
+                             * 0xffff */
+            uint8_t  timer; /* 0x08 counts down to the next frame */
+            uint8_t  period;/* 0x09 what timer reloads to */
+            uint8_t  _r[2];
+        } anim;
+
+        /* capsule and popup - a sprite falling down the screen. Note x and y
+         * are at 0x02 here, not 0x04: the two families disagree, which is why
+         * this is a union and not a struct. */
+        struct {
+            uint8_t  x, y;  /* 0x02 0x03 y is incremented as it falls */
+            uint8_t  kind;  /* 0x04 which frame table it draws from */
+            uint8_t  tick;  /* 0x05 masked & 7: only every eighth call moves */
+            uint8_t  frame; /* 0x06 the frame being drawn */
+            uint8_t  cycle; /* 0x07 the next one, copied into frame each step;
+                             * kind 2 cycles it 0..0x0f */
+            uint8_t  _r[4];
+        } fall;
+
+        /* the hatch a capsule comes out of */
+        struct {
+            uint16_t cell;  /* 0x02 the cell it opens in */
+            uint8_t  x, y;  /* 0x04 0x05 */
+            uint16_t wait;  /* 0x06 set to 0x12c and counted down */
+            uint16_t phase; /* 0x08 counted down; every 0x23rd draws */
+            uint16_t script;/* 0x0a cursor into a list, ending at 0xffff */
+        } hatch;
+
+        /* entity_cells_timer - nothing but a countdown */
+        struct {
+            uint8_t  _p[2];
+            uint16_t left;  /* 0x04 at zero, cells_restore puts the field back */
+            uint8_t  _r[6];
+        } cells;
+
+        /* entity_anim_brick - one of the six pieces of the moving picture */
+        struct {
+            uint8_t  x, y;  /* 0x02 0x03 */
+            uint8_t  piece; /* 0x04 which of the six */
+            uint8_t  _r[7];
+        } brick;
+
+        /* entity_paddle_fx - the grow or shrink between two paddle kinds */
+        struct {
+            uint8_t  pending;/* 0x02 a second capsule arrived mid-morph */
+            uint8_t  step;   /* 0x03 frame of the morph, counted down from 6 */
+            uint16_t sprites;/* 0x04 the sprite list being walked */
+            uint8_t  from;   /* 0x06 the kind it started as */
+            uint8_t  to;     /* 0x07 the kind it is becoming */
+            uint8_t  _p[2];
+            uint8_t  bonus;  /* 0x0a the capsule kind to apply when it lands */
+            uint8_t  _r;
+        } morph;
+
+        uint8_t raw[10];    /* for the handlers still reached by offset */
+    } p;
     uint16_t next;          /* 0x0c 0xffff ends the chain */
 } entity_t;
+
+ENSURE_ENTITY_ARM(anim, 10);   ENSURE_ENTITY_ARM(fall, 10);
+ENSURE_ENTITY_ARM(hatch, 10);  ENSURE_ENTITY_ARM(cells, 10);
+ENSURE_ENTITY_ARM(brick, 10);  ENSURE_ENTITY_ARM(morph, 10);
 
 ENSURE_SIZE(entity_t, 0x0e);
 #define ENSURE_ENTITY_AT(field, off) \
     typedef char ensure_entity_at_##field[offsetof(entity_t, field) == (off) ? 1 : -1]
 ENSURE_ENTITY_AT(handler, 0x00);
-ENSURE_ENTITY_AT(payload, 0x02);
+ENSURE_ENTITY_AT(p, 0x02);
 ENSURE_ENTITY_AT(next, 0x0c);
 
 /* A node by its image offset. The chain's links are the game's own 16-bit
