@@ -2235,13 +2235,14 @@ static entity_t *brick_entity(uint32_t slot, uint32_t handler,
 {
     entity_t *e = entity_alloc();
     e->handler = (uint16_t)handler;
+    ent_sprite_t *s = &e->p.anim.sprite;
     /* The original stores x and y with one word write from the hit slot; two
      * byte writes are the same thing and say which is which. */
-    e->p.anim.sprite.x = g_image[slot + 2];
-    e->p.anim.sprite.y = g_image[slot + 3];
-    e->p.anim.sprite.frame = (uint16_t)frames;
-    e->p.anim.sprite.timer = (uint8_t)rate;
-    e->p.anim.sprite.period = (uint8_t)rate;
+    s->x = g_image[slot + 2];
+    s->y = g_image[slot + 3];
+    s->frame = (uint16_t)frames;
+    s->timer = (uint8_t)rate;
+    s->period = (uint8_t)rate;
     return e;
 }
 
@@ -2295,15 +2296,16 @@ static void brick_1_or_2(uint32_t slot, ball_t *ball, int32_t is_two)
 
     entity_t *e = entity_alloc();
     e->handler = is_two ? 0x3273 : 0x3561;
+    ent_fall_t *f = &e->p.fall;
     /* The original writes x and y with one word and `inc bh` to put it a row
      * lower; the fall arm has them as the two bytes they are. */
     uint32_t centre = img_w(slot + 2);
-    e->p.fall.x = (uint8_t)centre;
-    e->p.fall.y = (uint8_t)((centre >> 8) + 1);
-    e->p.fall.kind = (uint8_t)bonus_kind();
-    e->p.fall.tick = 0;
-    e->p.fall.frame = 0;
-    e->p.fall.cycle = 1;
+    f->x = (uint8_t)centre;
+    f->y = (uint8_t)((centre >> 8) + 1);
+    f->kind = (uint8_t)bonus_kind();
+    f->tick = 0;
+    f->frame = 0;
+    f->cycle = 1;
     /* The sprite goes at the brick's centre, one scan line down - `inc bh`
      * before the store at [si+2], and BL untouched. Passing [si+4], the kind
      * that was just picked, as the x instead put it wherever the random
@@ -3071,26 +3073,27 @@ void entity_crumble(ent_anim_t *a)
 void bonus_release(const ent_hatch_t *h)
 {
     gv.bonus_live++;
-    entity_t *cap = entity_alloc();
-    cap->handler = 0x39fa;
-    cap->p.bonus.mode = 0;
-    cap->p.bonus.steps = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
+    entity_t *e = entity_alloc();
+    e->handler = 0x39fa;
+    ent_bonus_t *b = &e->p.bonus;
+    b->mode = 0;
+    b->steps = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
 
     uint32_t k = game_random(io_ticks(), 8);
     uint32_t di = BONUS_KINDS + k * 4;
-    cap->p.bonus.sprite.frame = (uint16_t)img_w(di);
-    cap->p.bonus.sprite.timer = g_image[di + 2];   /* one word in the original */
-    cap->p.bonus.sprite.period = g_image[di + 3];
+    b->sprite.frame = (uint16_t)img_w(di);
+    b->sprite.timer = g_image[di + 2];   /* one word in the original */
+    b->sprite.period = g_image[di + 3];
 
     uint32_t al = h->x;
     if (al) {
         al = (al - 8) & 0xff;
-        cap->p.bonus.mode = 2;
+        b->mode = 2;
     }
-    cap->p.bonus.sprite.x = (uint8_t)al;
-    cap->p.bonus.sprite.y = h->y;
-    xor_sprite_20x16(cap->p.bonus.sprite.x, cap->p.bonus.sprite.y,
-                     img_w(cap->p.bonus.sprite.frame));
+    b->sprite.x = (uint8_t)al;
+    b->sprite.y = h->y;
+    xor_sprite_20x16(b->sprite.x, b->sprite.y,
+                     img_w(b->sprite.frame));
 }
 
 /* 1ac2:390d  entity_hatch
@@ -3403,11 +3406,12 @@ void brick_9(uint32_t slot, ball_t *ball)
 
     entity_t *e = entity_alloc();
     e->handler = 0x36a1;
-    e->p.anim.arg.ball = img_off(ball);  /* the slot holds its address */
-    e->p.anim.sprite.frame = 0x6ad0;
-    e->p.anim.sprite.timer = e->p.anim.sprite.period = 0x32;
-    e->p.anim.sprite.x = (uint8_t)((idx % 12) * 16 + 8);
-    e->p.anim.sprite.y = (uint8_t)((idx / 12) * 8 + 6);
+    ent_anim_t *a = &e->p.anim;
+    a->arg.ball = img_off(ball);        /* the slot holds its address */
+    a->sprite.frame = 0x6ad0;
+    a->sprite.timer = a->sprite.period = 0x32;
+    a->sprite.x = (uint8_t)((idx % 12) * 16 + 8);
+    a->sprite.y = (uint8_t)((idx / 12) * 8 + 6);
 }
 
 /* 1ac2:2c59  brick 10 - fifty points, and the ball goes into state 4 while an
@@ -3424,11 +3428,12 @@ void brick_10(uint32_t slot, ball_t *ball)
 
     entity_t *e = entity_alloc();
     e->handler = 0x37e0;
-    e->p.anim.arg.ball = img_off(ball); /* likewise */
-    e->p.anim.sprite.frame = 0x6b88;
-    e->p.anim.sprite.x = (uint8_t)x;
-    e->p.anim.sprite.y = (uint8_t)y;
-    e->p.anim.sprite.timer = e->p.anim.sprite.period = 0x69;
+    ent_anim_t *a = &e->p.anim;
+    a->arg.ball = img_off(ball);        /* likewise */
+    a->sprite.frame = 0x6b88;
+    a->sprite.x = (uint8_t)x;
+    a->sprite.y = (uint8_t)y;
+    a->sprite.timer = a->sprite.period = 0x69;
     sprite_shift_draw(x, y, 0x6b9c);
 
     ball_t *b = ball;
@@ -5030,12 +5035,13 @@ void bonus_spawn(void)
     g_image[0x33d5]++;
     entity_t *e = entity_alloc();
     e->handler = 0x390d;
-    e->p.hatch.cell = (uint16_t)si;
-    e->p.hatch.x = g_image[si];
-    e->p.hatch.y = g_image[si + 1];
-    e->p.hatch.wait = 0;
-    e->p.hatch.phase = 0x2bc;
-    e->p.hatch.script = 0x604e;
+    ent_hatch_t *h = &e->p.hatch;
+    h->cell = (uint16_t)si;
+    h->x = g_image[si];
+    h->y = g_image[si + 1];
+    h->wait = 0;
+    h->phase = 0x2bc;
+    h->script = 0x604e;
 }
 
 /* 1ac2:50df  menu_banner_tick
@@ -7655,8 +7661,9 @@ void brick_animated(uint32_t slot, ball_t *ball)
 
     entity_t *e = entity_alloc();
     e->handler = 0x3abf;
-    e->p.brick.x = g_image[slot + 2];   /* the centre, one word in the original */
-    e->p.brick.y = g_image[slot + 3];
-    e->p.brick.piece = (uint8_t)piece;
+    ent_brick_t *br = &e->p.brick;
+    br->x = g_image[slot + 2];          /* the centre, one word in the original */
+    br->y = g_image[slot + 3];
+    br->piece = (uint8_t)piece;
     gv.level.bricks--;
 }
