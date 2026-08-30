@@ -562,6 +562,20 @@ original shoot.
   the side-by-side. Reaching them wants a bot that aims rather than one that
   survives, or a snapshot taken with the level number written by hand.
 
+- **Geometry in hex, which should be decimal.** Rows, columns, widths, pixel
+  counts and scan lines are quantities, and a great many of them are still
+  written as hex because that is how the disassembly spells every immediate.
+  `for (dl = 0x15; dl > 0; dl--)` is twenty-one rows; `si += 0x34` is a
+  fifty-two byte stride; `bx < 0x35` is fifty-three columns. Each reads as an
+  address and none of them is one.
+
+  The rule is in CLAUDE.md and new code follows it. Converting what is there
+  is a sweep of its own, and it wants doing carefully rather than by regex:
+  the same literal is a quantity in one line and an address in the next, and
+  `0x34` being both a stride and a screen offset in intro_reveal is exactly
+  the case a blind substitution would get wrong. Nothing in it changes
+  behaviour, so the check is that the binary is identical before and after.
+
 - **screen_stash and screen_unstash are reached by no route, and the reason
   is the boss key.** `1ac2:4ba9` puts the playfield aside and paints an
   overlay over it; `1ac2:4c13` puts it back. The comment at `1ac2:4ba9` says

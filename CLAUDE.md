@@ -260,6 +260,14 @@ it runs rather than the job it does. It writes one of those three prompts.
   routine carries the offset it was read from, so any line can be checked back
   against the binary.
 - Where a name or a type is a guess, say so.
+- **Geometry is decimal, addresses are hex.** A number that is a row, a
+  column, a width, a pixel count or a scan line reads as a quantity and
+  should be written as one: `reveal[7][1092]`, not `[7][0x444]`. Hex is for
+  what the original means as an address or a bit pattern - an offset, a
+  handler, a mask, a cell value. The same rule the padding sizes already
+  follow. New code should be written this way; the existing constants are a
+  sweep that has not been done - see STATUS.md.
+
 - **Integer types are always `stdint`**: `uint8_t`, `uint16_t`, `uint32_t`,
   `int16_t`, `int32_t`. Never `unsigned`, `unsigned char`, `short` or `long`.
   This is a port of 16-bit assembly, where every value has a width the
