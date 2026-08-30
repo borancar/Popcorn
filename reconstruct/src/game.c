@@ -6593,12 +6593,17 @@ void screen_end_of_game(void)
         si = cga_next_row(si);
     }
 
-    gv.eog_screen_at = (uint16_t)(8);
-    gv.eog_build_at = (uint16_t)(EOG_WIDTH);
+    /* Two cursors, and they are **not** the same kind of thing. 1ac2:525d
+     * loads [0x13c0] into DI with ES at 0xb800, so eog_screen_at is a screen
+     * position - the 8 is a literal immediate at 1ac2:51ee. [0x13c2] goes
+     * into SI with DS at 0, so eog_build_at is an image offset, and starting
+     * it at EOG_WIDTH is starting it at the saved screen's second row. */
+    gv.eog_screen_at = 8;
+    gv.eog_build_at = img_off(&gv.scratch1.eog_saved[EOG_WIDTH]);
 
     for (int32_t pass = 0x87; pass > 0; pass--) {
         /* The band as it stands, from the saved screen - not from vram. */
-        memcpy(gv.scratch2.eog_band, g_image + gv.eog_build_at, EOG_BAND_LEN);
+        memcpy(gv.scratch2.eog_band, img_ptr(gv.eog_build_at), EOG_BAND_LEN);
 
         const uint8_t *src = gv.eog_overlay;
         uint8_t *dst = gv.scratch2.eog_band;
@@ -6614,9 +6619,9 @@ void screen_end_of_game(void)
 
         /* One band on screen from the saved copy, then the merged block. */
         di = gv.eog_screen_at;
-        uint32_t from = (gv.eog_build_at - EOG_WIDTH) & 0xffff;
+        const uint8_t *from = img_ptr((gv.eog_build_at - EOG_WIDTH) & 0xffff);
         for (int32_t b = 0; b < EOG_WIDTH; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[from + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] = from[b];
         di = cga_next_row(di);
         gv.eog_screen_at = (uint16_t)(di);
 

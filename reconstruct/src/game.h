@@ -434,8 +434,8 @@ typedef struct __attribute__((packed)) {
         uint8_t eog_saved[4950];        /* 0x0000 the end-of-game screen copied into the image, 0x96 rows of 0x21 - the picture is merged into it a band at a time and put back */
     } scratch1;
     uint8_t  _pad_00[106];
-    uint16_t eog_screen_at;             /* 0x13c0 end-of-game screen cursor */
-    uint16_t eog_build_at;              /* 0x13c2 */
+    uint16_t eog_screen_at;             /* 0x13c0 where the end-of-game screen is being drawn - a **video memory** offset: 1ac2:525d loads it into DI with ES at 0xb800 */
+    uint16_t eog_build_at;              /* 0x13c2 where it is being read from - an **image** offset into eog_saved: 1ac2:5261 loads it into SI with DS at 0. The two cursors sit side by side and are different kinds of address */
     uint8_t  banner_state;              /* 0x13c4 the menu's scrolling text */
     uint16_t banner_ptr;                /* 0x13c5 where it has got to, as an image offset */
     uint8_t  cga_mode;                  /* 0x13c7 what was last written to port 0x3d8, the mode control. 0x0a at load: graphics, enabled. palette_cycle toggles bit 2, the colour-burst bit that is the difference between mode 04h and 05h */
