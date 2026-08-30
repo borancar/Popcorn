@@ -4681,19 +4681,18 @@ int32_t name_field(uint32_t di, uint8_t *abort)
         *name = ' ';
         draw_char(' ', di);
     }
-    /* 1ac2:145e - one place right per pass, and the walk is **downwards**:
-     * `mov al,[si] / mov [si+1],al / dec si`, eleven times from rec+0x0a.
-     * Going up instead copies each byte onto the one just written, so the
-     * whole name becomes twelve copies of the byte before it and two passes
-     * leave it blank - which is what a five-letter name got, since its
-     * shift is three. The space then goes at rec+0, not rec-1: after the
+    /* 1ac2:145e - one place right per pass, which is a shift and nothing
+     * more. The original walks **downwards** - `mov al,[si] / mov [si+1],al
+     * / dec si`, eleven times from rec+10 - and that direction is the whole
+     * of it: going up copies each byte onto the one just written, so the
+     * name becomes twelve copies of its first character and two passes leave
+     * it blank, which is what a five-letter name got since its shift is
+     * three. memmove is that walk. The space then goes at rec+0: after the
      * eleven steps `si` is rec-1 and the store is `[si+1]`. */
-    uint32_t base = img_off(gv.players[gv.player_digit - '1'].name) + 0x0a;
+    uint8_t *rec = gv.players[gv.player_digit - '1'].name;
     for (uint32_t n = shift; n > 0; n--) {
-        uint32_t si2 = base;
-        for (int32_t k = 0x0b; k > 0; k--, si2--)
-            g_image[si2 + 1] = g_image[si2];
-        g_image[si2 + 1] = ' ';          /* 1ac2:146b */
+        memmove(rec + 1, rec, 11);
+        rec[0] = ' ';                   /* 1ac2:146b */
     }
     return 0;
 }
