@@ -6577,7 +6577,6 @@ void screen_define_keys(void)
  * the table at 0xa8bf, each a tall sprite drawn twice, blanked from 0xabab,
  * and drawn twice more. Any key stops it; if none came, ending_column runs.
  * ===================================================================== */
-#define EOG_BAND      img_off(gv.scratch2.eog_band)
 #define EOG_WIDTH     0x21
 #define EOG_BAND_LEN  0x1ef
 #define EOG_BLANK     0xabab
@@ -6601,15 +6600,16 @@ void screen_end_of_game(void)
         /* The band as it stands, from the saved screen - not from vram. */
         memcpy(gv.scratch2.eog_band, g_image + gv.eog_build_at, EOG_BAND_LEN);
 
-        uint32_t src = img_off(gv.eog_overlay), dst = EOG_BAND;
+        const uint8_t *src = gv.eog_overlay;
+        uint8_t *dst = gv.scratch2.eog_band;
         for (int32_t i = 0; i < EOG_BAND_LEN; i++, src++, dst++) {
-            uint32_t old = g_image[dst], add = g_image[src], out = old;
+            uint32_t old = *dst, add = *src, out = old;
             for (int32_t shift = 6; shift >= 0; shift -= 2) {
                 uint32_t mask = 3u << shift;
                 if ((old & mask) == 0)
                     out += add & mask;
             }
-            g_image[dst] = (uint8_t)out;
+            *dst = (uint8_t)out;
         }
 
         /* One band on screen from the saved copy, then the merged block. */
@@ -6620,10 +6620,10 @@ void screen_end_of_game(void)
         di = cga_next_row(di);
         gv.eog_screen_at = (uint16_t)(di);
 
-        uint32_t m = EOG_BAND;
+        const uint8_t *m = gv.scratch2.eog_band;
         for (int32_t r = 0x0f; r > 0; r--) {
             for (int32_t b = 0; b < EOG_WIDTH; b++)
-                g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[m + b];
+                g_vram[(di + b) & (CGA_SIZE - 1)] = m[b];
             m += EOG_WIDTH;             /* `rep movsb` carries SI forward */
             di = cga_next_row(di);
         }
