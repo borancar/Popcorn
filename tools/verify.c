@@ -102,7 +102,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x30dd: pixel_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
     case 0x306b: shot_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
     case 0x3f20: bonus_hits_ball(&entity_at(r[R_BX])->p.anim.sprite, ball_at(r[R_SI])); return 1;
-    case 0x3f4f: sprite_shift_draw(r[R_CX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
+    case 0x3f4f: sprite_shift_draw(r[R_CX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]));
                  return 1;
     case 0x406a: xor_sprite_20x16(r[R_CX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]));
                  return 1;

@@ -1343,7 +1343,7 @@ void cells_restore(void);         /* 1ac2:36fb */
 
 void bonus_spawn(void);           /* 1ac2:3d95 */
 void xor_sprite_20x16(uint32_t x, uint32_t y, const uint8_t *src); /* 1ac2:406a */
-void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src);/* 1ac2:3f4f */
+void sprite_shift_draw(uint32_t x, uint32_t y, const uint8_t *src); /* 1ac2:3f4f */
 void entity_sparkle(ent_anim_t *a); /* 1ac2:3aee */
 void entity_crumble(ent_anim_t *a); /* 1ac2:3b2a */
 void entity_hatch(ent_hatch_t *h);   /* 1ac2:390d */
