@@ -1517,8 +1517,13 @@ void play_session(void)
 
     for (;;) {
         level_colours();                        /* 1ac2:044b */
-        memcpy(&gv.level,
-               g_image + SEG_C46 + gv.level_src, LEVEL_BYTES);
+        /* level_src and level_number are written together everywhere the
+         * game touches either - set, stepped, wrapped at LEVEL_COUNT, saved
+         * into a player's record and restored from it - so level_src is
+         * always LEVEL_TABLE + level_number * LEVEL_BYTES, which is this
+         * record. The game keeps both because the results screen walks the
+         * offset. */
+        gv.level = c46.levels[gv.level_number];
 
         for (;;) {                              /* one level, retried on death */
             level_intro();                      /* 1ac2:1eb9 */
