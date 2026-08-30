@@ -5245,7 +5245,7 @@ static void player_record_init(player_t *p)
     p->level_src = LEVEL_TABLE;
     p->level_number = 0;
     memset(p->score, '0', sizeof p->score);
-    memcpy(&p->level, g_image + SEG_C46 + LEVEL_TABLE, sizeof p->level);
+    p->level = c46.levels[0];
     for (int32_t i = 0; i < 6; i++)
         p->state[i] = 0xffff;
 }
@@ -5395,9 +5395,9 @@ void play_teardown(void)
  */
 void cell_special(uint32_t row, uint32_t col, uint32_t di)
 {
-    uint32_t src = SEG_C46 + 0x28f0 + (row & 0xff) * 0x30 + col * 4;
+    const uint8_t *src = &c46.hole_picture[row & 0xff][col * 4];
     for (int32_t b = 0; b < 4; b++)
-        g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + b];
+        g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
 }
 
 /* 1ac2:48af  input_and_draw_paddle - read the input and put the paddle where
@@ -5896,9 +5896,8 @@ void ending_blob(uint32_t pos)
      * in this program, and is why it was written that way - takes the sprite
      * from 49KB below where the original takes it. */
     for (int32_t r = 0; r < 8; r++) {
-        g_vram[di & (CGA_SIZE - 1)] ^= g_image[SEG_C46 + 0x28d9 + r * 2];
-        g_vram[(di + 1) & (CGA_SIZE - 1)] ^=
-            g_image[SEG_C46 + 0x28d9 + r * 2 + 1];
+        g_vram[di & (CGA_SIZE - 1)] ^= c46.ending_mark[r][0];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= c46.ending_mark[r][1];
         di = cga_next_row(di);
     }
 }
@@ -6126,7 +6125,7 @@ uint32_t ending_walk(uint32_t bl, uint32_t bh, uint32_t dx)
      * something else is in the register. */
 
     uint32_t target = (0x50 - ((bl << 3) & 0xff)) & 0xff;
-    g_image[SEG_C46 + 0x2823] = (uint8_t)target;
+    c46.blob_target = (uint8_t)target;
     while (((dx >> 8) & 0xff) != target) {
         uint32_t next = (dx - 0x400) & 0xffff;   /* `sub ah,4` */
         for (int32_t i = 0; i < 0x0f; i++)
@@ -6138,7 +6137,7 @@ uint32_t ending_walk(uint32_t bl, uint32_t bh, uint32_t dx)
     }
 
     target = (((bh << 3) + 8) & 0xff);
-    g_image[SEG_C46 + 0x2823] = (uint8_t)target;
+    c46.blob_target = (uint8_t)target;
     while ((dx & 0xff) != target) {
         uint32_t next = (dx - 4) & 0xffff;       /* `sub al,4` */
         for (int32_t i = 0; i < 0x0f; i++)
@@ -6413,9 +6412,9 @@ int32_t level_load_file(const char *dir)
         fputs("****** Fichier des Tableaux non trouve ******\n", stderr);
         return 0;
     }
-    fread(g_image + SEG_C46 + 6, 1, 0x21b6, f);
+    fread(c46.ppc_signature, 1, 0x21b6, f);
     fclose(f);
-    if (memcmp(g_image + SEG_C46, g_image + SEG_C46 + 6, 6) != 0) {
+    if (memcmp(c46.signature, c46.ppc_signature, 6) != 0) {
         fputs("****** Ce fichier n'est pas un fichier de Tableaux ******\n",
               stderr);
         return 0;
@@ -6861,7 +6860,6 @@ int32_t ball_after_endgame(ball_t *b)
  * until that returns "the level is over".
  * ===================================================================== */
 #define BANNER_ROW_VRAM 0x3130
-#define BANNER_XLAT     0x226c
 
 /* One row of the banner: 0x13 blank bytes, an edge, twelve translated cells,
  * an edge, and 0x13 blank again - then the whole screen scrolls up. */
@@ -6873,8 +6871,7 @@ static void banner_row(uint32_t si)
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
     for (int32_t i = 0; i < 0x0c; i++) {
         uint32_t cell = g_image[si + i];
-        g_vram[di++ & (CGA_SIZE - 1)] =
-            g_image[SEG_C46 + BANNER_XLAT + cell * 2];
+        g_vram[di++ & (CGA_SIZE - 1)] = c46.banner_xlat[cell][0];
     }
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
     for (int32_t i = 0; i < 0x13; i++)
