@@ -735,7 +735,7 @@ void intro_reveal(void)
  */
 void intro_scroll(void)
 {
-    uint32_t bp = SEG_C46 + 0x488a;
+    const uint8_t *feed = c46.scroll_rows[0];
     for (int32_t bl = 0x1a; bl > 0; bl--) {
         uint32_t di = 0x1b33;
         io_wait_retrace();
@@ -747,8 +747,8 @@ void intro_scroll(void)
             di = src;
         }
         for (int32_t i = 0; i < 0x31; i++)
-            g_vram[(0x3ef3 + i) & (CGA_SIZE - 1)] = g_image[bp + i];
-        bp += 0x31;
+            g_vram[(0x3ef3 + i) & (CGA_SIZE - 1)] = feed[i];
+        feed += 0x31;
         for (int32_t i = 0; i < 0x19; i++)
             game_delay();
     }
