@@ -136,7 +136,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * deliberate no-ops in the port. Checking a no-op against the original
      * would report a decision as a difference. */
     case 0x3abf: entity_anim_brick(&entity_at(r[R_BX])->p.brick); return 1;
-    case 0x3bac: draw_anim_cell(img_ptr(SEG_14A1 + r[R_SI]), r[R_CX] & 0xff, r[R_AX] & 0xff);
+    case 0x3bac: draw_anim_cell(s14a1_ptr(r[R_SI]), r[R_CX] & 0xff, r[R_AX] & 0xff);
                  return 1;
     /* The brick handlers, all of them. Only two were dispatched, so the
      * heart of the game - what happens when the ball meets a cell - could not

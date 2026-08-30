@@ -1632,7 +1632,7 @@ uint32_t draw_brick_row(uint32_t y)
          * values 24 and up name sprites in the 0x14a1 block rather than in
          * this one. So the choice is which image the offset is *into*. */
         const uint8_t *src = cell >= 24
-            ? img_ptr(SEG_14A1 + gv.cell_bitmap[cell])
+            ? s14a1_ptr(gv.cell_bitmap[cell])
             : img_ptr(gv.cell_bitmap[cell]);
         src += sub;
         for (int32_t b = 0; b < BRICK_BYTES; b++)
@@ -4582,7 +4582,7 @@ void level_between(void)
                 continue;               /* empty */
             /* As in draw_brick_row: 24 and up are in the 0x14a1 block. */
             const uint8_t *src = cell >= 24
-                ? img_ptr(SEG_14A1 + gv.cell_bitmap[cell])
+                ? s14a1_ptr(gv.cell_bitmap[cell])
                 : img_ptr(gv.cell_bitmap[cell]);
             uint32_t di = cga_at(x, y);
             for (int32_t r = 0; r < 8; r++) {
@@ -7364,8 +7364,8 @@ void demo_input_step(void)
     gv.anim_count = gv.anim_rate;
     gv.anim_ptr = (uint16_t)(gv.anim_ptr + 2);
     uint32_t si = gv.anim_ptr;
-    if (img_w(SEG_14A1 + si) == 0xffff)
-        gv.anim_ptr = (uint16_t)(img_w(SEG_14A1 + si + 2));
+    if (s14a1_w(si) == 0xffff)
+        gv.anim_ptr = (uint16_t)s14a1_w(si + 2);
 }
 
 /* 1ac2:3c35  bonus_script
@@ -7616,9 +7616,9 @@ void entity_anim_brick(ent_brick_t *br)
 {
     if (gv.anim_rate != gv.anim_count)
         return;
-    uint32_t si = img_w(SEG_14A1 + gv.anim_ptr)
+    uint32_t si = s14a1_w(gv.anim_ptr)
                 + br->piece * ANIM_SPRITE_BYTES;
-    draw_anim_cell(img_ptr(SEG_14A1 + si), br->x, br->y);
+    draw_anim_cell(s14a1_ptr(si), br->x, br->y);
 }
 
 /* 1ac2:2ccd  brick_animated - cells 16 to 21 */
@@ -7636,14 +7636,14 @@ void brick_animated(hit_t *hit, ball_t *ball)
 
     /* Remember what this piece turned into, indexed by the new cell value. */
     uint32_t script = s14a1.level[gv.level_number].script;
-    uint32_t frame = (img_w(SEG_14A1 + script)
+    uint32_t frame = (s14a1_w(script)
                       + (piece << 5)) & 0xffff;
     gv.cell_bitmap[(was + 8) & 0xff] = (uint16_t)frame;
 
     /* Draw it once where the brick was, from the script's current entry. */
     uint32_t x = hit->x, y = hit->y;
-    draw_anim_cell(img_ptr(SEG_14A1 + ((img_w(SEG_14A1 + gv.anim_ptr)
-                                       + (piece << 5)) & 0xffff)), x, y);
+    draw_anim_cell(s14a1_ptr((s14a1_w(gv.anim_ptr)
+                              + (piece << 5)) & 0xffff), x, y);
 
     entity_t *e = entity_alloc();
     e->handler = 0x3abf;

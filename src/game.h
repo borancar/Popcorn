@@ -973,6 +973,22 @@ typedef struct __attribute__((packed)) {
 ENSURE_SIZE(seg_14a1_t, 200);
 #define s14a1 (*(seg_14a1_t *)(g_image + SEG_14A1))
 
+/* Its own img_ptr and img_w. The offsets the animated bricks keep - in
+ * anim_ptr, in cell_bitmap's entries from 24 up, in the scripts - are
+ * relative to **this segment**, not to the image, which is why they went
+ * through `SEG_14A1 +` everywhere. Through these they read as what they are:
+ * a pointer into the block, and a word out of it. */
+static inline uint8_t *s14a1_ptr(uint32_t off)
+{
+    return (uint8_t *)&s14a1 + off;
+}
+
+static inline uint32_t s14a1_w(uint32_t off)
+{
+    const uint8_t *p = s14a1_ptr(off);
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8);
+}
+
 #define SEG_C46 0xc460
 
 /* The third segment: the block the program reaches as 0xc46, which holds the
