@@ -2922,9 +2922,9 @@ void entity_unlink(uint32_t node)
 }
 
 /* 1ac2:3668  cell_set_three - the cell an entity is sitting on becomes a 3 */
-void cell_set_three(uint32_t node)
+void cell_set_three(ent_anim_t *a)
 {
-    g_image[entity_at(node)->p.anim.arg.cell] = 3;
+    *img_ptr(a->arg.cell) = 3;
 }
 
 /* 1ac2:36fb  cells_restore
@@ -3845,13 +3845,12 @@ void draw_paddle_shifted(const uint8_t *sprite)
 
 /* Tell a node that is about to be discarded, if it is one of the two that
  * care. Shared by all three purges below. */
-static void entity_farewell(uint32_t bx)
+static void entity_farewell(entity_t *e)
 {
-    uint32_t handler = img_w(bx);
-    if (handler == 0x36f6)
+    if (e->handler == 0x36f6)
         cells_restore();
-    else if (handler == 0x365e)
-        cell_set_three(bx);
+    else if (e->handler == 0x365e)
+        cell_set_three(&e->p.anim);
 }
 
 /* 1ac2:055e  entities_clear - empty the active list onto the free one */
@@ -3859,9 +3858,10 @@ void entities_clear(void)
 {
     uint32_t bx = gv.entity_head.next;
     while (bx != 0xffff) {
-        entity_farewell(bx);
-        uint32_t next = entity_at(bx)->next;
-        entity_at(bx)->next = (uint16_t)(gv.entity_free);
+        entity_t *e = entity_at(bx);
+        entity_farewell(e);
+        uint32_t next = e->next;
+        e->next = (uint16_t)(gv.entity_free);
         gv.entity_free = (uint16_t)(bx);
         bx = next;
     }
@@ -3889,14 +3889,15 @@ void life_lost(void)
     gv.entity_prev = img_off(&gv.entity_head);
     uint32_t bx = gv.entity_head.next;
     while (bx != 0xffff) {
-        if (img_w(bx) == 0x3abf) {      /* this one stays */
+        entity_t *e = entity_at(bx);
+        if (e->handler == 0x3abf) {     /* this one stays */
             gv.entity_prev = (uint16_t)(bx);
-            bx = entity_at(bx)->next;
+            bx = e->next;
             continue;
         }
-        entity_farewell(bx);
-        uint32_t next = entity_at(bx)->next;
-        entity_at(bx)->next = (uint16_t)(gv.entity_free);
+        entity_farewell(e);
+        uint32_t next = e->next;
+        e->next = (uint16_t)(gv.entity_free);
         gv.entity_free = (uint16_t)(bx);
         entity_at(gv.entity_prev)->next = (uint16_t)next;
         bx = next;

@@ -1319,7 +1319,7 @@ uint32_t draw_run(uint8_t c, uint32_t count, uint32_t di); /* 1ac2:10c5 */
 void draw_cursor(uint32_t di);    /* 1ac2:14a7 */
 void define_keys_prompt(uint32_t src, uint32_t dst);            /* 1ac2:1642 */
 void flash_bar(uint32_t pattern); /* 1ac2:3146 */
-void cell_set_three(uint32_t node);/* 1ac2:3668 */
+void cell_set_three(ent_anim_t *a); /* 1ac2:3668 */
 void cells_restore(void);         /* 1ac2:36fb */
 
 void bonus_spawn(void);           /* 1ac2:3d95 */

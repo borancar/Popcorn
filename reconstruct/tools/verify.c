@@ -97,7 +97,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x3146: flash_bar(r[R_DX]); return 1;
     case 0x3232: entity_alloc(); return 1;
     case 0x3257: entity_unlink(r[R_BX]); return 1;
-    case 0x3668: cell_set_three(r[R_BX]); return 1;
+    case 0x3668: cell_set_three(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x36fb: cells_restore(); return 1;
     case 0x30dd: pixel_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
     case 0x306b: shot_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
