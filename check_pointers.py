@@ -24,6 +24,13 @@ rules this checks are what keeps those honest:
      without a pointer type: `table` is an array of somethings, and the C
      that means it is `img_w(table[index])`.
 
+And one thing it reports without complaining about: `img_ptr(img_w(x))`, a
+pointer **to** a pointer.  The game keeps tables of frame addresses, so a
+cursor into one needs both steps and two indirections are right there - the
+only place they are.  Worth seeing because getting it wrong is silent: one
+step too few draws a frame's pixels as if they were an address, one too many
+reads the address as if it were pixels.
+
 Rule 4 is the one that finds real work.  Rules 2 and 3 are mostly quiet until
 the fields are renamed, so the report ends with the candidates: the fields
 whose values already flow into an accessor and which therefore want the
@@ -179,6 +186,14 @@ def check(path, known_ptr_fields, findings, candidates):
                         "%s(%s) - the offset is computed in the call; give "
                         "the thing it indexes a type and subscript it"
                         % (name, text(arg, src)))
+                inner = inner_word_call(arg, src)
+                if name in PTR_FUNCS and inner is not None:
+                    add("pointer-to-pointer", n,
+                        "%s - a pointer **to** a pointer: %s is where the "
+                        "game keeps one, the word there is another, and this "
+                        "resolves that. Two of its indirections, not one"
+                        % (text(n, src), inner))
+
                 who = root_name(arg, src)
                 if who and not who.endswith("_ptr") and who not in (
                         "g_image", "off", "si", "di", "bx"):
@@ -224,6 +239,30 @@ def check(path, known_ptr_fields, findings, candidates):
                 add("read-without-ptr", n,
                     "g_image[%s] - reading through one of the game's "
                     "pointers without a _ptr accessor" % text(idx, src))
+
+
+def inner_word_call(node, src):
+    """`img_ptr(img_w(x))` - the x, if this is a pointer read through one.
+
+    The game keeps tables of pointers, so a cursor into one is a pointer to a
+    pointer and needs both steps.  Worth seeing rather than fixing: the shape
+    is correct, and it is the only place two indirections are right.
+    """
+    while node.type in ("cast_expression", "parenthesized_expression"):
+        kids = [c for c in node.named_children
+                if c.type not in ("type_descriptor", "primitive_type",
+                                  "type_identifier", "sized_type_specifier")]
+        if not kids:
+            return None
+        node = kids[0]
+    if node.type != "call_expression":
+        return None
+    fn = node.child_by_field_name("function")
+    args = node.child_by_field_name("arguments")
+    if fn is None or args is None or text(fn, src) not in WORD_FUNCS:
+        return None
+    real = [a for a in args.named_children if a.type != "comment"]
+    return text(real[0], src) if real else "?"
 
 
 def classify_store(rhs, field, known, src):
@@ -305,7 +344,11 @@ def main():
         by_rule = {}
         for rule, path, line, msg in findings:
             by_rule.setdefault(rule, []).append((path, line, msg))
-        for rule in sorted(by_rule):
+        order = ["store-without-img_off", "compound-offset",
+                 "pointer-advanced", "pointer-from-data",
+                 "pointer-to-pointer"]
+        for rule in sorted(by_rule, key=lambda r: (order.index(r)
+                                                   if r in order else 99, r)):
             hits = by_rule[rule]
             print("== %s (%d)" % (rule, len(hits)))
             for path, line, msg in hits:
