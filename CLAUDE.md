@@ -111,7 +111,7 @@ the useful skill is getting a routine to run at all. Three things do it:
 - **`--poke`** fast-forwards rather than fakes: clearing the brick count at
   `0x2f10` is what the play loop watches for, so the game runs its own
   level-done path from there. Poking level 48 and clearing it is how the port
-  came to play level 49.
+  came to play level 50.
 - **`verify.py --keys`** presses from a resumed state. `screen_stash` and
   `screen_unstash` are the pause: `1ac2:1669` tests for `ax == 0x11b`, which
   is Esc, and nothing else calls them. `--keys @1a62:escape,@1a62:space`
@@ -129,7 +129,7 @@ the useful skill is getting a routine to run at all. Three things do it:
   wanted one normally. Most of the game had never been compared at all,
   because the bot could not get there.
 
-  **Level 3 is in the standard set for a reason.** Its four-hit brick ends in
+  **Level 4 is in the standard set for a reason.** Its four-hit brick ends in
   the spinning 100 at `1ac2:366f`, whose counter at `[bx+2]` is a **byte** and
   whose `[bx+3]` holds whatever the recycled entity slot left there. Read that
   pair as a word and the counter never reaches zero, so the sprite is never
@@ -247,6 +247,14 @@ a difference.
 it runs rather than the job it does. It writes one of those three prompts.
 
 ## Conventions
+
+- **Levels are 0-based in the code and 1-based everywhere else.**
+  `level_number` at `0x13cc` runs 0 to 49; the header bar draws it plus one.
+  Snapshot files, the sweep scripts and the docs all use the **panel** number
+  a player would say, zero-padded so `snapshots/` sorts: `L02.snap` through
+  `L50.snap` - and there is no `L01`, because reaching a level means clearing
+  the one before it. `sweep_levels.sh 15` gives you the level the panel calls
+  15, which is record 14. See [docs/level-format.md](docs/level-format.md).
 
 - Addresses are **image offsets** unless written `seg:off`. Every reconstructed
   routine carries the offset it was read from, so any line can be checked back

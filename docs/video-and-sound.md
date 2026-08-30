@@ -55,8 +55,8 @@ every instruction of a frame gives about **24,500 cycles, or 326 Hz** at the
 
 | | cycles | Hz |
 | --- | --- | --- |
-| level 10, the bot moving the paddle | 24541 | 326.0 |
-| level 10, paddle still | 24537 | 326.0 |
+| level 11, the bot moving the paddle | 24541 | 326.0 |
+| level 11, paddle still | 24537 | 326.0 |
 | level 1 | 24419 | 327.6 |
 
 Three-quarters of that is the `loop $` waits, which are exactly 17 cycles a

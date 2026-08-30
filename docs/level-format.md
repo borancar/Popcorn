@@ -5,6 +5,14 @@ The fifty levels the game ships with, the records they live in, and the
 
 ## The level format
 
+**Numbering.** `level_number` at `0x13cc` is **0-based**: it runs 0 to 49 and
+`play_session` wraps it at `LEVEL_COUNT` = 50, and the header bar draws
+`level_number + 1`. So the last level, the one a player calls **50**, is
+`level_number` 49, and record *n* in the table is panel level *n + 1*.
+Everything user-facing here - this document, the snapshot files, the sweep
+scripts - uses the **panel** number; only `0x13cc` and the record index are
+0-based.
+
 Fifty levels of 176 bytes at image `0xc46c` - the block the program reaches as
 segment `0xc46`. `play_session` copies one at a time to `0x2f10`, and the play
 loop watches the first byte of that copy to know when the level is cleared.
@@ -114,9 +122,9 @@ what the game draws; at any other width it is diagonal nonsense.
 `POPGEN.EXE` writes `.PPC` files - see above for the format. `reconstruct/popcorn
 --cmdline poptab` plays them, as does `emulation.py --cmdline poptab`.
 
-## Level 10, and why a surviving bot is not a winning one
+## Level 11, and why a surviving bot is not a winning one
 
-Level 10 is worth reading as a piece of design, because it is where an
+Level 11 - record 10 - is worth reading as a piece of design, because it is where an
 autoplayer stops. Row 8 is **twelve cells of value 3**, and `brick_3` hardens a
 3 into a 4 that nothing breaks - so the moment the ball touches that row the
 top of the field is walled off for good, and 41 of the level's 77 bricks are

@@ -11,7 +11,7 @@ about it.
 | | |
 | --- | --- |
 | [memory-map.md](memory-map.md) | the load image, every data and code address identified so far, the INT 09h handler, and how the EXEPACK recovery works |
-| [level-format.md](level-format.md) | the 176-byte level record, the `.PPC` file, the cell values, the animated bricks, and why level 10 stops a bot |
+| [level-format.md](level-format.md) | the 176-byte level record, the `.PPC` file, the cell values, the animated bricks, and why level 11 stops a bot |
 | [entities.md](entities.md) | the entity chain, the ball structure, the capsules, the parachute, and a slip in the original's brick collision |
 | [video-and-sound.md](video-and-sound.md) | CGA mode 05h and its palette, the 8x12 font, the PC speaker |
 | [utilities.md](utilities.md) | POPSPEED, POPGEN and its level editor, and the cheat typed at the menu |

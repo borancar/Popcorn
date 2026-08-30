@@ -7,7 +7,12 @@
 # play_session loads the wanted one the way it normally would, then runs the
 # frame-by-frame comparison from that level's own start.
 #
-#     sh sweep_levels.sh SEED.snap OUTDIR 14 20 26 31 36 41 46
+#     sh sweep_levels.sh SEED.snap OUTDIR 15 21 27 32 37 42 47
+#
+# LEVEL is the **panel number**, the one the header bar shows. [0x13cc] is
+# 0-based, so panel level P is level_number P-1, and to land on P we poke P-2
+# and clear its brick count. Panel level 1 has no level before it and so
+# cannot be reached this way.
 #
 # SEED.snap is any snapshot taken mid-play at a frame close - the ones
 # sidebyside.py --snapshots writes will do.
@@ -18,13 +23,14 @@ shift 2
 PY="uv run"
 mkdir -p "$OUT"
 for lv in "$@"; do
-    prev=$((lv - 1))
+    prev=$((lv - 2))
     off=$((0xc + prev * 176))              # [0x13ca], the level's offset
-    $PY snapshot.py "$OUT/L$lv.snap" --resume "$SEED" --at 0x1c3f --seconds 20 \
+    snap="$OUT/$(printf L%02d "$lv").snap"
+    $PY snapshot.py "$snap" --resume "$SEED" --at 0x1c3f --seconds 20 \
         --poke 0x13cc=$prev --poke 0x13ca=$((off & 255)) \
         --poke 0x13cb=$((off >> 8)) --poke 0x2f10=0 >/dev/null 2>&1
     printf "level %-3s " "$lv"
-    $PY sidebyside.py --resume "$OUT/L$lv.snap" --frames "${FRAMES:-4000}" \
+    $PY sidebyside.py --resume "$snap" --frames "${FRAMES:-4000}" \
         --from-session --no-sound 2>&1 |
         grep -E "frames differ|identical throughout|frame [0-9]+, level" |
         head -1

@@ -146,5 +146,5 @@ over the cumulative table at `0x33b1`, which can be any of the eleven:
 
 So `+` is **0.8%** of brick-2 capsules and V is 2.7%, and on a level whose
 brick 2s are gone or unreachable neither can appear at all. That is why the
-bot never sees a `+` on level 10 - the wall leaves only hatches - and why
+bot never sees a `+` on level 11 - the wall leaves only hatches - and why
 `extra_life` at `0x318b` is the hardest routine in the game to make run.

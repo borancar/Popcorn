@@ -175,7 +175,7 @@ With `--from-session` it follows a whole game rather than one level, and it
 now runs past **2,000,000 frames** without a byte differing, through fourteen
 levels and the end-level bonus. That screen alone accounted for six of the
 bugs found on 2026-08-23; before them the two sides parted company on its
-ninth frame, and before the bot could aim, no run ever got past level 10.
+ninth frame, and before the bot could aim, no run ever got past level 11.
 
 `--snapshots DIR` writes a resumable state at the start of every level and
 `--resume FILE` starts from one, so a divergence hours in is reached in a
@@ -275,7 +275,7 @@ guessing which, and the resumed run happened to take the other one and agree.
 So the clean reproduction was never evidence, and reading it as one nearly
 closed a bug that was still there.
 
-With that fixed, a resume tracks: from the level 3 snapshot of a full run, the
+With that fixed, a resume tracks: from the level 4 snapshot of a full run, the
 resumed run reaches level 4 at relative frame 39,131 where the original reached
 it at 39,133 - two frames, which is the resume's own counting rather than its
 behaviour. Low memory is captured too now (the vector table and the BIOS data
@@ -369,7 +369,7 @@ intro reads the level *table*. It is `POPGEN`'s levels that can hold one, so
 the path was unreachable in everything the port had ever played.
 
 Reaching the other nine took states nothing had built. Brick 11 exists in
-quantity only on level 49, which is 168 of them and nothing else.
+quantity only on level 50, which is 168 of them and nothing else.
 `field_marks_wide` could not be sampled while `panel_finish` was being
 sampled, because the harness will not re-enter a routine whose caller it is
 already inside; asking for the callee on its own found it in one run.
@@ -557,7 +557,7 @@ original shoot.
 
 ## Deferred
 
-- **Levels 11 and beyond.** The bot has held level 10 for a quarter of a
+- **Levels 12 and beyond.** The bot has held level 11 for a quarter of a
   million frames without clearing it, so the levels after it are untested by
   the side-by-side. Reaching them wants a bot that aims rather than one that
   survives, or a snapshot taken with the level number written by hand.

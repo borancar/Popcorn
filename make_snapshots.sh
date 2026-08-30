@@ -36,21 +36,30 @@ $PY snapshot.py "$D/level.snap" --keys @0206:f1 --seconds 45 --bot
 # and clearing it makes play_session load the wanted one the way it normally
 # would; 0x1c3f is the level intro, so the snapshot lands at a level start.
 #
-# Level 3 is here for the four-hit brick: its last hit leaves the spinning 100
+# **These are panel numbers**, the ones the header bar shows and a player
+# would say. [0x13cc] is 0-based, so panel level P is level_number P-1: to
+# land on P we poke P-2 and clear its brick count, and play_session loads P
+# the way it normally would. Panel level 1 cannot be reached this way at all,
+# because there is no level before it.
+#
+# Level 4 is here for the four-hit brick: its last hit leaves the spinning 100
 # at 1ac2:366f, whose counter at [bx+2] is a **byte** and whose [bx+3] holds
 # whatever the recycled entity slot left behind. Reading that pair as a word
 # means the counter never reaches zero and the sprite is never taken off the
 # screen - which is a divergence no other route here reaches.
-for lv in 3 10 49; do
-    prev=$((lv - 1)); off=$((0xc + prev * 176))
-    $PY snapshot.py "$D/level$lv.snap" --resume "$D/level.snap" \
+#
+# Level 50 is the last, and the only one with brick 11: a solid wall of it,
+# with a picture behind that each hole uncovers.
+for lv in 4 11 50; do
+    prev=$((lv - 2)); off=$((0xc + prev * 176))
+    $PY snapshot.py "$D/level$(printf %02d $lv).snap" --resume "$D/level.snap" \
         --at 0x1c3f --seconds 30 --poke 0x13cc=$prev \
         --poke 0x13ca=$((off & 255)) --poke 0x13cb=$((off >> 8)) \
         --poke 0x2f10=0
 done
 
-# The last level cleared, so the next frame is the ending.
-$PY snapshot.py "$D/ending.snap" --resume "$D/level49.snap" \
+# The last level - panel 50 - cleared, so the next frame is the ending.
+$PY snapshot.py "$D/ending.snap" --resume "$D/level50.snap" \
     --at 0x1c3f --seconds 30 --poke 0x2f10=0
 
 # A capsule falling. 0x3273 is entity_capsule, so this stops the first frame
@@ -111,7 +120,7 @@ $PY snapshot.py "$D/bonus.snap" --resume "$D/plusrig.snap" \
 # 0x3f09 is more than one and runs the hall of fame only when it reaches the
 # last, so this needs 2 and 1. With both, score_before runs - and it has no
 # other way in, since it exists to order two players' scores.
-$PY snapshot.py "$D/twoplayer.snap" --resume "$D/level10.snap" --seconds 2 \
+$PY snapshot.py "$D/twoplayer.snap" --resume "$D/level11.snap" --seconds 2 \
     --copy 0x356a=0x344f:0x11b \
     --poke-str "0x356a=     AL     " --poke-str 0x357a=001000 \
     --poke 0x3576=0 --poke 0x3f08=2 --poke 0x3f09=1
@@ -121,19 +130,22 @@ $PY snapshot.py "$D/twoplayer.snap" --resume "$D/level10.snap" --seconds 2 \
 # level containing one is played. Poking 0x0c into the *table* rather than the
 # live copy at 0x2f18 is what makes it survive: play_session refreshes the copy
 # from the table every level, so a poke into the copy is gone by the intro.
-# Levels 9 to 12 are done because which one loads next depends on the seed.
+# Panel levels 10 to 13 are all done because which one loads next depends on
+# the seed. The record index is the 0-based level_number, so it is lv - 1.
 #
 # This reaches cell_special, cell_hole_draw, panel_reveal, panel_finish and
-# field_marks_wide - five routines no route had ever run.
+# field_marks_wide - five routines no route had ever run. Note it reaches the
+# hole *drawing* without ever running brick_11 at 1ac2:2d68, which is what
+# makes a hole in play: that is on panel level 50 and nowhere else.
 HOLES=""
-for lv in 9 10 11 12; do
-    b=$((0xc46c + lv * 176 + 8))
+for lv in 10 11 12 13; do
+    b=$((0xc46c + (lv - 1) * 176 + 8))
     for i in 0 1 2 3 12 13 24 25 36 37 48 49; do
         HOLES="$HOLES --poke $((b + i))=0x0c"
     done
 done
 # shellcheck disable=SC2086
-$PY snapshot.py "$D/cleared.snap" --resume "$D/level10.snap" --seconds 3 \
+$PY snapshot.py "$D/cleared.snap" --resume "$D/level11.snap" --seconds 3 \
     $HOLES --poke 0x2f10=0
 # ...and then on to the between-level screen itself, 1ac2:05f8, which is the
 # only thing that draws a hole. From the clear it is minutes of emulated time
