@@ -167,11 +167,22 @@ typedef struct __attribute__((packed)) {
                              * removed. crumble, plain and sparkle do not use
                              * it at all. */
                 uint16_t cell;  /* soften: the cell to harden */
-                uint16_t ball;  /* ball_arrive: the ball to put down */
+                uint16_t ball;  /* ball_arrive and ball_hold: the ball */
                 uint8_t  count; /* repeat: how many times round again */
+                struct {        /* bonus: a falling capsule steers itself */
+                    uint8_t mode;  /* 0 right, 1 down, 2 left, 3 up, 4 follow
+                                    * the script at 0x0a */
+                    uint8_t steps; /* how long to keep going that way, from
+                                    * random(0x3c) + 9 - and **reused** as the
+                                    * x the script started from once mode
+                                    * becomes 4 */
+                } move;
             } arg;
             ent_sprite_t sprite; /* 0x04..0x09 */
-            uint8_t  _r[2];
+            uint16_t script;    /* 0x0a bonus: cursor into the movement script.
+                                 * The animations proper never touch these two
+                                 * bytes, which is what lets the capsule share
+                                 * their record. */
 } ent_anim_t;
 
 typedef struct __attribute__((packed)) {
@@ -183,16 +194,6 @@ typedef struct __attribute__((packed)) {
                              * kind 2 cycles it 0..0x0f */
             uint8_t  _r[4];
 } ent_fall_t;
-
-typedef struct __attribute__((packed)) {
-            uint8_t  mode;  /* 0x02 how it moves: 0 right, 1 down, 2 left,
-                             * 3 up, 4 follow the script at 0x0a */
-            uint8_t  steps; /* 0x03 how long to keep going that way, from
-                             * random(0x3c) + 9 - and **reused** as the x the
-                             * script started from once mode becomes 4 */
-            ent_sprite_t sprite; /* 0x04..0x09, the same six bytes */
-            uint16_t script;/* 0x0a cursor into the movement script */
-} ent_bonus_t;
 
 typedef struct __attribute__((packed)) {
             uint16_t cell;  /* 0x02 the cell it opens in */
@@ -229,20 +230,17 @@ typedef struct __attribute__((packed)) {
     uint16_t handler;       /* 0x00 the routine entity_call dispatches to */
     union {                 /* 0x02 the variant, chosen by handler */
 
-        /* crumble, plain, sparkle, soften, repeat, ball_arrive, bonus - a
-         * sprite animation stepped frame by frame by entity_anim. */
+        /* crumble, plain, sparkle, soften, repeat, ball_arrive, ball_hold -
+         * a sprite animation stepped frame by frame. entity_bonus, the
+         * capsule falling towards the paddle, is one of these too: it is
+         * stepped the same way, off the same six bytes, and only spends the
+         * word at 0x02 and the one at 0x0a differently. */
         ent_anim_t anim;
 
         /* capsule and popup - a sprite falling down the screen. Note x and y
          * are at 0x02 here, not 0x04: the two families disagree, which is why
          * this is a union and not a struct. */
         ent_fall_t fall;
-
-        /* entity_bonus - a capsule falling under one of several movement
-         * scripts. Shares x, y, frame, timer and period with `anim`, because
-         * it is stepped the same way, but 0x02 and 0x03 are two bytes here
-         * rather than anim's word, and it has a script cursor at 0x0a. */
-        ent_bonus_t bonus;
 
         /* the hatch a capsule comes out of */
         ent_hatch_t hatch;
@@ -264,7 +262,6 @@ typedef struct __attribute__((packed)) {
 ENSURE_ENTITY_ARM(anim, 10);   ENSURE_ENTITY_ARM(fall, 10);
 ENSURE_ENTITY_ARM(hatch, 10);  ENSURE_ENTITY_ARM(cells, 10);
 ENSURE_ENTITY_ARM(brick, 10);  ENSURE_ENTITY_ARM(morph, 10);
-ENSURE_ENTITY_ARM(bonus, 10);
 
 ENSURE_SIZE(entity_t, 0x0e);
 #define ENSURE_ENTITY_AT(field, off) \
@@ -932,12 +929,12 @@ void entity_sparkle(ent_anim_t *a); /* 1ac2:3aee */
 void entity_crumble(ent_anim_t *a); /* 1ac2:3b2a */
 void entity_hatch(ent_hatch_t *h);   /* 1ac2:390d */
 void bonus_release(const ent_hatch_t *h);  /* 1ac2:39a1 */
-int32_t  bonus_move_right(ent_bonus_t *b, uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
-int32_t  bonus_move_left(ent_bonus_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */
-int32_t  bonus_move_up(ent_bonus_t *b, uint32_t *px, uint32_t *py);    /* 1ac2:3caf */
-int32_t  bonus_move_down(ent_bonus_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3d3c */
-int32_t  bonus_steer(ent_bonus_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3bf7 */
-int32_t  bonus_script(ent_bonus_t *b, uint32_t *px, uint32_t *py); /* 1ac2:3c35 */
+int32_t  bonus_move_right(ent_anim_t *b, uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
+int32_t  bonus_move_left(ent_anim_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */
+int32_t  bonus_move_up(ent_anim_t *b, uint32_t *px, uint32_t *py);    /* 1ac2:3caf */
+int32_t  bonus_move_down(ent_anim_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3d3c */
+int32_t  bonus_steer(ent_anim_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3bf7 */
+int32_t  bonus_script(ent_anim_t *b, uint32_t *px, uint32_t *py); /* 1ac2:3c35 */
 void demo_input_step(void);       /* 1ac2:1a6f */
 void drop_duplicate_hits(void);   /* 1ac2:27b7 */
 uint32_t hsc_bubble(uint32_t si, uint32_t di); /* 1ac2:4d5d */
