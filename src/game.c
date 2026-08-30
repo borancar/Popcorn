@@ -2230,11 +2230,10 @@ static void brick_common(ball_t *ball, uint32_t sound,
  * and leaves [si+3] holding whatever the recycled slot had. Writing the word
  * for it put the slot pointer's high byte, 0x2f, where the original had the
  * previous occupant's value - one byte, 62,536 frames in. */
-static uint32_t brick_entity(uint32_t slot, uint32_t handler,
+static entity_t *brick_entity(uint32_t slot, uint32_t handler,
                              uint32_t frames, uint32_t rate)
 {
-    uint32_t si = entity_alloc();
-    entity_t *e = entity_at(si);
+    entity_t *e = entity_alloc();
     e->handler = (uint16_t)handler;
     /* The original stores x and y with one word write from the hit slot; two
      * byte writes are the same thing and say which is which. */
@@ -2243,7 +2242,7 @@ static uint32_t brick_entity(uint32_t slot, uint32_t handler,
     e->p.anim.sprite.frame = (uint16_t)frames;
     e->p.anim.sprite.timer = (uint8_t)rate;
     e->p.anim.sprite.period = (uint8_t)rate;
-    return si;
+    return e;
 }
 
 /* Degrade a brick one step: the cell becomes `next`, the old picture comes off
@@ -2280,9 +2279,9 @@ static void brick_1_or_2(uint32_t slot, ball_t *ball, int32_t is_two)
     brick_common(ball, SOUND_BRICK, 0, 0, 2);
 
     if (gv.bonus_cap >= 3 || game_random(io_ticks(), 3) != 0) {
-        img_setw(brick_entity(slot, 0x3b2a,
-                              is_two ? 0x6508 : 0x65fe, 7) + 2,
-                 img_w(slot));
+        /* crumble, and it keeps the cell it is standing on */
+        brick_entity(slot, 0x3b2a, is_two ? 0x6508 : 0x65fe, 7)
+            ->p.anim.arg.cell = (uint16_t)img_w(slot);
         g_image[img_w(slot)] = 0;
         gv.level.bricks--;
         return;
@@ -2294,8 +2293,7 @@ static void brick_1_or_2(uint32_t slot, ball_t *ball, int32_t is_two)
     uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
     xor_sprite_16x7(x, y, is_two ? 0x63a6 : img_w(CELL_TABLE + 2));
 
-    uint32_t si = entity_alloc();
-    entity_t *e = entity_at(si);
+    entity_t *e = entity_alloc();
     e->handler = is_two ? 0x3273 : 0x3561;
     /* The original writes x and y with one word and `inc bh` to put it a row
      * lower; the fall arm has them as the two bytes they are. */
@@ -2324,7 +2322,8 @@ void brick_3(uint32_t slot, ball_t *ball)
     g_image[SOUND_REQUEST] = 4;
     if (ball)
         ball->bounces++;
-    img_setw(brick_entity(slot, 0x365e, 0x66f4, 8) + 2, img_w(slot));
+    brick_entity(slot, 0x365e, 0x66f4, 8)->p.anim.arg.cell =
+        (uint16_t)img_w(slot);
     g_image[img_w(slot)] = 4;
 }
 
@@ -2366,8 +2365,8 @@ void brick_8(uint32_t slot, ball_t *ball)
     uint32_t x = g_image[slot + 2], y = g_image[slot + 3];
     xor_sprite_16x7(x, y, 0x64c6);
     xor_sprite_16x7(x, y, 0x681c);
-    uint32_t si = brick_entity(slot, 0x366f, 0x67ea, 7);
-    g_image[si + 2] = 4;
+    /* four times round the animation - a **byte**, see ent_anim_t's arg */
+    brick_entity(slot, 0x366f, 0x67ea, 7)->p.anim.arg.count = 4;
     gv.level.bricks--;
 }
 
@@ -2898,7 +2897,7 @@ void flash_bar(uint32_t pattern)
  * created, which is the order they are drawn in.
  */
 
-uint32_t entity_alloc(void)
+entity_t *entity_alloc(void)
 {
     /* Take the first node off the free list. */
     uint32_t si = gv.entity_free;
@@ -2913,7 +2912,7 @@ uint32_t entity_alloc(void)
         bx = entity_at(bx)->next;
     entity_at(si)->next = (uint16_t)(0xffff);
     entity_at(bx)->next = (uint16_t)(si);
-    return si;
+    return entity_at(si);
 }
 
 /* 1ac2:3257  entity_unlink
@@ -3072,8 +3071,7 @@ void entity_crumble(ent_anim_t *a)
 void bonus_release(const ent_hatch_t *h)
 {
     gv.bonus_live++;
-    uint32_t si = entity_alloc();
-    entity_t *cap = entity_at(si);
+    entity_t *cap = entity_alloc();
     cap->handler = 0x39fa;
     cap->p.bonus.mode = 0;
     cap->p.bonus.steps = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
@@ -3389,7 +3387,8 @@ void brick_9(uint32_t slot, ball_t *ball)
     b->bounces = 0;
     ball_draw(b->sprite, b->x, b->y);
 
-    img_setw(brick_entity(slot, 0x3696, 0x6abe, 0x32) + 2, img_w(slot));
+    brick_entity(slot, 0x3696, 0x6abe, 0x32)->p.anim.arg.cell =
+        (uint16_t)img_w(slot);
 
     /* A cell that is not this one. */
     uint32_t cell, idx;
@@ -3398,17 +3397,17 @@ void brick_9(uint32_t slot, ball_t *ball)
         cell = img_off(gv.level.cells) + idx;
     } while (cell == img_w(slot));
 
-    uint32_t si = entity_alloc();
-    img_setw(si + 0, 0x36f6);
-    img_setw(si + 4, 0x514);
+    entity_t *timer = entity_alloc();
+    timer->handler = 0x36f6;
+    timer->p.cells.left = 0x514;
 
-    si = entity_alloc();
-    img_setw(si + 0, 0x36a1);
-    img_setw(si + 2, img_off(ball));    /* the slot holds its address */
-    img_setw(si + 6, 0x6ad0);
-    g_image[si + 8] = g_image[si + 9] = 0x32;
-    g_image[si + 4] = (uint8_t)((idx % 12) * 16 + 8);
-    g_image[si + 5] = (uint8_t)((idx / 12) * 8 + 6);
+    entity_t *e = entity_alloc();
+    e->handler = 0x36a1;
+    e->p.anim.arg.ball = img_off(ball);  /* the slot holds its address */
+    e->p.anim.sprite.frame = 0x6ad0;
+    e->p.anim.sprite.timer = e->p.anim.sprite.period = 0x32;
+    e->p.anim.sprite.x = (uint8_t)((idx % 12) * 16 + 8);
+    e->p.anim.sprite.y = (uint8_t)((idx / 12) * 8 + 6);
 }
 
 /* 1ac2:2c59  brick 10 - fifty points, and the ball goes into state 4 while an
@@ -3423,13 +3422,13 @@ void brick_10(uint32_t slot, ball_t *ball)
     if (!ball)
         return;
 
-    uint32_t si = entity_alloc();
-    img_setw(si + 0, 0x37e0);
-    img_setw(si + 2, img_off(ball));    /* likewise */
-    img_setw(si + 6, 0x6b88);
-    g_image[si + 4] = (uint8_t)x;
-    g_image[si + 5] = (uint8_t)y;
-    g_image[si + 8] = g_image[si + 9] = 0x69;
+    entity_t *e = entity_alloc();
+    e->handler = 0x37e0;
+    e->p.anim.arg.ball = img_off(ball); /* likewise */
+    e->p.anim.sprite.frame = 0x6b88;
+    e->p.anim.sprite.x = (uint8_t)x;
+    e->p.anim.sprite.y = (uint8_t)y;
+    e->p.anim.sprite.timer = e->p.anim.sprite.period = 0x69;
     sprite_shift_draw(x, y, 0x6b9c);
 
     ball_t *b = ball;
@@ -4222,7 +4221,7 @@ void bonus_laser(void)
 /* 1ac2:2e16  bonus 4 - more balls, run by an entity of its own */
 void bonus_multiball(void)
 {
-    img_setw(entity_alloc(), 0x3717);
+    entity_alloc()->handler = 0x3717;
 }
 
 /* 1ac2:3231  bonus 2, the E capsule - the wider paddle.
@@ -5029,14 +5028,14 @@ void bonus_spawn(void)
 
     g_image[si + 3] = 1;
     g_image[0x33d5]++;
-    uint32_t node = entity_alloc();
-    img_setw(node + 0, 0x390d);
-    img_setw(node + 2, si);
-    g_image[node + 4] = g_image[si];
-    g_image[node + 5] = g_image[si + 1];
-    img_setw(node + 6, 0);
-    img_setw(node + 8, 0x2bc);
-    img_setw(node + 0x0a, 0x604e);
+    entity_t *e = entity_alloc();
+    e->handler = 0x390d;
+    e->p.hatch.cell = (uint16_t)si;
+    e->p.hatch.x = g_image[si];
+    e->p.hatch.y = g_image[si + 1];
+    e->p.hatch.wait = 0;
+    e->p.hatch.phase = 0x2bc;
+    e->p.hatch.script = 0x604e;
 }
 
 /* 1ac2:50df  menu_banner_tick
@@ -7182,7 +7181,7 @@ int32_t next_player(const char *dir)
     memcpy(g_image + 0x30b0, q->state, sizeof q->state);
 
     for (uint32_t k = 0; k < q->ent_count; k++)
-        memcpy(g_image + entity_alloc(), q->ents[k], sizeof q->ents[0]);
+        memcpy(entity_alloc(), q->ents[k], sizeof q->ents[0]);
 
     panel_draw();
     level_colours();
@@ -7654,9 +7653,10 @@ void brick_animated(uint32_t slot, ball_t *ball)
     draw_anim_cell((img_w(SEG_14A1 + gv.anim_ptr)
                     + (piece << 5)) & 0xffff, x, y);
 
-    uint32_t si = entity_alloc();
-    img_setw(si + 0, 0x3abf);
-    img_setw(si + 2, img_w(slot + 2));  /* the centre, as one word */
-    g_image[si + 4] = (uint8_t)piece;
+    entity_t *e = entity_alloc();
+    e->handler = 0x3abf;
+    e->p.brick.x = g_image[slot + 2];   /* the centre, one word in the original */
+    e->p.brick.y = g_image[slot + 3];
+    e->p.brick.piece = (uint8_t)piece;
     gv.level.bricks--;
 }
