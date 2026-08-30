@@ -217,7 +217,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         draw_brick_row(r[R_AX] & 0xff);
         return 1;
     case 0x20b9:                        /* draw_sprite_20x6(bl, al, si) */
-        draw_sprite_20x6(r[R_BX] & 0xff, r[R_AX] & 0xff, r[R_SI]);
+        draw_sprite_20x6(r[R_BX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]));
         return 1;
     case 0x247f:                        /* ball_after(si = the ball) */
         ball_after(ball_at(r[R_SI]));

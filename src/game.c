@@ -928,7 +928,7 @@ void game_main(const char *dir, const char *levels)
                 /* The idle path: step the decoration, and when the banner
                  * runs out of text start the demo, which is how the attract
                  * mode comes on by itself. */
-                if (g_image[gv.banner_ptr] == 0) {
+                if (*img_ptr(gv.banner_ptr) == 0) {
                     start_demo();
                     back_to_menu = 1;
                     continue;
@@ -1595,7 +1595,6 @@ static uint32_t cga_at(uint32_t x, uint32_t y)
 #define BRICK_COLS      12
 #define BRICK_HEIGHT     8              /* scan lines */
 #define BRICK_BYTES      4              /* 16 pixels */
-#define SEG_14A1   0x14a10
 
 /* Returns the DI it leaves, which 1ac2:46dc depends on: the curtain lays its
  * second cap at [di] without saving DI across this call, and 1ac2:2034 opens
@@ -1628,12 +1627,12 @@ uint32_t draw_brick_row(uint32_t y)
  * Six rows of five bytes at a pixel position - the popcorn kernels the level
  * intro sweeps down the screen.
  */
-void draw_sprite_20x6(uint32_t x, uint32_t y, uint32_t src)
+void draw_sprite_20x6(uint32_t x, uint32_t y, const uint8_t *src)
 {
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 6; r++) {
         for (int32_t b = 0; b < 5; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + r * 5 + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] = src[r * 5 + b];
         di = cga_next_row(di);
     }
 }
@@ -1664,7 +1663,6 @@ void draw_sprite_20x6(uint32_t x, uint32_t y, uint32_t src)
  * the wrong one at every frame before it - which is what put a TABLEAU banner
  * in the port that the emulator had already cleared.
  * ===================================================================== */
-#define SWEEP_STATE 0x2efc              /* four of (timer, period, sprite) */
 #define SWEEP_X     0x60
 
 static void intro_pause(int32_t n)
@@ -1714,14 +1712,13 @@ void level_intro(void)
         io_frame_sync_extra(SYNC_INTRO);        /* 1ac2:1f13 */
         field_backdrop((gv.sweep_y[0] - 7) & 0xff);
         for (uint32_t k = 0; k < 4; k++) {
-            uint32_t st = SWEEP_STATE + k * 4;
-            g_image[st]++;
-            if (g_image[st + 1] != g_image[st])
+            sweep_t *st = &gv.sweep[k];
+            st->timer++;
+            if (st->period != st->timer)
                 continue;
-            g_image[st] = 0;
+            st->timer = 0;
             gv.sweep_y[k]--;
-            draw_sprite_20x6(SWEEP_X, gv.sweep_y[k],
-                             img_w(st + 2));
+            draw_sprite_20x6(SWEEP_X, gv.sweep_y[k], img_ptr(st->sprite));
         }
         intro_pause(0xa);
         io_present();
@@ -1737,14 +1734,13 @@ void level_intro(void)
         draw_brick_row(y);              /* 1ac2:2034 */
         field_backdrop((y + 1) & 0xff); /* 1ac2:1fc1 */
         for (int32_t k = 3; k >= 0; k--) {
-            uint32_t st = SWEEP_STATE + k * 4;
-            if (g_image[st] == 0) {
-                g_image[st] = g_image[st + 1];
+            sweep_t *st = &gv.sweep[k];
+            if (st->timer == 0) {
+                st->timer = st->period;
                 gv.sweep_y[k]++;
-                draw_sprite_20x6(SWEEP_X, gv.sweep_y[k],
-                                 img_w(st + 2));
+                draw_sprite_20x6(SWEEP_X, gv.sweep_y[k], img_ptr(st->sprite));
             }
-            g_image[st]--;              /* both ways round, after the draw */
+            st->timer--;                /* both ways round, after the draw */
         }
         intro_pause(0xa);
         io_present();
@@ -2700,11 +2696,7 @@ void level_draw(void)
  * the CGA interlace between rows, and this writes to a flat buffer 28 bytes to
  * a row. The character-to-glyph mapping is the same one, minus the cursor.
  * ===================================================================== */
-#define PANEL_IMAGE   0x85f0
 #define PANEL_STRIDE      28
-#define PANEL_NAME    0x86ee            /* row 9, byte 2 */
-#define PANEL_SCORE   0x8962            /* row 31, byte 14 */
-#define PANEL_LIVES   0x8cc0            /* row 62, byte 8 */
 #define PANEL_ON_SCREEN 0x3f24          /* bottom-right, and it grows upwards */
 /* `cmp bx, 0x5e` - the reveal runs for bx = 1..0x5d, ninety-three passes.
  * Ninety-two leaves the whole panel one scan line lower than it belongs, and
@@ -2730,11 +2722,11 @@ static void panel_char(uint8_t c, uint32_t di)
 
 void panel_draw(void)
 {
-    uint32_t di = PANEL_NAME;
+    uint32_t di = img_off(&gv.panel[9][2]);
     for (int32_t i = 0; i < 0x0c; i++, di += 2)
         panel_char(gv.player_name[i], di);
 
-    di = PANEL_SCORE;
+    di = img_off(&gv.panel[31][14]);
     for (int32_t i = 0; i < 6; i++, di += 2)
         panel_char(gv.score_text[i], di);
 
@@ -2743,7 +2735,7 @@ void panel_draw(void)
      * rather than skipped, so a lost life is rubbed out. */
     for (uint32_t n = 1; n <= 0x0c; n++) {
         uint32_t k = n - 1;
-        uint32_t d = PANEL_LIVES + (k & 0xfc) + (k & 3) * 0xa8;
+        uint32_t d = img_off(&gv.panel[62][8]) + (k & 0xfc) + (k & 3) * 0xa8;
         int32_t lit = n <= gv.lives;
         for (int32_t r = 0; r < 5; r++, d += PANEL_STRIDE) {
             for (int32_t b = 0; b < 4; b++)
@@ -2756,13 +2748,11 @@ void panel_draw(void)
      * bottom of the panel upwards, so it wipes on rather than appearing. */
     uint32_t bottom = PANEL_ON_SCREEN;
     for (uint32_t rows = 1; rows != PANEL_ROWS; rows++) {
-        uint32_t src = PANEL_IMAGE;
         uint32_t d = bottom;
         io_wait_retrace();
         for (uint32_t r = 0; r < rows; r++) {
             for (int32_t b = 0; b < PANEL_STRIDE; b++)
-                g_vram[(d + b) & (CGA_SIZE - 1)] = g_image[src + b];
-            src += PANEL_STRIDE;
+                g_vram[(d + b) & (CGA_SIZE - 1)] = gv.panel[r][b];
             d = cga_next_row(d);
         }
         for (int32_t i = 0; i < 0x32; i++)
@@ -2789,10 +2779,10 @@ void panel_draw(void)
 
 void level_colours(void)
 {
-    uint32_t si = SEG_14A1 + gv.level_number * 4;
-    gv.anim_ptr = (uint16_t)(img_w(si));
-    gv.anim_rate = g_image[si + 2];
-    gv.anim_count = g_image[si + 2];
+    const level_anim_t *a = &s14a1.level[gv.level_number];
+    gv.anim_ptr = a->script;
+    gv.anim_rate = a->rate;
+    gv.anim_count = a->rate;
 }
 
 /* 1ac2:10c5  draw_run - the same character `count` times.
@@ -3235,7 +3225,6 @@ int32_t bonus_move_down(ent_anim_t *b, uint32_t *px, uint32_t *py)
  * stops it. Direction 4 is not random at all: it follows a script of steps at
  * [bx+0x0a], which is how a capsule homes in.
  */
-#define BONUS_MOVES 0x3447
 
 int32_t bonus_steer(ent_anim_t *b, uint32_t *px, uint32_t *py)
 {
@@ -4096,12 +4085,11 @@ void laser_fire(void)
  * missed, it is simply dropped. Either way [0x3384] - how many capsules are
  * out - comes back down.
  * ===================================================================== */
-#define CAPSULE_FRAMES 0x3385           /* by kind: a table of frame tables */
 
 /* 1ac2:3561  entity_popup is the same routine with a different set of frames -
  * table 0x339b rather than 0x3385 - so the two share a body. */
-void entity_popup(ent_fall_t *f) { entity_capsule_frames(f, 0x339b); }
-void entity_capsule(ent_fall_t *f) { entity_capsule_frames(f, CAPSULE_FRAMES); }
+void entity_popup(ent_fall_t *f) { entity_capsule_frames(f, img_off(gv.popup_frames)); }
+void entity_capsule(ent_fall_t *f) { entity_capsule_frames(f, img_off(gv.capsule_frames)); }
 
 void entity_capsule_frames(ent_fall_t *f, uint32_t table)
 {
@@ -5044,7 +5032,7 @@ void menu_banner_tick(void)
     if (gv.banner_state == 2) {
         gv.banner_state = 0x80;
         gv.banner_ptr = (uint16_t)(gv.banner_ptr + 1);
-        uint32_t c = g_image[gv.banner_ptr];
+        uint32_t c = *img_ptr(gv.banner_ptr);
         c = ((c ^ 0xaa) - 0x20) & 0xff;
         memcpy(gv.scratch1.banner_cell, gv.banner_font[c], 6);
     }
