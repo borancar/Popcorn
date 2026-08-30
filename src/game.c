@@ -2598,12 +2598,12 @@ void walker_step(uint32_t x)
 
 /* One strip of the hatch the creature comes out of: 19 rows of one word at a
  * fixed position, from a list of frames. */
-static void hatch_frame(uint32_t src, uint32_t x, uint32_t y)
+static void hatch_frame(const uint8_t *src, uint32_t x, uint32_t y)
 {
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 0x13; r++) {
-        g_vram[di & (CGA_SIZE - 1)] = g_image[src + r * 2];
-        g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[src + r * 2 + 1];
+        g_vram[di & (CGA_SIZE - 1)] = src[r * 2];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = src[r * 2 + 1];
         di = cga_next_row(di);
     }
 }
@@ -2624,7 +2624,7 @@ void level_draw(void)
 
     gv.paddle_x = 0xc8;
     for (int32_t f = 0; f < 5; f++) {
-        hatch_frame(gv.hatch_open[f], hx, hy);
+        hatch_frame(img_ptr(gv.hatch_open[f]), hx, hy);
         for (int32_t i = 0; i < 0x12c; i++)
             game_delay();
     }
@@ -2659,7 +2659,7 @@ void level_draw(void)
     for (int32_t f = 0; f < 0x14; f++) {
         uint32_t ch = (uint32_t)(0x14 - f);
         if (!(ch & 3))
-            hatch_frame(gv.hatch_shut[f >> 2], hx, hy);
+            hatch_frame(img_ptr(gv.hatch_shut[f >> 2]), hx, hy);
         for (int32_t d = 0; d < 0x4b; d++)
             game_delay();
         walker_step(gv.paddle_x);
@@ -2716,7 +2716,7 @@ void level_draw(void)
  * its bottom row of caps survives every clear. */
 #define PANEL_ROWS     0x5e
 
-static void panel_char(uint8_t c, uint32_t di)
+static void panel_char(uint8_t c, uint8_t *dest)
 {
     uint32_t g;
     if (c == '-')                       g = 0x0b;
@@ -2725,33 +2725,32 @@ static void panel_char(uint8_t c, uint32_t di)
     else if (c >= 'A')                  g = c - 0x35;
     else                                g = 0x0b;
     const uint8_t (*src)[2] = gv.font[g];
-    for (int32_t r = 0; r < FONT_ROWS; r++, di += PANEL_STRIDE) {
-        g_image[di] = src[r][0];
-        g_image[di + 1] = src[r][1];
+    for (int32_t r = 0; r < FONT_ROWS; r++, dest += PANEL_STRIDE) {
+        dest[0] = src[r][0];
+        dest[1] = src[r][1];
     }
 }
 
 void panel_draw(void)
 {
-    uint32_t di = img_off(&gv.panel[9][2]);
-    for (int32_t i = 0; i < 0x0c; i++, di += 2)
-        panel_char(gv.player_name[i], di);
+    uint8_t *dest = &gv.panel[9][2];
+    for (int32_t i = 0; i < 0x0c; i++, dest += 2)
+        panel_char(gv.player_name[i], dest);
 
-    di = img_off(&gv.panel[31][14]);
-    for (int32_t i = 0; i < 6; i++, di += 2)
-        panel_char(gv.score_text[i], di);
+    dest = &gv.panel[31][14];
+    for (int32_t i = 0; i < 6; i++, dest += 2)
+        panel_char(gv.score_text[i], dest);
 
     /* Twelve life markers, four to a row: `al & 0xfc` steps along the row and
      * `(al & 3) * 0xa8` steps down. Ones past the lives left are blanked
      * rather than skipped, so a lost life is rubbed out. */
     for (uint32_t n = 1; n <= 0x0c; n++) {
         uint32_t k = n - 1;
-        uint32_t d = img_off(&gv.panel[62][8]) + (k & 0xfc) + (k & 3) * 0xa8;
+        uint8_t *d = &gv.panel[62][8] + (k & 0xfc) + (k & 3) * 0xa8;
         int32_t lit = n <= gv.lives;
         for (int32_t r = 0; r < 5; r++, d += PANEL_STRIDE) {
             for (int32_t b = 0; b < 4; b++)
-                g_image[d + b] = lit
-                    ? gv.life_sprite[r][b] : 0;
+                d[b] = lit ? gv.life_sprite[r][b] : 0;
         }
     }
 
