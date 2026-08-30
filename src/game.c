@@ -2431,7 +2431,7 @@ void xor_sprite_16x7(uint32_t x, uint32_t y, const uint8_t *src)
 /* ------------------------------------------------------------------------
  * 1ac2:413d  score_add
  *
- * Add the six-digit figure at [0x1415] to the score at [0x13cd], in decimal,
+ * Add the six-digit figure in score_add to the score in score_text, in decimal,
  * and redraw it. Both are held as ASCII digits, so the addition masks off the
  * 0x30 before working and puts it back after.
  *
@@ -2443,19 +2443,18 @@ void xor_sprite_16x7(uint32_t x, uint32_t y, const uint8_t *src)
  */
 void score_add(void)
 {
-    uint32_t si = 0x13d2, di = 0x141a;
     uint32_t carry = 0;
-    for (int32_t i = 0; i < 6; i++, si--, di--) {
-        uint32_t sum = (g_image[si] & 0x0f) + g_image[di] + (carry ? 1 : 0);
+    for (int32_t i = 5; i >= 0; i--) {          /* least significant first */
+        uint32_t sum = (gv.score_text[i] & 0x0f) + gv.score_add[i]
+                     + (carry ? 1 : 0);
         uint32_t adjusted = (sum + 6) & 0xff;
         carry = (adjusted & 0xf0) || (sum & 0xf0);
-        g_image[si] = (uint8_t)(0x30 | ((carry ? adjusted : sum) & 0x0f));
+        gv.score_text[i] = (uint8_t)(0x30 | ((carry ? adjusted : sum) & 0x0f));
     }
     /* Redraw the six digits into the panel. */
-    si = 0x13cd;
-    di = 0x15d2;
-    for (int32_t i = 0; i < 6; i++, si++, di += 2)
-        draw_char(g_image[si], di);
+    uint32_t di = 0x15d2;
+    for (int32_t i = 0; i < 6; i++, di += 2)
+        draw_char(gv.score_text[i], di);
 
     /* An extra life every time the score reaches gv.extra_at, which then
      * advances by two.
