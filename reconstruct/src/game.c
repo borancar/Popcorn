@@ -959,17 +959,37 @@ void game_main(const char *dir, const char *levels)
             }
 
             uint32_t key = io_get_key();
-            switch (key >> 8) {
-            case 0x43:                                  /* F9: sound */
-                g_image[SOUND_ON] ^= 1;
-                break;
-            case 0x42:                                  /* F8: palette */
+
+            /* 1ac2:0213 is a chain of compares, not a table, and the cheat
+             * matcher sits in the middle of it at 1ac2:0240 rather than at
+             * the end - so the order of these three is the original's:
+             *
+             *   F9 toggles the sound and falls through into the matcher;
+             *   F8 jumps clean past it at 1ac2:0226, which makes it the one
+             *      key that does not disturb a cheat half typed;
+             *   F7 clears the matcher and is then fed to it.
+             *
+             * F1 reaches the matcher too, at 1ac2:0259, *before* the game
+             * starts - and the original's return from a game is a stack
+             * throw to 1ac2:01d1, well past here. Feeding the matcher after
+             * play_session instead, as this did, both reversed that and read
+             * a `key` no longer guaranteed to survive the longjmp. */
+            if ((key >> 8) == 0x42) {                   /* F8: palette */
                 palette_cycle();
-                break;
-            case 0x41:                                  /* F7 */
+                io_present();
+                continue;
+            }
+            if ((key >> 8) == 0x43)                     /* F9: sound */
+                g_image[SOUND_ON] ^= 1;
+            if ((key >> 8) == 0x41) {                   /* F7: forget the
+                                                         * cheat so far */
                 gv.cheat_done = 0;
                 gv.cheat_at = (uint16_t)img_off(gv.cheat_text);
-                break;
+            }
+            if (gv.cheat_done != 1)                     /* 1ac2:0239 */
+                cheat_match((uint8_t)(key & 0xff));
+
+            switch (key >> 8) {
             case 0x44:                                  /* F10 */
                 /* The boss key. employee_enter is a no-op here on purpose, so
                  * nothing is stashed and screen_restore is not called either -
@@ -1024,9 +1044,6 @@ void game_main(const char *dir, const char *levels)
             default:
                 break;
             }
-            /* Every key also feeds the cheat matcher at 0x5171. */
-            if (gv.cheat_done != 1)
-                cheat_match((uint8_t)(key & 0xff));
             io_present();
         }
     }

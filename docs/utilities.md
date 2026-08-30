@@ -135,7 +135,14 @@ Typing **`LACRAL software`** and Enter **at the main menu** sets `[0x3f1b]`,
 which is the no-lives-lost flag: `play_session` skips its `dec [0x13c9]` at
 `1ac2:0363` and `ball_after_endgame` skips handing a life back at `1ac2:462c`.
 The string is at `0x3f0b`, `cheat_match` at `0x5171` walks it a key at a time,
-and every key pressed at the menu is fed to it. It is the authors' own company
+and `0x3f1c` is how far along it the typing has got. Every key pressed at the
+menu is fed to it **except F8**: the matcher's call sits in the middle of the
+menu's compare chain, at `1ac2:0240`, and F8's palette handler jumps clean past
+it at `1ac2:0226`. So the palette can be cycled in the middle of typing the
+cheat and the sequence survives, where F9 - which falls through into the
+matcher with an ASCII byte of zero - resets it. F1 reaches the matcher too,
+before the game starts, and the return from a game is a stack throw to
+`1ac2:01d1`, which is past all of this. It is the authors' own company
 name, and it is not the F10 "touche spéciale pour employés" the readme
 mentions - that is a separate screen.
 
