@@ -663,7 +663,9 @@ typedef struct __attribute__((packed)) {
     uint8_t  _pad_24[10];
     uint8_t  eog_overlay[495];          /* 0xa6d0 what screen_end_of_game merges into each band of the saved screen - the same 495 bytes every pass, since the source restarts and only the destination walks */
     eog_group_t eog_groups[7];          /* 0xa8bf ending exactly where the overlay does */
-    uint8_t  _pad_33[901];
+    uint8_t  _pad_33[720];
+    uint8_t  eog_blank[3][60];          /* 0xabab what the ending draws over a group to blank it: three tall_sprite frames, because it is called three times and each carries SI forward sixty bytes. One byte short of bonus_kinds */
+    uint8_t  _pad_34[1];
     bonus_kind_t bonus_kinds[8];        /* 0xac60 the eight capsules, and bonus_release picks one with random(8). Thirty-two bytes ending at 0xac80, which is kind 0's own sprite - the table abuts the data it points into */
     uint8_t  _pad_32[21968];
     uint8_t  screen_save[2][8000];      /* 0x10250 the whole screen, and the two halves land **adjacent** here rather than 0x2000 apart: 8000 is what each half of the aperture holds, and the 192 bytes of padding at the end of each are neither saved nor restored. So this is 16,000 bytes and not a copy of the aperture */
@@ -873,6 +875,7 @@ ENSURE_IMG_AT(game_over_paddle, 0xa346);
 ENSURE_IMG_AT(banner_font, 0xa3c0);
 ENSURE_IMG_AT(eog_overlay, 0xa6d0);
 ENSURE_IMG_AT(eog_groups, 0xa8bf);
+ENSURE_IMG_AT(eog_blank, 0xabab);
 ENSURE_IMG_AT(bonus_kinds, 0xac60);
 ENSURE_IMG_AT(screen_save, 0x10250);
 /* @generated-asserts end */

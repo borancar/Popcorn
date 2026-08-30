@@ -6588,7 +6588,6 @@ void screen_define_keys(void)
  * ===================================================================== */
 #define EOG_WIDTH     0x21
 #define EOG_BAND_LEN  0x1ef
-#define EOG_BLANK     0xabab
 
 void screen_end_of_game(void)
 {
@@ -6669,7 +6668,7 @@ void screen_end_of_game(void)
 
         if (tall_sprite(&sprite, at)) { keyed = 1; break; }
         tall_sprite(&sprite, at);       /* no test after the second */
-        uint32_t blank = EOG_BLANK;
+        uint32_t blank = img_off(gv.eog_blank[0]);
         if (tall_sprite(&blank, at)) { keyed = 1; break; }
         if (tall_sprite(&blank, at)) { keyed = 1; break; }
         if (tall_sprite(&blank, at)) { keyed = 1; break; }
