@@ -458,7 +458,9 @@ typedef struct __attribute__((packed)) {
     uint16_t frame_delay;               /* 0x1487 empty loops left this frame */
     uint16_t frame_delay_set;           /* 0x1489 what it is reloaded with */
     uint16_t speed_timer;               /* 0x148b frames until speed_limit rises, so a level speeds up */
-    uint8_t  _pad_07[1634];
+    uint8_t  particles[100][16];        /* 0x148d the menu's fountain and the ending's: a hundred records of sixteen - origin at +0 and +2, launch angle at +4, and how long it has been in flight. particle_count says how many are live */
+    uint16_t particle_seed;             /* 0x1acd particle_random's running value, folded in and advanced on every draw */
+    uint16_t particle_sprites[4][4];    /* 0x1acf a particle pre-shifted to each of the four pixel phases, four words apiece */
     /* 0x1aef is the general scratch, and four routines spend it on different
      * things at times that cannot overlap: the intro curtain runs before a
      * game, the pause and the ending during and after one, and the results
@@ -575,7 +577,7 @@ typedef struct __attribute__((packed)) {
                                          * second pass */
         };                              /* 0x3144 is entity_head.next */
     };
-    uint8_t  _pad_14[574];
+    entity_t entities[41];              /* 0x3146 the node pool - 574 bytes is 41 of them exactly, ending where bonus_cap begins. The chain is walked by image offset, so this is what those offsets point into rather than something the walk uses */
     uint8_t  bonus_cap;                 /* 0x3384 */
     uint8_t  _pad_15[44];
     uint8_t  bonus_odds[11];            /* 0x33b1 cumulative weights, ending at 0xff: bonus_kind walks them against random(0xff) and takes the index */
@@ -705,6 +707,9 @@ ENSURE_IMG_AT(menu_sp, 0x1405);
 ENSURE_IMG_AT(level_text, 0x1407);
 ENSURE_IMG_AT(level_num_text, 0x1410);
 ENSURE_IMG_AT(particle_count, 0x1413);
+ENSURE_IMG_AT(particles, 0x148d);
+ENSURE_IMG_AT(particle_seed, 0x1acd);
+ENSURE_IMG_AT(particle_sprites, 0x1acf);
 ENSURE_IMG_AT(score_add, 0x1415);
 ENSURE_IMG_AT(walker_work, 0x146a);
 ENSURE_IMG_AT(hsc_file, 0x141c);
@@ -780,6 +785,7 @@ ENSURE_IMG_AT(entity_head, 0x3138);
 ENSURE_IMG_AT(entity_free, 0x3138);
 ENSURE_IMG_AT(entity_remove, 0x313a);
 ENSURE_IMG_AT(entity_prev, 0x3142);
+ENSURE_IMG_AT(entities, 0x3146);
 ENSURE_IMG_AT(bonus_cap, 0x3384);
 ENSURE_IMG_AT(bonus_odds, 0x33b1);
 ENSURE_IMG_AT(bonus_handlers, 0x33bc);
@@ -1079,7 +1085,6 @@ void banner_shift(void);          /* 1ac2:5140 */
 void brick_11_after(uint32_t x, uint32_t y);  /* 1ac2:4c4b */
 uint32_t particle_random(uint32_t ax, uint32_t ticks, uint32_t limit); /* 1ac2:5448 */
 uint32_t particle_init(uint32_t si, uint32_t ax_in);  /* 1ac2:548a */
-#define PARTICLES 0x148d
 void menu_arrow(void);            /* 1ac2:490d */
 void arrow_head(uint32_t di);     /* 1ac2:492f */
 void arrow_tail(uint32_t di);     /* 1ac2:4957 */
