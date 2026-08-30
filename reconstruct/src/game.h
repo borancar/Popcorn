@@ -326,6 +326,14 @@ static inline ball_t *ball_at(uint32_t off)
     return (ball_t *)(g_image + off);
 }
 
+/* The inverse of img_off: what the game stores as a 16-bit offset, as the
+ * pointer it means. The call sites are where an `img_w` out of the game's own
+ * data becomes something a routine can be handed. */
+static inline uint8_t *img_ptr(uint32_t off)
+{
+    return g_image + off;
+}
+
 static inline uint32_t img_off(const void *p)
 {
     return (uint32_t)((const uint8_t *)p - g_image);
@@ -802,7 +810,7 @@ void save_screen(void);                                 /* 1ac2:5099 */
 void restore_screen(void);                              /* 1ac2:50bc */
 void paddle_row_offsets(uint32_t x, paddle_rows_t *rows); /* 1ac2:22de */
 void blit_xor(const uint8_t *pixels, const paddle_rows_t *rows); /* 1ac2:2281 */
-void draw_paddle(uint32_t sprite);                      /* 1ac2:221a */
+void draw_paddle(const uint8_t *sprite);                /* 1ac2:221a */
 void draw_char(uint8_t c, uint32_t di);           /* 1ac2:0c64 */
 uint32_t game_random(uint32_t ticks, uint32_t limit);   /* 1ac2:40c0 */
 void speaker_on(void);                                  /* 1ac2:0085 */
@@ -965,8 +973,8 @@ int32_t bonus_end_level_body(void); /* 1ac2:4210 */
 void bonus_effect(uint32_t kind);
 void scroll_up_band(void);        /* 1ac2:2109 */
 void scroll_down_band(void);      /* 1ac2:2148 */
-void draw_paddle_raw(uint32_t src);      /* 1ac2:22a9 */
-void draw_paddle_shifted(uint32_t src);  /* 1ac2:2187 */
+void draw_paddle_raw(const uint8_t *src);/* 1ac2:22a9 */
+void draw_paddle_shifted(const uint8_t *sprite); /* 1ac2:2187 */
 void ball_paddle(ball_t *b);  /* 1ac2:2316 */
 void laser_fire(void);            /* 1ac2:2ee3 */
 void probe_cell_at(uint32_t x, uint32_t y, hit_t *hit);    /* 1ac2:2755 */

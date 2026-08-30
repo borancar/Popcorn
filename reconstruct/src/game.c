@@ -256,7 +256,7 @@ void blit_xor(const uint8_t *pixels, const paddle_rows_t *rows)
  * to do, and XOR-ing it off and back on would flicker it.
  */
 
-void draw_paddle(uint32_t sprite)
+void draw_paddle(const uint8_t *sprite)
 {
     if (!gv.paddle_morphing &&
         gv.paddle_x == gv.paddle_prev_x)
@@ -284,7 +284,7 @@ void draw_paddle(uint32_t sprite)
 
     /* Pick the copy pre-shifted to this pixel within its byte. */
     memcpy(gv.paddle_pix[0],
-           g_image + sprite + (x & 3) * PADDLE_IMAGE, PADDLE_IMAGE + 1);
+           sprite + (x & 3) * PADDLE_IMAGE, PADDLE_IMAGE + 1);
 
     blit_xor(gv.paddle_pix[1], &gv.paddle_rows[1]);   /* erase where it was */
     blit_xor(gv.paddle_pix[0], &gv.paddle_rows[0]);     /* draw where it is */
@@ -1290,7 +1290,7 @@ int32_t play_loop(void)
             game_input();
             if (gv.key_action == 1)
                 break;
-            draw_paddle(SPRITE_BASE);
+            draw_paddle(img_ptr(SPRITE_BASE));
             io_present();
             if (!io_pump())
                 return 1;
@@ -1316,7 +1316,7 @@ frames:
 
         game_input();
         if (gv.paddle_morphing == 0)
-            draw_paddle(img_w(PADDLE_SPRITES + gv.paddle_kind * 4));
+            draw_paddle(img_ptr(img_w(PADDLE_SPRITES + gv.paddle_kind * 4)));
         if (gv.laser_on)
             laser_fire();
 
@@ -3804,12 +3804,12 @@ void scroll_down_band(void)
  * shift - it overwrites. The game-over sequence uses it to put the paddle's
  * remains down.
  */
-void draw_paddle_raw(uint32_t src)
+void draw_paddle_raw(const uint8_t *src)
 {
     uint32_t di = (gv.paddle_x >> 2) + PADDLE_ROW_BASE;
     for (int32_t r = 0; r < 0x10; r++) {
         for (int32_t b = 0; b < 7; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[src + r * 7 + b];
+            g_vram[(di + b) & (CGA_SIZE - 1)] = src[r * 7 + b];
         di = cga_next_row(di);
     }
 }
@@ -3821,7 +3821,7 @@ void draw_paddle_raw(uint32_t src)
  * erase-then-draw and the same early-out, but it charges the frame delay
  * 0x1f3 rather than 0x1e0 - a shift costs more than picking a copy.
  */
-void draw_paddle_shifted(uint32_t sprite)
+void draw_paddle_shifted(const uint8_t *sprite)
 {
     if (!gv.paddle_morphing &&
         gv.paddle_x == gv.paddle_prev_x)
@@ -3835,7 +3835,7 @@ void draw_paddle_shifted(uint32_t sprite)
     uint32_t x = gv.paddle_x;
     gv.paddle_prev_x = (uint8_t)x;
     paddle_row_offsets(x, &gv.paddle_rows[0]);
-    memcpy(gv.paddle_pix[0], g_image + sprite, PADDLE_IMAGE + 1);
+    memcpy(gv.paddle_pix[0], sprite, PADDLE_IMAGE + 1);
 
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < PADDLE_ROWS; r++) {
@@ -4465,11 +4465,11 @@ void entity_paddle_fx(ent_morph_t *m)
         if (gv.paddle_x == gv.paddle_prev_x)
             return;
         if (m->step == 6) {
-            draw_paddle(img_w(PADDLE_SPRITES + gv.paddle_kind * 4));
+            draw_paddle(img_ptr(img_w(PADDLE_SPRITES + gv.paddle_kind * 4)));
             return;
         }
         uint32_t si = m->sprites + m->step * 2;
-        draw_paddle_shifted(img_w(si));
+        draw_paddle_shifted(img_ptr(img_w(si)));
         return;
     }
 
@@ -4525,7 +4525,7 @@ void morph_step(ent_morph_t *m)
 {
     m->step--;
     uint32_t si = m->sprites + m->step * 2;
-    draw_paddle_shifted(img_w(si));
+    draw_paddle_shifted(img_ptr(img_w(si)));
 
     gv.paddle_width += gv.paddle_step;
     gv.paddle_max -= gv.paddle_step;
@@ -5440,7 +5440,7 @@ void cell_special(uint32_t row, uint32_t col, uint32_t di)
 void input_and_draw_paddle(void)
 {
     game_input();
-    draw_paddle(img_w(PADDLE_SPRITES + gv.paddle_kind * 4));
+    draw_paddle(img_ptr(img_w(PADDLE_SPRITES + gv.paddle_kind * 4)));
 }
 
 /* 1ac2:5171  cheat_match
@@ -6044,7 +6044,7 @@ void screen_game_over(void)
         uint32_t si = img_w(PADDLE_GROW + kind * 2);
         for (int32_t f = 0; f < 6; f++, si += 2) {
             io_wait_retrace();
-            draw_paddle_shifted(img_w(si));
+            draw_paddle_shifted(img_ptr(img_w(si)));
             for (int32_t i = 0; i < 0x96; i++)
                 game_delay();
             io_present();
@@ -6056,7 +6056,7 @@ void screen_game_over(void)
 
     for (uint32_t si = 0x9bb0; img_w(si); si += 2) {
         io_wait_retrace();
-        draw_paddle_raw(img_w(si));
+        draw_paddle_raw(img_ptr(img_w(si)));
         for (int32_t i = 0; i < 0x96; i++)
             game_delay();
         io_present();
