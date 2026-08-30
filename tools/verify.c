@@ -150,7 +150,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x3aee: entity_sparkle(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x3b2a: entity_crumble(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x390d: entity_hatch(entity_at(r[R_BX])); return 1;
-    case 0x39a1: bonus_release(r[R_BX]); return 1;
+    case 0x39a1: bonus_release(&entity_at(r[R_BX])->p.hatch); return 1;
     case 0x39fa: entity_bonus(entity_at(r[R_BX])); return 1;
     case 0x3df1: bonus_update(&entity_at(r[R_BX])->p.bonus.sprite, r[R_CX] & 0xff, r[R_AX] & 0xff);
                  return 1;
@@ -365,10 +365,10 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         g_result = score_before(g_image + r[R_SI], r[R_DI]);
         return 1;
     case 0x34c5:                        /* morph_begin(bx, si, dx) */
-        morph_begin(r[R_BX], r[R_SI], r[R_DX]);
+        morph_begin(&entity_at(r[R_BX])->p.morph, r[R_SI], r[R_DX]);
         return 1;
     case 0x34d7:                        /* morph_step(bx) */
-        morph_step(r[R_BX]);
+        morph_step(&entity_at(r[R_BX])->p.morph);
         return 1;
     case 0x3bf7: {                      /* bonus_steer(bx, cl, al) */
         /* entity_bonus hands these in CL and AL - the capsule's x
@@ -377,7 +377,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
          * twice from the PRNG where the original drew nothing. The
          * failure that reported was the harness's, not the port's. */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_steer(r[R_BX], &x, &y);
+        g_result = bonus_steer(&entity_at(r[R_BX])->p.bonus, &x, &y);
         return 1;
     }
     case 0x3c35: {                      /* bonus_script(bx, cl, al) */
@@ -387,7 +387,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
          * twice from the PRNG where the original drew nothing. The
          * failure that reported was the harness's, not the port's. */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_script(r[R_BX], &x, &y);
+        g_result = bonus_script(&entity_at(r[R_BX])->p.bonus, &x, &y);
         return 1;
     }
     /* The four directions a falling capsule can step, 1ac2:3447's table.
@@ -400,22 +400,22 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * arithmetic in it; the step itself is one `inc` behind that decision. */
     case 0x3c66: {                      /* bonus_move_right(bx, cl, al) */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_move_right(r[R_BX], &x, &y);
+        g_result = bonus_move_right(&entity_at(r[R_BX])->p.bonus, &x, &y);
         return 1;
     }
     case 0x3caf: {                      /* bonus_move_up */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_move_up(r[R_BX], &x, &y);
+        g_result = bonus_move_up(&entity_at(r[R_BX])->p.bonus, &x, &y);
         return 1;
     }
     case 0x3cf3: {                      /* bonus_move_left */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_move_left(r[R_BX], &x, &y);
+        g_result = bonus_move_left(&entity_at(r[R_BX])->p.bonus, &x, &y);
         return 1;
     }
     case 0x3d3c: {                      /* bonus_move_down */
         uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
-        g_result = bonus_move_down(r[R_BX], &x, &y);
+        g_result = bonus_move_down(&entity_at(r[R_BX])->p.bonus, &x, &y);
         return 1;
     }
     case 0x45a1:                        /* ball_after_endgame(si) */

@@ -3069,7 +3069,7 @@ void entity_crumble(ent_anim_t *a)
  */
 #define BONUS_KINDS 0xac60
 
-void bonus_release(uint32_t bx)
+void bonus_release(const ent_hatch_t *h)
 {
     gv.bonus_live++;
     uint32_t si = entity_alloc();
@@ -3084,13 +3084,13 @@ void bonus_release(uint32_t bx)
     cap->p.bonus.sprite.timer = g_image[di + 2];   /* one word in the original */
     cap->p.bonus.sprite.period = g_image[di + 3];
 
-    uint32_t al = entity_at(bx)->p.hatch.x;
+    uint32_t al = h->x;
     if (al) {
         al = (al - 8) & 0xff;
         cap->p.bonus.mode = 2;
     }
     cap->p.bonus.sprite.x = (uint8_t)al;
-    cap->p.bonus.sprite.y = entity_at(bx)->p.hatch.y;
+    cap->p.bonus.sprite.y = h->y;
     xor_sprite_20x16(cap->p.bonus.sprite.x, cap->p.bonus.sprite.y,
                      img_w(cap->p.bonus.sprite.frame));
 }
@@ -3105,7 +3105,7 @@ void bonus_release(uint32_t bx)
  */
 void entity_hatch(entity_t *e)
 {
-    /* `jne 0x390c` is the **ret**, not the `dec word [img_off(e)+6]` at 0x3909 that
+    /* `jne 0x390c` is the **ret**, not the `dec word [bx+6]` at 0x3909 that
      * sits just above it: while an extra ball is in play the hatch does
      * nothing at all. Decrementing here walks a counter that is already 0
      * round to 0xffff, which is what diverged 5,872 frames into level 4. */
@@ -3128,7 +3128,7 @@ void entity_hatch(entity_t *e)
     }
     if (si == 0x635c) {
         e->p.hatch.wait = 0x12c;
-        bonus_release(img_off(e));
+        bonus_release(&e->p.hatch);
     }
     e->p.hatch.script += 2;
     if (img_w(e->p.hatch.script) == 0xffff) {
@@ -3158,9 +3158,9 @@ static uint32_t cell_index(uint32_t y, uint32_t x)
 }
 
 /* 1ac2:3c66  bonus_move_right */
-int32_t bonus_move_right(uint32_t bx, uint32_t *px, uint32_t *py)
+int32_t bonus_move_right(ent_bonus_t *b, uint32_t *px, uint32_t *py)
 {
-    (void)bx;
+    (void)b;
     uint32_t y = *py, x = *px;
     if (x >= 0xb8)
         return 0;
@@ -3174,9 +3174,9 @@ int32_t bonus_move_right(uint32_t bx, uint32_t *px, uint32_t *py)
 }
 
 /* 1ac2:3cf3  bonus_move_left */
-int32_t bonus_move_left(uint32_t bx, uint32_t *px, uint32_t *py)
+int32_t bonus_move_left(ent_bonus_t *b, uint32_t *px, uint32_t *py)
 {
-    (void)bx;
+    (void)b;
     uint32_t y = *py, x = *px;
     if (x <= 8)
         return 0;
@@ -3190,9 +3190,9 @@ int32_t bonus_move_left(uint32_t bx, uint32_t *px, uint32_t *py)
 }
 
 /* 1ac2:3caf  bonus_move_up */
-int32_t bonus_move_up(uint32_t bx, uint32_t *px, uint32_t *py)
+int32_t bonus_move_up(ent_bonus_t *b, uint32_t *px, uint32_t *py)
 {
-    (void)bx;
+    (void)b;
     uint32_t y = *py, x = *px;
     if (y <= 6)
         return 0;
@@ -3218,15 +3218,14 @@ int32_t bonus_move_up(uint32_t bx, uint32_t *px, uint32_t *py)
  * two random() draws that never happened, and every draw after that offset.
  */
 /* 1ac2:3d3c  bonus_move_down */
-int32_t bonus_move_down(uint32_t bx, uint32_t *px, uint32_t *py)
+int32_t bonus_move_down(ent_bonus_t *b, uint32_t *px, uint32_t *py)
 {
     uint32_t y = *py, x = *px;
 
     if (y >= 0x78) {                    /* 1ac2:3d80 */
-        entity_t *e = entity_at(bx);
-        e->p.bonus.mode = 4;            /* follow a script from here on */
-        e->p.bonus.script = 0x8320;
-        e->p.bonus.steps = (uint8_t)x;
+        b->mode = 4;            /* follow a script from here on */
+        b->script = 0x8320;
+        b->steps = (uint8_t)x;
         (*py)++;
         return 1;
     }
@@ -3250,30 +3249,29 @@ int32_t bonus_move_down(uint32_t bx, uint32_t *px, uint32_t *py)
  */
 #define BONUS_MOVES 0x3447
 
-int32_t bonus_steer(uint32_t bx, uint32_t *px, uint32_t *py)
+int32_t bonus_steer(ent_bonus_t *b, uint32_t *px, uint32_t *py)
 {
-    entity_t *e = entity_at(bx);
-    if (e->p.bonus.mode == 4)
-        return bonus_script(bx, px, py);
+    if (b->mode == 4)
+        return bonus_script(b, px, py);
 
-    if (--e->p.bonus.steps != 0) {
+    if (--b->steps != 0) {
         int32_t moved;
-        switch (e->p.bonus.mode) {
-        case 0:  moved = bonus_move_right(bx, px, py); break;
-        case 1:  moved = bonus_move_down(bx, px, py);  break;
-        case 2:  moved = bonus_move_left(bx, px, py);  break;
-        case 3:  moved = bonus_move_up(bx, px, py);    break;
+        switch (b->mode) {
+        case 0:  moved = bonus_move_right(b, px, py); break;
+        case 1:  moved = bonus_move_down(b, px, py);  break;
+        case 2:  moved = bonus_move_left(b, px, py);  break;
+        case 3:  moved = bonus_move_up(b, px, py);    break;
         default: moved = 0;                        break;
         }
         if (moved)
             return 1;
     }
-    e->p.bonus.mode = (uint8_t)game_random(io_ticks(), 4);
-    if (e->p.bonus.mode == 1) {
-        e->p.bonus.steps = 0xff;
+    b->mode = (uint8_t)game_random(io_ticks(), 4);
+    if (b->mode == 1) {
+        b->steps = 0xff;
         return 1;
     }
-    e->p.bonus.steps = (uint8_t)game_random(io_ticks(), 0x3d);
+    b->steps = (uint8_t)game_random(io_ticks(), 0x3d);
     return 1;
 }
 
@@ -3700,7 +3698,7 @@ void entity_bonus(entity_t *e)
     /* The timer byte carries two counters: the low nibble paces the movement
      * and the high nibble the frame. */
     if (gv.extra_on != 1 && (e->p.bonus.sprite.timer & 0x0f) == 1) {
-        if (!bonus_steer(img_off(e), &x, &y))
+        if (!bonus_steer(&e->p.bonus, &x, &y))
             goto sprite;                /* 1ac2:3a52, the draw */
     }
     bonus_update(&e->p.bonus.sprite, x, y);             /* 1ac2:3df1 */
@@ -4110,12 +4108,11 @@ void laser_fire(void)
 
 /* 1ac2:3561  entity_popup is the same routine with a different set of frames -
  * table 0x339b rather than 0x3385 - so the two share a body. */
-void entity_popup(entity_t *e) { entity_capsule_frames(img_off(e), 0x339b); }
-void entity_capsule(entity_t *e) { entity_capsule_frames(img_off(e), CAPSULE_FRAMES); }
+void entity_popup(entity_t *e) { entity_capsule_frames(e, 0x339b); }
+void entity_capsule(entity_t *e) { entity_capsule_frames(e, CAPSULE_FRAMES); }
 
-void entity_capsule_frames(uint32_t bx, uint32_t table)
+void entity_capsule_frames(entity_t *e, uint32_t table)
 {
-    entity_t *e = entity_at(bx);
     if ((--e->p.fall.tick & 7) != 0)
         return;                         /* not this tick */
 
@@ -4391,9 +4388,9 @@ void entity_multiball(entity_t *e)
 #define PADDLE_SHRINK 0x2d25
 #define PADDLE_GROW   0x2d1d
 
-static void morph_finish(uint32_t bx)
+static void morph_finish(ent_morph_t *m)
 {
-    bonus_effect(entity_at(bx)->p.morph.bonus);
+    bonus_effect(m->bonus);
     gv.entity_remove = 1;
 }
 
@@ -4403,7 +4400,7 @@ void entity_paddle_fx(entity_t *e)
         /* Nothing is morphing. If the paddle is already the kind this capsule
          * gives, there is nothing to animate - just apply the effect. */
         if (gv.paddle_kind == e->p.morph.to) {
-            morph_finish(img_off(e));
+            morph_finish(&e->p.morph);
             return;
         }
         e->p.morph.from = gv.paddle_kind;
@@ -4455,7 +4452,7 @@ void entity_paddle_fx(entity_t *e)
     }
 
     if (e->p.morph.step != 6) {
-        morph_step(img_off(e));
+        morph_step(&e->p.morph);
         return;
     }
 
@@ -4470,7 +4467,7 @@ void entity_paddle_fx(entity_t *e)
         if (kind == 1)
             gv.paddle_step = 0xfe;    /* -2: this one shrinks */
         if (kind != 0) {
-            morph_begin(img_off(e), si, kind);
+            morph_begin(&e->p.morph, si, kind);
             return;
         }
         e->p.morph.pending = 0;
@@ -4481,52 +4478,50 @@ void entity_paddle_fx(entity_t *e)
     if (kind == 1)
         gv.paddle_step = 2;
     if (kind != 0) {
-        morph_begin(img_off(e), si, kind);
+        morph_begin(&e->p.morph, si, kind);
         return;
     }
     /* Both ends are the plain paddle: nothing to animate. */
     gv.paddle_kind = 0;
     gv.paddle_width = 0x1b;
     gv.paddle_morphing = 0;
-    morph_finish(img_off(e));
+    morph_finish(&e->p.morph);
 }
 
 /* 1ac2:34c5  morph_begin - start a stage: remember its sprite list and run
  * the first frame. */
-void morph_begin(uint32_t bx, uint32_t table, uint32_t kind)
+void morph_begin(ent_morph_t *m, uint32_t table, uint32_t kind)
 {
-    entity_t *e = entity_at(bx);
-    e->p.morph.sprites = (uint16_t)img_w(table + kind * 2);
-    e->p.morph.step = 6;
+    m->sprites = (uint16_t)img_w(table + kind * 2);
+    m->step = 6;
     gv.paddle_morphing = 0xff;
-    morph_step(bx);
+    morph_step(m);
 }
 
 /* 1ac2:34d7  morph_step - one frame of the shrink or grow */
-void morph_step(uint32_t bx)
+void morph_step(ent_morph_t *m)
 {
-    entity_t *e = entity_at(bx);
-    e->p.morph.step--;
-    uint32_t si = e->p.morph.sprites + e->p.morph.step * 2;
+    m->step--;
+    uint32_t si = m->sprites + m->step * 2;
     draw_paddle_shifted(img_w(si));
 
     gv.paddle_width += gv.paddle_step;
     gv.paddle_max -= gv.paddle_step;
 
-    if (e->p.morph.step != 0)
+    if (m->step != 0)
         return;
-    e->p.morph.step = 6;
-    if (e->p.morph.pending == 1) {      /* done shrinking; grow next */
-        e->p.morph.pending = 0;
+    m->step = 6;
+    if (m->pending == 1) {      /* done shrinking; grow next */
+        m->pending = 0;
         gv.paddle_kind = 0;
         return;
     }
     /* Done growing: install the new paddle and apply the effect. */
-    uint32_t kind = e->p.morph.to;
+    uint32_t kind = m->to;
     gv.paddle_kind = (uint8_t)kind;
     gv.paddle_width = g_image[PADDLE_SPRITES + kind * 4 + 2];
     gv.paddle_morphing = 0;
-    morph_finish(bx);
+    morph_finish(m);
 }
 
 /* ========================================================================
@@ -7388,13 +7383,13 @@ void demo_input_step(void)
  *
  * The x is clamped to 8..0xb8, which are the same walls everything else uses.
  */
-int32_t bonus_script(uint32_t bx, uint32_t *px, uint32_t *py)
+int32_t bonus_script(ent_bonus_t *b, uint32_t *px, uint32_t *py)
 {
-    uint32_t si = img_w(bx + 0x0a);
-    img_setw(bx + 0x0a, si + 2);
+    uint32_t si = b->script;
+    b->script = (uint16_t)(si + 2);
     uint32_t word = img_w(si);
     uint32_t al = word & 0xff, ah = (word >> 8) & 0xff;
-    uint32_t cl = g_image[bx + 3];
+    uint32_t cl = b->steps;
 
     if (al & 0x80) {                    /* a leftward step */
         uint32_t mag = (uint32_t)(-(int32_t)(int8_t)al) & 0xff;
