@@ -164,7 +164,6 @@ void input_mouse(uint32_t mouse_x, uint32_t buttons)
  * 0x10250 (the original reaches it as 0xc46:0x3df0, one of the 35 relocated
  * segment constants).  Used around anything that draws over the menu.
  */
-#define SCREEN_SAVE  0x10250
 /* Two `rep movsw` of 0xfa0 words each, from 0xb800:0000 and 0xb800:2000. That
  * is 8,000 bytes a half - the 200 visible scan lines at 80 bytes for every
  * other one - not the 8,192 each half of the aperture spans. The 192 bytes of
@@ -175,16 +174,14 @@ void input_mouse(uint32_t mouse_x, uint32_t buttons)
 
 void save_screen(void)
 {
-    memcpy(g_image + SCREEN_SAVE, g_vram, SCREEN_HALF);
-    memcpy(g_image + SCREEN_SAVE + SCREEN_HALF, g_vram + CGA_PLANE,
-           SCREEN_HALF);
+    memcpy(gv.screen_save[0], g_vram, SCREEN_HALF);
+    memcpy(gv.screen_save[1], g_vram + CGA_PLANE, SCREEN_HALF);
 }
 
 void restore_screen(void)
 {
-    memcpy(g_vram, g_image + SCREEN_SAVE, SCREEN_HALF);
-    memcpy(g_vram + CGA_PLANE, g_image + SCREEN_SAVE + SCREEN_HALF,
-           SCREEN_HALF);
+    memcpy(g_vram, gv.screen_save[0], SCREEN_HALF);
+    memcpy(g_vram + CGA_PLANE, gv.screen_save[1], SCREEN_HALF);
 }
 
 /* ------------------------------------------------------------------------
@@ -1199,7 +1196,7 @@ int32_t play_loop(void)
         g_vram[di & (CGA_SIZE - 1)] = 0xaa;
         g_vram[(di + 1) & (CGA_SIZE - 1)] = 0xaa;
     }
-    draw_text(0x1407, 0xc, 0x377e);
+    draw_text(img_off(gv.level_text), 0xc, 0x377e);
     di = 0x377e + 0x1e0;
     for (int32_t i = 0; i < 12; i++, di += 2) {
         g_vram[di & (CGA_SIZE - 1)] = 0xaa;
@@ -1453,7 +1450,6 @@ frames:
  * is written as one here rather than pretended away, because the routines it
  * unwinds through really are abandoned mid-call.
  * ===================================================================== */
-#define PLAYER_NAME   0x13d5
 #define LEVEL_TABLE   0x000c            /* within the 0xc46 block */
 #define LEVEL_BYTES     0xb0
 #define LEVEL_COUNT     0x32
@@ -1496,7 +1492,7 @@ void play_session(void)
         goto retry;
     }
 
-    memcpy(g_image + PLAYER_NAME, gv.players[0].name, sizeof gv.players[0].name);
+    memcpy(gv.player_name, gv.players[0].name, sizeof gv.players[0].name);
     memset(gv.score_text, '0', sizeof gv.score_text);
     gv.extra_at = 0x3032;               /* the first one at "20" */
     gv.cur_player = 0;
@@ -2745,7 +2741,7 @@ void panel_draw(void)
 {
     uint32_t di = PANEL_NAME;
     for (int32_t i = 0; i < 0x0c; i++, di += 2)
-        panel_char(g_image[PLAYER_NAME + i], di);
+        panel_char(gv.player_name[i], di);
 
     di = PANEL_SCORE;
     for (int32_t i = 0; i < 6; i++, di += 2)
@@ -4622,7 +4618,7 @@ void level_between(void)
 
 int32_t name_field(uint32_t di, uint8_t *abort)
 {
-    uint32_t si = img_off(gv.players[gv.name_index - '1'].name);
+    uint32_t si = img_off(gv.players[gv.player_digit - '1'].name);
     uint32_t len = 0;
     *abort = 0;
 
@@ -4699,7 +4695,7 @@ int32_t name_field(uint32_t di, uint8_t *abort)
      * leave it blank - which is what a five-letter name got, since its
      * shift is three. The space then goes at rec+0, not rec-1: after the
      * eleven steps `si` is rec-1 and the store is `[si+1]`. */
-    uint32_t base = img_off(gv.players[gv.name_index - '1'].name) + 0x0a;
+    uint32_t base = img_off(gv.players[gv.player_digit - '1'].name) + 0x0a;
     for (uint32_t n = shift; n > 0; n--) {
         uint32_t si2 = base;
         for (int32_t k = 0x0b; k > 0; k--, si2--)
@@ -4727,7 +4723,6 @@ int32_t name_field(uint32_t di, uint8_t *abort)
  * fixed patterns at 0x280 below the box's top, light down the left and dark
  * along the bottom. The next box starts a scan line and 0x50 past those.
  * ===================================================================== */
-#define NAME_PROMPT 0x13e1              /* "NOM DU JOUEUR", 0x18 characters */
 #define NAME_WIDTH  0x18                /* characters, and words of bar */
 
 static uint32_t name_bar(uint32_t di, uint32_t word)
@@ -4763,7 +4758,7 @@ uint8_t screen_player_names(void)
         uint32_t top = di;                      /* pushed at 1ac2:10f2 */
         uint32_t label = name_bar(top, 0xaaaa); /* pushed at 1ac2:110e */
 
-        draw_text(NAME_PROMPT, NAME_WIDTH, label);
+        draw_text(img_off(gv.name_prompt), NAME_WIDTH, label);
         name_bar((label + 0x1e0) & 0xffff, 0xaaaa);
 
         uint8_t abort = 0;
@@ -4773,15 +4768,15 @@ uint8_t screen_player_names(void)
             uint32_t d = top;
             for (int32_t r = 0; r < 0x0e; r++)
                 d = name_bar(d, 0);
-            gv.name_index = '1';
+            gv.player_digit = '1';
             return 0;
         }
         if (abort == 0xff) {
-            gv.name_index = '1';
+            gv.player_digit = '1';
             return 0xff;
         }
         if (++gv.player_count == 9) {
-            gv.name_index = '1';
+            gv.player_digit = '1';
             return 0;
         }
 
@@ -4791,7 +4786,7 @@ uint8_t screen_player_names(void)
         d = panel_row(d, 0xf5, 0x55, 0,    0);
         d = panel_row(d, 0xd5, 0x15, 0,    0);
         d = panel_row(d, 0x15, 0x55, 0x54, 1);
-        gv.name_index++;
+        gv.player_digit++;
         di = (d + 0x50) & 0xffff;
     }
 }
@@ -5283,14 +5278,14 @@ void play_prepare(void)
 
 /* The demo plays itself: [0x2d45] points at 0x1785, a third input routine that
  * reads a recorded script instead of a keyboard or a mouse, and cs:[0x1784] is
- * set to 0xff to say it is running. One player, with the name at 0x13f9. */
+ * set to 0xff to say it is running. One player, under demo_name. */
 
 
 void demo_start(void)
 {
     gv.input_active = (uint16_t)(INPUT_DEMO);
     g_image[CS_BASE + 0x1784] = 0xff;
-    memcpy(gv.players[0].name, g_image + 0x13f9, sizeof gv.players[0].name);
+    memcpy(gv.players[0].name, gv.demo_name, sizeof gv.players[0].name);
     player_record_init(&gv.players[0]);
     /* 1ac2:1576 clears **+0xd3**, one past the entity count at +0xd2 that
      * play_prepare clears at 1ac2:0d20 and 1ac2:0dce. So the demo's record
@@ -7181,7 +7176,7 @@ int32_t next_player(const char *dir)
     } while (q->lives == 0);
 
     /* Restore them. */
-    memcpy(g_image + PLAYER_NAME, q->name, sizeof q->name);
+    memcpy(gv.player_name, q->name, sizeof q->name);
     gv.lives = q->lives;
     gv.level_src = q->level_src;
     gv.level_number = q->level_number;

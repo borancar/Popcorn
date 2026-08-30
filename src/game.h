@@ -399,11 +399,32 @@ typedef struct __attribute__((packed)) {
     uint8_t  level_number;              /* 0x13cc */
     uint8_t  score_text[6];             /* 0x13cd the score, six ASCII digits - the game keeps no binary copy */
     uint16_t extra_at;                  /* 0x13d3 the next extra life, as the two ASCII digits the score has to reach - and stored **byte-swapped** against the score, which is why the comparison at 1ac2:2435 swaps before it compares. Reached as SCORE_TEXT + 6 and so looked like two more score digits; it is not */
-    uint8_t  _pad_02[20];
-    uint8_t  name_index;                /* 0x13e9 how far the player has typed their name */
-    uint8_t  _pad_03[38];
-    uint16_t level_num_text;            /* 0x1410 the level number as two ASCII digits, tens in the low byte */
-    uint8_t  _pad_04[1];
+    uint8_t  player_name[12];           /* 0x13d5 the player whose turn it is, copied out of players[] so the panel can draw it without knowing which one it is */
+    /* 0x13e1 " JOUEUR 1: ------------ ", the name-entry prompt, drawn whole.
+     * The digit in it is not decoration: it is the player number, and
+     * screen_player_names indexes players[] with it. One byte doing both
+     * jobs, so the union says so rather than two names for 0x13e9 saying
+     * nothing. */
+    union {
+        uint8_t name_prompt[24];
+        struct __attribute__((packed)) {
+            uint8_t _np0[8];
+            uint8_t player_digit;       /* 0x13e9 '1' to '9' - players[player_digit - '1'] */
+            uint8_t _np1[15];
+        };
+    };
+    uint8_t  demo_name[12];             /* 0x13f9 "  COMPUTER  ", the name the demo plays under */
+    uint16_t menu_sp;                   /* 0x1405 the stack pointer the menu was entered with. `mov sp,[0x1405] / jmp 0x1d1` is how the original leaves a game; the port longjmps instead, so nothing here reads this - it is what the address is */
+    /* 0x1407 " TABLEAU 00 ", drawn whole by the level intro, with its two
+     * digits written in place. The same arrangement as the prompt above. */
+    union {
+        uint8_t level_text[12];
+        struct __attribute__((packed)) {
+            uint8_t _lt0[9];
+            uint16_t level_num_text;    /* 0x1410 tens in the low byte */
+            uint8_t _lt1;
+        };
+    };
     uint16_t particle_count;            /* 0x1413 the menu's fountain */
     uint8_t  _pad_05[7];
     char     hsc_file[12];              /* 0x141c "popcorn.hsc", the name the table is saved under */
@@ -554,6 +575,14 @@ typedef struct __attribute__((packed)) {
     uint8_t  life_sprite[5][4];         /* 0x48e7 the spare-life marker in the panel */
     uint8_t  ball_start_sprite[8];      /* 0x48fb the four words a ball's `sprite` starts as, copied into balls[0] when a level begins */
     uint8_t  paddle_sprites[4][4][0x4d];/* 0x4903 the paddle images: four sets, and within each the four pixel phases. Only phase 0 of each is in the file - build_shifted_sprites makes the other three at startup, which is why they are consecutive and why `sprite + (x & 3) * 0x4d` indexes them */
+    /* 46K of the image that has not been mapped yet. It is not empty: the
+     * 8x12 font at 0x9020, the sprite banks the capsules and bricks draw
+     * from, the paddle-morph frames at 0xa346, the banner's character cells
+     * at 0xa3c0, the ending's picture at 0xa6d0 and the capsule kinds at
+     * 0xac60 are all in here, named where they are used and nowhere else.
+     * That is the next seam. */
+    uint8_t  _pad_22[46205];
+    uint8_t  screen_save[2][8000];      /* 0x10250 the whole screen, and the two halves land **adjacent** here rather than 0x2000 apart: 8000 is what each half of the aperture holds, and the 192 bytes of padding at the end of each are neither saved nor restored. So this is 16,000 bytes and not a copy of the aperture */
 } game_vars;
 
 /* The same bytes as g_image, which stays the buffer everything else - memcpy,
@@ -579,7 +608,12 @@ ENSURE_IMG_AT(level_src, 0x13ca);
 ENSURE_IMG_AT(level_number, 0x13cc);
 ENSURE_IMG_AT(score_text, 0x13cd);
 ENSURE_IMG_AT(extra_at, 0x13d3);
-ENSURE_IMG_AT(name_index, 0x13e9);
+ENSURE_IMG_AT(player_name, 0x13d5);
+ENSURE_IMG_AT(name_prompt, 0x13e1);
+ENSURE_IMG_AT(player_digit, 0x13e9);
+ENSURE_IMG_AT(demo_name, 0x13f9);
+ENSURE_IMG_AT(menu_sp, 0x1405);
+ENSURE_IMG_AT(level_text, 0x1407);
 ENSURE_IMG_AT(level_num_text, 0x1410);
 ENSURE_IMG_AT(particle_count, 0x1413);
 ENSURE_IMG_AT(hsc_file, 0x141c);
@@ -676,6 +710,7 @@ ENSURE_IMG_AT(frame_corner_left, 0x48d2);
 ENSURE_IMG_AT(life_sprite, 0x48e7);
 ENSURE_IMG_AT(ball_start_sprite, 0x48fb);
 ENSURE_IMG_AT(paddle_sprites, 0x4903);
+ENSURE_IMG_AT(screen_save, 0x10250);
 /* @generated-asserts end */
 
 /* The two facts the chain rests on, checked rather than described: the head
