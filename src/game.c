@@ -629,9 +629,11 @@ void intro_curtain(void)
  * backwards, so the source pointer runs continuously up through the image
  * while the destination steps one scan line at a time.
  */
-static void logo_pass(uint32_t src, uint32_t di0, int32_t rows, int32_t erase, int32_t back)
+static void logo_pass(const uint8_t *src, uint32_t di0, int32_t rows,
+                      int32_t erase, int32_t back)
 {
-    uint32_t si = src, di = di0;
+    const uint8_t *si = src;
+    uint32_t di = di0;
     for (int32_t n = rows; n > 0; n--) {
         uint32_t bx = di;
         for (int32_t i = 0; i < 12; i++) {          /* 12 words */
@@ -640,8 +642,8 @@ static void logo_pass(uint32_t src, uint32_t di0, int32_t rows, int32_t erase, i
              * it set. Writing at si-1 and si-2 for the backward case instead
              * shifts the whole picture by two bytes, which drew the
              * background and none of the lettering. */
-            g_vram[di & (CGA_SIZE - 1)] = g_image[si];
-            g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[si + 1];
+            g_vram[di & (CGA_SIZE - 1)] = si[0];
+            g_vram[(di + 1) & (CGA_SIZE - 1)] = si[1];
             si = back ? si - 2 : si + 2;
             di = back ? di - 2 : di + 2;
         }
@@ -674,10 +676,10 @@ void intro_logo(void)
     /* Two passes down with the direction flag set, then two up with it clear.
      * Each pair draws the slice then rubs the bar out again, so what is left
      * on screen is the picture and not the bar. */
-    logo_pass(SEG_C46 + 0x7c6e, 0x3f3f, 0x5b, 0, 1);
-    logo_pass(SEG_C46 + 0x7c6e, 0x3f3f, 0x5a, 1, 1);
-    logo_pass(SEG_C46 + 0x6b60, 0x3119, 0x5b, 0, 0);
-    logo_pass(SEG_C46 + 0x6b60, 0x1119, 0x5c, 1, 0);
+    logo_pass(img_ptr(SEG_C46 + 0x7c6e), 0x3f3f, 0x5b, 0, 1);
+    logo_pass(img_ptr(SEG_C46 + 0x7c6e), 0x3f3f, 0x5a, 1, 1);
+    logo_pass(img_ptr(SEG_C46 + 0x6b60), 0x3119, 0x5b, 0, 0);
+    logo_pass(img_ptr(SEG_C46 + 0x6b60), 0x1119, 0x5c, 1, 0);
 }
 
 /* 1ac2:55e5  intro_reveal
