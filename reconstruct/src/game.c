@@ -335,14 +335,17 @@ void draw_char(uint8_t c, uint32_t di)
  * else is in the image. `ticks` is passed in rather than read here so that a
  * replay can be made deterministic by feeding it a fixed sequence.
  */
-#define RNG_STIR   0x3164               /* ten words folded in */
 
 uint32_t game_random(uint32_t ticks, uint32_t limit)
 {
     io_log_random(limit);               /* for sidebyside.py, no-op otherwise */
     uint32_t ax = ticks & 0xffff;
+    /* Ten words out of the **entity pool**, from entity 2's variant on:
+     * 0x3164 is entities[2] plus two, so what gets folded in is whatever the
+     * entities happen to be holding this frame. */
+    const uint8_t *stir = (const uint8_t *)&gv.entities[2].p;
     for (int32_t i = 0; i < 10; i++)
-        ax = (ax + img_w(RNG_STIR + i * 2)) & 0xffff;
+        ax = (ax + stir[i * 2] + (stir[i * 2 + 1] << 8)) & 0xffff;
     ax = (ax + gv.rng_state) & 0xffff;
     gv.rng_state = (uint16_t)((gv.rng_state + 0x5ec5) & 0xffff);
 
@@ -629,11 +632,11 @@ void intro_curtain(void)
  * backwards, so the source pointer runs continuously up through the image
  * while the destination steps one scan line at a time.
  */
-static void logo_pass(const uint8_t *src, uint32_t di0, int32_t rows,
+static void logo_pass(const uint8_t *src, uint32_t dest, int32_t rows,
                       int32_t erase, int32_t back)
 {
     const uint8_t *si = src;
-    uint32_t di = di0;
+    uint32_t di = dest;
     for (int32_t n = rows; n > 0; n--) {
         uint32_t bx = di;
         for (int32_t i = 0; i < 12; i++) {          /* 12 words */
@@ -5072,13 +5075,14 @@ void menu_banner_tick(void)
 uint32_t particle_random(uint32_t ax, uint32_t ticks, uint32_t limit)
 {
     uint32_t n = gv.particle_count;
+    const uint8_t *p = gv.particles[0];
     for (uint32_t i = 0; i < n; i++)
-        ax = (ax + img_w(PARTICLES + i * 2)) & 0xffff;
+        ax = (ax + p[i * 2] + (p[i * 2 + 1] << 8)) & 0xffff;
     ax = (ax + ticks) & 0xffff;
-    ax = (ax + img_w(0x1acd)) & 0xffff;
+    ax = (ax + gv.particle_seed) & 0xffff;
     if (!limit)
         return 0;
-    img_setw(0x1acd, (img_w(0x1acd) + ax / limit) & 0xffff);
+    gv.particle_seed = (uint16_t)(gv.particle_seed + ax / limit);
     return ax % limit;
 }
 
@@ -5134,7 +5138,7 @@ uint32_t particle_init(uint32_t si, uint32_t ax_in)
  */
 void menu_particles_tick(void)
 {
-    uint32_t si = PARTICLES;
+    uint32_t si = img_off(gv.particles);
     uint32_t n = gv.particle_count;
     for (uint32_t k = 0; k < n; k++, si += 0x10) {
         /* Rub out where it was. */
@@ -5172,7 +5176,7 @@ void menu_particles_init(uint32_t ax_in)
     uint32_t n = gv.particle_count;
     uint32_t ax = ax_in;
     for (uint32_t i = 0; i < n; i++)
-        ax = particle_init(PARTICLES + i * 0x10, ax);
+        ax = particle_init(img_off(gv.particles[i]), ax);
 }
 
 /* INT 10h AH=0Ch in mode 05h: one pixel, two bits, in the byte that holds it.
@@ -6044,7 +6048,7 @@ void screen_game_over(void)
  * A 2x2 arrangement of words at (cx, dx), and the address is built out of the
  * two coordinates' low bits rather than by the usual formula: bit 0 of the row
  * picks the half of the interlace, bits 0 and 1 of the column pick one of four
- * pre-shifted sprites in the table at 0x1acf.
+ * pre-shifted sprites in particle_sprites.
  */
 void ending_plot(uint32_t x, uint32_t y)
 {
@@ -6052,7 +6056,7 @@ void ending_plot(uint32_t x, uint32_t y)
     uint32_t row = y >> 1;
     di += row * 0x50;
     uint32_t phase = ((x & 1) ? 1 : 0) + ((x & 2) ? 2 : 0);
-    uint32_t si = 0x1acf + phase * 8;
+    uint32_t si = img_off(gv.particle_sprites[phase]);
     di += x >> 2;
 
     uint32_t d = di;
@@ -6074,7 +6078,7 @@ void ending_particles_init(uint32_t ax)
 {
     uint32_t n = gv.particle_count;
     for (uint32_t i = 0; i < n; i++)
-        ax = ending_particle_init(PARTICLES + i * 0x10, ax);
+        ax = ending_particle_init(img_off(gv.particles[i]), ax);
     /* 1ac2:5a43 has no `ret` of its own: it **falls through** into
      * ending_particles_tick at 1ac2:5a56, so the first pass over the
      * particles is part of setting them up. Treating the two as separate
@@ -6086,7 +6090,7 @@ void ending_particles_init(uint32_t ax)
  * place of the BIOS pixel call and ending_particle_init to re-launch */
 void ending_particles_tick(void)
 {
-    uint32_t si = PARTICLES;
+    uint32_t si = img_off(gv.particles);
     uint32_t n = gv.particle_count;
     for (uint32_t k = 0; k < n; k++, si += 0x10) {
         uint32_t x = (img_w(si) + img_w(si + 4) - img_w(si + 6)) & 0xffff;
