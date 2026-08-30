@@ -2553,8 +2553,10 @@ void field_backdrop(uint32_t y)
  */
 void walker_draw(uint32_t x)
 {
-    uint32_t src = img_w(gv.walker_anim);
-    memcpy(gv.walker_work, g_image + src, sizeof gv.walker_work);
+    /* walker_anim is a cursor into a list of frame addresses, ended by
+     * 0xffff; the word it names is the frame. */
+    const uint8_t *frame = img_ptr(img_w(gv.walker_anim));
+    memcpy(gv.walker_work, frame, sizeof gv.walker_work);
 
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < 7; r++) {
