@@ -400,11 +400,18 @@ typedef struct __attribute__((packed)) {
     uint8_t  key_scan_l;                /* 0x2d4f the configured scan codes. Defaults 0x24, 0x25, 0x39 - **J**, **K** and space, read from the image rather than assumed */
     uint8_t  key_scan_r;                /* 0x2d50 */
     uint8_t  key_scan_a;                /* 0x2d51 */
-    uint8_t  _pad_09[258];
+    /* 0x2d52 to 0x2e53 tiles exactly, and the asserts below are what says so.
+     * The first two belong to screen_define_keys, which the port does not
+     * have; they are named because they are what is there. */
+    uint8_t  key_reserved[10];          /* 0x2d52 the scan codes that cannot be bound: F1 to F6, F9, F10 and Esc, ended by a zero */
+    char     key_prompts[48];           /* 0x2d5c three NUL-terminated strings, "Direction Gauche", "Direction Droite" and "Touche Action", written one at a time by 1ac2:1642 */
+    uint8_t  paddle_pix[2][80];         /* 0x2d8c the paddle's pixels: [0] as it is drawn now, [1] as it was drawn last frame so that one can be erased. PADDLE_IMAGE is 0x4d of each 80 */
+    uint16_t slope_top[11];             /* 0x2e2c the slope a ball leaves with, by how far in from either end it struck the top - shallow at the ends, steep towards the middle. Each entry is (dy, dx), the ball's own pair */
+    uint16_t slope_side[9];             /* 0x2e42 the same for a hit on the side, by depth. **Nine**, not ten: depth is y - 0xb6 and y stops at 0xbe, and the nine pairs run out exactly where paddle_x begins */
     uint8_t  paddle_x;                  /* 0x2e54 left edge, pixels */
     uint8_t  paddle_prev_x;             /* 0x2e55 where it was last frame, so the old one can be erased */
     uint8_t  hold_offset;               /* 0x2e56 a caught ball's x relative to the paddle */
-    uint8_t  _pad_10[28];
+    uint16_t paddle_rows[2][7];         /* 0x2e57 where each of the paddle's seven rows lands in video memory, now and last frame, to match paddle_pix */
     uint8_t  ball_alive;                /* 0x2e73 clear when the last ball is lost */
     uint8_t  hit_count;                 /* 0x2e74 */
     uint8_t  caught;                    /* 0x2e75 the C capsule: the ball sticks to the paddle */
@@ -543,6 +550,12 @@ ENSURE_IMG_AT(key_left, 0x2d4e);
 ENSURE_IMG_AT(key_scan_l, 0x2d4f);
 ENSURE_IMG_AT(key_scan_r, 0x2d50);
 ENSURE_IMG_AT(key_scan_a, 0x2d51);
+ENSURE_IMG_AT(key_reserved, 0x2d52);
+ENSURE_IMG_AT(key_prompts, 0x2d5c);
+ENSURE_IMG_AT(paddle_pix, 0x2d8c);
+ENSURE_IMG_AT(slope_top, 0x2e2c);
+ENSURE_IMG_AT(slope_side, 0x2e42);
+ENSURE_IMG_AT(paddle_rows, 0x2e57);
 ENSURE_IMG_AT(paddle_x, 0x2e54);
 ENSURE_IMG_AT(paddle_prev_x, 0x2e55);
 ENSURE_IMG_AT(hold_offset, 0x2e56);
