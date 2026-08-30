@@ -5424,16 +5424,16 @@ void input_and_draw_paddle(void)
  */
 void cheat_match(uint8_t c)
 {
-    uint32_t bx = gv.cheat_at;
-    if (c != g_image[bx]) {
-        gv.cheat_at = (uint16_t)img_off(gv.cheat_text);       /* wrong: back to the beginning */
+    const char *at = (const char *)img_ptr(gv.cheat_at);
+    if ((char)c != *at) {
+        gv.cheat_at = img_off(gv.cheat_text);   /* wrong: start over */
         return;
     }
-    if (g_image[bx] == 0x0d) {
+    if (*at == '\r') {
         gv.cheat_done = 1;            /* the whole word */
         return;
     }
-    gv.cheat_at = (uint16_t)(bx + 1);
+    gv.cheat_at++;
 }
 
 /* 1ac2:5196  palette_cycle
@@ -5659,18 +5659,18 @@ void level_tally(void)
 void screen_stash(void)
 {
     speaker_off();
-    uint32_t di = img_off(gv.scratch2.screen_stash);
+    uint8_t *keep = gv.scratch2.screen_stash;
     uint32_t si = 0x1900;
     for (int32_t half = 0; half < 2; half++) {
         for (int32_t r = 0; r < 0x14; r++) {
             for (int32_t b = 0; b < 0x32; b++)
-                g_image[di + b] = g_vram[(si + b) & (CGA_SIZE - 1)];
-            di += 0x32;
+                keep[b] = g_vram[(si + b) & (CGA_SIZE - 1)];
+            keep += 0x32;
             si += 0x32 + 0x1e;
         }
         si = 0x3900;
     }
-    di = 0x1900;
+    uint32_t di = 0x1900;
     for (int32_t r = 0; r < 0x26; r++) {
         for (int32_t b = 0; b < 0x32; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = gv.pause_overlay[r][b];
@@ -5700,14 +5700,14 @@ void screen_restore(void)
 void brick_11_after(uint32_t x, uint32_t y)
 {
     uint32_t row = (y - 6) & 0xff;
-    uint32_t si = SEG_C46 + 0x28f0 + row * 0x30 + (((x >> 2) & 0xff) - 2);
+    const uint8_t *src = &c46.hole_picture[row][((x >> 2) & 0xff) - 2];
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 8; r++) {
-        g_vram[di & (CGA_SIZE - 1)] ^= g_image[si];
-        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= g_image[si + 1];
-        g_vram[(di + 2) & (CGA_SIZE - 1)] ^= g_image[si + 2];
-        g_vram[(di + 3) & (CGA_SIZE - 1)] ^= g_image[si + 3];
-        si += 0x2c + 4;
+        g_vram[di & (CGA_SIZE - 1)] ^= src[0];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= src[1];
+        g_vram[(di + 2) & (CGA_SIZE - 1)] ^= src[2];
+        g_vram[(di + 3) & (CGA_SIZE - 1)] ^= src[3];
+        src += 0x30;
         di = cga_next_row(di);
     }
 }
@@ -5725,12 +5725,12 @@ void brick_11_after(uint32_t x, uint32_t y)
 void cell_hole_draw(uint32_t x, uint32_t y)
 {
     uint32_t row = (y - 6) & 0xff;
-    uint32_t si = SEG_C46 + 0x28f0 + row * 0x30 + (((x >> 2) & 0xff) - 2);
+    const uint8_t *src = &c46.hole_picture[row][((x >> 2) & 0xff) - 2];
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 8; r++) {
         for (int32_t b = 0; b < 4; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
-        si += 0x30;
+            g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
+        src += 0x30;
         di = cga_next_row(di);
     }
 }
@@ -5739,13 +5739,13 @@ void cell_hole_draw(uint32_t x, uint32_t y)
  * the speaker on again */
 void screen_unstash(void)
 {
-    uint32_t si = img_off(gv.scratch2.screen_stash);
+    const uint8_t *keep = gv.scratch2.screen_stash;
     uint32_t di = 0x1900;
     for (int32_t half = 0; half < 2; half++) {
         for (int32_t r = 0; r < 0x14; r++) {
             for (int32_t b = 0; b < 0x32; b++)
-                g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
-            si += 0x32;
+                g_vram[(di + b) & (CGA_SIZE - 1)] = keep[b];
+            keep += 0x32;
             di += 0x32 + 0x1e;
         }
         di = 0x3900;
@@ -5955,16 +5955,17 @@ void ending_column(void)
          * every one of the eight columns plays the whole list at 0xb7a2 from
          * the beginning. Hoisting it out, which is what this used to do, gave
          * each column one frame of the animation and then ran off the end. */
-        uint32_t bx = 0xb7a2;
-        while (img_w(bx) != 0xffff) {
-            uint32_t si = img_w(bx), d = di;
+        const uint16_t *frames = (const uint16_t *)img_ptr(0xb7a2);
+        while (*frames != 0xffff) {
+            const uint8_t *src = img_ptr(*frames);
+            uint32_t d = di;
             for (int32_t r = 0; r < 0x0f; r++) {
                 for (int32_t b = 0; b < 4; b++)
-                    g_vram[(d + b) & (CGA_SIZE - 1)] = g_image[si + b];
-                si += 5;                /* four copied, one skipped */
+                    g_vram[(d + b) & (CGA_SIZE - 1)] = src[b];
+                src += 5;               /* four copied, one skipped */
                 d = cga_next_row(d);
             }
-            bx += 2;
+            frames++;
             /* 1ac2:5348 - a hundred delays, watching for a key throughout. */
             for (int32_t i = 0; i < 0x64; i++) {
                 if (io_key_ready()) {
@@ -6194,12 +6195,13 @@ void screen_all_levels_done(void)
          * line that were only the band this side had already drawn. A sync
          * has to sit where the offset it is matched against sits. */
         io_frame_sync_extra(SYNC_ENDING);
-        uint32_t di = bp, si = SEG_C46 + 0x7c70;
+        uint32_t di = bp;
+        const uint8_t *band = c46.ending_band[0];
         io_wait_retrace();
         for (uint32_t r = 0; r < bh; r++) {
             for (int32_t b = 0; b < 0x1a; b++)
-                g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
-            si += 0x1a;
+                g_vram[(di + b) & (CGA_SIZE - 1)] = band[b];
+            band += 0x1a;
             di = cga_next_row(di);      /* the `sub` undoes `rep movsb` */
         }
         bp = cga_prev_row(bp);
@@ -6222,11 +6224,11 @@ void screen_all_levels_done(void)
      *
      * The script is at 0xc46:0x2825 - this whole screen runs with DS there,
      * which is what 0x2823, 0x289d and 0x28d9 are reached through as well. */
-    uint32_t walk = SEG_C46 + 0x2825;
+    const uint8_t *walk = c46.walk_script;
     for (uint32_t bh = 0; bh != 0x18; bh++) {
         io_frame_sync_extra(SYNC_ENDING);       /* 1ac2:59c0, the pass */
         for (uint32_t bl = 5; bl > 0; bl--) {
-            if (!g_image[walk++])               /* 1ac2:59c2, lodsb */
+            if (!*walk++)                       /* 1ac2:59c2, lodsb */
                 continue;
             uint32_t blobs = ending_blobs();    /* 1ac2:59c9 */
             ending_walk(bl, bh, blobs);         /* 1ac2:59ce */
