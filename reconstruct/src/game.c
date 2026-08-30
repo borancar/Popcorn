@@ -2984,9 +2984,9 @@ void xor_sprite_20x16(uint32_t x, uint32_t y, const uint8_t *src)
  * loop here is the same operation.
  */
 
-void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src)
+void sprite_shift_draw(uint32_t x, uint32_t y, const uint8_t *src)
 {
-    memcpy(gv.sprite_work, g_image + src, sizeof gv.sprite_work);
+    memcpy(gv.sprite_work, src, sizeof gv.sprite_work);
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < 0x10; r++) {
             uint8_t *row = gv.sprite_work[r];
@@ -3004,7 +3004,8 @@ void sprite_shift_draw(uint32_t x, uint32_t y, uint32_t src)
 /* Step a two-frame XOR animation: erase the frame before this one, draw this
  * one, advance. Shared by the handlers below, which differ only in which
  * drawing routine they use and what they do when the list ends. */
-static int32_t entity_anim(ent_anim_t *a, void (*draw)(uint32_t, uint32_t, uint32_t))
+static int32_t entity_anim(ent_anim_t *a,
+                           void (*draw)(uint32_t, uint32_t, const uint8_t *))
 {
     if (--a->sprite.timer != 0)
         return 0;                       /* not time for the next frame yet */
@@ -3015,11 +3016,11 @@ static int32_t entity_anim(ent_anim_t *a, void (*draw)(uint32_t, uint32_t, uint3
      * first word of the frame's pixels as if it were an address. */
     uint32_t cur = a->sprite.frame;
     uint32_t x = a->sprite.x, y = a->sprite.y;
-    draw(x, y, img_w(cur - 2));         /* the previous frame, to erase */
+    draw(x, y, img_ptr(img_w(cur - 2)));  /* the previous frame, to erase */
     uint32_t next = img_w(cur);
     if (next == 0xffff)
         return -1;                      /* the animation is over */
-    draw(x, y, next);
+    draw(x, y, img_ptr(next));
     a->sprite.frame = (uint16_t)(cur + 2);
     return 1;
 }
@@ -3434,7 +3435,7 @@ void brick_10(hit_t *hit, ball_t *ball)
     a->sprite.x = (uint8_t)x;
     a->sprite.y = (uint8_t)y;
     a->sprite.timer = a->sprite.period = 0x69;
-    sprite_shift_draw(x, y, 0x6b9c);
+    sprite_shift_draw(x, y, img_ptr(0x6b9c));
 
     ball_t *b = ball;
     b->state = 4;
@@ -3497,7 +3498,7 @@ void entity_ball_hold(ent_anim_t *a)
 
     if ((a->sprite.timer & 0x0f) == 1 && ny == 0xb8) {
         /* It has arrived at the bottom. */
-        sprite_shift_draw(x, y, img_w(a->sprite.frame));
+        sprite_shift_draw(x, y, img_ptr(img_w(a->sprite.frame)));
         if (gv.net_on == 1) {
             gv.entity_remove = 1;
             ball_place(ball_at(a->arg.ball), (x + 8) & 0xff, (y + 0x0b) & 0xff);
@@ -3614,7 +3615,7 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
          * sprite on screen, which is what it did before this was read
          * properly. */
         sprite_shift_draw(s->x, s->y,
-                          img_w(s->frame));
+                          img_ptr(img_w(s->frame)));
         s->x = (uint8_t)nx;
         s->y = (uint8_t)ny;
         uint32_t x = nx, y = ny;
@@ -3624,7 +3625,7 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
             if (img_w(s->frame) == 0xffff)
                 s->frame = (uint16_t)img_w(s->frame + 2);
         }
-        sprite_shift_draw(x, y, img_w(s->frame));       /* draw */
+        sprite_shift_draw(x, y, img_ptr(img_w(s->frame)));  /* draw */
     }
 
     /* The laser shot, if one is in flight. */
@@ -3638,7 +3639,7 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
                        ((sx + 0x13) & 0xff) <= ((bxx + 0x0f) & 0xff));
             if (hit) {
                 gv.hit_kind = 3;
-                sprite_shift_draw(s->x, s->y, img_w(s->frame));
+                sprite_shift_draw(s->x, s->y, img_ptr(img_w(s->frame)));
                 shot_xor(gv.laser_x, (gv.laser_y + 2) & 0xff);
                 gv.laser_y = 0xb3;
                 return;
@@ -3653,7 +3654,7 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
         if (((bxx + 0x0f) & 0xff) >= px &&
             bxx <= ((px + gv.paddle_width) & 0xff)) {
             gv.hit_kind = 1;
-            sprite_shift_draw(bxx, y, img_w(s->frame));
+            sprite_shift_draw(bxx, y, img_ptr(img_w(s->frame)));
             return;
         }
     }
@@ -3728,7 +3729,7 @@ void entity_bonus(ent_anim_t *b)
 sprite:
     if (draw)
         sprite_shift_draw(b->sprite.x, b->sprite.y,
-                          img_w(b->sprite.frame));
+                          img_ptr(img_w(b->sprite.frame)));
 
 settle:
     if (gv.hit_kind == 0) {       /* 1ac2:3aaa - it reached the bottom */
@@ -3750,7 +3751,7 @@ settle:
     b->sprite.timer = b->sprite.period = 0x0f;
     gv.bonus_live--;
     sprite_shift_draw(b->sprite.x, b->sprite.y,
-                      img_w(b->sprite.frame - 2));   /* now a sparkle */
+                      img_ptr(img_w(b->sprite.frame - 2)));  /* a sparkle */
     brick_score(0, 0, 0x0703);
 }
 
