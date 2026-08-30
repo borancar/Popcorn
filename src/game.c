@@ -2234,11 +2234,15 @@ static uint32_t brick_entity(uint32_t slot, uint32_t handler,
                              uint32_t frames, uint32_t rate)
 {
     uint32_t si = entity_alloc();
-    img_setw(si + 0, handler);
-    img_setw(si + 4, img_w(slot + 2));
-    img_setw(si + 6, frames);
-    g_image[si + 8] = (uint8_t)rate;
-    g_image[si + 9] = (uint8_t)rate;
+    entity_t *e = entity_at(si);
+    e->handler = (uint16_t)handler;
+    /* The original stores x and y with one word write from the hit slot; two
+     * byte writes are the same thing and say which is which. */
+    e->p.anim.x = g_image[slot + 2];
+    e->p.anim.y = g_image[slot + 3];
+    e->p.anim.frame = (uint16_t)frames;
+    e->p.anim.timer = (uint8_t)rate;
+    e->p.anim.period = (uint8_t)rate;
     return si;
 }
 
@@ -2291,13 +2295,17 @@ static void brick_1_or_2(uint32_t slot, ball_t *ball, int32_t is_two)
     xor_sprite_16x7(x, y, is_two ? 0x63a6 : img_w(CELL_TABLE + 2));
 
     uint32_t si = entity_alloc();
-    img_setw(si + 0, is_two ? 0x3273 : 0x3561);
+    entity_t *e = entity_at(si);
+    e->handler = is_two ? 0x3273 : 0x3561;
+    /* The original writes x and y with one word and `inc bh` to put it a row
+     * lower; the fall arm has them as the two bytes they are. */
     uint32_t centre = img_w(slot + 2);
-    img_setw(si + 2, centre + 0x100);   /* `inc bh`: one row further down */
-    g_image[si + 4] = (uint8_t)bonus_kind();
-    g_image[si + 5] = 0;
-    g_image[si + 6] = 0;
-    g_image[si + 7] = 1;
+    e->p.fall.x = (uint8_t)centre;
+    e->p.fall.y = (uint8_t)((centre >> 8) + 1);
+    e->p.fall.kind = (uint8_t)bonus_kind();
+    e->p.fall.tick = 0;
+    e->p.fall.frame = 0;
+    e->p.fall.cycle = 1;
     /* The sprite goes at the brick's centre, one scan line down - `inc bh`
      * before the store at [si+2], and BL untouched. Passing [si+4], the kind
      * that was just picked, as the x instead put it wherever the random
@@ -2925,7 +2933,7 @@ void entity_unlink(uint32_t node)
 /* 1ac2:3668  cell_set_three - the cell an entity is sitting on becomes a 3 */
 void cell_set_three(uint32_t node)
 {
-    g_image[img_w(node + 2)] = 3;
+    g_image[entity_at(node)->p.anim.arg] = 3;
 }
 
 /* 1ac2:36fb  cells_restore
@@ -3067,24 +3075,26 @@ void bonus_release(uint32_t bx)
 {
     gv.bonus_live++;
     uint32_t si = entity_alloc();
-    img_setw(si + 0, 0x39fa);
-    g_image[si + 2] = 0;
-    g_image[si + 3] = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
+    entity_t *cap = entity_at(si);
+    cap->handler = 0x39fa;
+    cap->p.bonus.mode = 0;
+    cap->p.bonus.steps = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
 
     uint32_t k = game_random(io_ticks(), 8);
     uint32_t di = BONUS_KINDS + k * 4;
-    img_setw(si + 6, img_w(di));
-    img_setw(si + 8, img_w(di + 2));
+    cap->p.bonus.frame = (uint16_t)img_w(di);
+    cap->p.bonus.timer = g_image[di + 2];   /* one word in the original */
+    cap->p.bonus.period = g_image[di + 3];
 
-    uint32_t al = g_image[bx + 4];
+    uint32_t al = entity_at(bx)->p.hatch.x;
     if (al) {
         al = (al - 8) & 0xff;
-        g_image[si + 2] = 2;
+        cap->p.bonus.mode = 2;
     }
-    g_image[si + 4] = (uint8_t)al;
-    g_image[si + 5] = g_image[bx + 5];
-    xor_sprite_20x16(g_image[si + 4], g_image[si + 5],
-                     img_w(img_w(si + 6)));
+    cap->p.bonus.x = (uint8_t)al;
+    cap->p.bonus.y = entity_at(bx)->p.hatch.y;
+    xor_sprite_20x16(cap->p.bonus.x, cap->p.bonus.y,
+                     img_w(cap->p.bonus.frame));
 }
 
 /* 1ac2:390d  entity_hatch
@@ -3103,28 +3113,29 @@ void entity_hatch(uint32_t bx)
      * round to 0xffff, which is what diverged 5,872 frames into level 4. */
     if (gv.extra_on != 0)
         return;
-    if (img_w(bx + 6) != 0) {
-        img_setw(bx + 6, img_w(bx + 6) - 1);
+    entity_t *e = entity_at(bx);
+    if (e->p.hatch.wait != 0) {
+        e->p.hatch.wait--;
         return;
     }
-    img_setw(bx + 8, img_w(bx + 8) - 1);
-    if (img_w(bx + 8) % 0x23 != 0)
+    e->p.hatch.phase--;
+    if (e->p.hatch.phase % 0x23 != 0)
         return;
 
-    uint32_t si = img_w(img_w(bx + 0x0a));
-    uint32_t di = cga_at(g_image[bx + 4], (g_image[bx + 5] - 0x0a) & 0xff);
+    uint32_t si = img_w(e->p.hatch.script);
+    uint32_t di = cga_at(e->p.hatch.x, (e->p.hatch.y - 0x0a) & 0xff);
     for (int32_t r = 0; r < 0x25; r++) {
         g_vram[di & (CGA_SIZE - 1)] = g_image[si + r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] = g_image[si + r * 2 + 1];
         di = cga_next_row(di);
     }
     if (si == 0x635c) {
-        img_setw(bx + 6, 0x12c);
+        e->p.hatch.wait = 0x12c;
         bonus_release(bx);
     }
-    img_setw(bx + 0x0a, img_w(bx + 0x0a) + 2);
-    if (img_w(img_w(bx + 0x0a)) == 0xffff) {
-        g_image[img_w(bx + 2) + 3] = 0;
+    e->p.hatch.script += 2;
+    if (img_w(e->p.hatch.script) == 0xffff) {
+        g_image[e->p.hatch.cell + 3] = 0;
         gv.entity_remove = 1;
     }
 }
@@ -3215,9 +3226,10 @@ int32_t bonus_move_down(uint32_t bx, uint32_t *px, uint32_t *py)
     uint32_t y = *py, x = *px;
 
     if (y >= 0x78) {                    /* 1ac2:3d80 */
-        g_image[bx + 2] = 4;            /* follow a script from here on */
-        img_setw(bx + 0x0a, 0x8320);
-        g_image[bx + 3] = (uint8_t)x;
+        entity_t *e = entity_at(bx);
+        e->p.bonus.mode = 4;            /* follow a script from here on */
+        e->p.bonus.script = 0x8320;
+        e->p.bonus.steps = (uint8_t)x;
         (*py)++;
         return 1;
     }
@@ -3243,13 +3255,13 @@ int32_t bonus_move_down(uint32_t bx, uint32_t *px, uint32_t *py)
 
 int32_t bonus_steer(uint32_t bx, uint32_t *px, uint32_t *py)
 {
-    uint8_t *b = g_image + bx;
-    if (b[2] == 4)
+    entity_t *e = entity_at(bx);
+    if (e->p.bonus.mode == 4)
         return bonus_script(bx, px, py);
 
-    if (--b[3] != 0) {
+    if (--e->p.bonus.steps != 0) {
         int32_t moved;
-        switch (b[2]) {
+        switch (e->p.bonus.mode) {
         case 0:  moved = bonus_move_right(bx, px, py); break;
         case 1:  moved = bonus_move_down(bx, px, py);  break;
         case 2:  moved = bonus_move_left(bx, px, py);  break;
@@ -3259,12 +3271,12 @@ int32_t bonus_steer(uint32_t bx, uint32_t *px, uint32_t *py)
         if (moved)
             return 1;
     }
-    b[2] = (uint8_t)game_random(io_ticks(), 4);
-    if (b[2] == 1) {
-        b[3] = 0xff;
+    e->p.bonus.mode = (uint8_t)game_random(io_ticks(), 4);
+    if (e->p.bonus.mode == 1) {
+        e->p.bonus.steps = 0xff;
         return 1;
     }
-    b[3] = (uint8_t)game_random(io_ticks(), 0x3d);
+    e->p.bonus.steps = (uint8_t)game_random(io_ticks(), 0x3d);
     return 1;
 }
 
@@ -3591,17 +3603,18 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
 {
     gv.hit_kind = 0;
 
-    if ((--g_image[bx + 8] & 0x0f) == 0) {
-        g_image[bx + 8]--;
-        g_image[bx + 8] = (uint8_t)((g_image[bx + 8] & 0xf0) |
-                                          (g_image[bx + 9] & 0x0f));
+    entity_t *e = entity_at(bx);
+    if ((--e->p.bonus.timer & 0x0f) == 0) {
+        e->p.bonus.timer--;
+        e->p.bonus.timer = (uint8_t)((e->p.bonus.timer & 0xf0) |
+                                     (e->p.bonus.period & 0x0f));
         /* Erase where the node still says it is - the move so far has only
          * happened in registers - then commit the new position and draw
          * there. Moving the node first and erasing after leaves the old
          * sprite on screen, which is what it did before this was read
          * properly. */
-        sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
-                          img_w(img_w(bx + 6)));
+        sprite_shift_draw(e->p.bonus.x, e->p.bonus.y,
+                          img_w(e->p.bonus.frame));
         g_image[bx + 4] = (uint8_t)nx;
         g_image[bx + 5] = (uint8_t)ny;
         uint32_t x = nx, y = ny;
@@ -3684,10 +3697,13 @@ void bonus_update(uint32_t bx, uint32_t nx, uint32_t ny)
  */
 void entity_bonus(uint32_t bx)
 {
-    uint32_t x = g_image[bx + 4], y = g_image[bx + 5];
+    entity_t *e = entity_at(bx);
+    uint32_t x = e->p.bonus.x, y = e->p.bonus.y;
     int32_t draw = 1;
 
-    if (gv.extra_on != 1 && (g_image[bx + 8] & 0x0f) == 1) {
+    /* The timer byte carries two counters: the low nibble paces the movement
+     * and the high nibble the frame. */
+    if (gv.extra_on != 1 && (e->p.bonus.timer & 0x0f) == 1) {
         if (!bonus_steer(bx, &x, &y))
             goto sprite;                /* 1ac2:3a52, the draw */
     }
@@ -3713,8 +3729,8 @@ void entity_bonus(uint32_t bx)
 
 sprite:
     if (draw)
-        sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
-                          img_w(img_w(bx + 6)));
+        sprite_shift_draw(e->p.bonus.x, e->p.bonus.y,
+                          img_w(e->p.bonus.frame));
 
 settle:
     if (gv.hit_kind == 0) {       /* 1ac2:3aaa - it reached the bottom */
@@ -3728,12 +3744,13 @@ settle:
     }
 
     g_image[SOUND_REQUEST] = 6;         /* 1ac2:3a67 */
-    img_setw(bx + 0, 0x3aee);           /* it becomes a sparkle */
-    img_setw(bx + 6, 0xb7a4);
-    g_image[bx + 8] = g_image[bx + 9] = 0x0f;
+    /* Collected: the node becomes a sparkle where it stands, same arm. */
+    e->handler = 0x3aee;
+    e->p.anim.frame = 0xb7a4;
+    e->p.anim.timer = e->p.anim.period = 0x0f;
     gv.bonus_live--;
-    sprite_shift_draw(g_image[bx + 4], g_image[bx + 5],
-                      img_w(img_w(bx + 6) - 2));
+    sprite_shift_draw(e->p.anim.x, e->p.anim.y,
+                      img_w(e->p.anim.frame - 2));   /* now a sparkle */
     brick_score(0, 0, 0x0703);
 }
 
@@ -4380,30 +4397,31 @@ void entity_multiball(uint32_t bx)
 
 static void morph_finish(uint32_t bx)
 {
-    bonus_effect(g_image[bx + 0x0a]);
+    bonus_effect(entity_at(bx)->p.morph.bonus);
     gv.entity_remove = 1;
 }
 
 void entity_paddle_fx(uint32_t bx)
 {
+    entity_t *e = entity_at(bx);
     if (gv.paddle_morphing == 0) {
         /* Nothing is morphing. If the paddle is already the kind this capsule
          * gives, there is nothing to animate - just apply the effect. */
-        if (gv.paddle_kind == g_image[bx + 7]) {
+        if (gv.paddle_kind == e->p.morph.to) {
             morph_finish(bx);
             return;
         }
-        g_image[bx + 6] = gv.paddle_kind;
+        e->p.morph.from = gv.paddle_kind;
         gv.paddle_morphing = 0xff;
         gv.morph_owner = (uint16_t)(bx);
 
-        if (g_image[bx + 7] != 2) {
+        if (e->p.morph.to != 2) {
             /* Losing the laser: take any shot in flight off the screen. */
             if (gv.laser_on == 2)
                 shot_xor(gv.laser_x, (gv.laser_y + 2) & 0xff);
             gv.laser_on = 0;
         }
-        if (g_image[bx + 7] != 3) {
+        if (e->p.morph.to != 3) {
             /* Losing the catch: release anything held. */
             gv.caught = 0;
             gv.hold_timer = (uint16_t)(0x460);
@@ -4432,38 +4450,39 @@ void entity_paddle_fx(uint32_t bx)
          * moved, so it still follows the player. */
         if (gv.paddle_x == gv.paddle_prev_x)
             return;
-        if (g_image[bx + 3] == 6) {
+        if (e->p.morph.step == 6) {
             draw_paddle(img_w(PADDLE_SPRITES + gv.paddle_kind * 4));
             return;
         }
-        uint32_t si = img_w(bx + 4) + g_image[bx + 3] * 2;
+        uint32_t si = e->p.morph.sprites + e->p.morph.step * 2;
         draw_paddle_shifted(img_w(si));
         return;
     }
 
-    if (g_image[bx + 3] != 6) {
+    if (e->p.morph.step != 6) {
         morph_step(bx);
         return;
     }
 
-    /* A frame boundary with [bx+3] == 6: pick the sprite list for this stage.
-     * [bx+2] is 1 while shrinking the old paddle and 0 while growing the new. */
+    /* A frame boundary with step == 6: pick the sprite list for this stage.
+     * `pending` is 1 while shrinking the old paddle and 0 while growing the
+     * new one. */
     uint32_t si, kind;
-    if (g_image[bx + 2] != 0) {
+    if (e->p.morph.pending != 0) {
         si = PADDLE_SHRINK;
         gv.paddle_step = 0;
-        kind = g_image[bx + 6];
+        kind = e->p.morph.from;
         if (kind == 1)
             gv.paddle_step = 0xfe;    /* -2: this one shrinks */
         if (kind != 0) {
             morph_begin(bx, si, kind);
             return;
         }
-        g_image[bx + 2] = 0;
+        e->p.morph.pending = 0;
     }
     si = PADDLE_GROW;
     gv.paddle_step = 0;
-    kind = g_image[bx + 7];
+    kind = e->p.morph.to;
     if (kind == 1)
         gv.paddle_step = 2;
     if (kind != 0) {
@@ -4481,8 +4500,9 @@ void entity_paddle_fx(uint32_t bx)
  * the first frame. */
 void morph_begin(uint32_t bx, uint32_t table, uint32_t kind)
 {
-    img_setw(bx + 4, img_w(table + kind * 2));
-    g_image[bx + 3] = 6;
+    entity_t *e = entity_at(bx);
+    e->p.morph.sprites = (uint16_t)img_w(table + kind * 2);
+    e->p.morph.step = 6;
     gv.paddle_morphing = 0xff;
     morph_step(bx);
 }
@@ -4490,23 +4510,24 @@ void morph_begin(uint32_t bx, uint32_t table, uint32_t kind)
 /* 1ac2:34d7  morph_step - one frame of the shrink or grow */
 void morph_step(uint32_t bx)
 {
-    g_image[bx + 3]--;
-    uint32_t si = img_w(bx + 4) + g_image[bx + 3] * 2;
+    entity_t *e = entity_at(bx);
+    e->p.morph.step--;
+    uint32_t si = e->p.morph.sprites + e->p.morph.step * 2;
     draw_paddle_shifted(img_w(si));
 
     gv.paddle_width += gv.paddle_step;
     gv.paddle_max -= gv.paddle_step;
 
-    if (g_image[bx + 3] != 0)
+    if (e->p.morph.step != 0)
         return;
-    g_image[bx + 3] = 6;
-    if (g_image[bx + 2] == 1) {         /* done shrinking; grow next */
-        g_image[bx + 2] = 0;
+    e->p.morph.step = 6;
+    if (e->p.morph.pending == 1) {      /* done shrinking; grow next */
+        e->p.morph.pending = 0;
         gv.paddle_kind = 0;
         return;
     }
     /* Done growing: install the new paddle and apply the effect. */
-    uint32_t kind = g_image[bx + 7];
+    uint32_t kind = e->p.morph.to;
     gv.paddle_kind = (uint8_t)kind;
     gv.paddle_width = g_image[PADDLE_SPRITES + kind * 4 + 2];
     gv.paddle_morphing = 0;

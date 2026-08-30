@@ -175,6 +175,24 @@ typedef struct __attribute__((packed)) {
             uint8_t  _r[4];
         } fall;
 
+        /* entity_bonus - a capsule falling under one of several movement
+         * scripts. Shares x, y, frame, timer and period with `anim`, because
+         * it is stepped the same way, but 0x02 and 0x03 are two bytes here
+         * rather than anim's word, and it has a script cursor at 0x0a. */
+        struct {
+            uint8_t  mode;  /* 0x02 how it moves: 0 right, 1 down, 2 left,
+                             * 3 up, 4 follow the script at 0x0a */
+            uint8_t  steps; /* 0x03 how long to keep going that way, from
+                             * random(0x3c) + 9 - and **reused** as the x the
+                             * script started from once mode becomes 4 */
+            uint8_t  x, y;  /* 0x04 0x05 */
+            uint16_t frame; /* 0x06 as anim.frame */
+            uint8_t  timer; /* 0x08 two counters in one byte: the low nibble
+                             * paces the movement, the high one the frame */
+            uint8_t  period;/* 0x09 */
+            uint16_t script;/* 0x0a cursor into the movement script */
+        } bonus;
+
         /* the hatch a capsule comes out of */
         struct {
             uint16_t cell;  /* 0x02 the cell it opens in */
@@ -218,6 +236,7 @@ typedef struct __attribute__((packed)) {
 ENSURE_ENTITY_ARM(anim, 10);   ENSURE_ENTITY_ARM(fall, 10);
 ENSURE_ENTITY_ARM(hatch, 10);  ENSURE_ENTITY_ARM(cells, 10);
 ENSURE_ENTITY_ARM(brick, 10);  ENSURE_ENTITY_ARM(morph, 10);
+ENSURE_ENTITY_ARM(bonus, 10);
 
 ENSURE_SIZE(entity_t, 0x0e);
 #define ENSURE_ENTITY_AT(field, off) \
