@@ -3466,7 +3466,7 @@ void entity_call(entity_t *e)
     case 0x36F6: entity_cells_timer(&e->p.cells); break;
     case 0x37E0: entity_ball_hold(&e->p.anim); break;
     case 0x390D: entity_hatch(&e->p.hatch); break;
-    case 0x39FA: entity_bonus(e); break;
+    case 0x39FA: entity_bonus(&e->p.anim); break;
     case 0x3ABF: entity_anim_brick(&e->p.brick); break;
     case 0x3AEE: entity_sparkle(&e->p.anim); break;
     case 0x3717: entity_multiball(); break;
@@ -3694,18 +3694,18 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
  * That last one is why the sound request diverged. cs:[0xf4] = 6 is raised
  * here, and a port that returned early after the bounce never raised it.
  */
-void entity_bonus(entity_t *e)
+void entity_bonus(ent_anim_t *b)
 {
-    uint32_t x = e->p.anim.sprite.x, y = e->p.anim.sprite.y;
+    uint32_t x = b->sprite.x, y = b->sprite.y;
     int32_t draw = 1;
 
     /* The timer byte carries two counters: the low nibble paces the movement
      * and the high nibble the frame. */
-    if (gv.extra_on != 1 && (e->p.anim.sprite.timer & 0x0f) == 1) {
-        if (!bonus_steer(&e->p.anim, &x, &y))
+    if (gv.extra_on != 1 && (b->sprite.timer & 0x0f) == 1) {
+        if (!bonus_steer(b, &x, &y))
             goto sprite;                /* 1ac2:3a52, the draw */
     }
-    bonus_update(&e->p.anim.sprite, x, y);             /* 1ac2:3df1 */
+    bonus_update(&b->sprite, x, y);             /* 1ac2:3df1 */
 
     if (gv.hit_kind == 0)
         return;                         /* 1ac2:3a24 */
@@ -3727,8 +3727,8 @@ void entity_bonus(entity_t *e)
 
 sprite:
     if (draw)
-        sprite_shift_draw(e->p.anim.sprite.x, e->p.anim.sprite.y,
-                          img_w(e->p.anim.sprite.frame));
+        sprite_shift_draw(b->sprite.x, b->sprite.y,
+                          img_w(b->sprite.frame));
 
 settle:
     if (gv.hit_kind == 0) {       /* 1ac2:3aaa - it reached the bottom */
@@ -3742,13 +3742,15 @@ settle:
     }
 
     g_image[SOUND_REQUEST] = 6;         /* 1ac2:3a67 */
-    /* Collected: the node becomes a sparkle where it stands, same arm. */
-    e->handler = 0x3aee;
-    e->p.anim.sprite.frame = 0xb7a4;
-    e->p.anim.sprite.timer = e->p.anim.sprite.period = 0x0f;
+    /* Collected: the node becomes a sparkle where it stands. The arm is the
+     * sparkle's too, unchanged - only `handler` is the node's, so this is the
+     * one line here that has to look outside the capsule. */
+    entity_of(b)->handler = 0x3aee;
+    b->sprite.frame = 0xb7a4;
+    b->sprite.timer = b->sprite.period = 0x0f;
     gv.bonus_live--;
-    sprite_shift_draw(e->p.anim.sprite.x, e->p.anim.sprite.y,
-                      img_w(e->p.anim.sprite.frame - 2));   /* now a sparkle */
+    sprite_shift_draw(b->sprite.x, b->sprite.y,
+                      img_w(b->sprite.frame - 2));   /* now a sparkle */
     brick_score(0, 0, 0x0703);
 }
 

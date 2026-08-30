@@ -278,6 +278,15 @@ static inline entity_t *entity_at(uint32_t off)
     return (entity_t *)(g_image + off);
 }
 
+/* The node an arm sits in. entity_call hands each handler its own arm, which
+ * is all any of them needs to do their work - but `handler` belongs to the
+ * node, not the arm, and a handler that rewrites it to hand the slot to
+ * another routine has to walk back up. The kernel spells this container_of. */
+static inline entity_t *entity_of(void *arm)
+{
+    return (entity_t *)((uint8_t *)arm - offsetof(entity_t, p));
+}
+
 /* A ball by its image offset, for the routines that still carry one because
  * the original passed it in a register. */
 static inline ball_t *ball_at(uint32_t off)
@@ -910,7 +919,7 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny); /* 1ac2:3df1 */
 uint32_t pixel_xor(uint32_t x, uint32_t y);        /* 1ac2:30dd */
 void shot_xor(uint32_t x, uint32_t y);             /* 1ac2:306b */
 void bonus_hits_ball(const ent_sprite_t *s, const ball_t *ball);  /* 1ac2:3f20 */
-void entity_bonus(entity_t *e);     /* 1ac2:39fa */
+void entity_bonus(ent_anim_t *b);   /* 1ac2:39fa */
 void entity_unknown(uint32_t bx);
 void entity_multiball(void);  /* 1ac2:3717 */
 void entity_unlink(uint32_t node);/* 1ac2:3257 */

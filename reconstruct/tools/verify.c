@@ -151,7 +151,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x3b2a: entity_crumble(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x390d: entity_hatch(&entity_at(r[R_BX])->p.hatch); return 1;
     case 0x39a1: bonus_release(&entity_at(r[R_BX])->p.hatch); return 1;
-    case 0x39fa: entity_bonus(entity_at(r[R_BX])); return 1;
+    case 0x39fa: entity_bonus(&entity_at(r[R_BX])->p.anim); return 1;
     case 0x3df1: bonus_update(&entity_at(r[R_BX])->p.anim.sprite, r[R_CX] & 0xff, r[R_AX] & 0xff);
                  return 1;
     case 0x365e: entity_soften(&entity_at(r[R_BX])->p.anim); return 1;
