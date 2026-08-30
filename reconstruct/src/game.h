@@ -383,10 +383,10 @@ typedef struct __attribute__((packed)) {
      * for different things. The menu is not up during the ending, and the
      * ending does not come back to the menu without going through the intro,
      * so the six bytes and the 4950 are the same bytes at different times. */
-    union {
+    union scratch1 {
         uint8_t banner_cell[6];         /* 0x0000 the character the banner is scrolling in: six rows of one byte, fetched and decoded by menu_banner_tick, read a bit at a time as the window walks */
         uint8_t eog_saved[4950];        /* 0x0000 the end-of-game screen copied into the image, 0x96 rows of 0x21 - the picture is merged into it a band at a time and put back */
-    };
+    } scratch1;
     uint8_t  _pad_00[106];
     uint16_t eog_screen_at;             /* 0x13c0 end-of-game screen cursor */
     uint16_t eog_build_at;              /* 0x13c2 */
@@ -442,12 +442,12 @@ typedef struct __attribute__((packed)) {
      * game, the pause and the ending during and after one, and the results
      * screen between. As with 0x0000, a union says that and four names for
      * one address would not. */
-    union {
+    union scratch2 {
         uint8_t curtain_work[2835];     /* intro_curtain: 0x1b rows of 0x69, decoded in place and then blitted */
         uint8_t screen_stash[4000];     /* screen_stash puts 2000 bytes of playfield here for the pause. screen_restore reads 4000 - that is employee_enter's boss screen, which the port does not stash, and it is the largest claim anyone makes on this buffer */
         uint8_t eog_band[495];          /* screen_end_of_game's band, merged with the picture and put back */
         hsc_entry_t hsc_scratch[9];     /* screen_results insertion-sorts the players' records here, and hsc_sort feeds them into hsc from it */
-    };
+    } scratch2;
     uint8_t  _pad_21[681];
     uint8_t  paddle_step;               /* 0x2d38 how much the width changes per morph frame */
     uint8_t  paddle_kind;               /* 0x2d39 which of the four sprite sets is current */
@@ -581,7 +581,12 @@ typedef struct __attribute__((packed)) {
      * at 0xa3c0, the ending's picture at 0xa6d0 and the capsule kinds at
      * 0xac60 are all in here, named where they are used and nowhere else.
      * That is the next seam. */
-    uint8_t  _pad_22[46205];
+    uint8_t  _pad_22[16973];
+    uint8_t  font[40][12][2];           /* 0x9020 the score panel's 8x12 font, two bits a pixel: forty glyphs of twelve rows of one word. Glyph 0, what a space maps to, is **not blank** - it is a solid block of colour 2, which is how the headings get their red ground */
+    uint8_t  pause_overlay[38][50];     /* 0x93e0 what screen_stash paints over the stashed playfield. It starts exactly where the font ends */
+    uint8_t  _pad_23[2164];
+    uint8_t  banner_font[129][6];       /* 0xa3c0 the menu banner's own font, and a different one: eight columns by six rows at one bit a pixel, one byte a row, scrolled a bit at a time. 129 glyphs is what banner_text indexes - its highest is 128, and the last byte of that glyph is the last non-zero byte before the ending's picture */
+    uint8_t  _pad_24[23434];
     uint8_t  screen_save[2][8000];      /* 0x10250 the whole screen, and the two halves land **adjacent** here rather than 0x2000 apart: 8000 is what each half of the aperture holds, and the 192 bytes of padding at the end of each are neither saved nor restored. So this is 16,000 bytes and not a copy of the aperture */
 } game_vars;
 
@@ -595,8 +600,7 @@ typedef struct __attribute__((packed)) {
     typedef char ensure_img_at_##field[offsetof(game_vars, field) == (off) ? 1 : -1]
 
 /* @generated-asserts begin - genvars.py rewrites between these markers */
-ENSURE_IMG_AT(banner_cell, 0x0000);
-ENSURE_IMG_AT(eog_saved, 0x0000);
+ENSURE_IMG_AT(scratch1, 0x0000);
 ENSURE_IMG_AT(eog_screen_at, 0x13c0);
 ENSURE_IMG_AT(eog_build_at, 0x13c2);
 ENSURE_IMG_AT(banner_state, 0x13c4);
@@ -628,10 +632,7 @@ ENSURE_IMG_AT(paddle_step, 0x2d38);
 ENSURE_IMG_AT(paddle_kind, 0x2d39);
 ENSURE_IMG_AT(paddle_width, 0x2d3a);
 ENSURE_IMG_AT(paddle_morphing, 0x2d3b);
-ENSURE_IMG_AT(curtain_work, 0x1aef);
-ENSURE_IMG_AT(screen_stash, 0x1aef);
-ENSURE_IMG_AT(eog_band, 0x1aef);
-ENSURE_IMG_AT(hsc_scratch, 0x1aef);
+ENSURE_IMG_AT(scratch2, 0x1aef);
 ENSURE_IMG_AT(morph_owner, 0x2d3c);
 ENSURE_IMG_AT(paddle_min, 0x2d3e);
 ENSURE_IMG_AT(paddle_max, 0x2d3f);
@@ -710,6 +711,9 @@ ENSURE_IMG_AT(frame_corner_left, 0x48d2);
 ENSURE_IMG_AT(life_sprite, 0x48e7);
 ENSURE_IMG_AT(ball_start_sprite, 0x48fb);
 ENSURE_IMG_AT(paddle_sprites, 0x4903);
+ENSURE_IMG_AT(font, 0x9020);
+ENSURE_IMG_AT(pause_overlay, 0x93e0);
+ENSURE_IMG_AT(banner_font, 0xa3c0);
 ENSURE_IMG_AT(screen_save, 0x10250);
 /* @generated-asserts end */
 

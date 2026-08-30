@@ -291,7 +291,7 @@ void draw_paddle(const uint8_t *sprite)
  * 1ac2:0c64  draw_char
  *
  * One glyph of the score-panel font at `di`, an offset into the framebuffer.
- * The table at 0x9020 holds 24 bytes per glyph: twelve rows of one word,
+ * gv.font holds 24 bytes per glyph: twelve rows of one word,
  * which at two bits per pixel is an 8x12 cell.
  *
  * The character-to-glyph map is the original's, verbatim - it has no glyphs
@@ -300,7 +300,6 @@ void draw_paddle(const uint8_t *sprite)
  * than blank. That is deliberate: it is how the red bars behind the headings
  * are painted.
  */
-#define FONT       0x9020
 #define FONT_ROWS      12
 #define FONT_GLYPH     24
 
@@ -316,10 +315,10 @@ static uint32_t glyph_of(uint8_t c)
 
 void draw_char(uint8_t c, uint32_t di)
 {
-    const uint8_t *g = g_image + FONT + glyph_of(c) * FONT_GLYPH;
+    const uint8_t (*g)[2] = gv.font[glyph_of(c)];
     for (int32_t r = 0; r < FONT_ROWS; r++) {
-        g_vram[di & (CGA_SIZE - 1)] = g[r * 2];
-        g_vram[(di + 1) & (CGA_SIZE - 1)] = g[r * 2 + 1];
+        g_vram[di & (CGA_SIZE - 1)] = g[r][0];
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = g[r][1];
         di = cga_next_row(di);
     }
 }
@@ -598,10 +597,10 @@ void intro_curtain(void)
 
     for (uint32_t rows = 1; rows != 0x6a; rows++) {
         uint32_t n = (CURTAIN_ROW * (rows & 0xff)) & 0xffff;
-        memcpy(gv.curtain_work, g_image + CURTAIN_SRC - n, n);
+        memcpy(gv.scratch2.curtain_work, g_image + CURTAIN_SRC - n, n);
 
         for (uint32_t i = 0; i < n && i < 0xbd; i++) {
-            uint32_t al = gv.curtain_work[i], out = 0;
+            uint32_t al = gv.scratch2.curtain_work[i], out = 0;
             for (int32_t k = 0; k < 4; k++) {
                 uint32_t hi = (al >> 7) & 1;
                 al = (al << 1) & 0xff;
@@ -610,10 +609,10 @@ void intro_curtain(void)
                 out = hi ? (((out << 1) | 1) << 1 | lo) & 0xff
                          : (out << 2) & 0xff;
             }
-            gv.curtain_work[i] = (uint8_t)out;
+            gv.scratch2.curtain_work[i] = (uint8_t)out;
         }
 
-        uint32_t si = img_off(gv.curtain_work), di = 0x34;
+        uint32_t si = img_off(gv.scratch2.curtain_work), di = 0x34;
         io_wait_retrace();
         for (uint32_t r = 0; r < rows; r++) {
             for (int32_t b = 0; b < CURTAIN_ROW; b++)
@@ -2730,10 +2729,10 @@ static void panel_char(uint8_t c, uint32_t di)
     else if (c <= '9')                  g = c - 0x2f;
     else if (c >= 'A')                  g = c - 0x35;
     else                                g = 0x0b;
-    const uint8_t *src = g_image + FONT + g * FONT_GLYPH;
+    const uint8_t (*src)[2] = gv.font[g];
     for (int32_t r = 0; r < FONT_ROWS; r++, di += PANEL_STRIDE) {
-        g_image[di] = src[r * 2];
-        g_image[di + 1] = src[r * 2 + 1];
+        g_image[di] = src[r][0];
+        g_image[di + 1] = src[r][1];
     }
 }
 
@@ -5060,14 +5059,13 @@ void menu_banner_tick(void)
         gv.banner_ptr = (uint16_t)(gv.banner_ptr + 1);
         uint32_t c = g_image[gv.banner_ptr];
         c = ((c ^ 0xaa) - 0x20) & 0xff;
-        uint32_t src = 0xa3c0 + c * 6;
-        memcpy(gv.banner_cell, g_image + src, 6);
+        memcpy(gv.scratch1.banner_cell, gv.banner_font[c], 6);
     }
     banner_shift();                     /* 1ac2:5140 */
 
     uint32_t di = 0x38a9;
     for (int32_t i = 0; i < 6; i++) {
-        if (gv.banner_cell[i] & gv.banner_state)
+        if (gv.scratch1.banner_cell[i] & gv.banner_state)
             g_vram[di & (CGA_SIZE - 1)] ^= 3;
         di = cga_next_row(di);
     }
@@ -5469,7 +5467,7 @@ void palette_cycle(void)
  * ===================================================================== */
 #define HSC_ENTRY   0x12                /* twelve of name and six of score */
 #define HSC_COUNT     10
-#define HSC_SCRATCH img_off(gv.hsc_scratch)
+#define HSC_SCRATCH img_off(gv.scratch2.hsc_scratch)
 #define BORDER_SPR (CS_BASE + 0x506d)   /* eight words, in the code segment */
 #define BORDER_POS (CS_BASE + 0x507d)   /* fourteen positions, likewise */
 
@@ -5666,13 +5664,13 @@ void level_tally(void)
 /* 1ac2:4ba9  screen_stash
  *
  * Put the playing screen aside in screen_stash and paint the overlay
- * at 0x93e0 over it - 0x26 rows of 0x32 bytes. Used by the pause screen and
+ * pause_overlay over it - 0x26 rows of 0x32 bytes. Used by the pause screen and
  * by F10.
  */
 void screen_stash(void)
 {
     speaker_off();
-    uint32_t di = img_off(gv.screen_stash);
+    uint32_t di = img_off(gv.scratch2.screen_stash);
     uint32_t si = 0x1900;
     for (int32_t half = 0; half < 2; half++) {
         for (int32_t r = 0; r < 0x14; r++) {
@@ -5684,11 +5682,9 @@ void screen_stash(void)
         si = 0x3900;
     }
     di = 0x1900;
-    si = 0x93e0;
     for (int32_t r = 0; r < 0x26; r++) {
         for (int32_t b = 0; b < 0x32; b++)
-            g_vram[(di + b) & (CGA_SIZE - 1)] = g_image[si + b];
-        si += 0x32;
+            g_vram[(di + b) & (CGA_SIZE - 1)] = gv.pause_overlay[r][b];
         di = cga_next_row(di);
     }
 }
@@ -5702,7 +5698,7 @@ void screen_restore(void)
 {
     io_cga_mode(0x0e);
     set_palette_registers(0x4b9d);
-    memcpy(g_vram, gv.screen_stash, 0x7d0 * 2);
+    memcpy(g_vram, gv.scratch2.screen_stash, 0x7d0 * 2);
     speaker_on();
 }
 
@@ -5754,7 +5750,7 @@ void cell_hole_draw(uint32_t x, uint32_t y)
  * the speaker on again */
 void screen_unstash(void)
 {
-    uint32_t si = img_off(gv.screen_stash);
+    uint32_t si = img_off(gv.scratch2.screen_stash);
     uint32_t di = 0x1900;
     for (int32_t half = 0; half < 2; half++) {
         for (int32_t r = 0; r < 0x14; r++) {
@@ -6588,7 +6584,7 @@ void screen_define_keys(void)
  * the table at 0xa8bf, each a tall sprite drawn twice, blanked from 0xabab,
  * and drawn twice more. Any key stops it; if none came, ending_column runs.
  * ===================================================================== */
-#define EOG_BAND      img_off(gv.eog_band)
+#define EOG_BAND      img_off(gv.scratch2.eog_band)
 #define EOG_PICTURE   0xa6d0
 #define EOG_WIDTH     0x21
 #define EOG_BAND_LEN  0x1ef
@@ -6602,7 +6598,7 @@ void screen_end_of_game(void)
     uint32_t si = 8, di = 0;
     for (int32_t n = 0x96; n > 0; n--) {
         for (int32_t b = 0; b < EOG_WIDTH; b++)
-            gv.eog_saved[di + b] = g_vram[(si + b) & (CGA_SIZE - 1)];
+            gv.scratch1.eog_saved[di + b] = g_vram[(si + b) & (CGA_SIZE - 1)];
         di += EOG_WIDTH;
         si = cga_next_row(si);
     }
