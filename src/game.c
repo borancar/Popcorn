@@ -360,13 +360,6 @@ uint32_t game_random(uint32_t ticks, uint32_t limit)
  * There are only a handful, and they are all here: the sound state and the
  * two bytes POPSPEED patches. */
 #define CS_BASE        0x1ac20
-#define SOUND_ON       (CS_BASE + 0x84)   /* F9 toggles this */
-#define SOUND_REQUEST  (CS_BASE + 0xf4)   /* an id to start, 0 = nothing */
-#define SOUND_TIMER    (CS_BASE + 0xf5)   /* ticks left on the current note */
-#define SOUND_PTR      (CS_BASE + 0xf6)   /* where in the tune we are */
-#define SOUND_TUNES    (CS_BASE + 0xf8)   /* table of tune addresses */
-#define DELAY_ENTRY    (CS_BASE + 0x164c) /* patched to 0xc3 to disable */
-#define DELAY_COUNT    (CS_BASE + 0x164e) /* the `mov cx,N` immediate */
 
 static int32_t g_speaker_on;
 
@@ -394,16 +387,16 @@ void speaker_off(void) { g_speaker_on = 0; io_sound(0); }
  */
 void sound_tick(void)
 {
-    uint8_t req = g_image[SOUND_REQUEST];
+    uint8_t req = cv.sound_request;
 
     if (req) {
-        g_image[SOUND_REQUEST] = 0;
-        if (!g_image[SOUND_ON])
+        cv.sound_request = 0;
+        if (!cv.sound_on)
             return;
-        img_setw(SOUND_PTR, img_w(SOUND_TUNES + (req - 1) * 2));
+        cv.sound_ptr = cv.sound_tunes[req - 1];
         speaker_on();
         /* fall through and play the first note straight away */
-    } else if (--g_image[SOUND_TIMER] != 0) {
+    } else if (--cv.sound_timer != 0) {
         return;                         /* still holding the current note */
     }
 
@@ -411,14 +404,14 @@ void sound_tick(void)
      * 0x1e and so on - because that is where the note data sits and DS is set
      * to the code segment at the top of the routine. Reading them as plain
      * image offsets lands in the sprite data and plays whatever is there. */
-    uint32_t si = img_w(SOUND_PTR);
+    uint32_t si = cv.sound_ptr;
     uint32_t note = img_w(CS_BASE + si);
     if (note == 0) {                    /* end of tune */
         speaker_off();
         return;
     }
-    img_setw(SOUND_PTR, si + 2);
-    g_image[SOUND_TIMER] = (uint8_t)(note >> 8);
+    cv.sound_ptr = (uint16_t)(si + 2);
+    cv.sound_timer = (uint8_t)(note >> 8);
     io_sound(((note & 0xff) << 8) | 1);
 }
 
@@ -440,9 +433,9 @@ void sound_tick(void)
 
 void game_delay(void)
 {
-    if (g_image[DELAY_ENTRY] == 0xc3)   /* patched to a bare `ret` */
+    if (cv.delay_entry == 0xc3)   /* patched to a bare `ret` */
         return;
-    io_delay_cycles(img_w(DELAY_COUNT) * CYCLES_PER_LOOP);
+    io_delay_cycles(cv.delay_count * CYCLES_PER_LOOP);
 }
 
 /* 1ac2:5680  read_speed_setting
@@ -460,13 +453,13 @@ void game_delay(void)
 void read_speed_setting(uint32_t speed)
 {
     if (speed == 1) {
-        g_image[DELAY_ENTRY] = 0xc3;
-        img_setw(DELAY_COUNT, 0);
+        cv.delay_entry = 0xc3;
+        cv.delay_count = (uint16_t)( 0);
         return;
     }
     if (speed == 0)
         speed = 0x6f;
-    img_setw(DELAY_COUNT, speed - 1);
+    cv.delay_count = (uint16_t)( speed - 1);
 }
 
 /* 1ac2:14b3  build_shifted_sprites
@@ -906,7 +899,7 @@ void game_main(const char *dir, const char *levels)
     }
     gv.input_selected = (uint16_t)(INPUT_KEYBOARD);
     gv.cheat_done = 0;
-    g_image[SOUND_ON] = 1;
+    cv.sound_on = 1;
     load_high_scores(dir);
     build_shifted_sprites();
 
@@ -963,7 +956,7 @@ void game_main(const char *dir, const char *levels)
                 continue;
             }
             if ((key >> 8) == 0x43)                     /* F9: sound */
-                g_image[SOUND_ON] ^= 1;
+                cv.sound_on ^= 1;
             if ((key >> 8) == 0x41) {                   /* F7: forget the
                                                          * cheat so far */
                 gv.cheat_done = 0;
@@ -1235,7 +1228,7 @@ int32_t play_loop(void)
     gv.repeat_div = 0;
     gv.key_action = 0;
     gv.speed_step = gv.speed_limit = 0xfa;
-    if (g_image[DELAY_ENTRY] != 0xc3) {
+    if (cv.delay_entry != 0xc3) {
         gv.speed_step = 3;
         gv.speed_limit = 3;
     }
@@ -1865,7 +1858,7 @@ void ball_after(ball_t *b)
 
     uint32_t x = b->x, y = b->y;
     if (x <= WALL_LEFT || x >= WALL_RIGHT) {
-        g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+        cv.sound_request = SOUND_BOUNCE;
         b->dir_x = (x <= WALL_LEFT) ? 0 : 1;
         b->acc_x = 1;
         b->acc_y = 0;
@@ -1874,7 +1867,7 @@ void ball_after(ball_t *b)
         b->bounces++;
     }
     if (y <= WALL_TOP) {
-        g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+        cv.sound_request = SOUND_BOUNCE;
         b->dir_y = 0;                 /* downwards */
         b->bounces++;
         b->acc_x = 0;
@@ -1890,7 +1883,7 @@ void ball_after(ball_t *b)
         return;
     }
     if (gv.net_on == 1) {     /* the net catches it */
-        g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+        cv.sound_request = SOUND_BOUNCE;
         b->anchor_x = b->x;
         b->anchor_y = 0xc3;
         b->dir_y = 1;                 /* upwards */
@@ -1947,7 +1940,7 @@ static void paddle_bounce_up(ball_t *b)
     b->anchor_y = (uint8_t)ah;
     b->acc_x = b->acc_y = 1;
     b->bounces = 0;
-    g_image[SOUND_REQUEST] = SOUND_PADDLE;
+    cv.sound_request = SOUND_PADDLE;
 }
 
 static void paddle_slope(ball_t *b, uint32_t table, uint32_t index)
@@ -1986,7 +1979,7 @@ void ball_paddle(ball_t *b)
         b->acc_x = b->acc_y = 1;
         b->bounces = 0;
         paddle_slope(b, SLOPE_SIDE, depth);
-        g_image[SOUND_REQUEST] = SOUND_PADDLE;
+        cv.sound_request = SOUND_PADDLE;
         return;
     }
 
@@ -2209,7 +2202,7 @@ static void brick_common(ball_t *ball, uint32_t sound,
                          uint32_t a, uint32_t b, uint32_t c)
 {
     brick_score(a, b, c);
-    g_image[SOUND_REQUEST] = (uint8_t)sound;
+    cv.sound_request = (uint8_t)sound;
     if (ball)
         ball->bounces = 0;
 }
@@ -2313,7 +2306,7 @@ void brick_2(hit_t *hit, ball_t *ball) { brick_1_or_2(hit, ball, 1); }
 /* 1ac2:2a3f  brick 3 - hardens into a 4, which nothing can break */
 void brick_3(hit_t *hit, ball_t *ball)
 {
-    g_image[SOUND_REQUEST] = 4;
+    cv.sound_request = 4;
     if (ball)
         ball->bounces++;
     brick_entity(hit, 0x365e, 0x66f4, 8)->p.anim.arg.cell =
@@ -2325,7 +2318,7 @@ void brick_3(hit_t *hit, ball_t *ball)
 void brick_solid(hit_t *hit, ball_t *ball)
 {
     (void)hit;
-    g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+    cv.sound_request = SOUND_BOUNCE;
     if (ball)
         ball->bounces++;
 }
@@ -3732,7 +3725,7 @@ settle:
         /* the net catches it, so it counts as collected */
     }
 
-    g_image[SOUND_REQUEST] = 6;         /* 1ac2:3a67 */
+    cv.sound_request = 6;         /* 1ac2:3a67 */
     /* Collected: the node becomes a sparkle where it stands. The arm is the
      * sparkle's too, unchanged - only `handler` is the node's, so this is the
      * one line here that has to look outside the capsule. */
@@ -3939,7 +3932,7 @@ int32_t ball_on_paddle(ball_t *b)
         gv.hold_timer = (uint16_t)((gv.hold_timer - gv.speed_limit) & 0xffff);
         gv.hold_offset = (uint8_t)(b->x - gv.paddle_x);
         ball_redraw(b);
-        g_image[SOUND_REQUEST] = SOUND_CATCH;
+        cv.sound_request = SOUND_CATCH;
         return 0;
     }
 
@@ -4044,7 +4037,7 @@ void laser_fire(void)
         if (gv.key_action != 1)
             return;
         uint32_t x = (gv.paddle_x + 4) & 0xff;
-        g_image[SOUND_REQUEST] = SHOT_SOUND;
+        cv.sound_request = SHOT_SOUND;
         gv.laser_x = (uint8_t)x;
         uint32_t y = gv.laser_y;
         laser_dot_rows(x, y, 0);
@@ -4791,11 +4784,10 @@ uint8_t screen_player_names(void)
  * counter advances every call, so consecutive bands use different corner
  * pieces and the border does not repeat.
  * ===================================================================== */
-#define FRAME_PHASE (CS_BASE + 0x5c6d)
 
 uint32_t frame_band(uint32_t di, uint32_t fill)
 {
-    uint32_t phase = g_image[FRAME_PHASE];
+    uint32_t phase = cv.frame_phase;
     for (int32_t i = 0; i < 3; i++)
         g_vram[(di + i) & (CGA_SIZE - 1)] = gv.frame_corner_left[phase][i];
     di += 3;
@@ -4805,7 +4797,7 @@ uint32_t frame_band(uint32_t di, uint32_t fill)
     }
     for (int32_t i = 0; i < 3; i++)
         g_vram[(di + i) & (CGA_SIZE - 1)] = gv.frame_corner_right[phase][i];
-    g_image[FRAME_PHASE]++;
+    cv.frame_phase++;
     return di + 3;
 }
 
@@ -4820,7 +4812,7 @@ uint32_t frame_band(uint32_t di, uint32_t fill)
  * ===================================================================== */
 void play_frame(void)
 {
-    g_image[FRAME_PHASE] = 0;
+    cv.frame_phase = 0;
 
     uint32_t di = 0x1e50;
     static const uint32_t fills[6] = { 0xffff, 0x5555, 0x5454, 0x5555, 0, 0 };
@@ -4850,7 +4842,7 @@ void play_frame(void)
         }
         di = cga_next_row(di);
 
-        uint32_t cap = (g_image[FRAME_PHASE] & 3) ? 0x50 : 0x10;
+        uint32_t cap = (cv.frame_phase & 3) ? 0x50 : 0x10;
         g_vram[di++ & (CGA_SIZE - 1)] = 0x0d;
         g_vram[di++ & (CGA_SIZE - 1)] = (uint8_t)cap;
         for (int32_t i = 0; i < 0x18; i++, di += 2) {
@@ -4859,7 +4851,7 @@ void play_frame(void)
         }
         g_vram[di++ & (CGA_SIZE - 1)] = 0x0d;
         g_vram[di & (CGA_SIZE - 1)] = (uint8_t)cap;
-        g_image[FRAME_PHASE]++;
+        cv.frame_phase++;
 
         bp = cga_prev_row(bp);
         /* `mov cx,0x5dc / loop $` - one busy-wait, not 0x5dc calls to the
@@ -4998,7 +4990,7 @@ void brick_11(hit_t *hit, ball_t *ball)
      * that is 168 of these bricks and nothing else. */
     (void)ball;
     brick_score(0, 0, 0x0207);
-    g_image[SOUND_REQUEST] = SOUND_BRICK;
+    cv.sound_request = SOUND_BRICK;
     g_image[hit->cell] = 0x0c;
     gv.level.bricks--;
     uint32_t x = hit->x, y = hit->y;
@@ -5274,7 +5266,7 @@ void play_prepare(void)
 void demo_start(void)
 {
     gv.input_active = (uint16_t)(INPUT_DEMO);
-    g_image[CS_BASE + 0x1784] = 0xff;
+    cv.demo_ball = 0xff;
     memcpy(gv.players[0].name, gv.demo_name, sizeof gv.players[0].name);
     player_record_init(&gv.players[0]);
     /* 1ac2:1576 clears **+0xd3**, one past the entity count at +0xd2 that
@@ -5460,8 +5452,6 @@ void palette_cycle(void)
 #define HSC_ENTRY   0x12                /* twelve of name and six of score */
 #define HSC_COUNT     10
 #define HSC_SCRATCH img_off(gv.scratch2.hsc_scratch)
-#define BORDER_SPR (CS_BASE + 0x506d)   /* eight words, in the code segment */
-#define BORDER_POS (CS_BASE + 0x507d)   /* fourteen positions, likewise */
 
 /* 1ac2:4d5d  hsc_bubble - one pass of the sort, from the bottom up.
  * `scasb` compares a name's six score digits against the entry above it and
@@ -5521,7 +5511,7 @@ void hsc_save(const char *dir)
 void border_draw(uint32_t di)
 {
     for (int32_t i = 0; i < 8; i++) {
-        img_vram_setw(di, img_w(BORDER_SPR + i * 2));
+        img_vram_setw(di, cv.border_spr[i]);
         di = cga_next_row(di);
     }
 }
@@ -5557,11 +5547,11 @@ uint32_t border_step(uint32_t di)
 void border_animate(void)
 {
     for (int32_t i = 0; i < 0x0e; i++) {
-        uint32_t di = img_w(BORDER_POS + i * 2);
+        uint32_t di = cv.border_pos[i];
         border_draw(di);
         di = border_step(di);
         border_erase(di);
-        img_setw(BORDER_POS + i * 2, di);
+        cv.border_pos[i] = (uint16_t)di;
     }
 }
 
@@ -5599,7 +5589,7 @@ void border_block(uint32_t di)
     for (int32_t n = 0x1a; n > 0; n--, di += 2) {
         uint32_t d = di;
         for (int32_t i = 0; i < 8; i++) {
-            img_vram_setw(d, img_w(BORDER_SPR + i * 2));
+            img_vram_setw(d, cv.border_spr[i]);
             d = cga_next_row(d);
         }
     }
@@ -5790,7 +5780,7 @@ void border_setup(void)
 
     uint32_t di = 0;
     for (int32_t i = 0; i < 0x0e; i++) {
-        img_setw(BORDER_POS + i * 2, di);
+        cv.border_pos[i] = (uint16_t)di;
         border_erase(di);
         for (int32_t k = 0; k < 7; k++)
             di = border_step(di);
@@ -6001,7 +5991,7 @@ void ending_column(void)
  * ===================================================================== */
 void screen_game_over(void)
 {
-    memcpy(gv.paddle_pix[0], g_image + 0xa346, 0x27 * 2);
+    memcpy(gv.paddle_pix[0], gv.game_over_paddle, sizeof gv.game_over_paddle);
 
     uint32_t di = 0x1cc2;
     for (int32_t r = 0; r < 8; r++) {
@@ -6284,7 +6274,7 @@ void int09_handler(uint32_t scan)
     if ((scan & 0xff) == gv.key_scan_r)
         gv.last_dir = 1;
     if (scan == 0xc3)                   /* F9 released */
-        g_image[SOUND_ON] ^= 1;
+        cv.sound_on ^= 1;
     if (make)
         gv.last_make = (uint8_t)scan;
 
@@ -6600,7 +6590,7 @@ void screen_end_of_game(void)
 
     for (int32_t pass = 0x87; pass > 0; pass--) {
         /* The band as it stands, from the saved screen - not from vram. */
-        memcpy(g_image + EOG_BAND, g_image + gv.eog_build_at, EOG_BAND_LEN);
+        memcpy(gv.scratch2.eog_band, g_image + gv.eog_build_at, EOG_BAND_LEN);
 
         uint32_t src = EOG_PICTURE, dst = EOG_BAND;
         for (int32_t i = 0; i < EOG_BAND_LEN; i++, src++, dst++) {
@@ -6765,7 +6755,7 @@ int32_t ball_after_endgame(ball_t *b)
 
     if (x <= WALL_LEFT || x >= WALL_RIGHT) {
         b->dir_x = (x <= WALL_LEFT) ? 0 : 1;
-        g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+        cv.sound_request = SOUND_BOUNCE;
         b->acc_x = 1;
         b->acc_y = 0;
         b->anchor_x = (uint8_t)(x <= WALL_LEFT ? 9 : 0xc3);
@@ -6786,7 +6776,7 @@ int32_t ball_after_endgame(ball_t *b)
             b->acc_y = 1;
             b->anchor_x = (uint8_t)x;
             b->anchor_y = (uint8_t)(y + 1);
-            g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+            cv.sound_request = SOUND_BOUNCE;
         }
     } else if (y < 0x74) {
         if (y == 0x3c) {
@@ -6824,7 +6814,7 @@ int32_t ball_after_endgame(ball_t *b)
             b->acc_y = 0;
             b->anchor_x = (uint8_t)(x <= 0x60 ? 0x61 : 0x6b);
             b->anchor_y = (uint8_t)y;
-            g_image[SOUND_REQUEST] = SOUND_BOUNCE;
+            cv.sound_request = SOUND_BOUNCE;
         }
         return 0;
     }
@@ -7440,7 +7430,6 @@ void bonus_stop_monsters(void)
  * that is not part of the sequence throws the stack away and returns to the
  * menu.
  * ===================================================================== */
-#define DEMO_BALL   (CS_BASE + 0x1784)    /* cs:[0x1784], which ball */
 #define DEMO_CHASE_Y  0x82
 
 /* Both tails clamp the paddle to the right-hand limit before returning. */
@@ -7460,14 +7449,14 @@ void input_demo(void)
                 ;
             screen_restore();                   /* 1ac2:4b4f */
         } else if ((key >> 8) == 0x43) {        /* F9: sound */
-            g_image[SOUND_ON] ^= 1;
+            cv.sound_on ^= 1;
         } else if (!cheat_sequence((uint8_t)(key & 0xff))) {
             entities_clear();                   /* 1ac2:055e */
             longjmp(g_back_to_menu, 1);         /* sp = [0x1405]; jmp 0x1d1 */
         }
     }
 
-    uint32_t chasing = g_image[DEMO_BALL];
+    uint32_t chasing = cv.demo_ball;
     if (chasing != 0xff) {
         ball_t *b = &gv.balls[chasing];
         if (b->y >= DEMO_CHASE_Y &&
@@ -7498,12 +7487,12 @@ void input_demo(void)
         if (b->y > DEMO_CHASE_Y &&
             b->state != 0 &&
             b->dir_y != 1) {
-            g_image[DEMO_BALL] = (uint8_t)cl;
+            cv.demo_ball = (uint8_t)cl;
             demo_clamp();
             return;
         }
     }
-    g_image[DEMO_BALL] = 0xff;
+    cv.demo_ball = 0xff;
     demo_clamp();
 }
 
@@ -7522,27 +7511,25 @@ void input_demo(void)
  * - so the message is decoded and put on stderr rather than on the screen,
  * and everything else about the sequence behaves as it does in the original.
  */
-#define CHEAT_CURSOR (CS_BASE + 0x56a2)
-#define CHEAT_LAST   (CS_BASE + 0x56a4)
 #define CHEAT_START  0x56a5
 #define CHEAT_TEXT   0x56b5
 
 int32_t cheat_sequence(uint8_t key)
 {
-    uint32_t si = img_w(CHEAT_CURSOR);
+    uint32_t si = cv.cheat_cursor;
     uint32_t al = key ^ 0xaa;
 
     if (al != g_image[CS_BASE + si]) {
         /* Not the next one. The same key twice is not a failure. */
-        if (al == g_image[CHEAT_LAST])
+        if (al == cv.cheat_last)
             return 1;
-        img_setw(CHEAT_CURSOR, CHEAT_START);
-        g_image[CHEAT_LAST] = 0;
+        cv.cheat_cursor = CHEAT_START;
+        cv.cheat_last = 0;
         return 0;
     }
 
-    g_image[CHEAT_LAST] = (uint8_t)al;
-    img_setw(CHEAT_CURSOR, si + 1);
+    cv.cheat_last = (uint8_t)al;
+    cv.cheat_cursor = (uint16_t)(si + 1);
     if (g_image[CS_BASE + si + 1] != 0xaa)
         return 1;                       /* more to go */
 
@@ -7572,8 +7559,8 @@ int32_t cheat_sequence(uint8_t key)
     }
     io_get_key();
     io_cga_mode(5);
-    img_setw(CHEAT_CURSOR, CHEAT_START);
-    g_image[CHEAT_LAST] = 0xff;
+    cv.cheat_cursor = CHEAT_START;
+    cv.cheat_last = 0xff;
     return 1;
 }
 
@@ -7621,7 +7608,7 @@ void entity_anim_brick(ent_brick_t *br)
 void brick_animated(hit_t *hit, ball_t *ball)
 {
     brick_score(0, 0, 0x0303);
-    g_image[SOUND_REQUEST] = 3;
+    cv.sound_request = 3;
     if (ball)
         ball->bounces++;
 
