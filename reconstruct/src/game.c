@@ -1344,8 +1344,30 @@ frames:
             gv.speed_step = gv.speed_limit;
         }
 
-        /* The entity list. [0x3142] trails one node behind so a handler that
-         * asks to be removed can be unlinked without walking the list again. */
+        /* The entity list. A handler asks to be taken out by setting
+         * gv.entity_remove - twelve of them do - and the walk does the
+         * unlinking, which is what makes the four details below matter.
+         *
+         * entity_prev trails one node behind, so the predecessor is to hand
+         * and the list needs no second walk to find it. It starts at the head
+         * *node*, so removing the first entity is not a special case.
+         *
+         * It is deliberately **not** advanced on the removal branch: after an
+         * unlink the predecessor is still the predecessor of whatever comes
+         * next, which is what lets two entities in a row be removed.
+         *
+         * `next` is read **before** entity_unlink, because unlink overwrites
+         * that same field with the free-list head - the node's link is reused
+         * to push it onto the free list. Reading it afterwards would walk the
+         * free list.
+         *
+         * And the flag is a single global, consumed by entity_unlink, so it is
+         * one request from one handler and cannot outlive the node it was set
+         * for.
+         *
+         * One consequence worth knowing: entity_alloc appends to the **tail**,
+         * and this walk runs to the tail, so an entity created by a handler
+         * during the walk is called in the same frame it was born. */
         gv.entity_prev = img_off(&gv.entity_head);
         uint32_t bx = gv.entity_head.next;
         while (bx != 0xffff) {
