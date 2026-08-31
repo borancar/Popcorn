@@ -759,7 +759,13 @@ typedef struct __attribute__((packed)) {
     uint8_t  intro_feed[19][5];         /* 0x6d36 the five-byte rows level_intro feeds in under the panel, one a pass - nineteen of them, ending exactly at backdrop_table */
     uint16_t backdrop_ptr[5];         /* 0x6d95 the level intro's backdrop by phase. **Five**, not eight: the entries are 0x6d9f, 0x6f1f, 0x709f, 0x721f and 0x739f - 0x180 apart, which is one frame - and the three words after them are pixels. backdrop_phase wraps at 0x27, so `phase >> 3` is 0 to 4 and the `& 7` beside it can never reach the rest */
     uint8_t  backdrop[5][384];          /* 0x6d9f what those five point at: 8 rows of 48, the full 192-pixel width. level_intro's first loop feeds backdrop[0] in 48 bytes at a time, which is the same frame read a row a pass */
-    uint8_t  _pad_28[188];
+    uint8_t  _pad_28[2];
+    /* 0x7521 the creature's walk cycle: eight frames then SENTINEL_PTR, which
+     * walker_step wraps on. The eighth entry is 0x7533, the byte just past
+     * this list - so the last frame's pixels begin where the offsets end,
+     * which is the corroboration that there are exactly nine words here. */
+    uint16_t walker_frame_ptr[9];
+    uint8_t  _pad_28b[168];
     uint16_t walker_drop_ptr[6];            /* 0x75db the six frames the creature plays once it has walked in, 7 rows of 7 at a fixed spot */
     uint8_t  _pad_29[294];
     uint16_t hatch_open_ptr[5];             /* 0x770d the hatch opening */
@@ -954,6 +960,7 @@ ENSURE_GLOBAL_AT(brick10_hold, 0x6b9c);
 ENSURE_GLOBAL_AT(intro_feed, 0x6d36);
 ENSURE_GLOBAL_AT(backdrop_ptr, 0x6d95);
 ENSURE_GLOBAL_AT(backdrop, 0x6d9f);
+ENSURE_GLOBAL_AT(walker_frame_ptr, 0x7521);
 ENSURE_GLOBAL_AT(walker_drop_ptr, 0x75db);
 ENSURE_GLOBAL_AT(hatch_open_ptr, 0x770d);
 ENSURE_GLOBAL_AT(hatch_shut_ptr, 0x7717);
