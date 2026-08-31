@@ -2558,7 +2558,6 @@ void field_backdrop(uint32_t y)
  * frame.
  * ===================================================================== */
 #define WALKER_ROW    0x1cc0            /* the paddle row */
-#define WALKER_FIRST  0x7521            /* where the frame list restarts */
 
 /* 1ac2:1e50  walker_draw
  *
@@ -2610,7 +2609,7 @@ void walker_step(uint32_t x)
     walker_draw(x);
     global.walker_anim_ptr += 2;
     if (global_w(global.walker_anim_ptr) == SENTINEL_PTR)
-        global.walker_anim_ptr = WALKER_FIRST;
+        global.walker_anim_ptr = global_off(global.walker_frame_ptr);
 }
 
 /* One strip of the hatch the creature comes out of: 19 rows of one word at a
@@ -2658,7 +2657,11 @@ void level_draw(void)
         di = cga_next_row(di);
     }
 
-    global.walker_anim_ptr = 0x7525;
+    /* Frame 2, not frame 0: walker_step reads the entry *before* the
+     * cursor to erase with, so the walk has to start with one behind
+     * it - and the `+= 2` below puts the cursor on 3 before the first
+     * step, which is where the sequence the screen shows begins. */
+    global.walker_anim_ptr = global_off(&global.walker_frame_ptr[2]);
     global.paddle_x = 0xc6;
     walker_draw(0xc8);
     global.walker_anim_ptr += 2;
