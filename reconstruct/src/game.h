@@ -713,6 +713,18 @@ typedef struct __attribute__((packed)) {
     uint8_t  eog_blank[3][60];          /* 0xabab what the ending draws over a group to blank it: three tall_sprite frames, because it is called three times and each carries SI forward sixty bytes. One byte short of bonus_kinds */
     uint8_t  _pad_34[1];
     bonus_kind_t bonus_kinds[8];        /* 0xac60 the eight capsules, and bonus_release picks one with random(8). Thirty-two bytes ending at 0xac80, which is kind 0's own sprite - the table abuts the data it points into */
+    uint8_t  _pad_35[2850];
+    /* The sparkle a collected capsule leaves, and the same twelve pictures the
+     * ending's columns play. Two walkers, two conventions: entity_sparkle
+     * enters at `[1]`, because entity_anim erases the entry *before* the
+     * cursor and `[0]` is what it rubs out first; ending_column reads from
+     * `[0]` and draws every one of them.
+     *
+     * These are the first bytes named beyond bonus_kinds, which is why
+     * global_t stops here rather than at 0xac80 - the 2,850 before them are
+     * still nobody's. */
+    uint16_t sparkle_ptr[13];           /* 0xb7a2 twelve frames, then SENTINEL_PTR */
+    uint8_t  sparkle[12][16][5];        /* 0xb7bc twelve of 20x16, which is what sprite_shift_draw takes. ending_column copies four of the five bytes a row and fifteen of the sixteen rows */
 } global_t;
 
 /* The same bytes as g_image, which stays the buffer everything else - memcpy,
@@ -886,6 +898,8 @@ ENSURE_GLOBAL_AT(eog_overlay, 0xa6d0);
 ENSURE_GLOBAL_AT(eog_groups, 0xa8bf);
 ENSURE_GLOBAL_AT(eog_blank, 0xabab);
 ENSURE_GLOBAL_AT(bonus_kinds, 0xac60);
+ENSURE_GLOBAL_AT(sparkle_ptr, 0xb7a2);
+ENSURE_GLOBAL_AT(sparkle, 0xb7bc);
 /* @generated-asserts end */
 
 /* The two facts the chain rests on, checked rather than described: the head
