@@ -46,6 +46,7 @@ static SDL_Renderer *ren;
 static SDL_Texture *tex;
 static SDL_AudioStream *audio;
 static void sound_top_up(void);
+static void cga_palette_update(void);
 static int32_t win_scale = 3;
 static int32_t quit_requested;
 static uint64_t next_present_ns;
@@ -75,6 +76,10 @@ int32_t io_init(int32_t scale)
     if (scale < 1)
         scale = 1;
     win_scale = scale;
+    /* Until this runs, g_palette is only its static initialiser - which was a
+     * second answer to the same question, and disagreed with the registers as
+     * soon as POPCORN_RGBI was set.  Compute it from them once, here. */
+    cga_palette_update();
     if (!SDL_CreateWindowAndRenderer("Popcorn", CGA_W * scale, CGA_H * scale,
                                      0, &win, &ren)) {
         fprintf(stderr, "popcorn: SDL_CreateWindowAndRenderer: %s\n",
@@ -906,6 +911,27 @@ static const uint32_t CGA16[16] = {
     0xffff5555, 0xffff55ff, 0xffffff55, 0xffffffff,
 };
 
+/* A real CGA's own output, which is not the default - see below.  -1 until
+ * the environment has been asked; POPCORN_RGBI=1 turns it on for `popcorn`,
+ * which has no command line of its own to put a flag in, and popcorn-dev
+ * takes --rgbi. */
+static int32_t cga_rgbi = -1;
+
+void io_set_rgbi(int32_t on)
+{
+    cga_rgbi = on != 0;
+    cga_palette_update();
+}
+
+static int32_t rgbi_wanted(void)
+{
+    if (cga_rgbi < 0) {
+        const char *e = getenv("POPCORN_RGBI");
+        cga_rgbi = e != NULL && *e != '\0' && *e != '0';
+    }
+    return cga_rgbi;
+}
+
 /* The CGA's four palettes, and the colour-burst bit does **not** choose
  * between them.
  *
@@ -929,12 +955,18 @@ static void cga_palette_update(void)
         { 2, 4, 6 }, { 10, 12, 14 },        /* palette 0, dim and bright */
         { 3, 5, 7 }, { 11, 13, 15 },        /* palette 1 */
     };
-    uint32_t row = ((cga_colour_reg >> 5) & 1) * 2 +
-                   ((cga_colour_reg >> 4) & 1);
+    /* What a real CGA substitutes when the burst is off, whatever the palette
+     * bit says: cyan, red and white.  Only with POPCORN_RGBI. */
+    static const uint8_t rgbi[2][3] = { { 3, 4, 7 }, { 11, 12, 15 } };
+    uint32_t bright = (cga_colour_reg >> 4) & 1;
+    const uint8_t *fg =
+        (rgbi_wanted() && ((cga_mode_reg >> 2) & 1))
+            ? rgbi[bright]
+            : sets[((cga_colour_reg >> 5) & 1) * 2 + bright];
     uint32_t *p = (uint32_t *)g_palette;
     p[0] = CGA16[cga_colour_reg & 0x0f];
     for (int32_t i = 0; i < 3; i++)
-        p[i + 1] = CGA16[sets[row][i]];
+        p[i + 1] = CGA16[fg[i]];
 }
 
 void io_cga_mode(uint32_t v)   { cga_mode_reg = v;   cga_palette_update(); }
