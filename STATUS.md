@@ -527,6 +527,20 @@ original shoot.
    , against 9 at the start of the day. Two things are still open on
    it, and they are different questions:
 
+   A third has been closed, and it was never the port. `--from-bonus` had
+   been reporting five bytes differing on every frame - `speed_step`,
+   `speed_timer` and the tick of every live entity, each one lower on the
+   port. `--resume` set `start_at = FRAME_END` unconditionally, a hundred
+   lines after `--from-bonus` had set it to `BONUS_BODY`, and `start_at` is
+   the field `lockstep.c` reads to decide where to rejoin. So the port was
+   told it had resumed at the frame top, went in through `play_loop`, and
+   ran one frame body the emulator never ran - which decrements exactly
+   those five counters and nothing else, which is why the screens were
+   identical the whole time. `--from-bonus` was never taken at all. The
+   resume now reads the snapshot's own stopping point out of its registers
+   rather than assuming one, and the route is **3,000 frames identical**,
+   through the bonus and on into the next level.
+
    - A full run from the menu diverges at frame 120,291 on level 5, with the
      **port** a level ahead this time rather than behind - and it does **not
      reproduce**: resuming from that level's own snapshot, 6,753 frames

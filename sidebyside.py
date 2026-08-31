@@ -515,11 +515,26 @@ def main():
         captured["img"] = img
         captured["vram"] = vram
         captured["ticks"] = ticks
-        start_at = FRAME_END            # snapshots are frame boundaries now
-        # CS:IP is restored *on* the sync instruction, so the hook would fire
-        # once with no work done - the port's frame 1 against the emulator's
-        # frame 0. Same reason the normal path skips a hit after emu_stop.
-        resuming[0] = start_at
+        # Where the snapshot actually stopped decides both of these, and it
+        # is the last of REGS_ALL. A capture at the frame's close is restored
+        # *on* the sync instruction, so the hook would fire once with no work
+        # done - the port's frame 1 against the emulator's frame 0 - and one
+        # hit has to be skipped, the same way the normal path skips one after
+        # emu_stop.
+        #
+        # 1ac2:4210 is the exception and has to stay one: it is not a sync
+        # point, so there is nothing to skip - and start_at is what the port
+        # is *told it resumed at*, in the state file lockstep.c reads. Setting
+        # it to the frame top here overrode --from-bonus and sent the port in
+        # through play_loop instead of into the bonus, where it ran one frame
+        # body the emulator never ran: one decrement of speed_step, of
+        # speed_timer, and of every live entity's tick. Those five bytes are
+        # what this route had been differing by, on every frame, for months.
+        if regs[-1] == BONUS_BODY:
+            start_at = BONUS_BODY
+        else:
+            start_at = FRAME_END
+            resuming[0] = start_at
         base_frame[0] = fr
         print(f"resumed {os.path.basename(args.resume)}: level {lv}, "
               f"originally frame {fr}")
