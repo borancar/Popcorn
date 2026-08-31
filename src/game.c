@@ -1314,7 +1314,7 @@ frames:
 
         game_input();
         if (global.paddle_morphing == 0)
-            draw_paddle(global_ptr(global.paddle_sets[global.paddle_kind].sprites));
+            draw_paddle(global_ptr(global.paddle_sets[global.paddle_kind].sprites_ptr));
         if (global.laser_on)
             laser_fire();
 
@@ -1517,7 +1517,7 @@ void play_session(void)
     if (g_start_level >= 0)
         lv = (uint32_t)g_start_level;
     global.level_number = (uint8_t)lv;
-    global.level_src = assets_off(&assets.levels[global.level_number]);
+    global.level_src_ptr = assets_off(&assets.levels[global.level_number]);
     panel_draw();
 
     for (;;) {
@@ -1565,11 +1565,11 @@ retry:
 
     level_done:
         screen_level_done();                    /* 1ac2:0521 */
-        global.level_src = assets_off(&assets.levels[global.level_number + 1]);
+        global.level_src_ptr = assets_off(&assets.levels[global.level_number + 1]);
         global.level_number++;
         if (global.level_number == LEVEL_COUNT) {
             global.level_number = 0;
-            global.level_src = assets_off(&assets.levels[0]);
+            global.level_src_ptr = assets_off(&assets.levels[0]);
             screen_all_levels_done();           /* 1ac2:5940 */
         }
     }
@@ -1739,7 +1739,7 @@ void level_intro(void)
                 continue;
             st->timer = 0;
             global.sweep_y[k]--;
-            draw_sprite_20x6(SWEEP_X, global.sweep_y[k], global_ptr(st->sprite));
+            draw_sprite_20x6(SWEEP_X, global.sweep_y[k], global_ptr(st->sprite_ptr));
         }
         intro_pause(0xa);
         io_present();
@@ -1759,7 +1759,7 @@ void level_intro(void)
             if (st->timer == 0) {
                 st->timer = st->period;
                 global.sweep_y[k]++;
-                draw_sprite_20x6(SWEEP_X, global.sweep_y[k], global_ptr(st->sprite));
+                draw_sprite_20x6(SWEEP_X, global.sweep_y[k], global_ptr(st->sprite_ptr));
             }
             st->timer--;                /* both ways round, after the draw */
         }
@@ -2527,7 +2527,7 @@ void field_backdrop(uint32_t y)
 {
     io_log_random(0x1fc1);              /* tagged, for sidebyside's per-frame list */
     uint32_t di = cga_at(0, y) + BRICK_LEFT;
-    const uint8_t *src = global_ptr(global.backdrop_table[(global.backdrop_phase >> 3) & 7]);
+    const uint8_t *src = global_ptr(global.backdrop_ptr[(global.backdrop_phase >> 3) & 7]);
     for (int32_t r = 0; r < 8; r++) {
         for (int32_t b = 0; b < BACKDROP_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
@@ -2562,7 +2562,7 @@ void walker_draw(uint32_t x)
 {
     /* walker_anim is a cursor into a list of frame addresses, ended by
      * 0xffff; the word it names is the frame. */
-    const uint8_t *frame = global_ptr(global_w(global.walker_anim));
+    const uint8_t *frame = global_ptr(global_w(global.walker_anim_ptr));
     memcpy(global.walker_work, frame, sizeof global.walker_work);
 
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
@@ -2595,13 +2595,13 @@ void walker_draw(uint32_t x)
  */
 void walker_step(uint32_t x)
 {
-    global.walker_anim = (uint16_t)(global.walker_anim - 2);
+    global.walker_anim_ptr -= 2;
     walker_draw(x + 2);
-    global.walker_anim = (uint16_t)(global.walker_anim + 2);
+    global.walker_anim_ptr += 2;
     walker_draw(x);
-    global.walker_anim = (uint16_t)(global.walker_anim + 2);
-    if (global_w(global.walker_anim) == SENTINEL_PTR)
-        global.walker_anim = (uint16_t)(WALKER_FIRST);
+    global.walker_anim_ptr += 2;
+    if (global_w(global.walker_anim_ptr) == SENTINEL_PTR)
+        global.walker_anim_ptr = WALKER_FIRST;
 }
 
 /* One strip of the hatch the creature comes out of: 19 rows of one word at a
@@ -2632,7 +2632,7 @@ void level_draw(void)
 
     global.paddle_x = 0xc8;
     for (int32_t f = 0; f < 5; f++) {
-        hatch_frame(global_ptr(global.hatch_open[f]), hx, hy);
+        hatch_frame(global_ptr(global.hatch_open_ptr[f]), hx, hy);
         for (int32_t i = 0; i < 0x12c; i++)
             game_delay();
     }
@@ -2649,10 +2649,10 @@ void level_draw(void)
         di = cga_next_row(di);
     }
 
-    global.walker_anim = (uint16_t)(0x7525);
+    global.walker_anim_ptr = 0x7525;
     global.paddle_x = 0xc6;
     walker_draw(0xc8);
-    global.walker_anim = (uint16_t)(global.walker_anim + 2);
+    global.walker_anim_ptr += 2;
     for (int32_t i = 0; i < 9; i++) {
         for (int32_t d = 0; d < 0x4b; d++)
             game_delay();
@@ -2667,7 +2667,7 @@ void level_draw(void)
     for (int32_t f = 0; f < 0x14; f++) {
         uint32_t ch = (uint32_t)(0x14 - f);
         if (!(ch & 3))
-            hatch_frame(global_ptr(global.hatch_shut[f >> 2]), hx, hy);
+            hatch_frame(global_ptr(global.hatch_shut_ptr[f >> 2]), hx, hy);
         for (int32_t d = 0; d < 0x4b; d++)
             game_delay();
         walker_step(global.paddle_x);
@@ -2687,7 +2687,7 @@ void level_draw(void)
     }
 
     for (int32_t f = 0; f < 6; f++) {
-        const uint8_t *src = global_ptr(global.walker_drop[f]);
+        const uint8_t *src = global_ptr(global.walker_drop_ptr[f]);
         uint32_t d = 0x1cd9;
         for (int32_t r = 0; r < 7; r++) {
             for (int32_t b = 0; b < 7; b++)
@@ -3340,7 +3340,7 @@ void entity_ball_arrive(ent_anim_t *a)
     if (global.entity_remove != 1)
         return;
 
-    ball_place(ball_ptr(a->arg.ball), (a->sprite.x + 8) & 0xff,
+    ball_place(ball_ptr(a->arg.ball_ptr), (a->sprite.x + 8) & 0xff,
                (a->sprite.y - 4) & 0xff);
 }
 
@@ -3397,7 +3397,7 @@ void brick_9(hit_t *hit, ball_t *ball)
     entity_t *e = entity_alloc();
     e->handler_fn = ENTITY_BALL_ARRIVE_FN;
     ent_anim_t *a = &e->p.anim;
-    a->arg.ball = global_off(ball);        /* the slot holds its address */
+    a->arg.ball_ptr = global_off(ball);        /* the slot holds its address */
     a->sprite.frame_ptr = global_off(&global.teleport_in_ptr[1]);
     a->sprite.timer = a->sprite.period = 0x32;
     a->sprite.x = (uint8_t)((idx % 12) * 16 + 8);
@@ -3419,7 +3419,7 @@ void brick_10(hit_t *hit, ball_t *ball)
     entity_t *e = entity_alloc();
     e->handler_fn = ENTITY_BALL_HOLD_FN;
     ent_anim_t *a = &e->p.anim;
-    a->arg.ball = global_off(ball);        /* likewise */
+    a->arg.ball_ptr = global_off(ball);        /* likewise */
     a->sprite.frame_ptr = global_off(global.brick10_hold_ptr);
     a->sprite.x = (uint8_t)x;
     a->sprite.y = (uint8_t)y;
@@ -3490,11 +3490,11 @@ void entity_ball_hold(ent_anim_t *a)
         sprite_shift_draw(x, y, global_ptr(global_w(a->sprite.frame_ptr)));
         if (global.net_on == 1) {
             global.entity_remove = 1;
-            ball_place(ball_ptr(a->arg.ball), (x + 8) & 0xff, (y + 0x0b) & 0xff);
+            ball_place(ball_ptr(a->arg.ball_ptr), (x + 8) & 0xff, (y + 0x0b) & 0xff);
             return;
         }
         global.ball_alive--;
-        ball_ptr(a->arg.ball)->state = 0;
+        ball_ptr(a->arg.ball_ptr)->state = 0;
         global.entity_remove = 1;
         return;
     }
@@ -3512,7 +3512,7 @@ void entity_ball_hold(ent_anim_t *a)
         brick_score(0, 0, 0x0303);
         ry = (ry + 4) & 0xff;
     }
-    ball_place(ball_ptr(a->arg.ball), (a->sprite.x + 8) & 0xff, (ry + 0x0c) & 0xff);
+    ball_place(ball_ptr(a->arg.ball_ptr), (a->sprite.x + 8) & 0xff, (ry + 0x0c) & 0xff);
     if (global.hit_kind != 3)
         brick_score(0, 0, 5);
 }
@@ -4444,10 +4444,10 @@ void entity_paddle_fx(ent_morph_t *m)
         if (global.paddle_x == global.paddle_prev_x)
             return;
         if (m->step == 6) {
-            draw_paddle(global_ptr(global.paddle_sets[global.paddle_kind].sprites));
+            draw_paddle(global_ptr(global.paddle_sets[global.paddle_kind].sprites_ptr));
             return;
         }
-        uint32_t si = m->sprites + m->step * 2;
+        uint32_t si = m->sprites_ptr + m->step * 2;
         draw_paddle_shifted(global_ptr(global_w(si)));
         return;
     }
@@ -4494,7 +4494,7 @@ void entity_paddle_fx(ent_morph_t *m)
  * the first frame. */
 void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint32_t kind)
 {
-    m->sprites = global_table_w(table_ptr, kind);
+    m->sprites_ptr = global_table_w(table_ptr, kind);
     m->step = 6;
     global.paddle_morphing = 0xff;
     morph_step(m);
@@ -4504,7 +4504,7 @@ void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint32_t kind)
 void morph_step(ent_morph_t *m)
 {
     m->step--;
-    uint32_t si = m->sprites + m->step * 2;
+    uint32_t si = m->sprites_ptr + m->step * 2;
     draw_paddle_shifted(global_ptr(global_w(si)));
 
     global.paddle_width += global.paddle_step;
@@ -5240,7 +5240,7 @@ void banner_shift(void)
 static void player_record_init(player_t *p)
 {
     p->lives = 5;
-    p->level_src = assets_off(&assets.levels[0]);
+    p->level_src_ptr = assets_off(&assets.levels[0]);
     p->level_number = 0;
     memset(p->score, '0', sizeof p->score);
     p->level = assets.levels[0];
@@ -5404,7 +5404,7 @@ void cell_special(uint32_t row, uint32_t col, uint32_t di)
 void input_and_draw_paddle(void)
 {
     game_input();
-    draw_paddle(global_ptr(global.paddle_sets[global.paddle_kind].sprites));
+    draw_paddle(global_ptr(global.paddle_sets[global.paddle_kind].sprites_ptr));
 }
 
 /* 1ac2:5171  cheat_match
@@ -6611,11 +6611,11 @@ void screen_end_of_game(void)
      * into SI with DS at 0, so eog_build_at is an image offset, and starting
      * it at EOG_WIDTH is starting it at the saved screen's second row. */
     global.eog_screen_at = 8;
-    global.eog_build_at = global_off(&global.scratch1.eog_saved[EOG_WIDTH]);
+    global.eog_build_ptr = global_off(&global.scratch1.eog_saved[EOG_WIDTH]);
 
     for (int32_t pass = 0x87; pass > 0; pass--) {
         /* The band as it stands, from the saved screen - not from vram. */
-        memcpy(global.scratch2.eog_band, global_ptr(global.eog_build_at), EOG_BAND_LEN);
+        memcpy(global.scratch2.eog_band, global_ptr(global.eog_build_ptr), EOG_BAND_LEN);
 
         const uint8_t *src = global.eog_overlay;
         uint8_t *dst = global.scratch2.eog_band;
@@ -6631,7 +6631,7 @@ void screen_end_of_game(void)
 
         /* One band on screen from the saved copy, then the merged block. */
         di = global.eog_screen_at;
-        const uint8_t *from = global_ptr((global.eog_build_at - EOG_WIDTH) & 0xffff);
+        const uint8_t *from = global_ptr((global.eog_build_ptr - EOG_WIDTH) & 0xffff);
         for (int32_t b = 0; b < EOG_WIDTH; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = from[b];
         di = cga_next_row(di);
@@ -6644,7 +6644,7 @@ void screen_end_of_game(void)
             m += EOG_WIDTH;             /* `rep movsb` carries SI forward */
             di = cga_next_row(di);
         }
-        global.eog_build_at = (uint16_t)(global.eog_build_at + EOG_WIDTH);
+        global.eog_build_ptr += EOG_WIDTH;
 
         io_present();
         if (!io_pump())
@@ -6668,7 +6668,7 @@ void screen_end_of_game(void)
     int32_t keyed = 0;
     for (int32_t g = 0; g < 7 && !keyed; g++) {
         uint32_t at = (0x34f0 + global.eog_groups[g].at) & 0xffff;
-        const uint8_t *sprite = global_ptr(global.eog_groups[g].sprite);
+        const uint8_t *sprite = global_ptr(global.eog_groups[g].sprite_ptr);
 
         if (tall_sprite(&sprite, at)) { keyed = 1; break; }
         tall_sprite(&sprite, at);       /* no test after the second */
@@ -7012,7 +7012,7 @@ static int32_t bonus_end_level_run(void)
      * row's lodsb so the second reads the same twelve - and a blank. And si
      * walks **up** the level by 0x0c a time, not down: the loop's `pop si` at
      * 1ac2:43e7 takes the value after the second row's lodsb. */
-    uint32_t si = (global.level_src + 0xb8) & 0xffff;
+    uint32_t si = (global.level_src_ptr + 0xb8) & 0xffff;
     for (int32_t n = 0x0e; n > 0; n--, si = (si + 0x0c) & 0xffff) {
         banner_row(assets_ptr(si));
         banner_row(assets_ptr(si));
@@ -7151,7 +7151,7 @@ int32_t next_player(const char *dir)
     /* Save this player. */
     player_t *p = &global.players[global.cur_player];
     p->lives = global.lives;
-    p->level_src = global.level_src;
+    p->level_src_ptr = global.level_src_ptr;
     p->level_number = global.level_number;
     memcpy(p->score, global.score_text, sizeof p->score);
     p->level = global.level;
@@ -7179,7 +7179,7 @@ int32_t next_player(const char *dir)
     /* Restore them. */
     memcpy(global.player_name, q->name, sizeof q->name);
     global.lives = q->lives;
-    global.level_src = q->level_src;
+    global.level_src_ptr = q->level_src_ptr;
     global.level_number = q->level_number;
     memcpy(global.score_text, q->score, sizeof global.score_text);
     global.level = q->level;
