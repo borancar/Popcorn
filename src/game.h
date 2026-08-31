@@ -1341,7 +1341,19 @@ typedef struct __attribute__((packed)) {
     uint16_t delay_count;               /* cs:0x164e the `mov cx,N` immediate POPSPEED writes */
     uint8_t  _code4[308];
     uint8_t  demo_ball;                 /* cs:0x1784 which ball the demo is chasing, 0xff for none */
-    uint8_t  _code5[14568];
+    uint8_t  _code5[13324];
+    /* The 6845's twelve parameters, twice - and this is a **CRT controller**
+     * table, not a palette. set_crtc writes them to ports 0x3d0 and 0x3d1,
+     * which on a CGA are the aliases of the 6845's index and data registers
+     * that partial address decoding leaves lying about; 0x3d4 and 0x3d5 are
+     * the same two. They are IBM's own values for the two modes.
+     *
+     * They live in the **code** segment - 1ac2:4b88 is `mov al, cs:[si]` -
+     * which is why the port read the wrong bytes entirely while it called
+     * them a palette and reached them with global_ptr. */
+    uint8_t  crtc_text80[12];           /* cs:0x4b91 80 columns of text: 80 displayed, 25 rows of 8 scan lines. employee_enter's, for the fake DOS prompt */
+    uint8_t  crtc_graphics[12];         /* cs:0x4b9d 320x200: 40 displayed, 100 rows of 1 scan line, which is the interlace. screen_restore's, putting it back */
+    uint8_t  _code5b[1220];
     uint16_t border_spr[8];             /* cs:0x506d the menu border's sprites */
     uint16_t border_pos[14];            /* cs:0x507d and where each one is, updated in place */
     uint8_t  _code6[1545];
@@ -1387,6 +1399,8 @@ ENSURE_CODE_AT(sound_tunes_ptr, 0x00f8);
 ENSURE_CODE_AT(delay_entry, 0x164c);
 ENSURE_CODE_AT(delay_count, 0x164e);
 ENSURE_CODE_AT(demo_ball, 0x1784);
+ENSURE_CODE_AT(crtc_text80, 0x4b91);
+ENSURE_CODE_AT(crtc_graphics, 0x4b9d);
 ENSURE_CODE_AT(border_spr, 0x506d);
 ENSURE_CODE_AT(border_pos, 0x507d);
 ENSURE_CODE_AT(cheat_cursor_ptr, 0x56a2);
@@ -1586,7 +1600,7 @@ int32_t  cheat_sequence(char key);    /* 1ac2:58b3 */            /* 1ac2:1509 */
 void play_prepare(void);          /* 1ac2:0cc5 */
 
 int32_t  level_load_file(const char *dir);  /* 1ac2:08c8 */
-void set_palette_registers(const uint8_t *table); /* 1ac2:4b7a */
+void set_crtc(const uint8_t *params); /* 1ac2:4b7a */
 uint8_t screen_player_names(void);  /* 1ac2:10de */
 int32_t  name_field(uint32_t di, uint8_t *abort); /* 1ac2:13b8 */
 void play_frame(void);            /* 1ac2:1212 */

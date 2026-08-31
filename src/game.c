@@ -1076,7 +1076,7 @@ static void input_keys_mouse(void)
      * platform layer calls int09_handler for every scan code in both modes,
      * so the 0xc3 toggle in there has already done it. Doing it again would
      * toggle twice and look exactly like F9 not working. */
-    if (ax == 0x011b) {                 /* 1ac2:1669, Esc */
+    if (ax == ((KEY_ESC << 8) | KEY_ESCAPE_CHAR)) {   /* 1ac2:1669 */
         screen_stash();                 /* 1ac2:4ba9 */
         uint32_t k;
         do {
@@ -1092,12 +1092,12 @@ static void input_keys_mouse(void)
         screen_unstash();               /* 1ac2:4c13 */
         return;
     }
-    if (ax == 0x4400) {                 /* 1ac2:168b, F10 */
+    if ((ax >> 8) == KEY_F10) {         /* 1ac2:168b */
         /* The boss key is a no-op here on purpose - see employee_enter - so
          * nothing was stashed and 1ac2:169c's screen_restore is skipped with
          * it, exactly as the menu's F10 does. */
         employee_enter();               /* 1ac2:4ae0 */
-        while (io_key_ready() && io_get_key() == 0x4400)
+        while (io_key_ready() && (io_get_key() >> 8) == KEY_F10)
             ;                           /* 1ac2:1693 */
     }
 }
@@ -5699,7 +5699,7 @@ void screen_stash(void)
 void screen_restore(void)
 {
     io_cga_mode(0x0e);
-    set_palette_registers(global_ptr(0x4b9d));
+    set_crtc(runtime.crtc_graphics);
     memcpy(g_vram, global.scratch2.screen_stash, 0x7d0 * 2);
     speaker_on();
 }
@@ -6448,17 +6448,34 @@ int32_t level_load_file(const char *dir)
     return 1;
 }
 
-/* 1ac2:4b7a  set_palette_registers
+/* 1ac2:4b7a  set_crtc
  *
- * Twelve values out to ports 0x3d0 through 0x3db, alternating index and data.
- * That is an EGA-style palette write on what is meant to be a CGA, and it does
- * nothing on real CGA hardware - the two screens that use it (F10 and its
- * exit) look the same without it. Recorded because it runs.
+ * Twelve parameters into the **6845**, index and value alternating: the index
+ * to port 0x3d0 and the value to 0x3d1, `inc dx` and `dec dx` between them.
+ * Those two are the CRT controller's index and data registers - a CGA decodes
+ * its ports partially, so 0x3d0/0x3d1 and 0x3d4/0x3d5 are the same pair.
+ *
+ * This was called set_palette_registers and described as an EGA palette write
+ * that did nothing. It is neither. It reprograms the display: the two callers
+ * are the boss key, which puts the CRTC into 80-column text to draw its fake
+ * DOS prompt, and its exit, which puts it back to 320x200. The values are
+ * IBM's own for those modes, and R1 - 80 against 40 displayed characters -
+ * is what tells the two tables apart at a glance.
+ *
+ * The parameters are read `mov al, cs:[si]` at 1ac2:4b88, from the **code**
+ * segment. The port had them at the same offset in the data segment, which
+ * lands in the middle of paddle_sprites - twelve bytes of paddle, sent
+ * nowhere, and no way to notice while the body did nothing.
+ *
+ * The body still does nothing, because the port has no 6845 to program and
+ * both screens it serves are ones the port deliberately does not draw. It is
+ * kept, and now reads the right bytes, because a routine that runs should say
+ * what it runs on.
  */
-void set_palette_registers(const uint8_t *table)
+void set_crtc(const uint8_t *params)
 {
-    for (int32_t i = 0; i < 0x0c; i++)
-        (void)table[i];
+    for (int32_t i = 0; i < 12; i++)
+        (void)params[i];
 }
 
 /* ========================================================================
