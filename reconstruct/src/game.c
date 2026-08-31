@@ -5445,13 +5445,18 @@ void cheat_match(uint8_t c)
  * wrap the colour-burst bit in the mode register at [0x13c7] is flipped too.
  * Both are written to their ports.
  *
- * So thirty-two presses to come back round, for eight distinct screens. Only
- * bits 4 and 5 of the colour select are wired on a CGA - intensity and which
- * of the two palettes - which is four combinations, and bits 6 and 7 go
- * nowhere, so each of the four comes up four times in the sixteen. The burst
- * bit is what doubles it: cleared, mode 05h shows cyan, red and white on an
- * RGB monitor whichever palette bit is set, which is the third set the
- * hardware has and the one this game draws in.
+ * Thirty-two presses to come back round, and **six** distinct screens in
+ * them - fewer than the arithmetic suggests, twice over.
+ *
+ * Only bits 4 and 5 of the colour select are wired on a CGA: intensity, and
+ * which of the two palettes. Bits 6 and 7 go nowhere, so each of the four
+ * combinations comes up four times in the sixteen presses, and the low
+ * nibble - the background - is never touched, so it stays black throughout.
+ * Then the burst bit adds fewer than it looks: with it cleared, mode 05h
+ * shows cyan, red and white on an RGB monitor **whichever way the palette bit
+ * is set**, so it contributes two more sets and not four. Four with the burst
+ * on, two with it off. sdl_io.c's table says the same thing by having its
+ * last four rows be two, repeated.
  */
 void palette_cycle(void)
 {
