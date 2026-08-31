@@ -5273,7 +5273,7 @@ void play_prepare(void)
 
 void demo_start(void)
 {
-    global.input_active_fn = (uint16_t)(INPUT_DEMO_FN);
+    global.input_active_fn = INPUT_DEMO_FN;
     runtime.demo_ball = 0xff;
     memcpy(global.players[0].name, global.demo_name, sizeof global.players[0].name);
     player_record_init(&global.players[0]);
