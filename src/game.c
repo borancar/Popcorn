@@ -3737,7 +3737,7 @@ settle:
      * sparkle's too, unchanged - only `handler` is the node's, so this is the
      * one line here that has to look outside the capsule. */
     entity_of(b)->handler_fn = ENTITY_SPARKLE_FN;
-    b->sprite.frame_ptr = 0xb7a4;
+    b->sprite.frame_ptr = global_off(&global.sparkle_ptr[1]);
     b->sprite.timer = b->sprite.period = 0x0f;
     global.bonus_live--;
     sprite_shift_draw(b->sprite.x, b->sprite.y,
@@ -5972,9 +5972,8 @@ void ending_column(void)
          * every one of the eight columns plays the whole list at 0xb7a2 from
          * the beginning. Hoisting it out, which is what this used to do, gave
          * each column one frame of the animation and then ran off the end. */
-        const uint16_t *frames = (const uint16_t *)global_ptr(0xb7a2);
-        while (*frames != SENTINEL_PTR) {
-            const uint8_t *src = global_ptr(*frames);
+        for (int32_t f = 0; global.sparkle_ptr[f] != SENTINEL_PTR; f++) {
+            const uint8_t *src = global_ptr(global.sparkle_ptr[f]);
             uint32_t d = di;
             for (int32_t r = 0; r < 0x0f; r++) {
                 for (int32_t b = 0; b < 4; b++)
@@ -5982,7 +5981,6 @@ void ending_column(void)
                 src += 5;               /* four copied, one skipped */
                 d = cga_next_row(d);
             }
-            frames++;
             /* 1ac2:5348 - a hundred delays, watching for a key throughout. */
             for (int32_t i = 0; i < 0x64; i++) {
                 if (io_key_ready()) {
