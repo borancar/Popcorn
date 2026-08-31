@@ -6,27 +6,32 @@ address parked in a slot, an animation cursor, a frame list - and they are
 16-bit offsets into one of four segments, not C pointers.  The port has one
 way in and one way out:
 
-    img_off(p)      a C pointer -> the offset the game would have stored
-    img_ptr(off)    that offset -> the pointer it means
-    img_w(off)      the 16-bit value **at** an offset, which is how one of
+    global_off(p)      a C pointer -> the offset the game would have stored
+    global_ptr(off)    that offset -> the pointer it means
+    global_w(off)      the 16-bit value **at** an offset, which is how one of
                     the game's pointers is read out of its data
 
-with entity_ptr, ball_ptr, hit_ptr and s14a1_ptr as the typed forms.  The
+with entity_ptr, ball_ptr, hit_ptr and animations_ptr as the typed forms.  The
 rules this checks are what keeps those honest:
 
   1. A field the game treats as a pointer is named `*_ptr`.
-  2. Storing into one must go through `img_off`.  Anything else is a number
-     being put where a pointer goes.
+  2. Where a value stored into one came from.  **Informational**: the rule
+     that only `global_off` makes a pointer is too narrow to be an error.  A
+     pointer can be built out of the game's own data with no C pointer in
+     sight - `animated_ptr[p] = group_ptr + (piece << 5)` is a frame inside a
+     group, genuinely an offset into the animations block, and no `_off`
+     could apply to it.  So this reports where the value came from and leaves
+     the judgement.
   3. Reading one must go through a `_ptr` accessor.  A bare `g_image[x]` on
      a stored pointer is the same mistake with the arithmetic inlined.
   4. Casting one **to an integer** is a smell.  A pointer of the game's is
      sixteen bits wide by definition, so `(uint16_t)x_ptr` either says nothing
      or is covering for something else being the wrong width - a local
      declared uint32_t, most often.  Declare the local uint16_t and the cast
-     goes.  Casting what img_ptr *returns* to a typed C pointer is a different
+     goes.  Casting what global_ptr *returns* to a typed C pointer is a different
      thing and is fine.
   5. The only pointer constant is `SENTINEL_PTR`.  An address written into a
-     call - `img_ptr(0x6b9c)`, or a #define standing for one - is a place in
+     call - `global_ptr(0x6b9c)`, or a #define standing for one - is a place in
      the image that has not been given a field yet, and naming it is the fix.
   6. A `_fn` field holds a **routine's** address - something the game calls
      rather than reads - and only an `_FN` constant or another `_fn` is one.
@@ -34,11 +39,11 @@ rules this checks are what keeps those honest:
      fixed in the image and there is nothing to give it a field.  Casting one
      is the same smell as casting a pointer.
   7. What an accessor is called with must be **simple** - a name, a field, a
-     subscript.  `img_w(table + index * 2)` is doing pointer arithmetic
+     subscript.  `global_w(table + index * 2)` is doing pointer arithmetic
      without a pointer type: `table` is an array of somethings, and the C
-     that means it is `img_w(table[index])`.
+     that means it is `global_w(table[index])`.
 
-And one thing it reports without complaining about: `img_ptr(img_w(x))`, a
+And one thing it reports without complaining about: `global_ptr(global_w(x))`, a
 pointer **to** a pointer.  The game keeps tables of frame addresses, so a
 cursor into one needs both steps and two indirections are right there - the
 only place they are.  Worth seeing because getting it wrong is silent: one
@@ -51,21 +56,24 @@ whose values already flow into an accessor and which therefore want the
 suffix.  That list is the rename, written down.
 
 Stores are sorted rather than lumped, because a pointer does not only come
-from img_off:
+from global_off:
 
-    made      img_off of a C pointer - the port deciding an address
-    copied    img_w, another pointer field, an entry of a table of them:
+    made      global_off of a C pointer - the port deciding an address
+    copied    global_w, another pointer field, an entry of a table of them:
               the game's own data handing one over
     advanced  the same field plus or minus something - a cursor stepping,
               and the arithmetic is on an offset, which is what makes it
               16-bit wrap-around and not C pointer arithmetic
-    neither   a bare number put where a pointer goes, which is the catch
+    neither   no source this can recognise.  Worth a look, not a verdict:
+              the value may be a perfectly good offset the checker has no way
+              to see the provenance of
 
     uv run check_pointers.py                 # game.c and game.h
     uv run check_pointers.py --strict         # exit 1 if anything is flagged
     uv run check_pointers.py FILE...
 """
 import argparse
+import re
 import os
 import sys
 
@@ -75,16 +83,37 @@ import tree_sitter_c
 C = Language(tree_sitter_c.language())
 
 # Resolve one of the game's stored offsets into something addressable.
-PTR_FUNCS = {"img_ptr", "entity_ptr", "ball_ptr", "hit_ptr", "s14a1_ptr"}
+PTR_FUNCS = {"global_ptr", "entity_ptr", "ball_ptr", "hit_ptr",
+             "animations_ptr", "assets_ptr", "runtime_ptr"}
 # Read or write a 16-bit value at an offset - which is how the game's own
 # pointers are loaded and stored.
-WORD_FUNCS = {"img_w", "s14a1_w", "img_setw"}
+WORD_FUNCS = {"global_w", "animations_w", "global_setw", "runtime_w"}
 # The other direction.
-OFF_FUNCS = {"img_off", "cv_off"}
+OFF_FUNCS = {"global_off", "assets_off", "runtime_off", "animations_off"}
 
 ACCESSORS = PTR_FUNCS | WORD_FUNCS
 
-# The argument that is an offset.  img_setw(off, value) writes the second.
+# Which segment an accessor resolves against.  A stored offset means nothing
+# without one: the same 16-bit word is a different byte in each segment, and
+# the four bases are tens of kilobytes apart.
+#
+# Note what this is **not**.  Where a field lives and what its value points
+# into are independent, and the program relies on that: global.anim_ptr is a
+# member of global_t whose value is an offset into the animations block, so
+# `animations_w(global.anim_ptr)` is right, not a mix-up.  A field can also
+# retarget - the same word holding an offset into one segment at one moment
+# and another at another - so "this field always means segment X" is not a
+# fact this can assume.  It reports what it saw and leaves the judgement.
+SEGMENT_OF = {
+    "global_ptr": "global", "global_w": "global", "global_setw": "global",
+    "entity_ptr": "global", "ball_ptr": "global", "hit_ptr": "global",
+    "animations_ptr": "animations", "animations_w": "animations",
+    "assets_ptr": "assets",
+    "runtime_ptr": "runtime", "runtime_w": "runtime",
+    "vram_setw": "vram",
+}
+
+# The argument that is an offset.  global_setw(off, value) writes the second.
 OFFSET_ARG = {f: 0 for f in ACCESSORS}
 
 
@@ -115,7 +144,7 @@ def is_simple(node, src):
                               "type_identifier", "sized_type_specifier"):
                 return is_simple(c, src)
         return True
-    if k == "call_expression":              # img_ptr(img_w(x)) is two steps,
+    if k == "call_expression":              # global_ptr(global_w(x)) is two steps,
         return True                         # each of which is checked itself
     return False
 
@@ -142,6 +171,46 @@ def root_name(node, src):
         if k == "identifier":
             return text(node, src)
         return None
+
+
+def enclosing_fn(node, src):
+    """The function a node sits in, so two locals called `si` stay apart."""
+    n = node.parent
+    while n is not None:
+        if n.type == "function_definition":
+            d = n.child_by_field_name("declarator")
+            while d is not None and d.type != "identifier":
+                d = d.child_by_field_name("declarator")
+            return text(d, src) if d is not None else None
+        n = n.parent
+    return None
+
+
+def qualified_name(node, src):
+    """A key that separates same-named things.
+
+    root_name gives the leaf, and leaves collide: there are three different
+    `script` fields, and `si` is a local in dozens of routines.  For a field
+    this keeps the object it was read from, with subscripts flattened so
+    `hits[i].cell` and `hits[j].cell` are one thing.  Locals are qualified by
+    the function they live in.
+    """
+    while node.type in ("parenthesized_expression", "cast_expression"):
+        kids = [c for c in node.named_children
+                if c.type not in ("type_descriptor", "primitive_type",
+                                  "type_identifier", "sized_type_specifier")]
+        if not kids:
+            return None
+        node = kids[0]
+    if node.type == "subscript_expression":
+        arg = node.child_by_field_name("argument")
+        return qualified_name(arg, src) if arg is not None else None
+    if node.type == "field_expression":
+        return re.sub(r"\[[^\]]*\]", "[]", text(node, src))
+    if node.type == "identifier":
+        fn = enclosing_fn(node, src)
+        return "%s() %s" % (fn, text(node, src)) if fn else text(node, src)
+    return None
 
 
 def struct_fields(paths):
@@ -193,7 +262,8 @@ def ptr_fields(paths):
     return names
 
 
-def check(path, known_ptr_fields, known_fn_fields, findings, candidates):
+def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
+          segments):
     src = open(path, "rb").read()
     tree = Parser(C).parse(src)
     rel = os.path.relpath(path)
@@ -232,6 +302,23 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates):
                         % (text(n, src), inner))
 
                 who = root_name(arg, src)
+
+                # Which segment this stored offset was resolved against.
+                # Keyed by a qualified name: the leaf alone collides, and a
+                # collision reads as a field meaning two segments at once.
+                seg = SEGMENT_OF.get(name)
+                qual = qualified_name(arg, src)
+                if qual and seg and not qual.startswith(("global_ptr()",
+                                                         "animations_ptr()",
+                                                         "runtime_ptr()",
+                                                         "assets_ptr()",
+                                                         "global_w()",
+                                                         "animations_w()",
+                                                         "runtime_w()",
+                                                         "global_setw()")):
+                    segments.setdefault(qual, {}).setdefault(seg, set()).add(
+                        "%s:%d %s" % (rel, arg.start_point[0] + 1, name))
+
                 if who and not who.endswith("_ptr") and who not in (
                         "g_image", "off", "si", "di", "bx"):
                     candidates.setdefault(who, set()).add(
@@ -260,11 +347,11 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates):
                 how = ("advanced" if compound
                        else classify_store(rhs, field, known_ptr_fields, src))
                 if how == "made":
-                    pass                # img_off: a C pointer written down
+                    pass                # global_off: a C pointer written down
                 elif how == "copied":
                     add("pointer-from-data", n,
                         "%s = %s - a pointer taken from the game's own data "
-                        "rather than made with img_off. Legitimate, and worth "
+                        "rather than made with global_off. Legitimate, and worth "
                         "seeing: it is where one of its pointers comes from"
                         % (text(lhs, src), text(rhs, src)))
                 elif how == "terminator":
@@ -277,7 +364,7 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates):
                         "rather than C pointer arithmetic"
                         % (text(lhs, src), text(rhs, src)))
                 else:
-                    add("store-without-img_off", n,
+                    add("store-without-global_off", n,
                         "%s = %s - a plain number put where one of the game's "
                         "pointers goes" % (text(lhs, src), text(rhs, src)))
 
@@ -346,7 +433,7 @@ def is_constant(node, src):
 
 
 def inner_word_call(node, src):
-    """`img_ptr(img_w(x))` - the x, if this is a pointer read through one.
+    """`global_ptr(global_w(x))` - the x, if this is a pointer read through one.
 
     The game keeps tables of pointers, so a cursor into one is a pointer to a
     pointer and needs both steps.  Worth seeing rather than fixing: the shape
@@ -372,8 +459,8 @@ def inner_word_call(node, src):
 def classify_store(rhs, field, known, src):
     """Where a value stored into one of the game's pointers came from.
 
-    `made`     img_off of a C pointer - the port deciding an address
-    `copied`   img_w, or another pointer field, or an entry of a table of
+    `made`     global_off of a C pointer - the port deciding an address
+    `copied`   global_w, or another pointer field, or an entry of a table of
                them: the game's own data handing one over
     `advanced` the same field plus or minus something - a cursor stepping
     otherwise  a bare number, which is the thing worth catching
@@ -396,10 +483,32 @@ def classify_store(rhs, field, known, src):
             if name in WORD_FUNCS:
                 return "copied"
     if node.type == "binary_expression":
+        # A pointer with something added is still a pointer.  The obvious case
+        # is a cursor stepping itself, but the value can equally have come
+        # from another field, or out of another segment with its `_w`:
+        # `group_ptr + (piece << 5)` is a frame inside a group, and there is
+        # no `_off` that could apply to it because no C pointer was ever
+        # involved - the offset came from the game's own data.
         for side in (node.child_by_field_name("left"),
                      node.child_by_field_name("right")):
-            if side is not None and root_name(side, src) == field:
+            if side is None:
+                continue
+            who = root_name(side, src)
+            if who == field or (who and (who.endswith("_ptr") or who in known)):
                 return "advanced"
+            inner = side
+            while inner.type in ("cast_expression", "parenthesized_expression"):
+                kids = [c for c in inner.named_children
+                        if c.type not in ("type_descriptor", "primitive_type",
+                                          "type_identifier",
+                                          "sized_type_specifier")]
+                if not kids:
+                    break
+                inner = kids[0]
+            if inner.type == "call_expression":
+                fn = inner.child_by_field_name("function")
+                if fn is not None and text(fn, src) in WORD_FUNCS:
+                    return "advanced"
     lit = text(node, src)
     if lit == "SENTINEL_PTR" or (node.type == "number_literal"
                                  and lit.lower() in ("0xffff", "65535")):
@@ -413,7 +522,7 @@ def classify_store(rhs, field, known, src):
 
 
 def is_cast_of_off(node, src):
-    """`(uint16_t)img_off(x)` is still an img_off."""
+    """`(uint16_t)global_off(x)` is still an global_off."""
     while node.type in ("cast_expression", "parenthesized_expression"):
         kids = [c for c in node.named_children
                 if c.type not in ("type_descriptor", "primitive_type",
@@ -436,6 +545,8 @@ def main():
                     help="exit 1 when anything is flagged")
     ap.add_argument("--candidates", action="store_true",
                     help="only the fields that want a _ptr suffix")
+    ap.add_argument("--segments", action="store_true",
+                    help="only the segment each stored offset is read against")
     a = ap.parse_args()
 
     missing = [f for f in a.files if not os.path.exists(f)]
@@ -445,23 +556,50 @@ def main():
     known = ptr_fields(a.files)
     known_fn = fn_fields(a.files)
     fields = struct_fields(a.files)
-    findings, candidates = [], {}
+    findings, candidates, segments = [], {}, {}
     for f in a.files:
-        check(f, known, known_fn, findings, candidates)
+        check(f, known, known_fn, findings, candidates, segments)
+
+    # A stored offset read against more than one segment.  Informational: it
+    # can be right - a field that legitimately retargets - but at most one
+    # reading is right at any one moment, so each of these is a place to look.
+    mixed = {k: v for k, v in segments.items() if len(v) > 1}
+    if a.segments or (mixed and not a.candidates):
+        print("== a stored offset resolved against more than one segment (%d)"
+              % len(mixed))
+        print("   informational: where a field lives and what its value points")
+        print("   into are different things, and a field may retarget - but at")
+        print("   most one of these readings is right at any one moment")
+        for who in sorted(mixed):
+            print("  %s" % who)
+            for seg in sorted(mixed[who]):
+                where = sorted(mixed[who][seg])
+                print("      %-10s %s%s" % (seg, where[0],
+                                            " ..." if len(where) > 1 else ""))
+        print()
+    if a.segments:
+        return
 
     if not a.candidates:
         by_rule = {}
         for rule, path, line, msg in findings:
             by_rule.setdefault(rule, []).append((path, line, msg))
-        order = ["store-without-img_off", "routine-from-elsewhere",
+        order = ["routine-from-elsewhere",
                  "cast-of-a-routine", "pointer-constant",
                  "cast-of-a-pointer", "compound-offset",
+                 "store-without-global_off",
                  "pointer-advanced", "pointer-from-data",
                  "pointer-to-pointer"]
+        # Reported, not complained about: each of these has a shape that is
+        # right often enough that calling it a fault would train the reader
+        # to skip the report.
+        info = {"store-without-global_off", "pointer-advanced",
+                "pointer-from-data", "pointer-to-pointer"}
         for rule in sorted(by_rule, key=lambda r: (order.index(r)
                                                    if r in order else 99, r)):
             hits = by_rule[rule]
-            print("== %s (%d)" % (rule, len(hits)))
+            print("== %s (%d)%s" % (rule, len(hits),
+                                    "  [info]" if rule in info else ""))
             for path, line, msg in hits:
                 print("  %s:%d  %s" % (path, line, msg))
             print()

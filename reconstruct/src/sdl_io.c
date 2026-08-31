@@ -510,9 +510,9 @@ static void script_pump(void)
         else if (a >= 'A' && a <= 'Z')
             a += 32;
         key_push(sc, a);
-        if (sc == gv.key_scan_l) gv.key_left = 1;
-        if (sc == gv.key_scan_r) gv.key_right = 1;
-        if (sc == gv.key_scan_a) gv.key_action = 1;
+        if (sc == global.key_scan_l) global.key_left = 1;
+        if (sc == global.key_scan_r) global.key_right = 1;
+        if (sc == global.key_scan_a) global.key_action = 1;
         fprintf(stderr, "popcorn: [keys] scan %#04x at %ums\n", sc, script[i].ms);
     }
 }
