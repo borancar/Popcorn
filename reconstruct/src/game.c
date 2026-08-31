@@ -2322,10 +2322,10 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
      * than as `frames[kind][0]` of all eleven lists apiece. So this is the
      * first frame of whichever list the thing is about to animate through,
      * and saying that is what makes the two constants go away. */
-    xor_sprite_16xn(centre & 0xff, ((centre >> 8) + 1) & 0xff,
-                    global_ptr(global_w(is_two ? global.capsule_frames_ptr[f->kind]
-                                               : global.popup_frames_ptr[f->kind])),
-                    6);
+    const uint8_t *appear =
+        is_two ? global_ptr(global_w(global.capsule_frames_ptr[f->kind]))
+               : global_ptr(global_w(global.popup_frames_ptr[f->kind]));
+    xor_sprite_16xn(centre & 0xff, ((centre >> 8) + 1) & 0xff, appear, 6);
     global.bonus_cap++;
 }
 
