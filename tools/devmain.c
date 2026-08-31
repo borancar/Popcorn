@@ -6,33 +6,63 @@
  * the deliverable's command line stays a fact about the deliverable rather
  * than a place where debugging options accumulate.
  *
- *   --resume FILE        start from a snapshot.py capture, played by the
- *                        port itself rather than by a driver
+ * Starting somewhere other than the beginning:
+ *
+ *   --resume FILE        continue from a snapshot.py capture, played by the
+ *                        port itself rather than by a driver. The capture
+ *                        carries the image, so POPCORN.EXE is not needed and
+ *                        the working directory does not matter. Where to
+ *                        rejoin comes from the game's own variables rather
+ *                        than the captured CS:IP, which is an accident of
+ *                        where the emulator happened to stop
  *   --level N            start a game on level N (0-49) instead of the
  *                        first, so what goes wrong deep in the game can be
  *                        watched without playing to it
+ *   --cmdline NAME       the level file, as `popcorn NAME` takes it
+ *
+ * Playing it without a player:
+ *
  *   --autoplay [SEED]    play by itself, through the mouse - the same bot
  *                        autoplay.py drives the port with, but without the
  *                        Python process, the emulator beside it and the pipe
- *   --cmdline NAME       the level file, as `popcorn NAME` takes it
+ *   --keys SCAN@MS,...   press scan codes at wall-clock times; `^` before a
+ *                        scan code presses it with shift
+ *
+ * What it looks like:
+ *
  *   --scale N            window scale
+ *   --rgbi               the colours a real CGA gives mode 05h on an RGBI
+ *                        monitor. The default is what an EGA or VGA shows,
+ *                        which is what the game's authors saw. See main.c,
+ *                        where this is the one flag the deliverable also has
  *   --play-hz N          play-loop rate; 326 is the measured original
+ *
+ * Taking something away with you:
+ *
  *   --run-ms N           stop after N milliseconds of wall clock
  *   --shot FILE          write the screen there when the deadline is reached
  *   --dump-vram FILE     likewise, the raw 0xb8000 aperture
  *   --dump-image FILE    write the unpacked load image and exit, which is how
- *                        exepack.c is checked - or, with --run-ms, write it
- *                        when the run ends, to see what a session changed
- *                        exepack.c is checked against unpack_popcorn.py
- *   --keys SCAN@MS,...   press scan codes at wall-clock times; `^` before a
- *                        scan code presses it with shift
+ *                        exepack.c is checked against unpack_popcorn.py - or,
+ *                        with --run-ms, write it when the run ends, to see
+ *                        what a session changed
+ *
+ * Driven by something else:
+ *
  *   --verify IN OUT      run one routine on a captured state (verify.py)
  *   --lockstep STATE     the frame protocol sidebyside.py and autoplay.py
  *                        drive, resuming from a captured state
- *   --lockstep-sync-scroll / -endgame / -results
+ *   --lockstep-sync-scroll / -endgame / -results / -curtain / -ending
+ *                          / -intro
  *                        extra sync points, for the screens that are drawn
  *                        outside the play loop and are otherwise compared by
  *                        nothing at all
+ *
+ * --resume returns as soon as the game does, so the flags that are applied
+ * after the load image is read do not reach it: --keys and --level are
+ * ignored with it. --autoplay is not - it is armed while the arguments are
+ * being read - which is what makes `--autoplay --resume bonus.snap` the way
+ * to watch a screen nothing can reliably be played into.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -182,16 +212,23 @@ int32_t main(int32_t argc, char **argv)
             fprintf(stderr,
                     "usage: %s [--autoplay [SEED]] [--level N] "
                     "[--cmdline NAME]\n"
+                    "       %s --resume SNAPSHOT  (continue a capture; "
+                    "--keys and --level do not apply)\n"
                     "       %s [--scale N] [--play-hz N]\n"
                     "       %s [--run-ms N] [--shot FILE] [--dump-vram FILE]\n"
                     "       %s [--dump-image FILE] [--keys SCAN@MS,...]\n"
                     "       %s [--rgbi]  (a real CGA's mode 05h colours)\n"
                     "       %s --verify STATE-IN RESULT-OUT\n"
-                    "       %s --lockstep STATE [--lockstep-sync-...]\n"
+                    "       %s --lockstep STATE [--lockstep-sync-scroll]\n"
+                    "               [--lockstep-sync-endgame] "
+                    "[--lockstep-sync-results]\n"
+                    "               [--lockstep-sync-curtain] "
+                    "[--lockstep-sync-ending]\n"
+                    "               [--lockstep-sync-intro]\n"
                     "\n"
                     "To play, use popcorn.\n",
                     argv[0], argv[0], argv[0], argv[0], argv[0],
-                    argv[0], argv[0]);
+                    argv[0], argv[0], argv[0]);
             return 2;
         }
     }
