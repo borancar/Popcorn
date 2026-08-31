@@ -890,26 +890,26 @@ typedef char ensure_head_next_lands_on_3144[
  * animations_ptr and runtime_ptr, each of which resolves an offset into its own
  * segment. A 16-bit offset reaches 0xffff and no further, which is the
  * segment these belong to. */
-static inline uint8_t *global_ptr(uint32_t off)
+static inline uint8_t *global_ptr(uint16_t off)
 {
     return (uint8_t *)&global + off;
 }
 
-static inline uint32_t global_off(const void *p)
+static inline uint16_t global_off(const void *p)
 {
-    return (uint32_t)((const uint8_t *)p - (const uint8_t *)&global);
+    return (uint16_t)((const uint8_t *)p - (const uint8_t *)&global);
 }
 
 /* Little-endian accessors, so a transcribed `mov ax,[0x3144]` reads the way it
  * reads in the disassembly. global_w comes back in a **pointer's width**: what it
  * reads is a word of the game's data, and the reason the port reads words at
  * all is that the game keeps its pointers in them. */
-static inline uint16_t global_w(uint32_t off)
+static inline uint16_t global_w(uint16_t off)
 {
     const uint8_t *p = global_ptr(off);
     return (uint16_t)(p[0] | (p[1] << 8));
 }
-static inline void global_setw(uint32_t off, uint32_t v)
+static inline void global_setw(uint16_t off, uint32_t v)
 {
     uint8_t *p = global_ptr(off);
     p[0] = (uint8_t)v;
@@ -922,7 +922,7 @@ static inline void global_setw(uint32_t off, uint32_t v)
  *
  * `_ptr` throughout means the same thing as global_ptr: resolve an offset the
  * game stored. `_at`, as in cell_at, means find something by where it is. */
-static inline entity_t *entity_ptr(uint32_t off)
+static inline entity_t *entity_ptr(uint16_t off)
 {
     return (entity_t *)((uint8_t *)&global + off);
 }
@@ -937,14 +937,14 @@ static inline entity_t *entity_of(void *arm)
 }
 
 /* A probe slot by its image offset, for the same reason as ball_ptr. */
-static inline hit_t *hit_ptr(uint32_t off)
+static inline hit_t *hit_ptr(uint16_t off)
 {
     return (hit_t *)((uint8_t *)&global + off);
 }
 
 /* A ball by its image offset, for the routines that still carry one because
  * the original passed it in a register. */
-static inline ball_t *ball_ptr(uint32_t off)
+static inline ball_t *ball_ptr(uint16_t off)
 {
     return (ball_t *)((uint8_t *)&global + off);
 }
@@ -1104,7 +1104,7 @@ static inline uint16_t assets_off(const void *p)
 
 /* And the inverse, for an offset the game stored into this block - level_src
  * is the one that travels. */
-static inline uint8_t *assets_ptr(uint32_t off)
+static inline uint8_t *assets_ptr(uint16_t off)
 {
     return (uint8_t *)&assets + off;
 }
@@ -1253,14 +1253,14 @@ ENSURE_ANIMATIONS_AT(anim5, 0x5860);
  * - are relative to **this block**, not to the image, which is why they went
  * through `SEG_ANIMATIONS +` everywhere. Through these they read as what they
  * are: a pointer into the block, and a word out of it. */
-static inline uint8_t *animations_ptr(uint32_t off)
+static inline uint8_t *animations_ptr(uint16_t off)
 {
     return (uint8_t *)&animations + off;
 }
 
 /* A word out of the block - which is one of the game's pointers, so it comes
  * back in a pointer's width. */
-static inline uint16_t animations_w(uint32_t off)
+static inline uint16_t animations_w(uint16_t off)
 {
     const uint8_t *p = animations_ptr(off);
     return (uint16_t)(p[0] | (p[1] << 8));
@@ -1318,12 +1318,12 @@ ENSURE_SIZE(runtime_t, 0x5c6e);
  * them: the offsets the game keeps into its code segment - the sound cursor,
  * the cheat cursor, the border tables - are relative to **this** segment.
  * `CS_BASE + x` was that conversion done by hand at every site. */
-static inline uint8_t *runtime_ptr(uint32_t off)
+static inline uint8_t *runtime_ptr(uint16_t off)
 {
     return (uint8_t *)&runtime + off;
 }
 
-static inline uint16_t runtime_w(uint32_t off)
+static inline uint16_t runtime_w(uint16_t off)
 {
     const uint8_t *p = runtime_ptr(off);
     return (uint16_t)(p[0] | (p[1] << 8));
