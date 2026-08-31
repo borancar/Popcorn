@@ -602,6 +602,21 @@ original shoot.
   not positions at all. It pairs with the decimal sweep below, since the x and
   y that come out are quantities.
 
+  Counted: about fifty sites - 25 `di = 0x....`, 22 more locals initialised
+  the same way, and 3 handed straight to `vram_setw`. **All of them**, not a
+  selection: a screen offset written as a number is the thing being got rid
+  of, so leaving some is leaving the reader to wonder which kind each one is.
+
+  Two things to carry through, found while decoding
+  `screen_high_scores`. The starting offsets convert cleanly - its `0x2142` is
+  exactly `cga_at(8, 9)` and the `0x142` above it `cga_at(8, 8)`, the bar one
+  scan line over the heading. But the **stepping** is a separate question:
+  that routine advances by `HSC_LINE`, 0x1b0, whose comment says "DI already
+  +0x30" - a stride that assumes the cursor has moved by the width just drawn,
+  which is not `cga_next_row` and does not become it. And every step is masked
+  `& 0xffff`, which is the original's 16-bit DI wrapping; whatever replaces
+  the constant has to leave that alone.
+
   This matters beyond legibility. `eog_saved` lives at image offset 0, so
   every screen offset is also a valid image offset, and the two kinds of
   address are indistinguishable as bare numbers - `eog_screen_at` is a VRAM
