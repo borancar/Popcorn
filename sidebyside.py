@@ -156,9 +156,10 @@ def name_of(off):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--frames", type=int, default=200,
+    ap.add_argument("--frames", type=int, default=None,
                     help="0 runs until a comparison fails or you "
-                         "stop it")
+                         "stop it. Default 200, or unbounded under --play, "
+                         "which is a session rather than a measurement")
     ap.add_argument("--from-bonus", action="store_true",
                     help="the snapshot was taken at 1ac2:4210, the end-of-"
                          "level bonus, so resume there rather than in the play "
@@ -268,6 +269,11 @@ def main():
     # There is nowhere to read a mouse from without a window.
     if args.play:
         args.watch = True
+    if args.frames is None:
+        # 200 is a measurement's length. A session's is however long the
+        # player keeps playing, so --play runs until the window is closed
+        # unless a count was actually asked for.
+        args.frames = 0 if args.play else 200
 
     sys.path.insert(0, HERE)
     import unicorn
