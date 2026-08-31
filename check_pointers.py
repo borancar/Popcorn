@@ -158,13 +158,24 @@ def branches(node):
     if it holds for **both** arms - `is_two ? ENTITY_CAPSULE_FN :
     ENTITY_POPUP_FN` stores a routine's address either way.  Everything else
     is one value, so this is the identity for it.
+
+    It is also what an accessor's offset argument has to be checked through.
+    `global_ptr(is_two ? 0x4e13 : 0x5863)` is the two calls
+    `is_two ? global_ptr(0x4e13) : global_ptr(0x5863)` written short, and the
+    interesting thing about it is not that the argument is compound - it is
+    that each arm is an address nobody has named.  Reporting the ternary as
+    one compound offset hides two pointer constants behind it.  Nested arms
+    recurse, so a chain of ternaries is as many values as it has ends.
     """
     if node.type == "conditional_expression":
         arms = [node.child_by_field_name(f)
                 for f in ("consequence", "alternative")]
-        arms = [a for a in arms if a is not None]
-        if arms:
-            return arms
+        out = []
+        for a in arms:
+            if a is not None:
+                out.extend(branches(a))     # a ternary inside a ternary
+        if out:
+            return out
     return [node]
 
 
@@ -305,49 +316,52 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
             if enclosing_fn(n, src) in ACCESSORS:
                 continue
             if name in ACCESSORS and real:
-                arg = real[OFFSET_ARG[name]]
-                if not is_simple(arg, src):
-                    add("compound-offset", arg,
-                        "%s(%s) - the offset is computed in the call; give "
-                        "the thing it indexes a type and subscript it"
-                        % (name, text(arg, src)))
-                if is_constant(arg, src):
-                    add("pointer-constant", arg,
-                        "%s(%s) - the only pointer constant this program has "
-                        "is SENTINEL_PTR. An address written into a call is a "
-                        "field of the struct that has not been named yet"
-                        % (name, text(arg, src)))
+                # One accessor call, but the offset it is handed may be a
+                # ternary - which is two calls written short. Check each value
+                # it can take, so `global_ptr(a ? X : Y)` reports what
+                # `a ? global_ptr(X) : global_ptr(Y)` would.
+                for arg in branches(real[OFFSET_ARG[name]]):
+                    if not is_simple(arg, src):
+                        add("compound-offset", arg,
+                            "%s(%s) - the offset is computed in the call; "
+                            "give the thing it indexes a type and subscript it"
+                            % (name, text(arg, src)))
+                    if is_constant(arg, src):
+                        add("pointer-constant", arg,
+                            "%s(%s) - the only pointer constant this program "
+                            "has is SENTINEL_PTR. An address written into a "
+                            "call is a field of the struct that has not been "
+                            "named yet" % (name, text(arg, src)))
 
-                inner = inner_word_call(arg, src)
-                if name in PTR_FUNCS and inner is not None:
-                    add("pointer-to-pointer", n,
-                        "%s - a pointer **to** a pointer: %s is where the "
-                        "game keeps one, the word there is another, and this "
-                        "resolves that. Two of its indirections, not one"
-                        % (text(n, src), inner))
+                    inner = inner_word_call(arg, src)
+                    if name in PTR_FUNCS and inner is not None:
+                        add("pointer-to-pointer", n,
+                            "%s - a pointer **to** a pointer: %s is where the "
+                            "game keeps one, the word there is another, and "
+                            "this resolves that. Two of its indirections, not "
+                            "one" % (text(n, src), inner))
 
-                who = root_name(arg, src)
+                    who = root_name(arg, src)
 
-                # Which segment this stored offset was resolved against.
-                # Keyed by a qualified name: the leaf alone collides, and a
-                # collision reads as a field meaning two segments at once.
-                seg = SEGMENT_OF.get(name)
-                qual = qualified_name(arg, src)
-                if qual and seg and not qual.startswith(("global_ptr()",
-                                                         "animations_ptr()",
-                                                         "runtime_ptr()",
-                                                         "assets_ptr()",
-                                                         "global_w()",
-                                                         "animations_w()",
-                                                         "runtime_w()",
-                                                         "global_setw()")):
-                    segments.setdefault(qual, {}).setdefault(seg, set()).add(
-                        "%s:%d %s" % (rel, arg.start_point[0] + 1, name))
+                    # Which segment this stored offset was resolved against.
+                    # Keyed by a qualified name: the leaf alone collides, and
+                    # a collision reads as a field meaning two segments at
+                    # once.
+                    seg = SEGMENT_OF.get(name)
+                    qual = qualified_name(arg, src)
+                    if qual and seg and not qual.startswith((
+                            "global_ptr()", "animations_ptr()",
+                            "runtime_ptr()", "assets_ptr()", "global_w()",
+                            "animations_w()", "runtime_w()",
+                            "global_setw()")):
+                        segments.setdefault(qual, {}).setdefault(
+                            seg, set()).add(
+                            "%s:%d %s" % (rel, arg.start_point[0] + 1, name))
 
-                if who and not who.endswith("_ptr") and who not in (
-                        "g_image", "off", "si", "di", "bx"):
-                    candidates.setdefault(who, set()).add(
-                        "%s:%d %s" % (rel, arg.start_point[0] + 1, name))
+                    if who and not who.endswith("_ptr") and who not in (
+                            "g_image", "off", "si", "di", "bx"):
+                        candidates.setdefault(who, set()).add(
+                            "%s:%d %s" % (rel, arg.start_point[0] + 1, name))
 
         if n.type == "assignment_expression":
             lhs = n.child_by_field_name("left")
