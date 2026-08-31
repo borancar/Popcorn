@@ -1,8 +1,15 @@
 # Popcorn — the game's own code, reconstructed
 
 <p align="center">
-<img src="screenshots/menu.png" width="320" alt="Popcorn's menu, drawn by the port">
-<img src="screenshots/level-1.png" width="320" alt="The first level in play, the bot on the paddle">
+<img src="screenshots/menu-rgbi.png" width="320" alt="Popcorn's menu in cyan, red and white">
+<img src="screenshots/level-1-rgbi.png" width="320" alt="The first level in play, in cyan, red and white">
+<br><sub><code>--rgbi</code> — what a real CGA forces in mode 05h</sub>
+</p>
+
+<p align="center">
+<img src="screenshots/menu.png" width="320" alt="Popcorn's menu in cyan, magenta and white">
+<img src="screenshots/level-1.png" width="320" alt="The first level in play, in cyan, magenta and white">
+<br><sub>the default — what an EGA or VGA shows, and what the authors saw</sub>
 </p>
 
 C reconstructed from the disassembly of **Popcorn** (Christophe Lacaze /
@@ -13,11 +20,11 @@ the address in the original it was read from. It builds and plays:
 make && ./popcorn
 ```
 
-Both screenshots above are the port's own output, captured from it with
-`popcorn-dev --shot`: the menu it draws at startup, and the first level in
-play. The name in the panel is the bot's - `popcorn-dev --autoplay` plays the
-game by itself, which is how the port gets watched without a person at the
-paddle.
+All four screenshots above are the port's own output, captured from it with
+`popcorn-dev --shot`: the menu it draws at startup and the first level in
+play, each in both palettes. The name in the panel is the bot's -
+`popcorn-dev --autoplay` plays the game by itself, which is how the port gets
+watched without a person at the paddle.
 
 **On the colours.** The game asks BIOS for mode 05h, and on a real CGA driving
 an RGBI monitor that clears the colour burst and forces cyan, red and white
