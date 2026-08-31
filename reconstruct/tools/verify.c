@@ -124,7 +124,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x3200: bonus_stop_monsters(); return 1;
     case 0x41e5: cell_special(r[R_AX] & 0xff, r[R_CX] & 0xff, r[R_DI]);
                  return 1;
-    case 0x4b7a: set_palette_registers(global_ptr(r[R_SI])); return 1;
+    case 0x4b7a: set_crtc(runtime_ptr(r[R_SI])); return 1;   /* SI is a cs: offset */
     case 0x4c4b: brick_11_after(r[R_CX] & 0xff, r[R_AX] & 0xff); return 1;
     case 0x4cc1: cell_hole_draw(r[R_CX] & 0xff, r[R_AX] & 0xff); return 1;
     /* 0x4e1a, the high-score screen, is left out: it returns on a key, and
