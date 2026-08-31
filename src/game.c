@@ -5445,18 +5445,17 @@ void cheat_match(uint8_t c)
  * wrap the colour-burst bit in the mode register at [0x13c7] is flipped too.
  * Both are written to their ports.
  *
- * Thirty-two presses to come back round, and **six** distinct screens in
- * them - fewer than the arithmetic suggests, twice over.
+ * What it cycles is the CGA's **four palettes** - palette 0 and palette 1,
+ * each dim and bright - because bits 4 and 5 of the colour select are the
+ * only ones wired. Bits 6 and 7 go nowhere, so those four come round four
+ * times over in the sixteen presses, and the low nibble is never touched, so
+ * the background stays black throughout.
  *
- * Only bits 4 and 5 of the colour select are wired on a CGA: intensity, and
- * which of the two palettes. Bits 6 and 7 go nowhere, so each of the four
- * combinations comes up four times in the sixteen presses, and the low
- * nibble - the background - is never touched, so it stays black throughout.
- * Then the burst bit adds fewer than it looks: with it cleared, mode 05h
- * shows cyan, red and white on an RGB monitor **whichever way the palette bit
- * is set**, so it contributes two more sets and not four. Four with the burst
- * on, two with it off. sdl_io.c's table says the same thing by having its
- * last four rows be two, repeated.
+ * The burst bit is not a fifth palette. Flipping it is a **mode** change,
+ * 04h to 05h, and in 05h the palette bit stops meaning anything: an RGB
+ * monitor shows cyan, red and white either way. That is why F8 takes
+ * thirty-two presses to return - sixteen through the palettes in one mode,
+ * sixteen in the other - while only ever offering four palettes.
  */
 void palette_cycle(void)
 {
