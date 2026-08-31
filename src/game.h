@@ -663,7 +663,7 @@ typedef struct __attribute__((packed)) {
      * 0xac60 are all in here, named where they are used and nowhere else.
      * That is the next seam. */
     uint8_t  _pad_22[4731];
-    uint16_t hatch_script[21];          /* 0x604e how a hatch opens: twenty frame offsets then SENTINEL_PTR. Entries 0 to 9 open it, 10 to 18 shut it again by playing the same frames backwards, and the last is mark_sprite - the hatch closed is the mark that was always there */
+    uint16_t hatch_script_ptr[21];      /* 0x604e how a hatch opens: twenty frame offsets then SENTINEL_PTR. Entries 0 to 9 open it, 10 to 18 shut it again by playing the same frames backwards, and the last is mark_sprite - the hatch closed is the mark that was always there */
     uint8_t  mark_sprite[37][2];        /* 0x6078 the mark drawn at each field position, one word a row. field_marks takes 0x1f rows of it and level_between 0x25 - the same picture, cut short. It is also the hatch's **shut** frame, which is why hatch_frame starts after it rather than at it */
     uint8_t  hatch_frame[10][37][2];    /* 0x60c2 the hatch opening, ten frames of the same 37 rows. hatch_frame[9] is fully open, and entity_hatch releases the capsule on it */
     uint8_t  _pad_26[2448];
@@ -839,7 +839,7 @@ ENSURE_GLOBAL_AT(frame_corner_left, 0x48d2);
 ENSURE_GLOBAL_AT(life_sprite, 0x48e7);
 ENSURE_GLOBAL_AT(ball_start_sprite, 0x48fb);
 ENSURE_GLOBAL_AT(paddle_sprites, 0x4903);
-ENSURE_GLOBAL_AT(hatch_script, 0x604e);
+ENSURE_GLOBAL_AT(hatch_script_ptr, 0x604e);
 ENSURE_GLOBAL_AT(mark_sprite, 0x6078);
 ENSURE_GLOBAL_AT(hatch_frame, 0x60c2);
 ENSURE_GLOBAL_AT(intro_feed, 0x6d36);

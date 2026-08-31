@@ -5032,7 +5032,7 @@ void bonus_spawn(void)
     h->y = m->y;
     h->wait = 0;
     h->phase = 0x2bc;
-    h->script_ptr = global_off(global.hatch_script);
+    h->script_ptr = global_off(global.hatch_script_ptr);
 }
 
 /* 1ac2:50df  menu_banner_tick
