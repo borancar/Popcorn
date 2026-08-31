@@ -648,7 +648,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  cur_player;                /* 0x3f0a */
     char     cheat_text[16];            /* 0x3f0b "LACRAL software\r" - the expected keys, the return being the last of them */
     uint8_t  cheat_done;                /* 0x3f1b set when the whole of it has been typed; the menu tests this */
-    uint16_t cheat_at;                  /* 0x3f1c how far along cheat_text the typing has got, as an image offset */
+    uint16_t cheat_at_ptr;              /* 0x3f1c how far along cheat_text the typing has got, as an image offset */
     uint8_t  banner_text[2418];         /* 0x3f1e the menu's scrolling text - the authors' message, in the game's own character encoding rather than ASCII, ended by a zero. banner_ptr walks it, and the menu starts the demo when it reaches the end */
     uint8_t  arrow_head_sprite[9][5];   /* 0x4890 the menu arrow's head, XORed in by arrow_head */
     uint8_t  frame_corner_right[7][3];  /* 0x48bd the right-hand corner pieces of the playfield surround */
@@ -831,7 +831,7 @@ ENSURE_GLOBAL_AT(live_count, 0x3f09);
 ENSURE_GLOBAL_AT(cur_player, 0x3f0a);
 ENSURE_GLOBAL_AT(cheat_text, 0x3f0b);
 ENSURE_GLOBAL_AT(cheat_done, 0x3f1b);
-ENSURE_GLOBAL_AT(cheat_at, 0x3f1c);
+ENSURE_GLOBAL_AT(cheat_at_ptr, 0x3f1c);
 ENSURE_GLOBAL_AT(banner_text, 0x3f1e);
 ENSURE_GLOBAL_AT(arrow_head_sprite, 0x4890);
 ENSURE_GLOBAL_AT(frame_corner_right, 0x48bd);

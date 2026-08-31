@@ -978,7 +978,7 @@ void game_main(const char *dir, const char *levels)
             if ((key >> 8) == KEY_F7) {                 /* forget the
                                                          * cheat so far */
                 global.cheat_done = 0;
-                global.cheat_at = (uint16_t)global_off(global.cheat_text);
+                global.cheat_at_ptr = global_off(global.cheat_text);
             }
             if (global.cheat_done != 1)                     /* 1ac2:0239 */
                 cheat_match((uint8_t)(key & 0xff));
@@ -5419,22 +5419,22 @@ void input_and_draw_paddle(void)
 
 /* 1ac2:5171  cheat_match
  *
- * One character of a typed cheat. cheat_at walks along cheat_text; a wrong
+ * One character of a typed cheat. cheat_at_ptr walks along cheat_text; a wrong
  * character starts it over at the beginning, and reaching the terminating
  * return sets cheat_done, which is what the menu tests.
  */
 void cheat_match(uint8_t c)
 {
-    const char *at = (const char *)global_ptr(global.cheat_at);
+    const char *at = (const char *)global_ptr(global.cheat_at_ptr);
     if ((char)c != *at) {
-        global.cheat_at = global_off(global.cheat_text);   /* wrong: start over */
+        global.cheat_at_ptr = global_off(global.cheat_text);   /* wrong: start over */
         return;
     }
     if (*at == '\r') {
         global.cheat_done = 1;            /* the whole word */
         return;
     }
-    global.cheat_at++;
+    global.cheat_at_ptr++;
 }
 
 /* 1ac2:5196  palette_cycle
