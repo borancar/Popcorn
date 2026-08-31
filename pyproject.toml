@@ -10,7 +10,7 @@ dependencies = [
     # rate - and a measurement whose instrument cannot be named is not
     # reproducible. Moving the pin is a deliberate act; re-run verify_routes.sh
     # afterwards.
-    "dos-emulator @ git+https://github.com/borancar/dos_emulator@a9ae5ee40ffd4f790b86f92157fc98c1b547d392",
+    "dos-emulator @ git+https://github.com/borancar/dos_emulator@83cd99d",
 
     # Disassembly: tools_dis.py, analyze.py, cycles.py.
     "capstone",

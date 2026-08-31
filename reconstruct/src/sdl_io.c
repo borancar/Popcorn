@@ -27,13 +27,14 @@
 
 uint8_t g_vram[CGA_SIZE];
 
-/* Mode 05h on an RGB monitor: the colour-burst-kill bit in the mode-control
- * register selects this palette whatever the palette bit says.  Entry 0 is the
- * background from the colour-select register, black at the BIOS default. */
+/* Palette 1 at high intensity, which is what BIOS leaves in the colour-select
+ * register (0x30) for mode 05h.  Entry 0 is the background from that same
+ * register, black at the default.  See cga_palette_update for why the
+ * colour-burst bit does not turn this into the cyan/red/white set. */
 uint32_t g_palette[4] = {
     0xff000000,     /* black */
-    0xff55ffff,     /* cyan */
-    0xffff5555,     /* red */
+    0xff55ffff,     /* light cyan */
+    0xffff55ff,     /* light magenta */
     0xffffffff,     /* white */
 };
 
@@ -894,8 +895,8 @@ static void sound_top_up(void)
 
 /* The two CGA registers F8 cycles. The port keeps its own palette rather than
  * a register file, so these translate: 0x3d9 bits 4 and 5 pick the intensity
- * and the palette, and 0x3d8 bit 2 kills the colour burst - which on an RGB
- * monitor is what selects the cyan/red/white set the game normally runs in. */
+ * and the palette.  0x3d8 bit 2 kills the colour burst, and deliberately does
+ * nothing here - see cga_palette_update. */
 static uint32_t cga_mode_reg = 0x0e, cga_colour_reg = 0x30;
 
 static const uint32_t CGA16[16] = {
@@ -905,16 +906,30 @@ static const uint32_t CGA16[16] = {
     0xffff5555, 0xffff55ff, 0xffffff55, 0xffffffff,
 };
 
+/* The CGA's four palettes, and the colour-burst bit does **not** choose
+ * between them.
+ *
+ * On a real CGA, clearing that bit in 320x200 - which is what BIOS mode 05h
+ * does, and this game asks for mode 5 at 1ac2:01a1 - forces cyan, red and
+ * white on an RGBI monitor whatever the palette bit says.  A card that only
+ * emulates the mode does not carry the quirk over, and by 1988 that is what
+ * the game was being played on: EGA and VGA boards driving a monitor through
+ * the newer connector.  There the palette bit governs, and with BIOS leaving
+ * 0x30 in the colour-select register the game comes up in palette 1 at high
+ * intensity - light cyan, light magenta, white.  DOSBox shows the same, and
+ * it is the picture people remember.
+ *
+ * **This is a deliberate departure from emulation.py**, which models the CGA
+ * itself and renders the cyan/red/white set.  sidebyside cannot see the
+ * difference - it compares video memory and the image, and the palette is in
+ * neither - so it is written down here instead. */
 static void cga_palette_update(void)
 {
-    static const uint8_t sets[8][3] = {
+    static const uint8_t sets[4][3] = {
         { 2, 4, 6 }, { 10, 12, 14 },        /* palette 0, dim and bright */
         { 3, 5, 7 }, { 11, 13, 15 },        /* palette 1 */
-        { 3, 4, 7 }, { 11, 12, 15 },        /* burst off: cyan, red, white */
-        { 3, 4, 7 }, { 11, 12, 15 },
     };
-    uint32_t row = ((cga_mode_reg >> 2) & 1) * 4 +
-                   ((cga_colour_reg >> 5) & 1) * 2 +
+    uint32_t row = ((cga_colour_reg >> 5) & 1) * 2 +
                    ((cga_colour_reg >> 4) & 1);
     uint32_t *p = (uint32_t *)g_palette;
     p[0] = CGA16[cga_colour_reg & 0x0f];
