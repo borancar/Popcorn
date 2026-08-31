@@ -2373,9 +2373,10 @@ void brick_8(hit_t *hit, ball_t *ball)
     *global_ptr(hit->cell) = 0;
     uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[8]));
-    xor_sprite_16x7(x, y, global_ptr(0x681c));
+    xor_sprite_16x7(x, y, global.brick8_score[0]);
     /* four times round the animation - a **byte**, see ent_anim_t's arg */
-    brick_entity(hit, ENTITY_REPEAT_FN, 0x67ea, 7)->p.anim.arg.count = 4;
+    brick_entity(hit, ENTITY_REPEAT_FN,
+                 global_off(global.brick8_roll_ptr), 7)->p.anim.arg.count = 4;
     global.level.bricks--;
 }
 
@@ -3302,10 +3303,10 @@ void entity_repeat(ent_anim_t *a)
         return;
     if (--a->arg.count != 0) {   /* a **byte**: 1ac2:3679 */
         global.entity_remove = 0;
-        a->sprite.frame = 0x67ea;       /* and round the animation again */
+        a->sprite.frame = global_off(global.brick8_roll_ptr);  /* round again */
         return;
     }
-    xor_sprite_16x7(a->sprite.x, a->sprite.y, global_ptr(0x681c));
+    xor_sprite_16x7(a->sprite.x, a->sprite.y, global.brick8_score[0]);
 }
 
 /* 1ac2:3696  from brick 9 - the animation and nothing else */
