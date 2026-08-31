@@ -2194,9 +2194,9 @@ void ball_bricks(ball_t *b)
     drop_duplicate_hits();
 
     for (int32_t i = 0; i < 4; i++) {
-        uint16_t cell = global.hits[i].cell_ptr;
-        if (cell)
-            brick_hit(&global.hits[i], global_ptr(cell), b);
+        uint16_t cell_ptr = global.hits[i].cell_ptr;
+        if (cell_ptr)
+            brick_hit(&global.hits[i], global_ptr(cell_ptr), b);
     }
 }
 
@@ -4077,9 +4077,9 @@ void laser_fire(void)
         return;
 
     for (int32_t i = 0; i < 2; i++) {
-        uint16_t cell = global.hits[i].cell_ptr;
-        if (cell)                       /* BP is zero: no ball struck this */
-            brick_hit(&global.hits[i], global_ptr(cell), (ball_t *)0);
+        uint16_t cell_ptr = global.hits[i].cell_ptr;
+        if (cell_ptr)                   /* BP is zero: no ball struck this */
+            brick_hit(&global.hits[i], global_ptr(cell_ptr), (ball_t *)0);
     }
     shot_xor(global.laser_x, (global.laser_y + 2) & 0xff);
     global.laser_y = 0xb3;
