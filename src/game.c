@@ -5143,29 +5143,29 @@ uint32_t particle_init(uint32_t si, uint32_t ax_in)
  */
 void menu_particles_tick(void)
 {
-    uint32_t si = global_off(global.particles);
+    uint16_t particle_ptr = global_off(global.particles);
     uint32_t n = global.particle_count;
-    for (uint32_t k = 0; k < n; k++, si += 0x10) {
+    for (uint32_t k = 0; k < n; k++, particle_ptr += 0x10) {
         /* Rub out where it was. */
-        uint32_t x = (global_w(si) + global_w(si + 4) - global_w(si + 6)) & 0xffff;
-        uint32_t y = (global_w(si + 8) + global_w(si + 2) - global_w(si + 0x0a)) & 0xffff;
+        uint32_t x = (global_w(particle_ptr) + global_w(particle_ptr + 4) - global_w(particle_ptr + 6)) & 0xffff;
+        uint32_t y = (global_w(particle_ptr + 8) + global_w(particle_ptr + 2) - global_w(particle_ptr + 0x0a)) & 0xffff;
         if (x <= 0x13f && y <= 0xc7)
             plot_pixel_xor(x, y, 3);
 
-        global_setw(si + 6, (global_w(si + 6) + global_w(si + 0x0c)) & 0xffff);
-        int16_t t = (int16_t)global_w(si + 6);
-        int16_t v = (int16_t)global_w(si + 0x0e);
+        global_setw(particle_ptr + 6, (global_w(particle_ptr + 6) + global_w(particle_ptr + 0x0c)) & 0xffff);
+        int16_t t = (int16_t)global_w(particle_ptr + 6);
+        int16_t v = (int16_t)global_w(particle_ptr + 0x0e);
         int16_t first = (int16_t)(v * t);
         int32_t prod = (int32_t)first * (int32_t)t;
-        global_setw(si + 8, (int16_t)(prod / 100) & 0xffff);
+        global_setw(particle_ptr + 8, (int16_t)(prod / 100) & 0xffff);
 
-        y = (global_w(si + 8) + global_w(si + 2) - global_w(si + 0x0a)) & 0xffff;
-        x = (global_w(si) + global_w(si + 4) - global_w(si + 6)) & 0xffff;
+        y = (global_w(particle_ptr + 8) + global_w(particle_ptr + 2) - global_w(particle_ptr + 0x0a)) & 0xffff;
+        x = (global_w(particle_ptr) + global_w(particle_ptr + 4) - global_w(particle_ptr + 6)) & 0xffff;
         if (y <= 0xc7 && x <= 0x13f)
             plot_pixel_xor(x, y, 3);
 
         if (y > 0xc7)
-            particle_init(si, y);       /* gone: launch another */
+            particle_init(particle_ptr, y);       /* gone: launch another */
         /* One delay per kernel, not one per kernel per kernel: `mov cx,bp`
          * restores the loop counter and the `call` is outside any loop. */
         game_delay();
@@ -6075,13 +6075,13 @@ void ending_plot(uint32_t x, uint32_t y)
     uint32_t row = y >> 1;
     di += row * 0x50;
     uint32_t phase = ((x & 1) ? 1 : 0) + ((x & 2) ? 2 : 0);
-    uint32_t si = global_off(global.particle_sprites[phase]);
+    uint16_t sprite_ptr = global_off(global.particle_sprites[phase]);
     di += x >> 2;
 
     uint32_t d = di;
     for (int32_t i = 0; i < 4; i++) {
-        g_vram[d & (CGA_SIZE - 1)] ^= (uint8_t)global_w(si + i * 2);
-        g_vram[(d + 1) & (CGA_SIZE - 1)] ^= (uint8_t)(global_w(si + i * 2) >> 8);
+        g_vram[d & (CGA_SIZE - 1)] ^= (uint8_t)global_w(sprite_ptr + i * 2);
+        g_vram[(d + 1) & (CGA_SIZE - 1)] ^= (uint8_t)(global_w(sprite_ptr + i * 2) >> 8);
         /* Just cga_next_row. The original writes the four rows out twice,
          * once for an even start (+0x2000, -0x1fb0, +0x2000 at 1ac2:5b15)
          * and once for an odd one (-0x1fb0, +0x2000, -0x1fb0 at 1ac2:5b65),
@@ -6109,26 +6109,26 @@ void ending_particles_init(uint32_t ax)
  * place of the BIOS pixel call and ending_particle_init to re-launch */
 void ending_particles_tick(void)
 {
-    uint32_t si = global_off(global.particles);
+    uint16_t particle_ptr = global_off(global.particles);
     uint32_t n = global.particle_count;
-    for (uint32_t k = 0; k < n; k++, si += 0x10) {
-        uint32_t x = (global_w(si) + global_w(si + 4) - global_w(si + 6)) & 0xffff;
-        uint32_t y = (global_w(si + 8) + global_w(si + 2) - global_w(si + 0x0a)) & 0xffff;
+    for (uint32_t k = 0; k < n; k++, particle_ptr += 0x10) {
+        uint32_t x = (global_w(particle_ptr) + global_w(particle_ptr + 4) - global_w(particle_ptr + 6)) & 0xffff;
+        uint32_t y = (global_w(particle_ptr + 8) + global_w(particle_ptr + 2) - global_w(particle_ptr + 0x0a)) & 0xffff;
         if (x <= 0x13f && y <= 0xc7)
             ending_plot(x, y);
 
-        global_setw(si + 6, (global_w(si + 6) + global_w(si + 0x0c)) & 0xffff);
-        int16_t t = (int16_t)global_w(si + 6), v = (int16_t)global_w(si + 0x0e);
+        global_setw(particle_ptr + 6, (global_w(particle_ptr + 6) + global_w(particle_ptr + 0x0c)) & 0xffff);
+        int16_t t = (int16_t)global_w(particle_ptr + 6), v = (int16_t)global_w(particle_ptr + 0x0e);
         int16_t first = (int16_t)(v * t);
         int32_t prod = (int32_t)first * (int32_t)t;
-        global_setw(si + 8, (int16_t)(prod / 100) & 0xffff);
+        global_setw(particle_ptr + 8, (int16_t)(prod / 100) & 0xffff);
 
-        y = (global_w(si + 8) + global_w(si + 2) - global_w(si + 0x0a)) & 0xffff;
-        x = (global_w(si) + global_w(si + 4) - global_w(si + 6)) & 0xffff;
+        y = (global_w(particle_ptr + 8) + global_w(particle_ptr + 2) - global_w(particle_ptr + 0x0a)) & 0xffff;
+        x = (global_w(particle_ptr) + global_w(particle_ptr + 4) - global_w(particle_ptr + 6)) & 0xffff;
         if (y <= 0xc7 && x <= 0x13f)
             ending_plot(x, y);
         if (y > 0xc7)
-            ending_particle_init(si, y);
+            ending_particle_init(particle_ptr, y);
         game_delay();
     }
 }
@@ -7042,9 +7042,9 @@ static int32_t bonus_end_level_run(void)
      * 0x2cd9, at 1ac2:43ef to 1ac2:447f. The transcription went straight from
      * the level's cells to the fresh ball and had none of what follows. */
     for (int32_t r = 0; r < 7; r++) {
-        uint32_t src = global_off(global.results_rows[2 + r]);
+        uint16_t row_ptr = global_off(global.results_rows[2 + r]);
         for (int32_t i = 0; i < 0x1a; i++)
-            vram_setw(BANNER_ROW_VRAM + i * 2, global_w(src + i * 2));
+            vram_setw(BANNER_ROW_VRAM + i * 2, global_w(row_ptr + i * 2));
         screen_scroll_up();
     }
 
