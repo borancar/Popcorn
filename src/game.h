@@ -182,9 +182,9 @@ typedef struct __attribute__((packed)) {
                              * holds whatever the recycled slot left there -
                              * see brick_entity - so reading the pair as a
                              * word never reaches zero and the entity is never
-                             * removed. crumble, plain and sparkle do not use
-                             * it at all. */
-                uint16_t cell;  /* soften: the cell to harden */
+                             * removed. plain and sparkle do not use it at
+                             * all. */
+                uint16_t cell_ptr; /* soften, crumble and the teleport: the cell to put back, as its image address */
                 uint16_t ball;  /* ball_arrive and ball_hold: the ball */
                 uint8_t  count; /* repeat: how many times round again */
                 struct {        /* bonus: a falling capsule steers itself */
@@ -378,7 +378,7 @@ ENSURE_SIZE(hsc_entry_t, 0x12);
  * one per corner of the ball, and ball_bricks reads them to decide which way
  * it leaves and which bricks were struck. */
 typedef struct __attribute__((packed)) {
-    uint16_t cell;          /* 0x00 the cell's image address, 0 for no brick */
+    uint16_t cell_ptr;      /* 0x00 the cell's image address, 0 for no brick */
     union {                 /* 0x02 the brick's centre. Written as two bytes
                              * and compared as one word at 1ac2:27b7, which is
                              * what makes "the same brick" a single compare */

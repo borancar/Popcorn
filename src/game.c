@@ -2051,7 +2051,7 @@ void ball_paddle(ball_t *b)
 void probe_cell_at(uint32_t x, uint32_t y, hit_t *hit)
 {
     if (x > 0xbf || y > 0xc4) {
-        hit->cell = 0;
+        hit->cell_ptr = 0;
         return;
     }
     /* The original spells the row stride as `row + row / 2` with row = y & 0xf8,
@@ -2059,13 +2059,13 @@ void probe_cell_at(uint32_t x, uint32_t y, hit_t *hit)
      * of eight. It is an array index. */
     uint8_t *cell = &global.level.cells[(y >> 3) * 12 + (x >> 4)];
     if (*cell == 0x0c || *cell == 0) {
-        hit->cell = 0;
+        hit->cell_ptr = 0;
         return;
     }
     /* The slot keeps the cell's *address*, not its index: the brick handlers
      * are handed it and write through it, and 1ac2:27b7 compares slots by it.
      * That 16-bit value is the game's own, so it stays an image offset. */
-    hit->cell = (uint16_t)global_off(cell);
+    hit->cell_ptr = (uint16_t)global_off(cell);
     global.hit_count++;
     hit->x = (uint8_t)((x & 0xf0) + 8);              /* the brick's */
     hit->y = (uint8_t)((y & 0xf8) + 6);              /* centre */
@@ -2080,12 +2080,12 @@ void probe_cell_at(uint32_t x, uint32_t y, hit_t *hit)
 void drop_duplicate_hits(void)
 {
     for (int32_t i = 0; i < 3; i++) {
-        if (!global.hits[i].cell)
+        if (!global.hits[i].cell_ptr)
             continue;
         uint32_t centre = global.hits[i].centre;
         for (int32_t j = i + 1; j < 4; j++)
-            if (global.hits[j].cell && global.hits[j].centre == centre)
-                global.hits[j].cell = 0;
+            if (global.hits[j].cell_ptr && global.hits[j].centre == centre)
+                global.hits[j].cell_ptr = 0;
     }
 }
 
@@ -2139,8 +2139,8 @@ void ball_bricks(ball_t *b)
     if (n == 0)
         return;
 
-    uint32_t s0 = global.hits[0].cell, s1 = global.hits[1].cell;
-    uint32_t s2 = global.hits[2].cell, s3 = global.hits[3].cell;
+    uint16_t s0 = global.hits[0].cell_ptr, s1 = global.hits[1].cell_ptr;
+    uint16_t s2 = global.hits[2].cell_ptr, s3 = global.hits[3].cell_ptr;
 
     /* The second half of that condition reads **[0x2e99]**, which is not slot
      * 3 at [0x2e95] but the first word of the direction table - and that word
@@ -2165,7 +2165,7 @@ void ball_bricks(ball_t *b)
     } else {
         /* One corner, or all four: leave in the direction its slot names. */
         int32_t i = 0;
-        while (i < 4 && !global.hits[i].cell)
+        while (i < 4 && !global.hits[i].cell_ptr)
             i++;
         if (i < 4) {
             uint32_t d = global.hit_dirs[i];
@@ -2180,13 +2180,13 @@ void ball_bricks(ball_t *b)
     if (n == 3) {
         if (s0) {
             if (s2) {
-                global.hits[1].cell = 0;
-                global.hits[3].cell = 0;
+                global.hits[1].cell_ptr = 0;
+                global.hits[3].cell_ptr = 0;
             } else {
-                global.hits[0].cell = 0;
+                global.hits[0].cell_ptr = 0;
             }
         } else {
-            global.hits[2].cell = 0;
+            global.hits[2].cell_ptr = 0;
         }
     }
 
@@ -2194,7 +2194,7 @@ void ball_bricks(ball_t *b)
     drop_duplicate_hits();
 
     for (int32_t i = 0; i < 4; i++) {
-        uint32_t cell = global.hits[i].cell;
+        uint16_t cell = global.hits[i].cell_ptr;
         if (cell)
             brick_hit(&global.hits[i], global_ptr(cell), b);
     }
@@ -2236,7 +2236,7 @@ static void brick_common(ball_t *ball, uint32_t sound,
  * for it put the slot pointer's high byte, 0x2f, where the original had the
  * previous occupant's value - one byte, 62,536 frames in. */
 static entity_t *brick_entity(hit_t *hit, uint16_t handler_fn,
-                             uint32_t frames, uint32_t rate)
+                             uint16_t frames, uint32_t rate)
 {
     entity_t *e = entity_alloc();
     e->handler_fn = handler_fn;
@@ -2245,7 +2245,7 @@ static entity_t *brick_entity(hit_t *hit, uint16_t handler_fn,
      * byte writes are the same thing and say which is which. */
     s->x = hit->x;
     s->y = hit->y;
-    s->frame_ptr = (uint16_t)frames;
+    s->frame_ptr = frames;
     s->timer = (uint8_t)rate;
     s->period = (uint8_t)rate;
     return e;
@@ -2257,7 +2257,7 @@ static entity_t *brick_entity(hit_t *hit, uint16_t handler_fn,
  * every other brick is drawn from. */
 static void brick_degrade(hit_t *hit, uint32_t from, uint32_t to)
 {
-    *global_ptr(hit->cell) = (uint8_t)to;
+    *global_ptr(hit->cell_ptr) = (uint8_t)to;
     uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[from]));   /* rub out */
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[to]));     /* and draw */
@@ -2288,14 +2288,14 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
     if (global.bonus_cap >= 3 || game_random(io_ticks(), 3) != 0) {
         /* crumble, and it keeps the cell it is standing on */
         brick_entity(hit, ENTITY_CRUMBLE_FN, is_two ? 0x6508 : 0x65fe, 7)
-            ->p.anim.arg.cell = (uint16_t)hit->cell;
-        *global_ptr(hit->cell) = 0;
+            ->p.anim.arg.cell_ptr = hit->cell_ptr;
+        *global_ptr(hit->cell_ptr) = 0;
         global.level.bricks--;
         return;
     }
 
     global.level.bricks--;
-    uint8_t *cell = global_ptr(hit->cell);
+    uint8_t *cell = global_ptr(hit->cell_ptr);
     *cell = 0;
     uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[is_two ? 2 : 1]));
@@ -2330,9 +2330,9 @@ void brick_3(hit_t *hit, ball_t *ball)
     runtime.sound_request = 4;
     if (ball)
         ball->bounces++;
-    brick_entity(hit, ENTITY_SOFTEN_FN, 0x66f4, 8)->p.anim.arg.cell =
-        (uint16_t)hit->cell;
-    *global_ptr(hit->cell) = 4;
+    brick_entity(hit, ENTITY_SOFTEN_FN, 0x66f4, 8)->p.anim.arg.cell_ptr =
+        hit->cell_ptr;
+    *global_ptr(hit->cell_ptr) = 4;
 }
 
 /* 1ac2:3221  bricks 4 and 12 - indestructible; the ball only bounces */
@@ -2369,7 +2369,7 @@ void brick_7(hit_t *hit, ball_t *ball)
 void brick_8(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, 4, 0, 0x100, 0);
-    *global_ptr(hit->cell) = 0;
+    *global_ptr(hit->cell_ptr) = 0;
     uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[8]));
     xor_sprite_16x7(x, y, global.brick8_score[0]);
@@ -2922,7 +2922,7 @@ void entity_unlink(entity_t *node)
 /* 1ac2:3668  cell_set_three - the cell an entity is sitting on becomes a 3 */
 void cell_set_three(ent_anim_t *a)
 {
-    *global_ptr(a->arg.cell) = 3;
+    *global_ptr(a->arg.cell_ptr) = 3;
 }
 
 /* 1ac2:36fb  cells_restore
@@ -3003,14 +3003,14 @@ static int32_t entity_anim(ent_anim_t *a,
     /* [bx+6] points *into* a list of frame pointers, so one dereference gets
      * the frame: `[si]` where si is the cursor. Dereferencing twice reads the
      * first word of the frame's pixels as if it were an address. */
-    uint32_t cur = a->sprite.frame_ptr;
+    uint16_t cur = a->sprite.frame_ptr;
     uint32_t x = a->sprite.x, y = a->sprite.y;
     draw(x, y, global_ptr(global_w(cur - 2)));  /* the previous frame, to erase */
     uint32_t next = global_w(cur);
     if (next == SENTINEL_PTR)
         return -1;                      /* the animation is over */
     draw(x, y, global_ptr(next));
-    a->sprite.frame_ptr = (uint16_t)(cur + 2);
+    a->sprite.frame_ptr = cur + 2;
     return 1;
 }
 
@@ -3041,11 +3041,11 @@ void entity_crumble(ent_anim_t *a)
         return;
     a->sprite.timer = a->sprite.period;
 
-    uint32_t cur = a->sprite.frame_ptr;
+    uint16_t cur = a->sprite.frame_ptr;
     uint32_t x = a->sprite.x, y = a->sprite.y;
     xor_sprite_16x7(x, y, global_ptr(global_w(cur - 2)));
     xor_sprite_16x7(x, y, global_ptr(global_w(cur)));
-    a->sprite.frame_ptr = (uint16_t)(cur + 2);
+    a->sprite.frame_ptr = cur + 2;
     if (global_w(a->sprite.frame_ptr) == SENTINEL_PTR)
         global.entity_remove = 1;
 }
@@ -3290,7 +3290,7 @@ void entity_soften(ent_anim_t *a)
 {
     entity_crumble(a);
     if (global.entity_remove == 1)
-        *global_ptr(a->arg.cell) = 3;    /* the cell it sat on */
+        *global_ptr(a->arg.cell_ptr) = 3;    /* the cell it sat on */
 }
 
 /* 1ac2:366f  from brick 8 - plays its animation [bx+2] times over, cancelling
@@ -3381,15 +3381,15 @@ void brick_9(hit_t *hit, ball_t *ball)
     ball_draw(b->sprite, b->x, b->y);
 
     brick_entity(hit, ENTITY_PLAIN_FN,
-                 global_off(&global.teleport_out_ptr[1]), 0x32)->p.anim.arg.cell =
-        (uint16_t)hit->cell;
+                 global_off(&global.teleport_out_ptr[1]), 0x32)->p.anim.arg.cell_ptr =
+        hit->cell_ptr;
 
     /* A cell that is not this one. */
     uint32_t cell, idx;
     do {
         idx = global.level.teleport[game_random(io_ticks(), n)];
         cell = global_off(global.level.cells) + idx;
-    } while (cell == hit->cell);
+    } while (cell == hit->cell_ptr);
 
     entity_t *timer = entity_alloc();
     timer->handler_fn = ENTITY_CELLS_TIMER_FN;
@@ -3410,7 +3410,7 @@ void brick_9(hit_t *hit, ball_t *ball)
 void brick_10(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, SOUND_BRICK, 0, 0, 5);
-    *global_ptr(hit->cell) = 0;
+    *global_ptr(hit->cell_ptr) = 0;
     global.level.bricks--;
     uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[10]));
@@ -4077,7 +4077,7 @@ void laser_fire(void)
         return;
 
     for (int32_t i = 0; i < 2; i++) {
-        uint32_t cell = global.hits[i].cell;
+        uint16_t cell = global.hits[i].cell_ptr;
         if (cell)                       /* BP is zero: no ball struck this */
             brick_hit(&global.hits[i], global_ptr(cell), (ball_t *)0);
     }
@@ -4999,7 +4999,7 @@ void brick_11(hit_t *hit, ball_t *ball)
     (void)ball;
     brick_score(0, 0, 0x0207);
     runtime.sound_request = SOUND_BRICK;
-    *global_ptr(hit->cell) = 0x0c;
+    *global_ptr(hit->cell_ptr) = 0x0c;
     global.level.bricks--;
     uint32_t x = hit->x, y = hit->y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[11]));
@@ -7639,7 +7639,7 @@ void brick_animated(hit_t *hit, ball_t *ball)
     if (ball)
         ball->bounces++;
 
-    uint8_t *cell = global_ptr(hit->cell);
+    uint8_t *cell = global_ptr(hit->cell_ptr);
     uint32_t was = *cell;
     uint32_t now = (was + 8) & 0xff;    /* marked, not cleared */
     *cell = (uint8_t)now;
