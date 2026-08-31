@@ -241,7 +241,10 @@ def main():
             sc, asc = KEYMAP[q.popleft()]
             m.press_key(sc, asc, True)
             m.press_key(sc, asc, False)
-        if want is not None and off == want and not pending:
+        # `not pending` would be the whole dict, and a drained deque stays
+        # in it - so with any --keys at all the dict is truthy forever and
+        # --at never fires. What matters is whether a key is still owed.
+        if want is not None and off == want and not any(pending.values()):
             stop[0] = True
             uc.emu_stop()
 

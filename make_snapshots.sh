@@ -30,7 +30,20 @@ $PY snapshot.py "$D/menu.snap" --seconds 25
 
 # A level, played into rather than started - the paddle is out, the ball is
 # moving and entities are live. Everything below resumes from this.
-$PY snapshot.py "$D/level.snap" --keys @0206:f1 --seconds 45 --bot
+#
+# The route is autoplay.py's ROUTE_PLAY, and it has to be: F1 opens a player
+# name box, and the name is read one character at a time by INT 21h AH=07h at
+# 1ac2:13d2, which **blocks**. While the emulator answered that call with a
+# space the game walked past the box on its own and `@0206:f1` was enough;
+# once AH=07h waited for a key the way DOS does, the box was where every run
+# stopped and every state below it was a machine sitting on one instruction.
+#
+# The stop is a rule rather than a count of seconds for the same reason
+# everything else here is: 1ac2:27d7 is ball_step, so this lands the first
+# time the ball actually moves. At a fixed 45 seconds the bot had already
+# lost its three balls and the capture was of the menu.
+ROUTE='@0206:f3,@0206:f1,@13d2:b,@13d2:o,@13d2:t,@13d2:return,@13d2:return'
+$PY snapshot.py "$D/level.snap" --keys "$ROUTE" --at 0x27d7 --seconds 60 --bot
 
 # Levels 3, 10 and 49 from their own first frame. Poking the level *before*
 # and clearing it makes play_session load the wanted one the way it normally
