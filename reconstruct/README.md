@@ -19,6 +19,20 @@ play. The name in the panel is the bot's - `popcorn-dev --autoplay` plays the
 game by itself, which is how the port gets watched without a person at the
 paddle.
 
+**On the colours.** The game asks BIOS for mode 05h, and on a real CGA driving
+an RGBI monitor that clears the colour burst and forces cyan, red and white
+whatever the palette register says. That is not the picture above, and it is
+not the one the authors had. A card that only *emulates* mode 05h does not
+carry the quirk over, and by 1988 the game was as likely to be running on an
+EGA or VGA board through the newer connector - where the palette bit governs,
+BIOS has left palette 1 at high intensity in the colour-select register, and
+the game comes up in light cyan, light magenta and white. That is what its
+authors saw while they wrote it, what a player of the time saw, and what the
+port draws. DOSBox shows the same.
+
+The CGA's own output is still reachable for comparison: the emulator this port
+is checked against renders it with `--rgbi`.
+
 **The game is here**, because its authors put it in the public domain. From
 `popcorn.doc`, in their own words:
 
