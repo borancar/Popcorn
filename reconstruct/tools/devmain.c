@@ -122,6 +122,7 @@ int32_t main(int32_t argc, char **argv)
 {
     const char *dump = NULL;
     int32_t scale = 3;
+    int32_t rgbi = 0;
     uint32_t run_ms = 0;
     const char *shot = NULL;
     const char *vram = NULL;
@@ -149,6 +150,8 @@ int32_t main(int32_t argc, char **argv)
             return verify_main(argv[i + 1], argv[i + 2]);
         else if (!strcmp(argv[i], "--dump-image") && i + 1 < argc)
             dump = argv[++i];
+        else if (!strcmp(argv[i], "--rgbi"))
+            rgbi = 1;
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc)
             scale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--play-hz") && i + 1 < argc)
@@ -182,12 +185,13 @@ int32_t main(int32_t argc, char **argv)
                     "       %s [--scale N] [--play-hz N]\n"
                     "       %s [--run-ms N] [--shot FILE] [--dump-vram FILE]\n"
                     "       %s [--dump-image FILE] [--keys SCAN@MS,...]\n"
+                    "       %s [--rgbi]  (a real CGA's mode 05h colours)\n"
                     "       %s --verify STATE-IN RESULT-OUT\n"
                     "       %s --lockstep STATE [--lockstep-sync-...]\n"
                     "\n"
                     "To play, use popcorn.\n",
                     argv[0], argv[0], argv[0], argv[0], argv[0],
-                    argv[0]);
+                    argv[0], argv[0]);
             return 2;
         }
     }
@@ -204,6 +208,8 @@ int32_t main(int32_t argc, char **argv)
         /* The capture carries the image, so POPCORN.EXE is not needed. */
         if (!io_init(scale))
             return 1;
+        if (rgbi)
+            io_set_rgbi(1);
         io_set_deadline(run_ms, shot, vram);
         io_set_deadline_image(dump && run_ms ? dump : NULL);
         int32_t r = resume_snapshot(resume);
@@ -232,6 +238,8 @@ int32_t main(int32_t argc, char **argv)
 
     if (!io_init(scale))
         return 1;
+    if (rgbi)
+        io_set_rgbi(1);
     io_set_deadline(run_ms, shot, vram);
     io_set_deadline_image(dump && run_ms ? dump : NULL);
     /* --keys 3b@30000,39@34000 : scan code, then when to press it. */
