@@ -191,6 +191,41 @@ Large files are edited by one-shot anchored scripts (`edit_*.py`, git-ignored)
 that assert each anchor occurs exactly once, do every replacement, then write the
 file back once, so a failed anchor leaves the file untouched.
 
+### The two branches, and the split
+
+Work happens on **`develop`**, which is the whole repository - the port, the
+Python tools, the docs. **`master` is not a branch of it.** It is a subtree
+split of `reconstruct/` alone: the same commits with the same messages, but
+with `reconstruct/` hoisted to the root, so a clone of it is the deliverable
+and nothing else. The hashes therefore differ from `develop`'s, and the two
+histories never merge.
+
+```sh
+git subtree split --prefix=reconstruct -b master-split
+git push origin master-split:master
+```
+
+The split is **deterministic**: the same commits produce the same hashes every
+time, which is the only reason each update fast-forwards rather than rewriting
+what is already published. So it has to keep being done this way - a different
+prefix, a filter-branch, or a hand-built commit produces different hashes and
+the next push needs a force, which breaks every clone. Two things worth
+checking before pushing, both cheap:
+
+```sh
+git merge-base --is-ancestor origin/master master-split   # a fast-forward, not a rewrite
+test "$(git rev-parse master-split^{tree})" = "$(git rev-parse develop:reconstruct)"
+```
+
+The second is the one that matters: it says the split reproduces `develop`'s
+`reconstruct/` byte for byte, so `master` cannot quietly drift from what was
+verified. `master-split` is a throwaway - it goes stale the moment `develop`
+moves, and the next split makes it again.
+
+Tags belong to `develop`'s history and have no counterpart on `master`, since
+the hashes differ. `raw_complete` is one: the port with every routine
+transcribed, before the load image became a struct.
+
 ## Where the game lives
 
 **In `reconstruct/`, and committed** - `popcorn.exe`, both `.ppc` sets,
