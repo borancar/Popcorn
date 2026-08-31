@@ -911,25 +911,16 @@ static const uint32_t CGA16[16] = {
     0xffff5555, 0xffff55ff, 0xffffff55, 0xffffffff,
 };
 
-/* A real CGA's own output, which is not the default - see below.  -1 until
- * the environment has been asked; POPCORN_RGBI=1 turns it on for `popcorn`,
- * which has no command line of its own to put a flag in, and popcorn-dev
- * takes --rgbi. */
-static int32_t cga_rgbi = -1;
+/* A real CGA's own output, which is not the default - see below.  Both
+ * binaries take --rgbi for it; there is no environment variable, because a
+ * thing that changes what the game looks like belongs where a player can see
+ * it. */
+static int32_t cga_rgbi;
 
 void io_set_rgbi(int32_t on)
 {
     cga_rgbi = on != 0;
     cga_palette_update();
-}
-
-static int32_t rgbi_wanted(void)
-{
-    if (cga_rgbi < 0) {
-        const char *e = getenv("POPCORN_RGBI");
-        cga_rgbi = e != NULL && *e != '\0' && *e != '0';
-    }
-    return cga_rgbi;
 }
 
 /* The CGA's four palettes, and the colour-burst bit does **not** choose
@@ -960,7 +951,7 @@ static void cga_palette_update(void)
     static const uint8_t rgbi[2][3] = { { 3, 4, 7 }, { 11, 12, 15 } };
     uint32_t bright = (cga_colour_reg >> 4) & 1;
     const uint8_t *fg =
-        (rgbi_wanted() && ((cga_mode_reg >> 2) & 1))
+        (cga_rgbi && ((cga_mode_reg >> 2) & 1))
             ? rgbi[bright]
             : sets[((cga_colour_reg >> 5) & 1) * 2 + bright];
     uint32_t *p = (uint32_t *)g_palette;

@@ -1449,8 +1449,8 @@ void io_set_int09_installed(int32_t on);
 /* DOS text is CP437 and a terminal wants UTF-8. io_cp437_utf8 appends one
  * byte to a buffer and hands back the new length; io_print_dos does a whole
  * line of it on stderr. */
-/* A real CGA's colours rather than an EGA or VGA's reading of mode 05h.
- * POPCORN_RGBI does the same for the game, which has no flags of its own. */
+/* A real CGA's colours rather than an EGA or VGA's reading of mode 05h -
+ * `--rgbi`, which both binaries take. */
 void io_set_rgbi(int32_t on);
 
 uint32_t io_cp437_utf8(char *out, uint32_t n, uint32_t cap, uint8_t c);
