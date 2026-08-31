@@ -1068,7 +1068,7 @@ static void input_keys_mouse(void)
 {
     if (!io_key_ready())
         return;                         /* 1ac2:1658 */
-    uint32_t ax = io_get_key();
+    uint32_t key = io_get_key();
 
     /* 1ac2:165e is F9, and it is **not** repeated here. The original reaches
      * it only with the mouse, because the keyboard mode installs a handler
@@ -1076,7 +1076,7 @@ static void input_keys_mouse(void)
      * platform layer calls int09_handler for every scan code in both modes,
      * so the 0xc3 toggle in there has already done it. Doing it again would
      * toggle twice and look exactly like F9 not working. */
-    if (ax == ((KEY_ESC << 8) | KEY_ESCAPE_CHAR)) {   /* 1ac2:1669 */
+    if (key == ((KEY_ESC << 8) | KEY_ESCAPE_CHAR)) {   /* 1ac2:1669 */
         screen_stash();                 /* 1ac2:4ba9 */
         uint32_t k;
         do {
@@ -1092,7 +1092,7 @@ static void input_keys_mouse(void)
         screen_unstash();               /* 1ac2:4c13 */
         return;
     }
-    if ((ax >> 8) == KEY_F10) {         /* 1ac2:168b */
+    if ((key >> 8) == KEY_F10) {         /* 1ac2:168b */
         /* The boss key is a no-op here on purpose - see employee_enter - so
          * nothing was stashed and 1ac2:169c's screen_restore is skipped with
          * it, exactly as the menu's F10 does. */
