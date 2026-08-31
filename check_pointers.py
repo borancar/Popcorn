@@ -466,10 +466,32 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                 k.type in ("pointer_declarator", "abstract_pointer_declarator")
                 for k in walk(typ))
             val = n.child_by_field_name("value")
+            # A cast of what a **call returned** is not a cast of a pointer,
+            # even when a pointer went into the call: `(int16_t)global_w(p)`
+            # reinterprets the word that came back, which is how a signed
+            # velocity is read, and `(uint8_t)global_w(p)` takes its low byte.
+            # Walking the whole operand for a `_ptr` name found the argument
+            # and called both of those a fault.
+            # A `_ptr` that appears only as an **argument** does not make
+            # this a cast of a pointer: the cast applies to what came back.
+            # `(int16_t)global_w(p)` reads a signed word and
+            # `(uint8_t)(global_w(p) >> 8)` its high byte, and both were being
+            # reported because the operand was walked for the name without
+            # asking where in it the name sat.
+            called = []
+            if val is not None:
+                called = [(k.start_byte, k.end_byte)
+                          for k in walk(val) if k.type == "call_expression"]
+
+            def only_an_argument(k):
+                return any(a <= k.start_byte and k.end_byte <= b
+                           for a, b in called)
+
             if val is not None and not to_pointer:
                 who = next((text(k, src) for k in walk(val)
                             if k.type in ("identifier", "field_identifier")
-                            and text(k, src).endswith("_ptr")), None)
+                            and text(k, src).endswith("_ptr")
+                            and not only_an_argument(k)), None)
                 if who:
                     add("cast-of-a-pointer", n,
                         "%s - one of the game's pointers is 16 bits wide by "
