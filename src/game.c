@@ -1860,7 +1860,6 @@ int32_t ball_redraw(ball_t *b)
  * [0x2e81] is the safety net - the extra floor a bonus can put up. With it
  * live the ball bounces off the bottom instead of being lost.
  */
-#define B_BOUNCES   0x1d
 #define WALL_LEFT   0x08
 #define WALL_RIGHT  0xc4
 #define WALL_TOP    0x04
@@ -5467,9 +5466,7 @@ void palette_cycle(void)
 /* ========================================================================
  * The hall of fame: its table, its file, and the border that runs round it.
  * ===================================================================== */
-#define HSC_ENTRY   0x12                /* twelve of name and six of score */
 #define HSC_COUNT     10
-#define HSC_SCRATCH global_off(global.scratch2.hsc_scratch)
 
 /* 1ac2:4d5d  hsc_bubble - one pass of the sort, from the bottom up.
  * `scasb` compares a name's six score digits against the entry above it and
