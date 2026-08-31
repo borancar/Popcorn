@@ -2194,9 +2194,9 @@ void ball_bricks(ball_t *b)
     drop_duplicate_hits();
 
     for (int32_t i = 0; i < 4; i++) {
-        uint16_t cell_ptr = global.hits[i].cell_ptr;
-        if (cell_ptr)
-            brick_hit(&global.hits[i], global_ptr(cell_ptr), b);
+        if (global.hits[i].cell_ptr)
+            brick_hit(&global.hits[i],
+                      global_ptr(global.hits[i].cell_ptr), b);
     }
 }
 
@@ -2236,7 +2236,7 @@ static void brick_common(ball_t *ball, uint32_t sound,
  * for it put the slot pointer's high byte, 0x2f, where the original had the
  * previous occupant's value - one byte, 62,536 frames in. */
 static entity_t *brick_entity(hit_t *hit, uint16_t handler_fn,
-                             uint16_t frames, uint32_t rate)
+                             uint16_t frames_ptr, uint32_t rate)
 {
     entity_t *e = entity_alloc();
     e->handler_fn = handler_fn;
@@ -2245,7 +2245,7 @@ static entity_t *brick_entity(hit_t *hit, uint16_t handler_fn,
      * byte writes are the same thing and say which is which. */
     s->x = hit->x;
     s->y = hit->y;
-    s->frame_ptr = frames;
+    s->frame_ptr = frames_ptr;
     s->timer = (uint8_t)rate;
     s->period = (uint8_t)rate;
     return e;
@@ -3003,14 +3003,14 @@ static int32_t entity_anim(ent_anim_t *a,
     /* [bx+6] points *into* a list of frame pointers, so one dereference gets
      * the frame: `[si]` where si is the cursor. Dereferencing twice reads the
      * first word of the frame's pixels as if it were an address. */
-    uint16_t cur = a->sprite.frame_ptr;
+    uint16_t cur_ptr = a->sprite.frame_ptr;
     uint32_t x = a->sprite.x, y = a->sprite.y;
-    draw(x, y, global_ptr(global_w(cur - 2)));  /* the previous frame, to erase */
-    uint32_t next = global_w(cur);
-    if (next == SENTINEL_PTR)
+    draw(x, y, global_ptr(global_w(cur_ptr - 2)));  /* the one before, to erase */
+    uint16_t next_ptr = global_w(cur_ptr);
+    if (next_ptr == SENTINEL_PTR)
         return -1;                      /* the animation is over */
-    draw(x, y, global_ptr(next));
-    a->sprite.frame_ptr = cur + 2;
+    draw(x, y, global_ptr(next_ptr));
+    a->sprite.frame_ptr = cur_ptr + 2;
     return 1;
 }
 
@@ -3041,11 +3041,11 @@ void entity_crumble(ent_anim_t *a)
         return;
     a->sprite.timer = a->sprite.period;
 
-    uint16_t cur = a->sprite.frame_ptr;
+    uint16_t cur_ptr = a->sprite.frame_ptr;
     uint32_t x = a->sprite.x, y = a->sprite.y;
-    xor_sprite_16x7(x, y, global_ptr(global_w(cur - 2)));
-    xor_sprite_16x7(x, y, global_ptr(global_w(cur)));
-    a->sprite.frame_ptr = cur + 2;
+    xor_sprite_16x7(x, y, global_ptr(global_w(cur_ptr - 2)));
+    xor_sprite_16x7(x, y, global_ptr(global_w(cur_ptr)));
+    a->sprite.frame_ptr = cur_ptr + 2;
     if (global_w(a->sprite.frame_ptr) == SENTINEL_PTR)
         global.entity_remove = 1;
 }
@@ -4077,9 +4077,9 @@ void laser_fire(void)
         return;
 
     for (int32_t i = 0; i < 2; i++) {
-        uint16_t cell_ptr = global.hits[i].cell_ptr;
-        if (cell_ptr)                   /* BP is zero: no ball struck this */
-            brick_hit(&global.hits[i], global_ptr(cell_ptr), (ball_t *)0);
+        if (global.hits[i].cell_ptr)    /* BP is zero: no ball struck this */
+            brick_hit(&global.hits[i],
+                      global_ptr(global.hits[i].cell_ptr), (ball_t *)0);
     }
     shot_xor(global.laser_x, (global.laser_y + 2) & 0xff);
     global.laser_y = 0xb3;
@@ -4114,11 +4114,12 @@ void entity_capsule_frames(ent_fall_t *f, uint32_t table)
 
     uint32_t base = global_w(table + f->kind * 2);
     uint32_t di = base + f->frame * 4;
-    uint32_t src = global_w(di), rows = global_w(di + 2);
+    uint16_t src_ptr = global_w(di);
+    uint32_t rows = global_w(di + 2);
 
     uint32_t y = f->y;
     f->y++;
-    xor_sprite_16xn(f->x, y, global_ptr(src), rows & 0xff);
+    xor_sprite_16xn(f->x, y, global_ptr(src_ptr), rows & 0xff);
 
     y = f->y;
     if (y == 0xc5) {                    /* fallen past the paddle */
@@ -4460,26 +4461,27 @@ void entity_paddle_fx(ent_morph_t *m)
     /* A frame boundary with step == 6: pick the sprite list for this stage.
      * `pending` is 1 while shrinking the old paddle and 0 while growing the
      * new one. */
-    uint32_t si, kind;
+    uint16_t table_ptr;
+    uint32_t kind;
     if (m->pending != 0) {
-        si = global_off(global.paddle_shrink);
+        table_ptr = global_off(global.paddle_shrink);
         global.paddle_step = 0;
         kind = m->from;
         if (kind == 1)
             global.paddle_step = 0xfe;    /* -2: this one shrinks */
         if (kind != 0) {
-            morph_begin(m, si, kind);
+            morph_begin(m, table_ptr, kind);
             return;
         }
         m->pending = 0;
     }
-    si = global_off(global.paddle_grow);
+    table_ptr = global_off(global.paddle_grow);
     global.paddle_step = 0;
     kind = m->to;
     if (kind == 1)
         global.paddle_step = 2;
     if (kind != 0) {
-        morph_begin(m, si, kind);
+        morph_begin(m, table_ptr, kind);
         return;
     }
     /* Both ends are the plain paddle: nothing to animate. */
@@ -4491,9 +4493,9 @@ void entity_paddle_fx(ent_morph_t *m)
 
 /* 1ac2:34c5  morph_begin - start a stage: remember its sprite list and run
  * the first frame. */
-void morph_begin(ent_morph_t *m, uint32_t table, uint32_t kind)
+void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint32_t kind)
 {
-    m->sprites = (uint16_t)global_w(table + kind * 2);
+    m->sprites = global_w(table_ptr + kind * 2);
     m->step = 6;
     global.paddle_morphing = 0xff;
     morph_step(m);

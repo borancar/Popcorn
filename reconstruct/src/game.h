@@ -1688,7 +1688,7 @@ void play_teardown(void);         /* 1ac2:41d4 */
 void entity_call(entity_t *e);  /* the call at 1ac2:1b5e */
 void entity_capsule(ent_fall_t *f); /* 1ac2:3273 */
 void entity_paddle_fx(ent_morph_t *m); /* 1ac2:3386 */
-void morph_begin(ent_morph_t *m, uint32_t table, uint32_t kind); /* 1ac2:34c5 */
+void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint32_t kind); /* 1ac2:34c5 */
 void morph_step(ent_morph_t *m);       /* 1ac2:34d7 */
 void entity_popup(ent_fall_t *f);   /* 1ac2:3561 */
 void entity_capsule_frames(ent_fall_t *f, uint32_t table);

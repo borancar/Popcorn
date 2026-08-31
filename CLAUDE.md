@@ -305,6 +305,21 @@ it runs rather than the job it does. It writes one of those three prompts.
   follow. New code should be written this way; the existing constants are a
   sweep that has not been done - see STATUS.md.
 
+- **`_ptr` marks one of the game's pointers, wherever it is held.** The game
+  keeps 16-bit offsets in its own data, and a field holding one is named
+  `*_ptr` - `next_ptr`, `cell_ptr`, `script_ptr`. **So is a local, and so is a
+  parameter**, for as long as the value is still one of those offsets rather
+  than a C pointer: `cur_ptr`, `frames_ptr`, `table_ptr`. A `uint16_t` says
+  the width and nothing about the kind, and the checker cannot follow a
+  pointer through a local that does not say it is one - that is the practical
+  reason, and it is why `check_pointers.py` lists the locals as well as the
+  fields.
+
+  It stops at the conversion. Once the value has been through `global_ptr` it
+  is a C pointer and its type says so, so `const uint8_t *src` keeps its
+  name. `_fn` is the same idea for a **routine's** address, and `_FN` for the
+  constants that name one.
+
 - **Integer types are always `stdint`**: `uint8_t`, `uint16_t`, `uint32_t`,
   `int16_t`, `int32_t`. Never `unsigned`, `unsigned char`, `short` or `long`.
   This is a port of 16-bit assembly, where every value has a width the
