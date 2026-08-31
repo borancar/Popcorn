@@ -163,7 +163,7 @@ ENSURE_SIZE(cell_bitmap_t, 60);
  */
 typedef struct __attribute__((packed)) {
     uint8_t  x, y;      /* 0x04 0x05 where it is drawn */
-    uint16_t frame;     /* 0x06 a cursor *into* a list of frame pointers, so
+    uint16_t frame_ptr; /* 0x06 a cursor *into* a list of frame pointers, so
                          * one dereference gets the frame */
     uint8_t  timer;     /* 0x08 two counters in one byte: the low nibble paces
                          * the movement, the high one the frame */
@@ -351,7 +351,7 @@ ENSURE_SIZE(eog_group_t, 4);
 /* One of the eight capsules a hatch can release: the sprite it animates
  * through and the pace it does it at. */
 typedef struct __attribute__((packed)) {
-    uint16_t frame;                 /* 0x00 */
+    uint16_t frame_ptr;             /* 0x00 where its animation starts, a cursor like ent_sprite_t's */
     uint8_t  timer;                 /* 0x02 the two are equal in every entry - */
     uint8_t  period;                /* 0x03 the original loads them as one word */
 } bonus_kind_t;
@@ -670,7 +670,10 @@ typedef struct __attribute__((packed)) {
     uint16_t brick8_roll_ptr[25];       /* 0x67ea brick 8's score rolling up: twenty-four frames then SENTINEL_PTR. The **last** of them is brick8_score itself, so the roll settles on the number it was counting to */
     uint8_t  brick8_score[7][4];        /* 0x681c the 100 it lands on, 16 pixels by 7. brick_8 XORs it on when the brick goes and the animation's final step XORs it off again, so it is underneath the roll the whole way */
     uint8_t  brick8_roll[23][7][4];     /* 0x6838 the twenty-three spinning frames, drawn over the score. Only brick 8 uses any of this */
-    uint8_t  _pad_26b[634];
+    uint8_t  _pad_26b[204];
+    uint16_t brick10_hold_ptr[10];      /* 0x6b88 the hand closing on the ball: eight frames, SENTINEL_PTR, then the word after it pointing back here - the same shape as hatch_script_ptr and the animations' own scripts */
+    uint8_t  brick10_hold[5][16][5];    /* 0x6b9c five frames of 20 by 16, which is what sprite_shift_draw takes. The list plays 0 1 2 1 0 then 3 4 3, so the hand closes and opens twice over five pictures */
+    uint8_t  _pad_26c[10];
     uint8_t  intro_feed[19][5];         /* 0x6d36 the five-byte rows level_intro feeds in under the panel, one a pass - nineteen of them, ending exactly at backdrop_table */
     uint16_t backdrop_table[5];         /* 0x6d95 the level intro's backdrop by phase. **Five**, not eight: the entries are 0x6d9f, 0x6f1f, 0x709f, 0x721f and 0x739f - 0x180 apart, which is one frame - and the three words after them are pixels. backdrop_phase wraps at 0x27, so `phase >> 3` is 0 to 4 and the `& 7` beside it can never reach the rest */
     uint8_t  backdrop[5][384];          /* 0x6d9f what those five point at: 8 rows of 48, the full 192-pixel width. level_intro's first loop feeds backdrop[0] in 48 bytes at a time, which is the same frame read a row a pass */
@@ -849,6 +852,8 @@ ENSURE_GLOBAL_AT(hatch_frame, 0x60c2);
 ENSURE_GLOBAL_AT(brick8_roll_ptr, 0x67ea);
 ENSURE_GLOBAL_AT(brick8_score, 0x681c);
 ENSURE_GLOBAL_AT(brick8_roll, 0x6838);
+ENSURE_GLOBAL_AT(brick10_hold_ptr, 0x6b88);
+ENSURE_GLOBAL_AT(brick10_hold, 0x6b9c);
 ENSURE_GLOBAL_AT(intro_feed, 0x6d36);
 ENSURE_GLOBAL_AT(backdrop_table, 0x6d95);
 ENSURE_GLOBAL_AT(backdrop, 0x6d9f);
@@ -1299,7 +1304,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  sound_request;             /* cs:0x00f4 an id to start, 0 = nothing */
     uint8_t  sound_timer;               /* cs:0x00f5 ticks left on the note */
     uint16_t sound_ptr;                 /* cs:0x00f6 where in the tune we are - a **code-segment** offset, which is why the note read goes through runtime_ptr */
-    uint16_t sound_tunes[7];            /* cs:0x00f8 a tune's address by id, ids 1 to 7 */
+    uint16_t sound_tunes_ptr[7];        /* cs:0x00f8 a tune's address by id, ids 1 to 7 - code-segment offsets, which is why sound_ptr is read through runtime_ptr */
     uint8_t  _code2[5446];
     uint8_t  delay_entry;               /* cs:0x164c game_delay's first byte, patched to 0xc3 to disable it */
     uint8_t  _code3[1];
@@ -1348,7 +1353,7 @@ ENSURE_CODE_AT(sound_on, 0x0084);
 ENSURE_CODE_AT(sound_request, 0x00f4);
 ENSURE_CODE_AT(sound_timer, 0x00f5);
 ENSURE_CODE_AT(sound_ptr, 0x00f6);
-ENSURE_CODE_AT(sound_tunes, 0x00f8);
+ENSURE_CODE_AT(sound_tunes_ptr, 0x00f8);
 ENSURE_CODE_AT(delay_entry, 0x164c);
 ENSURE_CODE_AT(delay_count, 0x164e);
 ENSURE_CODE_AT(demo_ball, 0x1784);

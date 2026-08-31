@@ -280,7 +280,7 @@ def ptr_fields(paths):
 
 
 def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
-          segments):
+          segments, all_fields):
     src = open(path, "rb").read()
     tree = Parser(C).parse(src)
     rel = os.path.relpath(path)
@@ -362,6 +362,25 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                         "another _fn" % (text(lhs, src), text(rhs, src)))
 
             if field in known_ptr_fields:
+                # Pointer-ness travels. If one of the game's pointers is
+                # copied out of another field, that field holds one too, and
+                # the name has to say so - `sprite.frame_ptr = kind->frame`
+                # is the shape, and it is how a whole chain stays unnamed
+                # because only its last link was looked at.
+                for arm in branches(rhs):
+                    rname = root_name(arm, src)
+                    if (rname and rname in all_fields
+                            and not rname.endswith("_ptr")
+                            and not rname.endswith("_fn")):
+                        add("pointer-from-unnamed", n,
+                            "%s = %s - `%s` holds one of the game's pointers, "
+                            "because %s does and this is where it comes from. "
+                            "It wants the suffix too"
+                            % (text(lhs, src), text(rhs, src), rname, field))
+                        candidates.setdefault(rname, set()).add(
+                            "%s:%d into %s"
+                            % (rel, n.start_point[0] + 1, field))
+
                 how = ("advanced" if compound
                        else classify_store(rhs, field, known_ptr_fields, src))
                 if how == "made":
@@ -396,6 +415,39 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                 if how == "made":
                     candidates.setdefault(field, set()).add(
                         "%s:%d store" % (rel, n.start_point[0] + 1))
+
+        if n.type == "declaration":
+            # A local declared wider than the thing it is given.  One of the
+            # game's pointers is sixteen bits; widening it here is what makes
+            # the cast on the way back into a `_ptr` field look necessary, so
+            # the two findings are one defect seen from both ends.
+            ty = n.child_by_field_name("type")
+            tyname = text(ty, src) if ty is not None else ""
+            if tyname in ("uint32_t", "uint64_t", "size_t"):
+                for d in n.named_children:
+                    if d.type != "init_declarator":
+                        continue
+                    val = d.child_by_field_name("value")
+                    who = d.child_by_field_name("declarator")
+                    if val is None or who is None:
+                        continue
+                    src_name = root_name(val, src)
+                    from_ptr = (src_name is not None
+                                and (src_name.endswith("_ptr")
+                                     or src_name in known_ptr_fields))
+                    # `_off` returns an offset and nothing else.  A `_w`
+                    # read is deliberately **not** here: it returns a word,
+                    # which is a pointer only sometimes - `rows` and `word`
+                    # come out of one and are neither.
+                    fn = (val.child_by_field_name("function")
+                          if val.type == "call_expression" else None)
+                    from_off = fn is not None and text(fn, src) in OFF_FUNCS
+                    if from_ptr or from_off:
+                        add("pointer-widened", d,
+                            "%s %s = %s - one of the game's pointers is "
+                            "sixteen bits, and a wider local is what makes "
+                            "the cast putting it back look necessary"
+                            % (tyname, text(who, src), text(val, src)))
 
         if n.type == "cast_expression":
             val0 = n.child_by_field_name("value")
@@ -596,7 +648,7 @@ def main():
     fields = struct_fields(a.files)
     findings, candidates, segments = [], {}, {}
     for f in a.files:
-        check(f, known, known_fn, findings, candidates, segments)
+        check(f, known, known_fn, findings, candidates, segments, fields)
 
     # A stored offset read against more than one segment.  Informational: it
     # can be right - a field that legitimately retargets - but at most one
@@ -624,7 +676,8 @@ def main():
             by_rule.setdefault(rule, []).append((path, line, msg))
         order = ["routine-from-elsewhere",
                  "cast-of-a-routine", "pointer-constant",
-                 "cast-of-a-pointer", "compound-offset",
+                 "cast-of-a-pointer", "pointer-from-unnamed",
+                 "pointer-widened", "compound-offset",
                  "store-without-global_off",
                  "pointer-advanced", "pointer-from-data",
                  "pointer-to-pointer"]

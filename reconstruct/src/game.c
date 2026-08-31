@@ -404,7 +404,7 @@ void sound_tick(void)
         runtime.sound_request = 0;
         if (!runtime.sound_on)
             return;
-        runtime.sound_ptr = runtime.sound_tunes[req - 1];
+        runtime.sound_ptr = runtime.sound_tunes_ptr[req - 1];
         speaker_on();
         /* fall through and play the first note straight away */
     } else if (--runtime.sound_timer != 0) {
@@ -2246,7 +2246,7 @@ static entity_t *brick_entity(hit_t *hit, uint16_t handler_fn,
      * byte writes are the same thing and say which is which. */
     s->x = hit->x;
     s->y = hit->y;
-    s->frame = (uint16_t)frames;
+    s->frame_ptr = (uint16_t)frames;
     s->timer = (uint8_t)rate;
     s->period = (uint8_t)rate;
     return e;
@@ -3004,14 +3004,14 @@ static int32_t entity_anim(ent_anim_t *a,
     /* [bx+6] points *into* a list of frame pointers, so one dereference gets
      * the frame: `[si]` where si is the cursor. Dereferencing twice reads the
      * first word of the frame's pixels as if it were an address. */
-    uint32_t cur = a->sprite.frame;
+    uint32_t cur = a->sprite.frame_ptr;
     uint32_t x = a->sprite.x, y = a->sprite.y;
     draw(x, y, global_ptr(global_w(cur - 2)));  /* the previous frame, to erase */
     uint32_t next = global_w(cur);
     if (next == SENTINEL_PTR)
         return -1;                      /* the animation is over */
     draw(x, y, global_ptr(next));
-    a->sprite.frame = (uint16_t)(cur + 2);
+    a->sprite.frame_ptr = (uint16_t)(cur + 2);
     return 1;
 }
 
@@ -3042,12 +3042,12 @@ void entity_crumble(ent_anim_t *a)
         return;
     a->sprite.timer = a->sprite.period;
 
-    uint32_t cur = a->sprite.frame;
+    uint32_t cur = a->sprite.frame_ptr;
     uint32_t x = a->sprite.x, y = a->sprite.y;
     xor_sprite_16x7(x, y, global_ptr(global_w(cur - 2)));
     xor_sprite_16x7(x, y, global_ptr(global_w(cur)));
-    a->sprite.frame = (uint16_t)(cur + 2);
-    if (global_w(a->sprite.frame) == SENTINEL_PTR)
+    a->sprite.frame_ptr = (uint16_t)(cur + 2);
+    if (global_w(a->sprite.frame_ptr) == SENTINEL_PTR)
         global.entity_remove = 1;
 }
 
@@ -3069,7 +3069,7 @@ void bonus_release(const ent_hatch_t *h)
     b->arg.move.steps = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
 
     const bonus_kind_t *kind = &global.bonus_kinds[game_random(io_ticks(), 8)];
-    b->sprite.frame = kind->frame;
+    b->sprite.frame_ptr = kind->frame_ptr;
     b->sprite.timer = kind->timer;       /* one word in the original */
     b->sprite.period = kind->period;
 
@@ -3081,7 +3081,7 @@ void bonus_release(const ent_hatch_t *h)
     b->sprite.x = (uint8_t)al;
     b->sprite.y = h->y;
     xor_sprite_20x16(b->sprite.x, b->sprite.y,
-                     global_ptr(global_w(b->sprite.frame)));
+                     global_ptr(global_w(b->sprite.frame_ptr)));
 }
 
 /* 1ac2:390d  entity_hatch
@@ -3303,7 +3303,7 @@ void entity_repeat(ent_anim_t *a)
         return;
     if (--a->arg.count != 0) {   /* a **byte**: 1ac2:3679 */
         global.entity_remove = 0;
-        a->sprite.frame = global_off(global.brick8_roll_ptr);  /* round again */
+        a->sprite.frame_ptr = global_off(global.brick8_roll_ptr);  /* round again */
         return;
     }
     xor_sprite_16x7(a->sprite.x, a->sprite.y, global.brick8_score[0]);
@@ -3399,7 +3399,7 @@ void brick_9(hit_t *hit, ball_t *ball)
     e->handler_fn = ENTITY_BALL_ARRIVE_FN;
     ent_anim_t *a = &e->p.anim;
     a->arg.ball = global_off(ball);        /* the slot holds its address */
-    a->sprite.frame = 0x6ad0;
+    a->sprite.frame_ptr = 0x6ad0;
     a->sprite.timer = a->sprite.period = 0x32;
     a->sprite.x = (uint8_t)((idx % 12) * 16 + 8);
     a->sprite.y = (uint8_t)((idx / 12) * 8 + 6);
@@ -3421,11 +3421,11 @@ void brick_10(hit_t *hit, ball_t *ball)
     e->handler_fn = ENTITY_BALL_HOLD_FN;
     ent_anim_t *a = &e->p.anim;
     a->arg.ball = global_off(ball);        /* likewise */
-    a->sprite.frame = 0x6b88;
+    a->sprite.frame_ptr = global_off(global.brick10_hold_ptr);
     a->sprite.x = (uint8_t)x;
     a->sprite.y = (uint8_t)y;
     a->sprite.timer = a->sprite.period = 0x69;
-    sprite_shift_draw(x, y, global_ptr(0x6b9c));
+    sprite_shift_draw(x, y, global.brick10_hold[0][0]);
 
     ball_t *b = ball;
     b->state = 4;
@@ -3488,7 +3488,7 @@ void entity_ball_hold(ent_anim_t *a)
 
     if ((a->sprite.timer & 0x0f) == 1 && ny == 0xb8) {
         /* It has arrived at the bottom. */
-        sprite_shift_draw(x, y, global_ptr(global_w(a->sprite.frame)));
+        sprite_shift_draw(x, y, global_ptr(global_w(a->sprite.frame_ptr)));
         if (global.net_on == 1) {
             global.entity_remove = 1;
             ball_place(ball_ptr(a->arg.ball), (x + 8) & 0xff, (y + 0x0b) & 0xff);
@@ -3605,17 +3605,17 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
          * sprite on screen, which is what it did before this was read
          * properly. */
         sprite_shift_draw(s->x, s->y,
-                          global_ptr(global_w(s->frame)));
+                          global_ptr(global_w(s->frame_ptr)));
         s->x = (uint8_t)nx;
         s->y = (uint8_t)ny;
         uint32_t x = nx, y = ny;
         if ((s->timer >> 4) == 0) {
             s->timer = s->period;
-            s->frame += 2;
-            if (global_w(s->frame) == SENTINEL_PTR)
-                s->frame = (uint16_t)global_w(s->frame + 2);
+            s->frame_ptr += 2;
+            if (global_w(s->frame_ptr) == SENTINEL_PTR)
+                s->frame_ptr = global_w(s->frame_ptr + 2);
         }
-        sprite_shift_draw(x, y, global_ptr(global_w(s->frame)));  /* draw */
+        sprite_shift_draw(x, y, global_ptr(global_w(s->frame_ptr)));  /* draw */
     }
 
     /* The laser shot, if one is in flight. */
@@ -3629,7 +3629,7 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
                        ((sx + 0x13) & 0xff) <= ((bxx + 0x0f) & 0xff));
             if (hit) {
                 global.hit_kind = 3;
-                sprite_shift_draw(s->x, s->y, global_ptr(global_w(s->frame)));
+                sprite_shift_draw(s->x, s->y, global_ptr(global_w(s->frame_ptr)));
                 shot_xor(global.laser_x, (global.laser_y + 2) & 0xff);
                 global.laser_y = 0xb3;
                 return;
@@ -3644,7 +3644,7 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
         if (((bxx + 0x0f) & 0xff) >= px &&
             bxx <= ((px + global.paddle_width) & 0xff)) {
             global.hit_kind = 1;
-            sprite_shift_draw(bxx, y, global_ptr(global_w(s->frame)));
+            sprite_shift_draw(bxx, y, global_ptr(global_w(s->frame_ptr)));
             return;
         }
     }
@@ -3719,7 +3719,7 @@ void entity_bonus(ent_anim_t *b)
 sprite:
     if (draw)
         sprite_shift_draw(b->sprite.x, b->sprite.y,
-                          global_ptr(global_w(b->sprite.frame)));
+                          global_ptr(global_w(b->sprite.frame_ptr)));
 
 settle:
     if (global.hit_kind == 0) {       /* 1ac2:3aaa - it reached the bottom */
@@ -3737,11 +3737,11 @@ settle:
      * sparkle's too, unchanged - only `handler` is the node's, so this is the
      * one line here that has to look outside the capsule. */
     entity_of(b)->handler_fn = ENTITY_SPARKLE_FN;
-    b->sprite.frame = 0xb7a4;
+    b->sprite.frame_ptr = 0xb7a4;
     b->sprite.timer = b->sprite.period = 0x0f;
     global.bonus_live--;
     sprite_shift_draw(b->sprite.x, b->sprite.y,
-                      global_ptr(global_w(b->sprite.frame - 2)));  /* a sparkle */
+                      global_ptr(global_w(b->sprite.frame_ptr - 2)));  /* a sparkle */
     brick_score(0, 0, 0x0703);
 }
 

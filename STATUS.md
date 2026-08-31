@@ -490,7 +490,35 @@ original shoot.
 
 ## Next
 
-1. **The end-level bonus, still.** Five transcription errors and one
+1. **The game's pointer arithmetic wants a general answer, not a per-site
+   one.** `check_pointers.py` reports 72 `compound-offset` sites, and they are
+   all the same handful of shapes:
+
+   ```c
+   xor_sprite_16x7(x, y, global_ptr(global_w(cur - 2)));   /* the previous frame */
+   xor_sprite_16x7(x, y, global_ptr(global_w(cur)));       /* and the current one */
+   global_w(table + index * 2)                             /* an entry of a table */
+   s->frame_ptr = global_w(s->frame_ptr + 2)               /* a cursor stepping */
+   ```
+
+   Every one is a cursor into a list of the game's 16-bit pointers, walked by
+   `+ 2` and dereferenced twice - and written out longhand each time, the
+   arithmetic doing what a type should. `cur - 2` is *the entry before this
+   one*, and nothing in the expression says so.
+
+   The fix is not to rewrite 72 sites by hand but to give the shape a name:
+   a list of the game's pointers is a **type**, stepping it is `++`, reading
+   through it is one call, and `- 2` becomes `[-1]` or a `prev` that reads as
+   English. `animations_t` is the worked example already - `anim_loop_t` and
+   `anim_sprite_t` retired every `<< 5` and `+ 2` in the two brick handlers,
+   and the same treatment applied to frame lists would take most of the 72
+   with it, along with the remaining `_ptr` candidates and the four loose
+   locals, which are the same sites seen from a different angle.
+
+   Do this before the rest of the renames: naming the fields one at a time
+   keeps arriving back at the same expressions.
+
+2. **The end-level bonus, still.** Five transcription errors and one
    structural one have come out of it, and the two sides now play the whole
    screen together and into the next level: **9,000 frames identical** from
    , against 9 at the start of the day. Two things are still open on
@@ -526,12 +554,12 @@ original shoot.
    the C says so outright, and why it is worth writing down that the original
    is relying on an accident here.
 
-2. **One routine nothing builds a state for.**
+3. **One routine nothing builds a state for.**
 
    `copy_string_text` at `0x1642` is inside `screen_define_keys`, which
    switches to text mode 01h. Excluded on purpose: the port has no text
    renderer, and that is a separate job from transcribing.
-3. **Sound.** Both play it now. The port records the PIT divisor in
+4. **Sound.** Both play it now. The port records the PIT divisor in
    `io_sound` and tops the stream up every frame while the note lasts;
    `emulation.py` tracks channel 2's divisor across its two `out 0x42` writes
    and the gate at port 0x61, and `speaker_update` loops a square wave for as
@@ -542,7 +570,7 @@ original shoot.
    while one is being held, so queueing a fixed buffer played the first thirty
    milliseconds of every note and then silence. A note of ten ticks is about a
    sixth of a second. `emulation.py` is still silent.
-4. **`.PPC` levels are playable now.** `reconstruct/popcorn --cmdline poptab`
+5. **`.PPC` levels are playable now.** `reconstruct/popcorn --cmdline poptab`
    loads `POPTAB.PPC` over the built-in table, the way `POPCORN POPTAB` does:
    0x21b6 bytes into the block reached as segment 0xc46, six bytes in, valid
    when the file's own six-byte header repeats. The loader was transcribed
