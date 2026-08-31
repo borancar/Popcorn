@@ -1942,8 +1942,6 @@ void ball_after(ball_t *b)
  */
 #define PADDLE_TOP    0xb5
 #define PADDLE_BOTTOM 0xbe
-#define SLOPE_TOP     global_off(global.slope_top)
-#define SLOPE_SIDE    global_off(global.slope_side)
 #define SOUND_PADDLE     1
 
 /* The common tail of every top-of-paddle bounce: reverse vertically, anchor
@@ -1965,11 +1963,12 @@ static void paddle_bounce_up(ball_t *b)
     runtime.sound_request = SOUND_PADDLE;
 }
 
-static void paddle_slope(ball_t *b, uint32_t table, uint32_t index)
+/* One entry of a slope table is the ball's (dy, dx) pair packed into a word,
+ * low byte first - which is the order the two `mov` bytes come out in. */
+static void paddle_slope(ball_t *b, uint16_t slope)
 {
-    uint32_t w = global_w(table + index * 2);
-    b->dy = (uint8_t)w;
-    b->dx = (uint8_t)(w >> 8);
+    b->dy = (uint8_t)slope;
+    b->dx = (uint8_t)(slope >> 8);
 }
 
 void ball_paddle(ball_t *b)
@@ -2000,7 +1999,7 @@ void ball_paddle(ball_t *b)
         b->anchor_y = (uint8_t)y;
         b->acc_x = b->acc_y = 1;
         b->bounces = 0;
-        paddle_slope(b, SLOPE_SIDE, depth);
+        paddle_slope(b, global.slope_side[depth]);
         runtime.sound_request = SOUND_PADDLE;
         return;
     }
@@ -2012,7 +2011,7 @@ void ball_paddle(ball_t *b)
     uint32_t off = (b->x - left) & 0xff;
 
     if (off <= 0x0a) {                          /* the left end */
-        paddle_slope(b, SLOPE_TOP, off);
+        paddle_slope(b, global.slope_top[off]);
         b->dir_x = 1;                         /* away to the left */
         paddle_bounce_up(b);
         return;
@@ -2022,7 +2021,7 @@ void ball_paddle(ball_t *b)
         return;
     uint32_t from_right = (span - off) & 0xff;
     if (from_right <= 0x0a) {                   /* the right end */
-        paddle_slope(b, SLOPE_TOP, from_right);
+        paddle_slope(b, global.slope_top[from_right]);
         b->dir_x = 0;                         /* away to the right */
         paddle_bounce_up(b);
         return;
@@ -2213,9 +2212,9 @@ void ball_bricks(ball_t *b)
 
 static void brick_score(uint32_t a, uint32_t b, uint32_t c)
 {
-    global_setw(global_off(global.score_add) + 0, a);
-    global_setw(global_off(global.score_add) + 2, b);
-    global_setw(global_off(global.score_add) + 4, c);
+    global.score_add_pair[0] = (uint16_t)a;
+    global.score_add_pair[1] = (uint16_t)b;
+    global.score_add_pair[2] = (uint16_t)c;
     score_add();                        /* 1ac2:413d */
 }
 
@@ -4107,15 +4106,15 @@ void laser_fire(void)
 void entity_popup(ent_fall_t *f) { entity_capsule_frames(f, global_off(global.popup_frames)); }
 void entity_capsule(ent_fall_t *f) { entity_capsule_frames(f, global_off(global.capsule_frames)); }
 
-void entity_capsule_frames(ent_fall_t *f, uint32_t table)
+void entity_capsule_frames(ent_fall_t *f, uint16_t table_ptr)
 {
     if ((--f->tick & 7) != 0)
         return;                         /* not this tick */
 
-    uint32_t base = global_w(table + f->kind * 2);
-    uint32_t di = base + f->frame * 4;
-    uint16_t src_ptr = global_w(di);
-    uint32_t rows = global_w(di + 2);
+    const fall_frame_t *list = (const fall_frame_t *)
+        global_ptr(global_table_w(table_ptr, f->kind));
+    uint16_t src_ptr = list[f->frame].sprite_ptr;
+    uint32_t rows = list[f->frame].rows;
 
     uint32_t y = f->y;
     f->y++;
@@ -4164,8 +4163,8 @@ void entity_capsule_frames(ent_fall_t *f, uint32_t table)
         else
             f->cycle++;
     }
-    di = base + f->frame * 4;
-    xor_sprite_16xn(f->x, y, global_ptr(global_w(di)), global_w(di + 2) & 0xff);
+    xor_sprite_16xn(f->x, y, global_ptr(list[f->frame].sprite_ptr),
+                    list[f->frame].rows & 0xff);
 }
 
 /* ========================================================================
@@ -4495,7 +4494,7 @@ void entity_paddle_fx(ent_morph_t *m)
  * the first frame. */
 void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint32_t kind)
 {
-    m->sprites = global_w(table_ptr + kind * 2);
+    m->sprites = global_table_w(table_ptr, kind);
     m->step = 6;
     global.paddle_morphing = 0xff;
     morph_step(m);
@@ -5080,7 +5079,10 @@ void menu_banner_tick(void)
 uint32_t particle_random(uint32_t ax, uint32_t ticks, uint32_t limit)
 {
     uint32_t n = global.particle_count;
-    const uint8_t *p = global.particles[0];
+    /* `lodsw` from the base of the block, particle_count times - so it reads
+     * the first n words rather than one field of each record, and where a
+     * word falls inside a record is not something it knows or cares about. */
+    const uint8_t *p = (const uint8_t *)global.particles;
     for (uint32_t i = 0; i < n; i++)
         ax = (ax + p[i * 2] + (p[i * 2 + 1] << 8)) & 0xffff;
     ax = (ax + ticks) & 0xffff;
@@ -5094,42 +5096,32 @@ uint32_t particle_random(uint32_t ax, uint32_t ticks, uint32_t limit)
 /* 1ac2:548a  particle_init
  *
  * Set one kernel going from (0x68, 0xa0) with a random speed and a random
- * angle. [si+0x0e] is its horizontal step and [si+0x0c] its direction; the
- * height is a parabola computed as `step * t * t / 100`, which is why the
- * record carries the time in [si+6] rather than a velocity.
+ * angle. The angle is both where t starts and what x is measured from, and it
+ * decides the sign of dir, so a kernel launched at a negative angle walks its
+ * time upwards and one launched positive walks it down - which is what sends
+ * the two halves of the fountain in opposite directions.
  */
-uint32_t particle_init(uint32_t si, uint32_t ax_in)
+uint32_t particle_init(particle_t *p, uint32_t ax_in)
 {
-    global_setw(si + 0, 0x68);
-    global_setw(si + 2, 0xa0);
+    p->x0 = 0x68;
+    p->y0 = 0xa0;
     uint32_t ax = (particle_random(ax_in, io_ticks(), 6) + 8) & 0xffff;
-    global_setw(si + 0x0e, ax);
+    p->speed = (uint16_t)ax;
     ax = (particle_random(ax, io_ticks(), 0x46) - 0x23) & 0xffff;
     if (ax == 0)
         ax = 0x0a;
-    global_setw(si + 4, ax);
-    global_setw(si + 6, ax);
-    global_setw(si + 0x0c, ax >= 0x8000 ? 1 : 0xffff);
-    /* `imul word [si+4]` twice then `idiv cx`. The first product is truncated
-     * to sixteen bits before the second multiply - only AX carries forward -
-     * and only the second keeps its high half, because `idiv` divides DX:AX.
-     * Doing the whole thing in 32-bit C gives a different answer as soon as
-     * the first product overflows, which it does for most angles. */
-    int16_t v = (int16_t)global_w(si + 0x0e);
-    int16_t t = (int16_t)ax;
-    int16_t first = (int16_t)(v * t);
-    int32_t prod = (int32_t)first * (int32_t)t;
-    global_setw(si + 0x0a, (int16_t)(prod / 100) & 0xffff);
-    global_setw(si + 8, (int16_t)(prod / 100) & 0xffff);
-    return (uint32_t)(int16_t)(prod / 100) & 0xffff;   /* what AX is left as */
+    p->t0 = (uint16_t)ax;
+    p->t = (uint16_t)ax;
+    p->dir = ax >= 0x8000 ? 1 : 0xffff;
+    uint16_t h = particle_height(p->speed, p->t);
+    p->h0 = h;
+    p->h = h;
+    return h;                                          /* what AX is left as */
 }
 
 /* 1ac2:53c2  menu_particles_tick
  *
- * The popcorn kernels bouncing under the menu. Each is a sixteen-byte record
- * at 0x148d: origin (+0, +2), the launch angle (+4), the time since launch
- * (+6), the current height (+8) and the last one (+0x0a), the horizontal
- * direction (+0x0c) and the speed (+0x0e).
+ * The popcorn kernels bouncing under the menu, one particle_t each.
  *
  * Points are put on the screen with INT 10h AH=0Ch, one BIOS call per pixel -
  * which is where the six hundred thousand INT 10h calls in a minute of menu
@@ -5143,29 +5135,24 @@ uint32_t particle_init(uint32_t si, uint32_t ax_in)
  */
 void menu_particles_tick(void)
 {
-    uint16_t particle_ptr = global_off(global.particles);
     uint32_t n = global.particle_count;
-    for (uint32_t k = 0; k < n; k++, particle_ptr += 0x10) {
+    for (uint32_t k = 0; k < n; k++) {
+        particle_t *p = &global.particles[k];
+
         /* Rub out where it was. */
-        uint32_t x = (global_w(particle_ptr) + global_w(particle_ptr + 4) - global_w(particle_ptr + 6)) & 0xffff;
-        uint32_t y = (global_w(particle_ptr + 8) + global_w(particle_ptr + 2) - global_w(particle_ptr + 0x0a)) & 0xffff;
-        if (x <= 0x13f && y <= 0xc7)
+        uint32_t x = particle_x(p), y = particle_y(p);
+        if (x <= 319 && y <= 199)
             plot_pixel_xor(x, y, 3);
 
-        global_setw(particle_ptr + 6, (global_w(particle_ptr + 6) + global_w(particle_ptr + 0x0c)) & 0xffff);
-        int16_t t = (int16_t)global_w(particle_ptr + 6);
-        int16_t v = (int16_t)global_w(particle_ptr + 0x0e);
-        int16_t first = (int16_t)(v * t);
-        int32_t prod = (int32_t)first * (int32_t)t;
-        global_setw(particle_ptr + 8, (int16_t)(prod / 100) & 0xffff);
+        particle_step(p);
 
-        y = (global_w(particle_ptr + 8) + global_w(particle_ptr + 2) - global_w(particle_ptr + 0x0a)) & 0xffff;
-        x = (global_w(particle_ptr) + global_w(particle_ptr + 4) - global_w(particle_ptr + 6)) & 0xffff;
-        if (y <= 0xc7 && x <= 0x13f)
+        y = particle_y(p);
+        x = particle_x(p);
+        if (y <= 199 && x <= 319)
             plot_pixel_xor(x, y, 3);
 
-        if (y > 0xc7)
-            particle_init(particle_ptr, y);       /* gone: launch another */
+        if (y > 199)
+            particle_init(p, y);                  /* gone: launch another */
         /* One delay per kernel, not one per kernel per kernel: `mov cx,bp`
          * restores the loop counter and the `call` is outside any loop. */
         game_delay();
@@ -5181,7 +5168,7 @@ void menu_particles_init(uint32_t ax_in)
     uint32_t n = global.particle_count;
     uint32_t ax = ax_in;
     for (uint32_t i = 0; i < n; i++)
-        ax = particle_init(global_off(global.particles[i]), ax);
+        ax = particle_init(&global.particles[i], ax);
 }
 
 /* INT 10h AH=0Ch in mode 05h: one pixel, two bits, in the byte that holds it.
@@ -5657,9 +5644,9 @@ void level_tally(void)
 {
     for (int32_t i = 0; i < 0xa8; i++) {
         uint32_t v = global.level.cells[i];
-        global_setw(global_off(global.score_add) + 0, 0);
-        global_setw(global_off(global.score_add) + 2, global.cell_score[v][0]);
-        global_setw(global_off(global.score_add) + 4, global.cell_score[v][1]);
+        global.score_add_pair[0] = 0;
+        global.score_add_pair[1] = global.cell_score[v][0];
+        global.score_add_pair[2] = global.cell_score[v][1];
         score_add();
     }
     brick_score(0, 1, 0);
@@ -5877,24 +5864,22 @@ void field_marks_wide(uint32_t di, uint32_t rows)
  * (0x68, 0x98) instead of (0x68, 0xa0) and with a speed of `random(3) + 8`
  * rather than `random(6) + 8`, so the kernels there rise more slowly.
  */
-uint32_t ending_particle_init(uint32_t si, uint32_t ax_in)
+uint32_t ending_particle_init(particle_t *p, uint32_t ax_in)
 {
-    global_setw(si + 0, 0x68);
-    global_setw(si + 2, 0x98);
+    p->x0 = 0x68;
+    p->y0 = 0x98;
     uint32_t ax = (particle_random(ax_in, io_ticks(), 3) + 8) & 0xffff;
-    global_setw(si + 0x0e, ax);
+    p->speed = (uint16_t)ax;
     ax = (particle_random(ax, io_ticks(), 0x46) - 0x23) & 0xffff;
     if (ax == 0)
         ax = 0x0a;
-    global_setw(si + 4, ax);
-    global_setw(si + 6, ax);
-    global_setw(si + 0x0c, ax >= 0x8000 ? 1 : 0xffff);
-    int16_t v = (int16_t)global_w(si + 0x0e), t = (int16_t)ax;
-    int16_t first = (int16_t)(v * t);
-    int32_t prod = (int32_t)first * (int32_t)t;
-    global_setw(si + 0x0a, (int16_t)(prod / 100) & 0xffff);
-    global_setw(si + 8, (int16_t)(prod / 100) & 0xffff);
-    return (uint32_t)(int16_t)(prod / 100) & 0xffff;
+    p->t0 = (uint16_t)ax;
+    p->t = (uint16_t)ax;
+    p->dir = ax >= 0x8000 ? 1 : 0xffff;
+    uint16_t h = particle_height(p->speed, p->t);
+    p->h0 = h;
+    p->h = h;
+    return h;
 }
 
 /* 1ac2:5c36  ending_blob
@@ -6075,13 +6060,13 @@ void ending_plot(uint32_t x, uint32_t y)
     uint32_t row = y >> 1;
     di += row * 0x50;
     uint32_t phase = ((x & 1) ? 1 : 0) + ((x & 2) ? 2 : 0);
-    uint16_t sprite_ptr = global_off(global.particle_sprites[phase]);
     di += x >> 2;
 
     uint32_t d = di;
     for (int32_t i = 0; i < 4; i++) {
-        g_vram[d & (CGA_SIZE - 1)] ^= (uint8_t)global_w(sprite_ptr + i * 2);
-        g_vram[(d + 1) & (CGA_SIZE - 1)] ^= (uint8_t)(global_w(sprite_ptr + i * 2) >> 8);
+        uint16_t bits = global.particle_sprites[phase][i];
+        g_vram[d & (CGA_SIZE - 1)] ^= (uint8_t)bits;
+        g_vram[(d + 1) & (CGA_SIZE - 1)] ^= (uint8_t)(bits >> 8);
         /* Just cga_next_row. The original writes the four rows out twice,
          * once for an even start (+0x2000, -0x1fb0, +0x2000 at 1ac2:5b15)
          * and once for an odd one (-0x1fb0, +0x2000, -0x1fb0 at 1ac2:5b65),
@@ -6097,7 +6082,7 @@ void ending_particles_init(uint32_t ax)
 {
     uint32_t n = global.particle_count;
     for (uint32_t i = 0; i < n; i++)
-        ax = ending_particle_init(global_off(global.particles[i]), ax);
+        ax = ending_particle_init(&global.particles[i], ax);
     /* 1ac2:5a43 has no `ret` of its own: it **falls through** into
      * ending_particles_tick at 1ac2:5a56, so the first pass over the
      * particles is part of setting them up. Treating the two as separate
@@ -6109,26 +6094,22 @@ void ending_particles_init(uint32_t ax)
  * place of the BIOS pixel call and ending_particle_init to re-launch */
 void ending_particles_tick(void)
 {
-    uint16_t particle_ptr = global_off(global.particles);
     uint32_t n = global.particle_count;
-    for (uint32_t k = 0; k < n; k++, particle_ptr += 0x10) {
-        uint32_t x = (global_w(particle_ptr) + global_w(particle_ptr + 4) - global_w(particle_ptr + 6)) & 0xffff;
-        uint32_t y = (global_w(particle_ptr + 8) + global_w(particle_ptr + 2) - global_w(particle_ptr + 0x0a)) & 0xffff;
-        if (x <= 0x13f && y <= 0xc7)
+    for (uint32_t k = 0; k < n; k++) {
+        particle_t *p = &global.particles[k];
+
+        uint32_t x = particle_x(p), y = particle_y(p);
+        if (x <= 319 && y <= 199)
             ending_plot(x, y);
 
-        global_setw(particle_ptr + 6, (global_w(particle_ptr + 6) + global_w(particle_ptr + 0x0c)) & 0xffff);
-        int16_t t = (int16_t)global_w(particle_ptr + 6), v = (int16_t)global_w(particle_ptr + 0x0e);
-        int16_t first = (int16_t)(v * t);
-        int32_t prod = (int32_t)first * (int32_t)t;
-        global_setw(particle_ptr + 8, (int16_t)(prod / 100) & 0xffff);
+        particle_step(p);
 
-        y = (global_w(particle_ptr + 8) + global_w(particle_ptr + 2) - global_w(particle_ptr + 0x0a)) & 0xffff;
-        x = (global_w(particle_ptr) + global_w(particle_ptr + 4) - global_w(particle_ptr + 6)) & 0xffff;
-        if (y <= 0xc7 && x <= 0x13f)
+        y = particle_y(p);
+        x = particle_x(p);
+        if (y <= 199 && x <= 319)
             ending_plot(x, y);
-        if (y > 0xc7)
-            ending_particle_init(particle_ptr, y);
+        if (y > 199)
+            ending_particle_init(p, y);
         game_delay();
     }
 }
@@ -7042,9 +7023,8 @@ static int32_t bonus_end_level_run(void)
      * 0x2cd9, at 1ac2:43ef to 1ac2:447f. The transcription went straight from
      * the level's cells to the fresh ball and had none of what follows. */
     for (int32_t r = 0; r < 7; r++) {
-        uint16_t row_ptr = global_off(global.results_rows[2 + r]);
-        for (int32_t i = 0; i < 0x1a; i++)
-            vram_setw(BANNER_ROW_VRAM + i * 2, global_w(row_ptr + i * 2));
+        for (int32_t i = 0; i < 26; i++)
+            vram_setw(BANNER_ROW_VRAM + i * 2, global.results_rows[2 + r][i]);
         screen_scroll_up();
     }
 

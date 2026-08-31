@@ -73,6 +73,68 @@ ENSURE_BALL_AT(state, 0x1c);    ENSURE_BALL_AT(bounces, 0x1d);
 
 ENSURE_SIZE(ball_t, 0x1e);
 
+/* One frame of a falling capsule or popup: the sprite to draw and how many
+ * rows of it. The lists are four bytes an entry, indexed by the entity's
+ * frame, and which list is a lookup by kind - see entity_capsule_frames. */
+typedef struct __attribute__((packed)) {
+    uint16_t sprite_ptr;    /* 0x00 */
+    uint16_t rows;          /* 0x02 - only the low byte is used */
+} fall_frame_t;
+ENSURE_SIZE(fall_frame_t, 4);
+
+/* One kernel of the fountain - the menu's and the ending's are the same
+ * record, and particle_init and ending_particle_init differ only in where
+ * they launch it from and how fast.
+ *
+ * Where it is drawn is not stored: `x0 + t0 - t` and `y0 + h - h0` are
+ * computed afresh each step, so the pair of origins and the pair of
+ * before-and-after values are what the record keeps. The height is a parabola
+ * in t - `speed * t * t / 100` - which is why there is a time here and not a
+ * vertical velocity, and why t walks by dir rather than by a step of its
+ * own. */
+typedef struct __attribute__((packed)) {
+    uint16_t x0;        /* 0x00 launched from here */
+    uint16_t y0;        /* 0x02 */
+    uint16_t t0;        /* 0x04 the launch angle, which is also what t starts at */
+    uint16_t t;         /* 0x06 the time, stepped by dir */
+    uint16_t h;         /* 0x08 the parabola's height now */
+    uint16_t h0;        /* 0x0a and at launch, so y is y0 + h - h0 */
+    uint16_t dir;       /* 0x0c 1 or 0xffff: which way t walks */
+    uint16_t speed;     /* 0x0e the horizontal step the parabola is scaled by */
+} particle_t;
+ENSURE_SIZE(particle_t, 16);
+
+/* Where it is now. Both are the original's 16-bit subtraction, so a kernel
+ * that has gone off the top of the screen comes back as a number near 0xffff
+ * and fails the `<= 199` test the same way one that has fallen off the bottom
+ * does. */
+static inline uint32_t particle_x(const particle_t *p)
+{
+    return (uint16_t)(p->x0 + p->t0 - p->t);
+}
+
+static inline uint32_t particle_y(const particle_t *p)
+{
+    return (uint16_t)(p->h + p->y0 - p->h0);
+}
+
+/* `imul word [si+4]` twice then `idiv cx`. The first product is truncated to
+ * sixteen bits before the second multiply - only AX carries forward - and
+ * only the second keeps its high half, because `idiv` divides DX:AX. Doing
+ * the whole thing in 32-bit C gives a different answer as soon as the first
+ * product overflows, which it does for most angles. */
+static inline uint16_t particle_height(uint16_t speed, uint16_t t)
+{
+    int16_t first = (int16_t)((int16_t)speed * (int16_t)t);
+    return (uint16_t)(int16_t)((int32_t)first * (int32_t)(int16_t)t / 100);
+}
+
+static inline void particle_step(particle_t *p)
+{
+    p->t = (uint16_t)(p->t + p->dir);
+    p->h = particle_height(p->speed, p->t);
+}
+
 /* Struct-land to offset-land, for the routines that still take an image
  * offset because that is what the original passed in a register. */
 /* The level being played: the 176-byte record play_session copies out of the
@@ -496,7 +558,14 @@ typedef struct __attribute__((packed)) {
         };
     };
     uint16_t particle_count;            /* 0x1413 the menu's fountain */
-    uint8_t  score_add[6];              /* 0x1415 what score_add is about to add, six digits most significant first */
+    /* 0x1415 what score_add is about to add: six decimal digits, most
+     * significant first. Every caller fills it three words at a time - one
+     * `mov` per pair of digits - which is why the same six bytes are here
+     * under both shapes. */
+    union {
+        uint8_t  score_add[6];
+        uint16_t score_add_pair[3];
+    };
     uint8_t  _pad_05[1];
     char     hsc_file[12];              /* 0x141c "popcorn.hsc", the name the table is saved under */
     char     level_file[64];            /* 0x1428 the .PPC to load, built from the command tail. 64 is what there is: walker_anim follows it */
@@ -508,7 +577,7 @@ typedef struct __attribute__((packed)) {
     uint16_t frame_delay;               /* 0x1487 empty loops left this frame */
     uint16_t frame_delay_set;           /* 0x1489 what it is reloaded with */
     uint16_t speed_timer;               /* 0x148b frames until speed_limit rises, so a level speeds up */
-    uint8_t  particles[100][16];        /* 0x148d the menu's fountain and the ending's: a hundred records of sixteen - origin at +0 and +2, launch angle at +4, and how long it has been in flight. particle_count says how many are live */
+    particle_t particles[100];          /* 0x148d the menu's fountain and the ending's, a hundred of them. particle_count says how many are live */
     uint16_t particle_seed;             /* 0x1acd particle_random's running value, folded in and advanced on every draw */
     uint16_t particle_sprites[4][4];    /* 0x1acf a particle pre-shifted to each of the four pixel phases, four words apiece */
     /* 0x1aef is the general scratch, and four routines spend it on different
@@ -946,10 +1015,33 @@ static inline uint16_t global_off(const void *p)
  * reads in the disassembly. global_w comes back in a **pointer's width**: what it
  * reads is a word of the game's data, and the reason the port reads words at
  * all is that the game keeps its pointers in them. */
+/* The i-th word of a table whose base the game passed in a register - the
+ * `mov ax,[bx+si]` with the base in BX and the index doubled into SI. A
+ * `const uint16_t *` would say it better and let C do the doubling, but the
+ * overlay is packed and these tables sit at odd offsets in it, so a word
+ * pointer into one is not something the compiler will hand out.
+ *
+ * Where the base is a *constant* this is the wrong tool: name the table as a
+ * field and subscript it. This is for the two routines the original itself
+ * calls with a different table each time. */
 static inline uint16_t global_w(uint16_t off)
 {
     const uint8_t *p = global_ptr(off);
     return (uint16_t)(p[0] | (p[1] << 8));
+}
+
+/* The i-th word of a table whose base the game passed in a register - the
+ * `mov ax,[bx+si]` with the base in BX and the index doubled into SI. A
+ * `const uint16_t *` would say it better and let C do the doubling, but the
+ * overlay is packed and these tables sit at odd offsets in it, so a word
+ * pointer into one is not something the compiler will hand out.
+ *
+ * Where the base is a *constant* this is the wrong tool: name the table as a
+ * field of global_t and subscript it. This is for the routines the original
+ * itself calls with a different table each time. */
+static inline uint16_t global_table_w(uint16_t table_ptr, uint32_t i)
+{
+    return global_w((uint16_t)(table_ptr + i * 2));
 }
 static inline void global_setw(uint16_t off, uint32_t v)
 {
@@ -1563,7 +1655,7 @@ void menu_banner_tick(void);      /* 1ac2:50df */
 void banner_shift(void);          /* 1ac2:5140 */
 void brick_11_after(uint32_t x, uint32_t y);  /* 1ac2:4c4b */
 uint32_t particle_random(uint32_t ax, uint32_t ticks, uint32_t limit); /* 1ac2:5448 */
-uint32_t particle_init(uint32_t si, uint32_t ax_in);  /* 1ac2:548a */
+uint32_t particle_init(particle_t *p, uint32_t ax_in);  /* 1ac2:548a */
 void menu_arrow(void);            /* 1ac2:490d */
 void arrow_head(uint32_t di);     /* 1ac2:492f */
 void arrow_tail(uint32_t di);     /* 1ac2:4957 */
@@ -1608,7 +1700,7 @@ uint32_t frame_band(uint32_t di, uint32_t fill);  /* 1ac2:1354 */
 void panel_reveal(void);          /* 1ac2:0911 */
 void field_marks(void);           /* 1ac2:0598 */
 void field_marks_wide(uint32_t di, uint32_t rows);  /* 1ac2:0a1d */
-uint32_t ending_particle_init(uint32_t si, uint32_t ax_in); /* 1ac2:59f7 */
+uint32_t ending_particle_init(particle_t *p, uint32_t ax_in); /* 1ac2:59f7 */
 void ending_blob(uint32_t pos);   /* 1ac2:5c36 */
 uint32_t ending_blobs(void);          /* 1ac2:5b80 */
 void ending_column(void);         /* 1ac2:5317 */
@@ -1691,7 +1783,7 @@ void entity_paddle_fx(ent_morph_t *m); /* 1ac2:3386 */
 void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint32_t kind); /* 1ac2:34c5 */
 void morph_step(ent_morph_t *m);       /* 1ac2:34d7 */
 void entity_popup(ent_fall_t *f);   /* 1ac2:3561 */
-void entity_capsule_frames(ent_fall_t *f, uint32_t table);
+void entity_capsule_frames(ent_fall_t *f, uint16_t table_ptr);
 void entity_ball_hold(ent_anim_t *a); /* 1ac2:37e0 */
 void ball_place(ball_t *ball, uint32_t x, uint32_t y);
 void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny); /* 1ac2:3df1 */
