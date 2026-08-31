@@ -121,7 +121,7 @@ static int32_t capsule_want(uint8_t kind)
 }
 
 static uint8_t rd(uint32_t off)        { return g_image[off]; }
-static uint32_t rw(uint32_t off)       { return img_w(off); }
+static uint32_t rw(uint32_t off)       { return global_w(off); }
 
 /* ------------------------------------------------------------ the reading */
 struct ball { int32_t x, y, dy_up, dx_neg, dx, dy; };
@@ -130,7 +130,7 @@ static int32_t live_balls(struct ball *out)
 {
     int32_t n = 0;
     for (int32_t i = 0; i < BALL_COUNT; i++) {
-        const ball_t *b = &gv.balls[i];
+        const ball_t *b = &global.balls[i];
         if (b->state != 1 && b->state != 2) /* 3 is brick 9, 4 the parachute */
             continue;
         out[n].x = b->x;

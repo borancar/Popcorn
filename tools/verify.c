@@ -77,7 +77,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         blit_xor(g_image + r[R_SI], (const paddle_rows_t *)(g_image + r[R_DI]));
         return 1;
     case 0x221a:                        /* draw_paddle(si = sprite) */
-        draw_paddle(img_ptr(r[R_SI]));
+        draw_paddle(global_ptr(r[R_SI]));
         return 1;
     case 0x2881:                        /* ball_draw(si = sprite, bl, al) */
         ball_draw(g_image + r[R_SI], r[R_BX] & 0xff, r[R_AX] & 0xff);
@@ -92,7 +92,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x044b: level_colours(); return 1;
     case 0x10c5: draw_run((uint8_t)(r[R_AX] & 0xff), r[R_DX] & 0xff,
                           r[R_DI]); return 1;
-    case 0x10d1: draw_text((const char *)img_ptr(r[R_SI]), r[R_DX] & 0xff, r[R_DI]); return 1;
+    case 0x10d1: draw_text((const char *)global_ptr(r[R_SI]), r[R_DX] & 0xff, r[R_DI]); return 1;
     case 0x14a7: draw_cursor(r[R_DI]); return 1;
     case 0x3146: flash_bar(r[R_DX]); return 1;
     case 0x3232: entity_alloc(); return 1;
@@ -102,11 +102,11 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x30dd: pixel_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
     case 0x306b: shot_xor(r[R_BX] & 0xff, r[R_AX] & 0xff); return 1;
     case 0x3f20: bonus_hits_ball(&entity_ptr(r[R_BX])->p.anim.sprite, ball_ptr(r[R_SI])); return 1;
-    case 0x3f4f: sprite_shift_draw(r[R_CX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]));
+    case 0x3f4f: sprite_shift_draw(r[R_CX] & 0xff, r[R_AX] & 0xff, global_ptr(r[R_SI]));
                  return 1;
-    case 0x406a: xor_sprite_20x16(r[R_CX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]));
+    case 0x406a: xor_sprite_20x16(r[R_CX] & 0xff, r[R_AX] & 0xff, global_ptr(r[R_SI]));
                  return 1;
-    case 0x40f2: xor_sprite_16xn(r[R_BX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]),
+    case 0x40f2: xor_sprite_16xn(r[R_BX] & 0xff, r[R_AX] & 0xff, global_ptr(r[R_SI]),
                                  r[R_CX] & 0xff); return 1;
     case 0x40c0:
         if (getenv("POPCORN_DEBUG_RNG"))
@@ -124,7 +124,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x3200: bonus_stop_monsters(); return 1;
     case 0x41e5: cell_special(r[R_AX] & 0xff, r[R_CX] & 0xff, r[R_DI]);
                  return 1;
-    case 0x4b7a: set_palette_registers(img_ptr(r[R_SI])); return 1;
+    case 0x4b7a: set_palette_registers(global_ptr(r[R_SI])); return 1;
     case 0x4c4b: brick_11_after(r[R_CX] & 0xff, r[R_AX] & 0xff); return 1;
     case 0x4cc1: cell_hole_draw(r[R_CX] & 0xff, r[R_AX] & 0xff); return 1;
     /* 0x4e1a, the high-score screen, is left out: it returns on a key, and
@@ -136,7 +136,8 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * deliberate no-ops in the port. Checking a no-op against the original
      * would report a decision as a difference. */
     case 0x3abf: entity_anim_brick(&entity_ptr(r[R_BX])->p.brick); return 1;
-    case 0x3bac: draw_anim_cell(s14a1_ptr(r[R_SI]), r[R_CX] & 0xff, r[R_AX] & 0xff);
+    case 0x3bac: draw_anim_cell((const anim_sprite_t *)animations_ptr(r[R_SI]),
+                                r[R_CX] & 0xff, r[R_AX] & 0xff);
                  return 1;
     /* The brick handlers, all of them. Only two were dispatched, so the
      * heart of the game - what happens when the ball meets a cell - could not
@@ -176,8 +177,8 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x318b: extra_life(); return 1;
     case 0x2109: scroll_up_band(); return 1;
     case 0x2148: scroll_down_band(); return 1;
-    case 0x22a9: draw_paddle_raw(img_ptr(r[R_SI])); return 1;
-    case 0x2187: draw_paddle_shifted(img_ptr(r[R_SI])); return 1;
+    case 0x22a9: draw_paddle_raw(global_ptr(r[R_SI])); return 1;
+    case 0x2187: draw_paddle_shifted(global_ptr(r[R_SI])); return 1;
     case 0x2e1e: g_result = ball_on_paddle(ball_ptr(r[R_SI])); return 1;
     case 0x2ee3: laser_fire(); return 1;
     case 0x2755: probe_cell_at(r[R_AX] & 0xff, r[R_BX] & 0xff, hit_ptr(r[R_SI]));
@@ -217,7 +218,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         draw_brick_row(r[R_AX] & 0xff);
         return 1;
     case 0x20b9:                        /* draw_sprite_20x6(bl, al, si) */
-        draw_sprite_20x6(r[R_BX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]));
+        draw_sprite_20x6(r[R_BX] & 0xff, r[R_AX] & 0xff, global_ptr(r[R_SI]));
         return 1;
     case 0x247f:                        /* ball_after(si = the ball) */
         ball_after(ball_ptr(r[R_SI]));
@@ -232,7 +233,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         score_add();
         return 1;
     case 0x3b64:                        /* xor_sprite_16x7(cl, al, si) */
-        xor_sprite_16x7(r[R_CX] & 0xff, r[R_AX] & 0xff, img_ptr(r[R_SI]));
+        xor_sprite_16x7(r[R_CX] & 0xff, r[R_AX] & 0xff, global_ptr(r[R_SI]));
         return 1;
     case 0x1fc1:                        /* field_backdrop(al = y) */
         field_backdrop(r[R_AX] & 0xff);
@@ -435,8 +436,8 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         g_result = ball_after_endgame(ball_ptr(r[R_SI]));
         return 1;
     case 0x4d5d:                        /* hsc_bubble(si, di) */
-        g_result = img_off(hsc_bubble((const hsc_entry_t *)img_ptr(r[R_SI]),
-                                     (hsc_entry_t *)img_ptr(r[R_DI])));
+        g_result = global_off(hsc_bubble((const hsc_entry_t *)global_ptr(r[R_SI]),
+                                     (hsc_entry_t *)global_ptr(r[R_DI])));
         return 1;
     case 0x4fa7:                        /* border_step(di) */
         g_result = border_step(r[R_DI]);
@@ -455,7 +456,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         cheat_match(r[R_AX] & 0xff);
         return 1;
     case 0x538d: {                      /* tall_sprite(si, di) */
-        const uint8_t *si = img_ptr(r[R_SI]);
+        const uint8_t *si = global_ptr(r[R_SI]);
         g_result = tall_sprite(&si, r[R_DI]);
         return 1;
     }

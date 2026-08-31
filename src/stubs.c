@@ -42,13 +42,6 @@ static void note(const char *name, uint32_t off)
     fprintf(stderr, "popcorn: stub %s (1ac2:%04x)\n", name, off);
 }
 
-#define STUB(name, off, what) \
-    void name(void) { note(#name, off); }
-
-/* The same, for a handler that takes its node. */
-#define STUB2(name, off) \
-    void name(uint32_t bx) { note(#name, off); (void)bx; }
-
 /* An entity whose handler has not been transcribed. Doing nothing leaves it in
  * the list for ever, so it is unlinked - the animation is lost but the list
  * does not fill up and stall the game. */
@@ -56,11 +49,5 @@ void entity_unknown(entity_t *e)
 {
     note("entity_unknown", 0x1b5e);
     (void)e;
-    gv.entity_remove = 1;
+    global.entity_remove = 1;
 }
-
-
-
-/* The player-name boxes return 0xff for "abort", anything else to go on. With
- * no implementation there is nobody to abort, so it reports a start. */
-
