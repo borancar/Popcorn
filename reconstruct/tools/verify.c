@@ -203,7 +203,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x50df: menu_banner_tick(); return 1;
     case 0x5140: banner_shift(); return 1;
     case 0x53c2: menu_particles_tick(); return 1;
-    case 0x548a: g_result = particle_init(r[R_SI], r[R_AX]); return 1;
+    case 0x548a: g_result = particle_init((particle_t *)global_ptr(r[R_SI]), r[R_AX]); return 1;
     case 0x5476: menu_particles_init(r[R_AX]); return 1;
     case 0x5448: g_result = particle_random(r[R_AX], io_ticks(), r[R_DX]);
                  return 1;
@@ -461,7 +461,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         return 1;
     }
     case 0x59f7:                        /* ending_particle_init(si, ax) */
-        g_result = ending_particle_init(r[R_SI], r[R_AX]);
+        g_result = ending_particle_init((particle_t *)global_ptr(r[R_SI]), r[R_AX]);
         return 1;
     case 0x5add:                        /* ending_plot(cx, dx) */
         ending_plot(r[R_CX], r[R_DX]);

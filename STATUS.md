@@ -490,33 +490,36 @@ original shoot.
 
 ## Next
 
-1. **The game's pointer arithmetic wants a general answer, not a per-site
-   one.** `check_pointers.py` reports 72 `compound-offset` sites, and they are
-   all the same handful of shapes:
+1. **The frame cursor is the last shape without a type.**
+   `check_pointers.py` reported 72 `compound-offset` sites; it reports
+   **7**. What went was everything that turned out to be a record or a table
+   in disguise: `particle_t` took 50 of them, `fall_frame_t` and
+   `global_table_w` most of the rest, and `score_add` as three words rather
+   than six digits took six more. Each was the same discovery - the
+   arithmetic was doing what a type should.
+
+   What is left is one shape, five of the seven sites:
 
    ```c
-   xor_sprite_16x7(x, y, global_ptr(global_w(cur - 2)));   /* the previous frame */
-   xor_sprite_16x7(x, y, global_ptr(global_w(cur)));       /* and the current one */
-   global_w(table + index * 2)                             /* an entry of a table */
-   s->frame_ptr = global_w(s->frame_ptr + 2)               /* a cursor stepping */
+   xor_sprite_16x7(x, y, global_ptr(global_w(cur_ptr - 2)));  /* the previous frame */
+   xor_sprite_16x7(x, y, global_ptr(global_w(cur_ptr)));      /* and the current one */
+   s->frame_ptr = global_w(s->frame_ptr + 2)                  /* a cursor stepping */
    ```
 
-   Every one is a cursor into a list of the game's 16-bit pointers, walked by
-   `+ 2` and dereferenced twice - and written out longhand each time, the
-   arithmetic doing what a type should. `cur - 2` is *the entry before this
-   one*, and nothing in the expression says so.
+   A cursor into a list of the game's 16-bit pointers, walked by `+ 2` and
+   dereferenced twice. `cur_ptr - 2` is *the entry before this one* - which
+   is why every frame list starts at index 1, since `entity_crumble` erases
+   what the cursor has just left - and nothing in the expression says so.
 
-   The fix is not to rewrite 72 sites by hand but to give the shape a name:
-   a list of the game's pointers is a **type**, stepping it is `++`, reading
-   through it is one call, and `- 2` becomes `[-1]` or a `prev` that reads as
-   English. `animations_t` is the worked example already - `anim_loop_t` and
-   `anim_sprite_t` retired every `<< 5` and `+ 2` in the two brick handlers,
-   and the same treatment applied to frame lists would take most of the 72
-   with it, along with the remaining `_ptr` candidates and the four loose
-   locals, which are the same sites seen from a different angle.
+   The obstacle is that a `uint16_t *` into the overlay is not available:
+   `global_t` is packed and the lists sit at odd offsets, so GCC will not
+   hand out a word pointer to one. `global_table_w` is the shape that works
+   around it for a table with a runtime base; a cursor wants the same
+   treatment, with `- 2` becoming `[-1]` and the double indirection one call.
 
-   Do this before the rest of the renames: naming the fields one at a time
-   keeps arriving back at the same expressions.
+   The two remaining sites are neither: `global_ptr(is_two ? ... : ...)` is
+   two named screens picked by a flag, and `eog_build_at - EOG_WIDTH` is a
+   row step in a buffer. Both want fields, not a cursor type.
 
 2. **The end-level bonus, still.** Five transcription errors and one
    structural one have come out of it, and the two sides now play the whole

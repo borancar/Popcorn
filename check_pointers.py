@@ -87,7 +87,8 @@ PTR_FUNCS = {"global_ptr", "entity_ptr", "ball_ptr", "hit_ptr",
              "animations_ptr", "assets_ptr", "runtime_ptr"}
 # Read or write a 16-bit value at an offset - which is how the game's own
 # pointers are loaded and stored.
-WORD_FUNCS = {"global_w", "animations_w", "global_setw", "runtime_w"}
+WORD_FUNCS = {"global_w", "animations_w", "global_setw", "runtime_w",
+              "global_table_w"}
 # The other direction.
 OFF_FUNCS = {"global_off", "assets_off", "runtime_off", "animations_off"}
 
@@ -106,6 +107,7 @@ ACCESSORS = PTR_FUNCS | WORD_FUNCS
 # fact this can assume.  It reports what it saw and leaves the judgement.
 SEGMENT_OF = {
     "global_ptr": "global", "global_w": "global", "global_setw": "global",
+    "global_table_w": "global",
     "entity_ptr": "global", "ball_ptr": "global", "hit_ptr": "global",
     "animations_ptr": "animations", "animations_w": "animations",
     "assets_ptr": "assets",
@@ -296,6 +298,12 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                 continue
             name = text(fn, src)
             real = [a for a in args.named_children if a.type != "comment"]
+            # An accessor's own body is where the arithmetic is *defined* -
+            # global_table_w exists precisely so that `base + i * 2` is
+            # written once. Complaining there would be asking it to call
+            # something that does not exist.
+            if enclosing_fn(n, src) in ACCESSORS:
+                continue
             if name in ACCESSORS and real:
                 arg = real[OFFSET_ARG[name]]
                 if not is_simple(arg, src):
@@ -493,7 +501,7 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                             if k.type in ("identifier", "field_identifier")
                             and text(k, src).endswith("_ptr")
                             and not only_an_argument(k)), None)
-                if who:
+                if who and enclosing_fn(n, src) not in ACCESSORS:
                     add("cast-of-a-pointer", n,
                         "%s - one of the game's pointers is 16 bits wide by "
                         "definition; a cast either says nothing or is hiding "
