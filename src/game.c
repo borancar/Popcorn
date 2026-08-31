@@ -2314,9 +2314,18 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
     /* The sprite goes at the brick's centre, one scan line down - `inc bh`
      * before the store at [si+2], and BL untouched. Passing [si+4], the kind
      * that was just picked, as the x instead put it wherever the random
-     * number landed. */
+     * number landed.
+     *
+     * The original writes the address down - 0x4e13 for a capsule, 0x5863 for
+     * a popup - and it can, because **every** list in both tables starts with
+     * the same three frames: those two words appear in the image nowhere else
+     * than as `frames[kind][0]` of all eleven lists apiece. So this is the
+     * first frame of whichever list the thing is about to animate through,
+     * and saying that is what makes the two constants go away. */
     xor_sprite_16xn(centre & 0xff, ((centre >> 8) + 1) & 0xff,
-                    global_ptr(is_two ? 0x4e13 : 0x5863), 6);
+                    global_ptr(global_w(is_two ? global.capsule_frames_ptr[f->kind]
+                                               : global.popup_frames_ptr[f->kind])),
+                    6);
     global.bonus_cap++;
 }
 
@@ -4103,8 +4112,8 @@ void laser_fire(void)
 
 /* 1ac2:3561  entity_popup is the same routine with a different set of frames -
  * table 0x339b rather than 0x3385 - so the two share a body. */
-void entity_popup(ent_fall_t *f) { entity_capsule_frames(f, global_off(global.popup_frames)); }
-void entity_capsule(ent_fall_t *f) { entity_capsule_frames(f, global_off(global.capsule_frames)); }
+void entity_popup(ent_fall_t *f) { entity_capsule_frames(f, global_off(global.popup_frames_ptr)); }
+void entity_capsule(ent_fall_t *f) { entity_capsule_frames(f, global_off(global.capsule_frames_ptr)); }
 
 void entity_capsule_frames(ent_fall_t *f, uint16_t table_ptr)
 {

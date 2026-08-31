@@ -699,8 +699,8 @@ typedef struct __attribute__((packed)) {
     };
     entity_t entities[41];              /* 0x3146 the node pool - 574 bytes is 41 of them exactly, ending where bonus_cap begins. The chain is walked by image offset, so this is what those offsets point into rather than something the walk uses */
     uint8_t  bonus_cap;                 /* 0x3384 */
-    uint16_t capsule_frames[11];        /* 0x3385 a falling capsule's frame table by kind */
-    uint16_t popup_frames[11];          /* 0x339b and a score popup's. Twenty-two each, ending exactly at bonus_odds - which is what says both are eleven */
+    uint16_t capsule_frames_ptr[11];        /* 0x3385 a falling capsule's frame table by kind */
+    uint16_t popup_frames_ptr[11];          /* 0x339b and a score popup's. Twenty-two each, ending exactly at bonus_odds - which is what says both are eleven */
     uint8_t  bonus_odds[11];            /* 0x33b1 cumulative weights, ending at 0xff: bonus_kind walks them against random(0xff) and takes the index */
     uint16_t bonus_handlers[11];        /* 0x33bc what each kind does, in the same order - 0x2daa points, 0x2def catch, 0x3231 wider, 0x2e03 laser, 0x2e16 multiball, 0x3119 net, 0x315b reverse, 0x318b extra life, 0x2da0, 0x31e8 slower, 0x3200 stop monsters */
     uint16_t rng_state;                 /* 0x33d2 */
@@ -915,8 +915,8 @@ ENSURE_GLOBAL_AT(entity_remove, 0x313a);
 ENSURE_GLOBAL_AT(entity_prev_ptr, 0x3142);
 ENSURE_GLOBAL_AT(entities, 0x3146);
 ENSURE_GLOBAL_AT(bonus_cap, 0x3384);
-ENSURE_GLOBAL_AT(capsule_frames, 0x3385);
-ENSURE_GLOBAL_AT(popup_frames, 0x339b);
+ENSURE_GLOBAL_AT(capsule_frames_ptr, 0x3385);
+ENSURE_GLOBAL_AT(popup_frames_ptr, 0x339b);
 ENSURE_GLOBAL_AT(bonus_odds, 0x33b1);
 ENSURE_GLOBAL_AT(bonus_handlers, 0x33bc);
 ENSURE_GLOBAL_AT(rng_state, 0x33d2);
