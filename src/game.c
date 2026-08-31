@@ -6815,16 +6815,24 @@ int32_t ball_after_endgame(ball_t *b)
             /* The upper chamber: the level is over. */
             speaker_off();
             ball_draw(global.balls[0].sprite, global.balls[0].x, global.balls[0].y);
-            for (uint32_t si = 0x6abe; global_w(si) != SENTINEL_PTR; si += 2) {
+            /* `mov si, 0x6abe` is teleport_out_ptr[1], and the walk starts
+             * at 1 for the reason every frame list here does: each pass
+             * erases [i - 1] before drawing [i], so entry 0 is the blank the
+             * first pass rubs out. The list ends at the SENTINEL_PTR in
+             * entry 8. */
+            for (uint32_t i = 1;
+                 global.teleport_out_ptr[i] != SENTINEL_PTR; i++) {
                 /* 1ac2:4769. The stretch between the ball reaching the
                  * chamber and the curtain starting had no sync of its own,
                  * so it was the one part of the transition still compared by
                  * nothing - and it is where the level is still on screen. */
                 io_frame_sync_extra(SYNC_CURTAIN);
-                for (int32_t i = 0; i < 0x147; i++)
+                for (int32_t d = 0; d < 0x147; d++)
                     game_delay();
-                xor_sprite_16x7(0x60, 0x38, global_ptr(global_w(si - 2)));
-                xor_sprite_16x7(0x60, 0x38, global_ptr(global_w(si)));
+                xor_sprite_16x7(0x60, 0x38,
+                                global_ptr(global.teleport_out_ptr[i - 1]));
+                xor_sprite_16x7(0x60, 0x38,
+                                global_ptr(global.teleport_out_ptr[i]));
             }
             level_tally();
             /* No `[0x2f0c] = 0x75` here: 1ac2:4791 goes straight from the
