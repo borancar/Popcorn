@@ -149,6 +149,23 @@ def is_simple(node, src):
     return False
 
 
+def branches(node):
+    """The values an expression can take.
+
+    A ternary is two of them, and a rule about what may be stored holds only
+    if it holds for **both** arms - `is_two ? ENTITY_CAPSULE_FN :
+    ENTITY_POPUP_FN` stores a routine's address either way.  Everything else
+    is one value, so this is the identity for it.
+    """
+    if node.type == "conditional_expression":
+        arms = [node.child_by_field_name(f)
+                for f in ("consequence", "alternative")]
+        arms = [a for a in arms if a is not None]
+        if arms:
+            return arms
+    return [node]
+
+
 def root_name(node, src):
     """The field or variable an expression is ultimately reading."""
     while True:
@@ -334,9 +351,10 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
 
             field = root_name(lhs, src)
             if field in known_fn_fields:
-                rname = root_name(rhs, src)
-                ok = rname is not None and (rname.endswith("_FN")
-                                            or rname.endswith("_fn"))
+                names = [root_name(a, src) for a in branches(rhs)]
+                ok = all(r is not None and (r.endswith("_FN")
+                                            or r.endswith("_fn"))
+                         for r in names)
                 if not ok:
                     add("routine-from-elsewhere", n,
                         "%s = %s - a `_fn` holds a routine's address, and the "
@@ -477,6 +495,15 @@ def classify_store(rhs, field, known, src):
     otherwise  a bare number, which is the thing worth catching
     """
     node = rhs
+    # Either arm of a ternary has to stand on its own, and the store is only
+    # as well-founded as the weaker of the two.
+    arms = branches(node)
+    if len(arms) > 1:
+        kinds = [classify_store(a, field, known, src) for a in arms]
+        if any(k is None for k in kinds):
+            return None
+        return kinds[0] if len(set(kinds)) == 1 else "copied"
+
     while node.type in ("cast_expression", "parenthesized_expression"):
         kids = [c for c in node.named_children
                 if c.type not in ("type_descriptor", "primitive_type",
