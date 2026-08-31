@@ -26,7 +26,8 @@ bot holds it permanently.
     uv run sidebyside.py                 # 200 frames, stop on the first difference
     uv run sidebyside.py --frames 500
     uv run sidebyside.py --keep-going    # count them instead of stopping
-    uv run sidebyside.py --window        # watch the emulator while it runs
+    uv run sidebyside.py --watch         # both screens, side by side
+    uv run sidebyside.py --watch --play  # ...and you drive them, with one mouse
 """
 import argparse
 import collections
@@ -82,6 +83,11 @@ CGA_SIZE = 0x4000
 CGA_W, CGA_H = 320, 200
 CGA_PLANE = 0x2000
 CGA_STRIDE = 80
+# --watch shows both screens at once. The gap is there so the eye can tell
+# which picture is which without a caption, and it is part of the window's
+# coordinates, so the mouse mapping has to subtract it.
+WATCH_GAP = 8
+PANES_W = CGA_W * 2 + WATCH_GAP
 PADDLE_X = 0x2E54
 
 # The brick behaviour table at 0x3044, by cell value - so a report can say
@@ -225,7 +231,12 @@ def main():
                     help="flip one byte of the port's image at frame N, to "
                          "prove the comparison can fail")
     ap.add_argument("--watch", action="store_true",
-                    help="show the port's screen in a window (needs a display)")
+                    help="show both screens side by side in one window, the "
+                         "emulator on the left and the port on the right "
+                         "(needs a display)")
+    ap.add_argument("--play", action="store_true",
+                    help="drive both sides from your own mouse instead of "
+                         "the bot. Implies --watch")
     ap.add_argument("--snap", metavar="FILE",
                     help="write the port's screen to FILE as a PNG every "
                          "--snap-every frames, for watching from elsewhere")
@@ -254,6 +265,9 @@ def main():
     ap.add_argument("--enter-seconds", type=float, default=120.0,
                     help="how long to give the menu before giving up")
     args = ap.parse_args()
+    # There is nowhere to read a mouse from without a window.
+    if args.play:
+        args.watch = True
 
     sys.path.insert(0, HERE)
     import unicorn
@@ -636,10 +650,13 @@ def main():
         view["np"] = np
         view["pygame"] = pygame
         if args.watch:
-            pygame.display.set_caption("Popcorn - the port, in lockstep")
+            pygame.display.set_caption(
+                "Popcorn - emulator | port, in lockstep"
+                + (" - your mouse drives both" if args.play else ""))
             view["screen"] = pygame.display.set_mode(
-                (CGA_W * args.scale, CGA_H * args.scale))
+                (PANES_W * args.scale, CGA_H * args.scale))
         view["surf"] = pygame.Surface((CGA_W, CGA_H))
+        view["panes"] = pygame.Surface((PANES_W, CGA_H))
         # CGA's interlace, precomputed: which vram byte feeds each cell.
         view["idx"] = np.array(
             [[(CGA_PLANE if y & 1 else 0) + (y >> 1) * CGA_STRIDE + x
@@ -648,26 +665,62 @@ def main():
                                 (0xff, 0x55, 0x55), (0xff, 0xff, 0xff)],
                                dtype=np.uint8)
 
-    def watch_draw(vram, n):
+    def paint(vram):
+        """One side's video memory onto view["surf"], CGA interlace undone."""
         np, pygame = view["np"], view["pygame"]
         b = np.frombuffer(vram, dtype=np.uint8)[view["idx"]]
         px = np.stack([(b >> 6) & 3, (b >> 4) & 3, (b >> 2) & 3, b & 3],
                       axis=-1).reshape(CGA_H, CGA_W)
-        rgb = view["pal"][px]
-        pygame.surfarray.blit_array(view["surf"], rgb.transpose(1, 0, 2))
+        pygame.surfarray.blit_array(view["surf"],
+                                    view["pal"][px].transpose(1, 0, 2))
+
+    def watch_draw(evram, pvram, n):
+        pygame = view["pygame"]
+        paint(pvram)
         if args.snap and n % args.snap_every == 0:
+            # The snapshot is the *port*, which is what it always was: it
+            # exists to be looked at from elsewhere, and the emulator beside
+            # it would only halve the resolution of the thing being checked.
             big = pygame.transform.scale(
                 view["surf"], (CGA_W * args.scale, CGA_H * args.scale))
             pygame.image.save(big, args.snap)
         if not args.watch:
             return 1
-        pygame.transform.scale(view["surf"], view["screen"].get_size(),
+        view["panes"].fill((0x22, 0x22, 0x22))
+        view["panes"].blit(view["surf"], (CGA_W + WATCH_GAP, 0))
+        paint(evram)
+        view["panes"].blit(view["surf"], (0, 0))
+        pygame.transform.scale(view["panes"], view["screen"].get_size(),
                                view["screen"])
         pygame.display.flip()
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
                 return 0
         return 1
+
+    def human_step():
+        """Read the player's mouse once, and give it to the **emulator**.
+
+        The invariant this whole tool rests on is that one number reaches
+        both sides, so that a difference in the picture cannot be a
+        difference in what the player did. That holds for a human exactly
+        as it holds for the bot, provided the mouse is read once - so this
+        writes the emulator's mouse and lets first_mouse() carry it across,
+        rather than sending the port a second reading of the same hand.
+
+        Either pane drives: the two show the same game, and being made to
+        aim at the left one to steer the right one would be a puzzle rather
+        than a feature.
+        """
+        pygame = view["pygame"]
+        mx = pygame.mouse.get_pos()[0] / max(1, args.scale)
+        if mx >= CGA_W + WATCH_GAP:
+            mx -= CGA_W + WATCH_GAP
+        mx = 0 if mx < 0 else CGA_W - 1 if mx > CGA_W - 1 else mx
+        # The game's mouse is absolute and 640 wide - input_mouse is
+        # `paddle = clamp(mouse x / 2)` - so a pixel of screen is two of it.
+        m.mouse_pos = (int(mx) * 2, 100)
+        m.mouse_btn = 1 if any(pygame.mouse.get_pressed()) else 0
 
     def save_screens(ev, pv, n):
         import pygame
@@ -723,13 +776,18 @@ def main():
             b[KEYS_LO:KEYS_HI] = bytes(KEYS_HI - KEYS_LO)
         return bytes(b)
 
-    # The port gets its first input before it runs a single instruction, for
-    # the same reason: its serve wait reads the action button too.
-    bot.step()
-    port_go(first_mouse(), getattr(m, "mouse_btn", 0), bios_ticks())
-
+    # The window has to exist before the first input when the player is the
+    # one supplying it - there is nowhere to read a mouse from otherwise.
     if args.watch or args.snap:
         watch_open()
+
+    # The port gets its first input before it runs a single instruction, for
+    # the same reason: its serve wait reads the action button too.
+    if args.play:
+        human_step()
+    else:
+        bot.step()
+    port_go(first_mouse(), getattr(m, "mouse_btn", 0), bios_ticks())
 
     differing, compared = 0, 0
     n = -1
@@ -880,7 +938,8 @@ def main():
                 port.wait(timeout=5)
                 return 1
 
-        if (args.watch or args.snap) and not watch_draw(pvram, n):
+        if (args.watch or args.snap) and not watch_draw(
+                frame_hit["vram"], pvram, n):
             print(f"\nwindow closed at frame {n}")
             break
         frames_done[0] = n
@@ -889,8 +948,11 @@ def main():
                   f"(level {frame_hit['img'][LEVEL_NUMBER]})", flush=True)
 
         # The bot reads the emulator - the reference - and both are told the
-        # same thing.
-        bot.step()
+        # same thing. So does the player: one mouse, read once.
+        if args.play:
+            human_step()
+        else:
+            bot.step()
         port_go(first_mouse(), getattr(m, "mouse_btn", 0), bios_ticks())
 
     port_go(0, 0, 0, stop_it=1)
