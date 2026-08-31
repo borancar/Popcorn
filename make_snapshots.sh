@@ -84,13 +84,26 @@ $PY snapshot.py "$D/capsule.snap" --resume "$D/level.snap" \
 $PY snapshot.py "$D/tall.snap" --resume "$D/capsule.snap" \
     --at 0x538d --seconds 900 --bot
 
-# The ending's particle fountain, which is a screen of its own.
-$PY snapshot.py "$D/particles.snap" --resume "$D/ending.snap" \
-    --at 0x5a43 --seconds 400
+# The ending's particle fountain, which is a screen of its own. Three hops,
+# and the reason is a fencepost: ending.snap is *level 48*, because --poke
+# seeds the file that is written rather than steering the run that writes it,
+# so resuming it clears panel 49 and stops at panel 50's intro. Panel 50 has
+# to be cleared too before level_number reaches LEVEL_COUNT and
+# screen_all_levels_done runs at all - and 1ac2:5940 opens with ten thousand
+# game_delay calls and a band that grows a row a frame, so the fountain is a
+# long way past it even then. Asking for 0x5a43 in one go from ending.snap
+# reaches neither and reports only that it did not.
+#
+# 1ac2:1eb9 is level_intro, which is the rule for "the next level started":
+# unlike 0x1c3f it is not where a resumed capture is already sitting, so it
+# stops at the following one rather than at once.
+$PY snapshot.py "$D/end49.snap" --resume "$D/ending.snap" \
+    --at 0x1eb9 --seconds 200 --poke 0x2f10=0
+$PY snapshot.py "$D/alldone.snap" --resume "$D/end49.snap" \
+    --at 0x5940 --seconds 300
+$PY snapshot.py "$D/particles.snap" --resume "$D/alldone.snap" \
+    --at 0x5a43 --seconds 600
 
-# The field marks - 0x0598 draws them, and nothing else calls it.
-$PY snapshot.py "$D/marks.snap" --resume "$D/level.snap" \
-    --at 0x0598 --seconds 400 --bot
 
 # The extra-life capsule, which is 7 chances in 255 and which no run had ever
 # reached. 0x33b1 is the odds table - eleven cumulative weights out of 255 -
@@ -166,6 +179,15 @@ $PY snapshot.py "$D/cleared.snap" --resume "$D/level11.snap" --seconds 3 \
 # while a longer run found twenty calls of it agreeing.
 $PY snapshot.py "$D/holes.snap" --resume "$D/cleared.snap" --at 0x05f8 \
     --seconds 400
+
+# The field marks - 0x0598 draws them, and nothing else calls it. It is the
+# last thing panel_finish does, so reaching it means reaching a panel reveal,
+# and from a level already under way that means clearing the level first and
+# waiting out the transition - which the bot did not manage in 400 seconds.
+# The bonus reveals the panel on its way in, so from there it is immediate.
+# This is why it sits below bonus.snap rather than up with the level states.
+$PY snapshot.py "$D/marks.snap" --resume "$D/bonus.snap" \
+    --at 0x0598 --seconds 200
 
 # A life about to be lost: no balls left in play.
 $PY snapshot.py "$D/lastball.snap" --resume "$D/level.snap" \
