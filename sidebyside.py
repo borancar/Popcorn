@@ -789,7 +789,7 @@ def main():
         bot.step()
     port_go(first_mouse(), getattr(m, "mouse_btn", 0), bios_ticks())
 
-    differing, compared = 0, 0
+    differing, on_screen, compared = 0, 0, 0
     n = -1
     while args.frames == 0 or n + 1 < args.frames:
         if stop_now[0]:
@@ -878,6 +878,7 @@ def main():
 
         if img_bad or vram_bad:
             differing += 1
+            on_screen += 1 if vram_bad else 0
             lv = frame_hit["img"][LEVEL_NUMBER]
             print(f"\nframe {n}, level {lv}: {len(img_bad)} image bytes, "
                   f"{len(vram_bad)} screen bytes differ")
@@ -963,7 +964,15 @@ def main():
     print(f"the emulator re-entered {start_at:#06x} {reentries[0]} times")
     print("   " + ", ".join(f"{k:#06x}x{v}" for k, v in sorted(hits.items())))
     if differing:
-        print(f"\n{compared} frames compared, {differing} differed")
+        # Memory and screen are worth separating in the tally, not only in
+        # each frame's report. A handover that leaves a countdown one tick
+        # out differs in five bytes for ever and draws the same picture
+        # every frame, and "200 differed" reads as a broken port when what
+        # it means is a broken join. The screen is what a player can see;
+        # the image is what the two programs believe.
+        where = ("none of them on screen" if not on_screen
+                 else f"{on_screen} of them on screen")
+        print(f"\n{compared} frames compared, {differing} differed - {where}")
         return 1
     print(f"\n{compared} frames compared, identical throughout")
     return 0
