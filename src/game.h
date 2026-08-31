@@ -670,7 +670,20 @@ typedef struct __attribute__((packed)) {
     uint16_t brick8_roll_ptr[25];       /* 0x67ea brick 8's score rolling up: twenty-four frames then SENTINEL_PTR. The **last** of them is brick8_score itself, so the roll settles on the number it was counting to */
     uint8_t  brick8_score[7][4];        /* 0x681c the 100 it lands on, 16 pixels by 7. brick_8 XORs it on when the brick goes and the animation's final step XORs it off again, so it is underneath the roll the whole way */
     uint8_t  brick8_roll[23][7][4];     /* 0x6838 the twenty-three spinning frames, drawn over the score. Only brick 8 uses any of this */
-    uint8_t  _pad_26b[204];
+    /* Brick 9 is the teleport, and these are the two halves of what it does:
+     * the ball vanishes where it struck and arrives at another teleport cell.
+     * Both lists name the **same six frames**, one ascending and one
+     * descending, so the same pictures play forwards to go and backwards to
+     * come back.
+     *
+     * Each opens with 0x64e6 - brick 9's own bitmap, cell_bitmap.plain_ptr[9]
+     * - and the code enters at `[1]`, not `[0]`. That entry is not skipped:
+     * entity_crumble erases `cur - 2` before drawing `cur`, so the first step
+     * rubs out the brick, and the last entry being the bitmap again is what
+     * puts it back. */
+    uint16_t teleport_out_ptr[9];       /* 0x6abc going, frames ascending */
+    uint16_t teleport_in_ptr[9];        /* 0x6ace arriving, the same six descending */
+    uint8_t  teleport_frame[6][7][4];   /* 0x6ae0 six of 16x7, ending exactly where brick10_hold_ptr begins */
     uint16_t brick10_hold_ptr[10];      /* 0x6b88 the hand closing on the ball: eight frames, SENTINEL_PTR, then the word after it pointing back here - the same shape as hatch_script_ptr and the animations' own scripts */
     uint8_t  brick10_hold[5][16][5];    /* 0x6b9c five frames of 20 by 16, which is what sprite_shift_draw takes. The list plays 0 1 2 1 0 then 3 4 3, so the hand closes and opens twice over five pictures */
     uint8_t  _pad_26c[10];
@@ -852,6 +865,9 @@ ENSURE_GLOBAL_AT(hatch_frame, 0x60c2);
 ENSURE_GLOBAL_AT(brick8_roll_ptr, 0x67ea);
 ENSURE_GLOBAL_AT(brick8_score, 0x681c);
 ENSURE_GLOBAL_AT(brick8_roll, 0x6838);
+ENSURE_GLOBAL_AT(teleport_out_ptr, 0x6abc);
+ENSURE_GLOBAL_AT(teleport_in_ptr, 0x6ace);
+ENSURE_GLOBAL_AT(teleport_frame, 0x6ae0);
 ENSURE_GLOBAL_AT(brick10_hold_ptr, 0x6b88);
 ENSURE_GLOBAL_AT(brick10_hold, 0x6b9c);
 ENSURE_GLOBAL_AT(intro_feed, 0x6d36);

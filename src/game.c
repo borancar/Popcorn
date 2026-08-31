@@ -3380,7 +3380,8 @@ void brick_9(hit_t *hit, ball_t *ball)
     b->bounces = 0;
     ball_draw(b->sprite, b->x, b->y);
 
-    brick_entity(hit, ENTITY_PLAIN_FN, 0x6abe, 0x32)->p.anim.arg.cell =
+    brick_entity(hit, ENTITY_PLAIN_FN,
+                 global_off(&global.teleport_out_ptr[1]), 0x32)->p.anim.arg.cell =
         (uint16_t)hit->cell;
 
     /* A cell that is not this one. */
@@ -3398,7 +3399,7 @@ void brick_9(hit_t *hit, ball_t *ball)
     e->handler_fn = ENTITY_BALL_ARRIVE_FN;
     ent_anim_t *a = &e->p.anim;
     a->arg.ball = global_off(ball);        /* the slot holds its address */
-    a->sprite.frame_ptr = 0x6ad0;
+    a->sprite.frame_ptr = global_off(&global.teleport_in_ptr[1]);
     a->sprite.timer = a->sprite.period = 0x32;
     a->sprite.x = (uint8_t)((idx % 12) * 16 + 8);
     a->sprite.y = (uint8_t)((idx / 12) * 8 + 6);
