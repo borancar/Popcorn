@@ -463,7 +463,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  banner_state;              /* 0x13c4 the menu's scrolling text */
     uint16_t banner_ptr;                /* 0x13c5 where it has got to, as an image offset */
     uint8_t  cga_mode;                  /* 0x13c7 what was last written to port 0x3d8, the mode control. 0x0a at load: graphics, enabled. palette_cycle toggles bit 2, the colour-burst bit that is the difference between mode 04h and 05h */
-    uint8_t  cga_colour;                /* 0x13c8 what was last written to port 0x3d9, the colour select. palette_cycle adds 0x10, walking the intensity bit and then the palette bit until it wraps */
+    uint8_t  cga_colour;                /* 0x13c8 what was last written to port 0x3d9, the colour select. palette_cycle adds 0x10, so the high nibble counts and wraps after sixteen presses; only bits 4 and 5 of it are wired - intensity and palette - so the four combinations repeat four times over, and the low nibble, the background, stays black */
     uint8_t  lives;                     /* 0x13c9 */
     uint16_t level_src;                 /* 0x13ca offset of the current level within the 0xc46 block */
     uint8_t  level_number;              /* 0x13cc */
