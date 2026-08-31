@@ -169,7 +169,7 @@ ENSURE_LEVEL_AT(cells, 0x08);
 typedef struct __attribute__((packed)) {
     uint8_t  name[12];      /* 0x00 */
     uint8_t  lives;         /* 0x0c */
-    uint16_t level_src;     /* 0x0d offset of their level in the 0xc46 table */
+    uint16_t level_src_ptr; /* 0x0d offset of their level in the 0xc46 table */
     uint8_t  level_number;  /* 0x0f */
     uint8_t  score[6];      /* 0x10 ASCII digits, as global.score_text is */
     level_t  level;         /* 0x16 their copy of it, cells and all */
@@ -185,7 +185,7 @@ ENSURE_SIZE(player_t, 0x11b);
 #define ENSURE_PLAYER_AT(field, off) \
     typedef char ensure_player_at_##field[offsetof(player_t, field) == (off) ? 1 : -1]
 ENSURE_PLAYER_AT(name, 0x00);   ENSURE_PLAYER_AT(lives, 0x0c);
-ENSURE_PLAYER_AT(level_src, 0x0d); ENSURE_PLAYER_AT(level_number, 0x0f);
+ENSURE_PLAYER_AT(level_src_ptr, 0x0d); ENSURE_PLAYER_AT(level_number, 0x0f);
 ENSURE_PLAYER_AT(score, 0x10);  ENSURE_PLAYER_AT(level, 0x16);
 ENSURE_PLAYER_AT(state, 0xc6);  ENSURE_PLAYER_AT(ent_count, 0xd2);
 ENSURE_PLAYER_AT(ents, 0xd3);
@@ -247,7 +247,7 @@ typedef struct __attribute__((packed)) {
                              * removed. plain and sparkle do not use it at
                              * all. */
                 uint16_t cell_ptr; /* soften, crumble and the teleport: the cell to put back, as its image address */
-                uint16_t ball;  /* ball_arrive and ball_hold: the ball */
+                uint16_t ball_ptr; /* ball_arrive and ball_hold: the ball */
                 uint8_t  count; /* repeat: how many times round again */
                 struct {        /* bonus: a falling capsule steers itself */
                     uint8_t mode;  /* 0 right, 1 down, 2 left, 3 up, 4 follow
@@ -298,7 +298,7 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
             uint8_t  pending;/* 0x02 a second capsule arrived mid-morph */
             uint8_t  step;   /* 0x03 frame of the morph, counted down from 6 */
-            uint16_t sprites;/* 0x04 the sprite list being walked */
+            uint16_t sprites_ptr;/* 0x04 the sprite list being walked */
             uint8_t  from;   /* 0x06 the kind it started as */
             uint8_t  to;     /* 0x07 the kind it is becoming */
             uint8_t  _p[2];
@@ -387,7 +387,7 @@ ENSURE_SIZE(paddle_rows_t, 14);
 typedef struct __attribute__((packed)) {
     uint8_t  timer;                 /* 0x00 counted up */
     uint8_t  period;                /* 0x01 and compared against, then reset */
-    uint16_t sprite;                /* 0x02 */
+    uint16_t sprite_ptr;            /* 0x02 */
 } sweep_t;
 ENSURE_SIZE(sweep_t, 4);
 
@@ -406,7 +406,7 @@ ENSURE_SIZE(mark_t, 4);
  * sprite it starts from. */
 typedef struct __attribute__((packed)) {
     uint16_t at;                    /* 0x00 added to 0x34f0 */
-    uint16_t sprite;                /* 0x02 tall_sprite carries this forward */
+    uint16_t sprite_ptr;            /* 0x02 tall_sprite carries this forward */
 } eog_group_t;
 ENSURE_SIZE(eog_group_t, 4);
 
@@ -422,7 +422,7 @@ ENSURE_SIZE(bonus_kind_t, 4);
 /* One of the four paddle kinds: where its four pixel phases start, and how
  * wide it is. The table at 0x2d0d is four of these, indexed by paddle_kind. */
 typedef struct __attribute__((packed)) {
-    uint16_t sprites;               /* 0x00 into paddle_sprites */
+    uint16_t sprites_ptr;           /* 0x00 into paddle_sprites */
     uint8_t  width;                 /* 0x02 pixels */
     uint8_t  _r;
 } paddle_set_t;
@@ -521,13 +521,13 @@ typedef struct __attribute__((packed)) {
     } scratch1;
     uint8_t  _pad_00[106];
     uint16_t eog_screen_at;             /* 0x13c0 where the end-of-game screen is being drawn - a **video memory** offset: 1ac2:525d loads it into DI with ES at 0xb800 */
-    uint16_t eog_build_at;              /* 0x13c2 where it is being read from - an **image** offset into eog_saved: 1ac2:5261 loads it into SI with DS at 0. The two cursors sit side by side and are different kinds of address */
+    uint16_t eog_build_ptr;              /* 0x13c2 where it is being read from - an **image** offset into eog_saved: 1ac2:5261 loads it into SI with DS at 0. The two cursors sit side by side and are different kinds of address */
     uint8_t  banner_state;              /* 0x13c4 the menu's scrolling text */
     uint16_t banner_ptr;                /* 0x13c5 where it has got to, as an image offset */
     uint8_t  cga_mode;                  /* 0x13c7 what was last written to port 0x3d8, the mode control. 0x0a at load: graphics, enabled. palette_cycle toggles bit 2, the colour-burst bit that is the difference between mode 04h and 05h */
     uint8_t  cga_colour;                /* 0x13c8 what was last written to port 0x3d9, the colour select. palette_cycle adds 0x10, so the high nibble counts and wraps after sixteen presses; only bits 4 and 5 of it are wired - intensity and palette - so the four combinations repeat four times over, and the low nibble, the background, stays black */
     uint8_t  lives;                     /* 0x13c9 */
-    uint16_t level_src;                 /* 0x13ca offset of the current level within the 0xc46 block */
+    uint16_t level_src_ptr;             /* 0x13ca offset of the current level within the 0xc46 block */
     uint8_t  level_number;              /* 0x13cc */
     uint8_t  score_text[6];             /* 0x13cd the score, six ASCII digits - the game keeps no binary copy */
     uint16_t extra_at;                  /* 0x13d3 the next extra life, as the two ASCII digits the score has to reach - and stored **byte-swapped** against the score, which is why the comparison at 1ac2:2435 swaps before it compares. Reached as score_text + 6 and so looked like two more score digits; it is not */
@@ -569,7 +569,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  _pad_05[1];
     char     hsc_file[12];              /* 0x141c "popcorn.hsc", the name the table is saved under */
     char     level_file[64];            /* 0x1428 the .PPC to load, built from the command tail. 64 is what there is: walker_anim follows it */
-    uint16_t walker_anim;               /* 0x1468 a pointer into the walking figure's frame list, stepped by two */
+    uint16_t walker_anim_ptr;               /* 0x1468 a pointer into the walking figure's frame list, stepped by two */
     uint8_t  walker_work[7][3];         /* 0x146a walker_draw's buffer: one 12x7 frame copied in and shifted, three bytes a row */
     uint8_t  _pad_06[6];
     uint8_t  speed_step;                /* 0x1485 the ball's move-this-frame counter, reloaded from speed_limit */
@@ -757,13 +757,13 @@ typedef struct __attribute__((packed)) {
     uint8_t  brick10_hold[5][16][5];    /* 0x6b9c five frames of 20 by 16, which is what sprite_shift_draw takes. The list plays 0 1 2 1 0 then 3 4 3, so the hand closes and opens twice over five pictures */
     uint8_t  _pad_26c[10];
     uint8_t  intro_feed[19][5];         /* 0x6d36 the five-byte rows level_intro feeds in under the panel, one a pass - nineteen of them, ending exactly at backdrop_table */
-    uint16_t backdrop_table[5];         /* 0x6d95 the level intro's backdrop by phase. **Five**, not eight: the entries are 0x6d9f, 0x6f1f, 0x709f, 0x721f and 0x739f - 0x180 apart, which is one frame - and the three words after them are pixels. backdrop_phase wraps at 0x27, so `phase >> 3` is 0 to 4 and the `& 7` beside it can never reach the rest */
+    uint16_t backdrop_ptr[5];         /* 0x6d95 the level intro's backdrop by phase. **Five**, not eight: the entries are 0x6d9f, 0x6f1f, 0x709f, 0x721f and 0x739f - 0x180 apart, which is one frame - and the three words after them are pixels. backdrop_phase wraps at 0x27, so `phase >> 3` is 0 to 4 and the `& 7` beside it can never reach the rest */
     uint8_t  backdrop[5][384];          /* 0x6d9f what those five point at: 8 rows of 48, the full 192-pixel width. level_intro's first loop feeds backdrop[0] in 48 bytes at a time, which is the same frame read a row a pass */
     uint8_t  _pad_28[188];
-    uint16_t walker_drop[6];            /* 0x75db the six frames the creature plays once it has walked in, 7 rows of 7 at a fixed spot */
+    uint16_t walker_drop_ptr[6];            /* 0x75db the six frames the creature plays once it has walked in, 7 rows of 7 at a fixed spot */
     uint8_t  _pad_29[294];
-    uint16_t hatch_open[5];             /* 0x770d the hatch opening */
-    uint16_t hatch_shut[5];             /* 0x7717 and closing, one frame every fourth step of the walk out */
+    uint16_t hatch_open_ptr[5];             /* 0x770d the hatch opening */
+    uint16_t hatch_shut_ptr[5];             /* 0x7717 and closing, one frame every fourth step of the walk out */
     uint8_t  _pad_30[228];
     uint8_t  curtain_image[105][27];    /* 0x7805 the POPCORN logo the intro curtain brings down: 105 rows of 27 bytes, 108 pixels wide. intro_curtain reads it **backwards** - on frame `rows` it takes the last `rows` rows and draws them from the top, so the picture comes down like a curtain. That is why the address in the original is 0x8318, which is the end of this and not the start */
     uint8_t  _pad_23b[728];
@@ -814,13 +814,13 @@ typedef struct __attribute__((packed)) {
 /* @generated-asserts begin - genvars.py rewrites between these markers */
 ENSURE_GLOBAL_AT(scratch1, 0x0000);
 ENSURE_GLOBAL_AT(eog_screen_at, 0x13c0);
-ENSURE_GLOBAL_AT(eog_build_at, 0x13c2);
+ENSURE_GLOBAL_AT(eog_build_ptr, 0x13c2);
 ENSURE_GLOBAL_AT(banner_state, 0x13c4);
 ENSURE_GLOBAL_AT(cga_mode, 0x13c7);
 ENSURE_GLOBAL_AT(cga_colour, 0x13c8);
 ENSURE_GLOBAL_AT(banner_ptr, 0x13c5);
 ENSURE_GLOBAL_AT(lives, 0x13c9);
-ENSURE_GLOBAL_AT(level_src, 0x13ca);
+ENSURE_GLOBAL_AT(level_src_ptr, 0x13ca);
 ENSURE_GLOBAL_AT(level_number, 0x13cc);
 ENSURE_GLOBAL_AT(score_text, 0x13cd);
 ENSURE_GLOBAL_AT(extra_at, 0x13d3);
@@ -839,7 +839,7 @@ ENSURE_GLOBAL_AT(score_add, 0x1415);
 ENSURE_GLOBAL_AT(walker_work, 0x146a);
 ENSURE_GLOBAL_AT(hsc_file, 0x141c);
 ENSURE_GLOBAL_AT(level_file, 0x1428);
-ENSURE_GLOBAL_AT(walker_anim, 0x1468);
+ENSURE_GLOBAL_AT(walker_anim_ptr, 0x1468);
 ENSURE_GLOBAL_AT(speed_step, 0x1485);
 ENSURE_GLOBAL_AT(speed_limit, 0x1486);
 ENSURE_GLOBAL_AT(frame_delay, 0x1487);
@@ -952,11 +952,11 @@ ENSURE_GLOBAL_AT(teleport_frame, 0x6ae0);
 ENSURE_GLOBAL_AT(brick10_hold_ptr, 0x6b88);
 ENSURE_GLOBAL_AT(brick10_hold, 0x6b9c);
 ENSURE_GLOBAL_AT(intro_feed, 0x6d36);
-ENSURE_GLOBAL_AT(backdrop_table, 0x6d95);
+ENSURE_GLOBAL_AT(backdrop_ptr, 0x6d95);
 ENSURE_GLOBAL_AT(backdrop, 0x6d9f);
-ENSURE_GLOBAL_AT(walker_drop, 0x75db);
-ENSURE_GLOBAL_AT(hatch_open, 0x770d);
-ENSURE_GLOBAL_AT(hatch_shut, 0x7717);
+ENSURE_GLOBAL_AT(walker_drop_ptr, 0x75db);
+ENSURE_GLOBAL_AT(hatch_open_ptr, 0x770d);
+ENSURE_GLOBAL_AT(hatch_shut_ptr, 0x7717);
 ENSURE_GLOBAL_AT(curtain_image, 0x7805);
 ENSURE_GLOBAL_AT(panel, 0x85f0);
 ENSURE_GLOBAL_AT(font, 0x9020);
