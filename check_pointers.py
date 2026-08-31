@@ -348,6 +348,7 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                 continue
             op = n.child_by_field_name("operator")
             compound = op is not None and text(op, src) != "="
+            stmt = " ".join(text(n, src).split())
 
             field = root_name(lhs, src)
             if field in known_fn_fields:
@@ -357,9 +358,9 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                          for r in names)
                 if not ok:
                     add("routine-from-elsewhere", n,
-                        "%s = %s - a `_fn` holds a routine's address, and the "
+                        "%s - a `_fn` holds a routine's address, and the "
                         "only things that are one are an _FN constant or "
-                        "another _fn" % (text(lhs, src), text(rhs, src)))
+                        "another _fn" % stmt)
 
             if field in known_ptr_fields:
                 # Pointer-ness travels. If one of the game's pointers is
@@ -373,10 +374,10 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                             and not rname.endswith("_ptr")
                             and not rname.endswith("_fn")):
                         add("pointer-from-unnamed", n,
-                            "%s = %s - `%s` holds one of the game's pointers, "
+                            "%s - `%s` holds one of the game's pointers, "
                             "because %s does and this is where it comes from. "
                             "It wants the suffix too"
-                            % (text(lhs, src), text(rhs, src), rname, field))
+                            % (stmt, rname, field))
                         candidates.setdefault(rname, set()).add(
                             "%s:%d into %s"
                             % (rel, n.start_point[0] + 1, field))
@@ -387,23 +388,23 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                     pass                # global_off: a C pointer written down
                 elif how == "copied":
                     add("pointer-from-data", n,
-                        "%s = %s - a pointer taken from the game's own data "
+                        "%s - a pointer taken from the game's own data "
                         "rather than made with global_off. Legitimate, and worth "
                         "seeing: it is where one of its pointers comes from"
-                        % (text(lhs, src), text(rhs, src)))
+                        % stmt)
                 elif how == "terminator":
                     pass                # 0xffff ends a chain. Zero cannot:
                                         # zero is a real offset here
                 elif how == "advanced":
                     add("pointer-advanced", n,
-                        "%s = %s - a cursor stepped. The arithmetic is on an "
+                        "%s - a cursor stepped. The arithmetic is on an "
                         "offset, which is what makes it 16-bit wrap-around "
                         "rather than C pointer arithmetic"
-                        % (text(lhs, src), text(rhs, src)))
+                        % stmt)
                 else:
                     add("store-without-global_off", n,
-                        "%s = %s - a plain number put where one of the game's "
-                        "pointers goes" % (text(lhs, src), text(rhs, src)))
+                        "%s - a plain number put where one of the game's "
+                        "pointers goes" % stmt)
             elif field and not field.endswith("_ptr"):
                 # A field **assigned from** an `_off` accessor is one of the
                 # game's pointers as surely as one read through a `_ptr` one -
