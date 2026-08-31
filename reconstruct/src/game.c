@@ -3124,7 +3124,7 @@ void entity_hatch(ent_hatch_t *h)
     }
     h->script += 2;
     if (global_w(h->script) == SENTINEL_PTR) {
-        ((mark_t *)global_ptr(h->mark))->taken = 0;
+        ((mark_t *)global_ptr(h->mark_ptr))->taken = 0;
         global.entity_remove = 1;
     }
 }
@@ -5027,7 +5027,7 @@ void bonus_spawn(void)
     entity_t *e = entity_alloc();
     e->handler_fn = ENTITY_HATCH_FN;
     ent_hatch_t *h = &e->p.hatch;
-    h->mark = global_off(m);
+    h->mark_ptr = global_off(m);
     h->x = m->x;
     h->y = m->y;
     h->wait = 0;

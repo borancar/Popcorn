@@ -214,7 +214,7 @@ typedef struct __attribute__((packed)) {
 } ent_fall_t;
 
 typedef struct __attribute__((packed)) {
-            uint16_t mark;  /* 0x02 the field_marks record this hatch is at, as the game's own 16-bit pointer - entity_hatch clears its `taken` through this */
+            uint16_t mark_ptr; /* 0x02 the field_marks record this hatch is at, as the game's own 16-bit pointer - entity_hatch clears its `taken` through this */
             uint8_t  x, y;  /* 0x04 0x05 */
             uint16_t wait;  /* 0x06 set to 0x12c and counted down */
             uint16_t phase; /* 0x08 counted down; every 0x23rd draws */

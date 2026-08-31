@@ -367,6 +367,17 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                     add("store-without-global_off", n,
                         "%s = %s - a plain number put where one of the game's "
                         "pointers goes" % (text(lhs, src), text(rhs, src)))
+            elif field and not field.endswith("_ptr"):
+                # A field **assigned from** an `_off` accessor is one of the
+                # game's pointers as surely as one read through a `_ptr` one -
+                # global_off produces an offset and nothing else.  Reading was
+                # the only evidence collected, so a field only ever written
+                # here and read somewhere this cannot see stayed invisible.
+                how = (None if compound
+                       else classify_store(rhs, field, known_ptr_fields, src))
+                if how == "made":
+                    candidates.setdefault(field, set()).add(
+                        "%s:%d store" % (rel, n.start_point[0] + 1))
 
         if n.type == "cast_expression":
             val0 = n.child_by_field_name("value")
