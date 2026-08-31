@@ -30,8 +30,13 @@ the game comes up in light cyan, light magenta and white. That is what its
 authors saw while they wrote it, what a player of the time saw, and what the
 port draws. DOSBox shows the same.
 
-The CGA's own output is still reachable for comparison: the emulator this port
-is checked against renders it with `--rgbi`.
+The CGA's own output is still reachable, from either side:
+
+```sh
+./popcorn --rgbi          # cyan, red and white, as the hardware forces them
+```
+
+and the emulator this port is checked against takes the same flag.
 
 **The game is here**, because its authors put it in the public domain. From
 `popcorn.doc`, in their own words:
