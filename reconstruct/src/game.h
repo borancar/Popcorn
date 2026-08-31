@@ -218,7 +218,7 @@ typedef struct __attribute__((packed)) {
             uint8_t  x, y;  /* 0x04 0x05 */
             uint16_t wait;  /* 0x06 set to 0x12c and counted down */
             uint16_t phase; /* 0x08 counted down; every 0x23rd draws */
-            uint16_t script;/* 0x0a cursor into a list, ending at 0xffff */
+            uint16_t script_ptr; /* 0x0a cursor into hatch_script, ending at SENTINEL_PTR */
 } ent_hatch_t;
 
 typedef struct __attribute__((packed)) {
@@ -662,9 +662,11 @@ typedef struct __attribute__((packed)) {
      * at 0xa3c0, the ending's picture at 0xa6d0 and the capsule kinds at
      * 0xac60 are all in here, named where they are used and nowhere else.
      * That is the next seam. */
-    uint8_t  _pad_22[4773];
-    uint8_t  mark_sprite[37][2];        /* 0x6078 the mark drawn at each field position, one word a row. field_marks takes 0x1f rows of it and level_between 0x25 - the same picture, cut short */
-    uint8_t  _pad_26[3188];
+    uint8_t  _pad_22[4731];
+    uint16_t hatch_script[21];          /* 0x604e how a hatch opens: twenty frame offsets then SENTINEL_PTR. Entries 0 to 9 open it, 10 to 18 shut it again by playing the same frames backwards, and the last is mark_sprite - the hatch closed is the mark that was always there */
+    uint8_t  mark_sprite[37][2];        /* 0x6078 the mark drawn at each field position, one word a row. field_marks takes 0x1f rows of it and level_between 0x25 - the same picture, cut short. It is also the hatch's **shut** frame, which is why hatch_frame starts after it rather than at it */
+    uint8_t  hatch_frame[10][37][2];    /* 0x60c2 the hatch opening, ten frames of the same 37 rows. hatch_frame[9] is fully open, and entity_hatch releases the capsule on it */
+    uint8_t  _pad_26[2448];
     uint8_t  intro_feed[19][5];         /* 0x6d36 the five-byte rows level_intro feeds in under the panel, one a pass - nineteen of them, ending exactly at backdrop_table */
     uint16_t backdrop_table[5];         /* 0x6d95 the level intro's backdrop by phase. **Five**, not eight: the entries are 0x6d9f, 0x6f1f, 0x709f, 0x721f and 0x739f - 0x180 apart, which is one frame - and the three words after them are pixels. backdrop_phase wraps at 0x27, so `phase >> 3` is 0 to 4 and the `& 7` beside it can never reach the rest */
     uint8_t  backdrop[5][384];          /* 0x6d9f what those five point at: 8 rows of 48, the full 192-pixel width. level_intro's first loop feeds backdrop[0] in 48 bytes at a time, which is the same frame read a row a pass */
@@ -837,7 +839,9 @@ ENSURE_GLOBAL_AT(frame_corner_left, 0x48d2);
 ENSURE_GLOBAL_AT(life_sprite, 0x48e7);
 ENSURE_GLOBAL_AT(ball_start_sprite, 0x48fb);
 ENSURE_GLOBAL_AT(paddle_sprites, 0x4903);
+ENSURE_GLOBAL_AT(hatch_script, 0x604e);
 ENSURE_GLOBAL_AT(mark_sprite, 0x6078);
+ENSURE_GLOBAL_AT(hatch_frame, 0x60c2);
 ENSURE_GLOBAL_AT(intro_feed, 0x6d36);
 ENSURE_GLOBAL_AT(backdrop_table, 0x6d95);
 ENSURE_GLOBAL_AT(backdrop, 0x6d9f);

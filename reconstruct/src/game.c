@@ -3107,23 +3107,23 @@ void entity_hatch(ent_hatch_t *h)
     if (h->phase % 0x23 != 0)
         return;
 
-    uint32_t frame = global_w(h->script);
-    const uint8_t *src = global_ptr(frame);
+    const uint8_t *src = global_ptr(global_w(h->script_ptr));
     uint32_t di = cga_at(h->x, (h->y - 0x0a) & 0xff);
     for (int32_t r = 0; r < 0x25; r++) {
         g_vram[di & (CGA_SIZE - 1)] = src[r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] = src[r * 2 + 1];
         di = cga_next_row(di);
     }
-    /* The last frame of the opening is what releases the capsule, and the
-     * original tests the **offset** rather than the pointer - so that stays
-     * as it is. */
-    if (frame == 0x635c) {
+    /* The frame that finishes the opening is the one that releases the
+     * capsule. The original compares the offset it just loaded; comparing the
+     * pointers it resolves to is the same comparison, both coming from the
+     * same base, and it says which frame rather than which address. */
+    if (src == global.hatch_frame[9][0]) {
         h->wait = 0x12c;
         bonus_release(h);
     }
-    h->script += 2;
-    if (global_w(h->script) == SENTINEL_PTR) {
+    h->script_ptr += 2;
+    if (global_w(h->script_ptr) == SENTINEL_PTR) {
         ((mark_t *)global_ptr(h->mark_ptr))->taken = 0;
         global.entity_remove = 1;
     }
@@ -5032,7 +5032,7 @@ void bonus_spawn(void)
     h->y = m->y;
     h->wait = 0;
     h->phase = 0x2bc;
-    h->script = 0x604e;
+    h->script_ptr = global_off(global.hatch_script);
 }
 
 /* 1ac2:50df  menu_banner_tick
