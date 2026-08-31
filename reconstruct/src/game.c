@@ -5441,9 +5441,18 @@ void cheat_match(uint8_t c)
 /* 1ac2:5196  palette_cycle
  *
  * F8. [0x13c8] is the colour-select register and 0x10 is added to it each
- * press, so it walks the intensity and palette bits; every fourth press it
- * wraps to zero and the colour-burst bit in the mode register at [0x13c7] is
- * flipped as well. Both are then written to their ports.
+ * press, so the high nibble counts and the low one - the background colour -
+ * stays at black. It takes **sixteen** presses to wrap, not four, and on the
+ * wrap the colour-burst bit in the mode register at [0x13c7] is flipped too.
+ * Both are written to their ports.
+ *
+ * So thirty-two presses to come back round, for eight distinct screens. Only
+ * bits 4 and 5 of the colour select are wired on a CGA - intensity and which
+ * of the two palettes - which is four combinations, and bits 6 and 7 go
+ * nowhere, so each of the four comes up four times in the sixteen. The burst
+ * bit is what doubles it: cleared, mode 05h shows cyan, red and white on an
+ * RGB monitor whichever palette bit is set, which is the third set the
+ * hardware has and the one this game draws in.
  */
 void palette_cycle(void)
 {
