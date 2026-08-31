@@ -119,6 +119,17 @@ the useful skill is getting a routine to run at all. Three things do it:
   is Esc, and nothing else calls them. `--keys @1a62:escape,@1a62:space`
   checks both in forty seconds.
 
+- **The player-name box has to be typed into, not waited out.** F1 opens
+  it, and `1ac2:13d2` reads it one character at a time through INT 21h
+  AH=07h, which **blocks** - so a run that presses only `@0206:f1` parks on
+  that one instruction forever and every snapshot taken after it is a dead
+  machine that resumes into nothing. `autoplay.py`'s `ROUTE_PLAY` is the
+  route to copy: `@0206:f3,@0206:f1,@13d2:b,@13d2:o,@13d2:t,@13d2:return,
+  @13d2:return`. Several keys at one offset fire on successive arrivals,
+  which is what types a name. The emulator answered AH=07h with a space
+  until it was made to wait the way DOS does, and that is what had been
+  walking past the box.
+
 - **Poke the odds, not just the state.** `extra_life` is 7/255 of a
   brick-2 capsule, which is why no run had ever reached it. Zeroing the
   cumulative weights at `0x33b1` up to V's entry makes `bonus_kind` return it
