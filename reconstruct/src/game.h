@@ -280,7 +280,7 @@ typedef struct __attribute__((packed)) {
             uint8_t  x, y;  /* 0x04 0x05 */
             uint16_t wait;  /* 0x06 set to 0x12c and counted down */
             uint16_t phase; /* 0x08 counted down; every 0x23rd draws */
-            uint16_t script_ptr; /* 0x0a cursor into hatch_script, ending at SENTINEL_PTR */
+            uint16_t script_ptr; /* 0x0a cursor into hatch_script, ending at END_PTR */
 } ent_hatch_t;
 
 typedef struct __attribute__((packed)) {
@@ -475,7 +475,7 @@ ENSURE_SIZE(hit_t, 4);
  * **cannot** be zero: zero is a real offset in this program - scratch1 is at
  * it - so a terminator of zero and a valid pointer would be the same value.
  * Spelled as -1 in the pointer's own width, which is what it is. */
-#define SENTINEL_PTR ((uint16_t)-1U)
+#define END_PTR ((uint16_t)-1U)
 
 
 /* ------------------------------------------------------------------------
@@ -732,11 +732,11 @@ typedef struct __attribute__((packed)) {
      * 0xac60 are all in here, named where they are used and nowhere else.
      * That is the next seam. */
     uint8_t  _pad_22[4731];
-    uint16_t hatch_script_ptr[21];      /* 0x604e how a hatch opens: twenty frame offsets then SENTINEL_PTR. Entries 0 to 9 open it, 10 to 18 shut it again by playing the same frames backwards, and the last is mark_sprite - the hatch closed is the mark that was always there */
+    uint16_t hatch_script_ptr[21];      /* 0x604e how a hatch opens: twenty frame offsets then END_PTR. Entries 0 to 9 open it, 10 to 18 shut it again by playing the same frames backwards, and the last is mark_sprite - the hatch closed is the mark that was always there */
     uint8_t  mark_sprite[37][2];        /* 0x6078 the mark drawn at each field position, one word a row. field_marks takes 0x1f rows of it and level_between 0x25 - the same picture, cut short. It is also the hatch's **shut** frame, which is why hatch_frame starts after it rather than at it */
     uint8_t  hatch_frame[10][37][2];    /* 0x60c2 the hatch opening, ten frames of the same 37 rows. hatch_frame[9] is fully open, and entity_hatch releases the capsule on it */
     uint8_t  _pad_26[1092];
-    uint16_t brick8_roll_ptr[25];       /* 0x67ea brick 8's score rolling up: twenty-four frames then SENTINEL_PTR. The **last** of them is brick8_score itself, so the roll settles on the number it was counting to */
+    uint16_t brick8_roll_ptr[25];       /* 0x67ea brick 8's score rolling up: twenty-four frames then END_PTR. The **last** of them is brick8_score itself, so the roll settles on the number it was counting to */
     uint8_t  brick8_score[7][4];        /* 0x681c the 100 it lands on, 16 pixels by 7. brick_8 XORs it on when the brick goes and the animation's final step XORs it off again, so it is underneath the roll the whole way */
     uint8_t  brick8_roll[23][7][4];     /* 0x6838 the twenty-three spinning frames, drawn over the score. Only brick 8 uses any of this */
     /* Brick 9 is the teleport, and these are the two halves of what it does:
@@ -753,14 +753,14 @@ typedef struct __attribute__((packed)) {
     uint16_t teleport_out_ptr[9];       /* 0x6abc going, frames ascending */
     uint16_t teleport_in_ptr[9];        /* 0x6ace arriving, the same six descending */
     uint8_t  teleport_frame[6][7][4];   /* 0x6ae0 six of 16x7, ending exactly where brick10_hold_ptr begins */
-    uint16_t brick10_hold_ptr[10];      /* 0x6b88 the hand closing on the ball: eight frames, SENTINEL_PTR, then the word after it pointing back here - the same shape as hatch_script_ptr and the animations' own scripts */
+    uint16_t brick10_hold_ptr[10];      /* 0x6b88 the hand closing on the ball: eight frames, END_PTR, then the word after it pointing back here - the same shape as hatch_script_ptr and the animations' own scripts */
     uint8_t  brick10_hold[5][16][5];    /* 0x6b9c five frames of 20 by 16, which is what sprite_shift_draw takes. The list plays 0 1 2 1 0 then 3 4 3, so the hand closes and opens twice over five pictures */
     uint8_t  _pad_26c[10];
     uint8_t  intro_feed[19][5];         /* 0x6d36 the five-byte rows level_intro feeds in under the panel, one a pass - nineteen of them, ending exactly at backdrop_table */
     uint16_t backdrop_ptr[5];         /* 0x6d95 the level intro's backdrop by phase. **Five**, not eight: the entries are 0x6d9f, 0x6f1f, 0x709f, 0x721f and 0x739f - 0x180 apart, which is one frame - and the three words after them are pixels. backdrop_phase wraps at 0x27, so `phase >> 3` is 0 to 4 and the `& 7` beside it can never reach the rest */
     uint8_t  backdrop[5][384];          /* 0x6d9f what those five point at: 8 rows of 48, the full 192-pixel width. level_intro's first loop feeds backdrop[0] in 48 bytes at a time, which is the same frame read a row a pass */
     uint8_t  _pad_28[2];
-    /* 0x7521 the creature's walk cycle: eight frames then SENTINEL_PTR, which
+    /* 0x7521 the creature's walk cycle: eight frames then END_PTR, which
      * walker_step wraps on. The eighth entry is 0x7533, the byte just past
      * this list - so the last frame's pixels begin where the offsets end,
      * which is the corroboration that there are exactly nine words here. */
@@ -798,7 +798,7 @@ typedef struct __attribute__((packed)) {
      * These are the first bytes named beyond bonus_kinds, which is why
      * global_t stops here rather than at 0xac80 - the 2,850 before them are
      * still nobody's. */
-    uint16_t sparkle_ptr[13];           /* 0xb7a2 twelve frames, then SENTINEL_PTR */
+    uint16_t sparkle_ptr[13];           /* 0xb7a2 twelve frames, then END_PTR */
     uint8_t  sparkle[12][16][5];        /* 0xb7bc twelve of 20x16, which is what sprite_shift_draw takes. ending_column copies four of the five bytes a row and fifteen of the sixteen rows */
 } global_t;
 
@@ -1288,7 +1288,7 @@ ENSURE_SIZE(level_anim_t, 4);
  * it turns the cell into 24 to 29 and writes that piece's frame - an offset
  * into **this** block - into cell_bitmap.animated_ptr. That is why cell_bitmap is
  * split: its `plain_ptr` entries are global_t's offsets and its `animated_ptr`
- * entries are this segment's, and the six start as SENTINEL_PTR because
+ * entries are this segment's, and the six start as END_PTR because
  * nothing reads them until a brick has been hit.
  *
  * The rest of the block is six animations, and the fifty levels share them:
@@ -1332,7 +1332,7 @@ ENSURE_SIZE(anim_group_t, 192);
 
 /* One animation: the order, and then the pictures. `entry` holds offsets
  * into this segment, one a step, and the two words after them close it: a
- * SENTINEL_PTR where an entry would be, and where anim_step resumes - which
+ * END_PTR where an entry would be, and where anim_step resumes - which
  * for all six is their own first entry.
  * The groups follow immediately and only this animation's entries point into
  * them.
@@ -1341,7 +1341,7 @@ ENSURE_SIZE(anim_group_t, 192);
  * animation holds or reverses - which is why the counts differ. */
 #define ANIM_SCRIPT(entries, groups) struct __attribute__((packed)) { \
         uint16_t     entry[entries];   /* one group offset a step */   \
-        uint16_t     ends;             /* SENTINEL_PTR */              \
+        uint16_t     ends;             /* END_PTR */              \
         uint16_t     resume_ptr;       /* and where to carry on from */ \
         anim_group_t group[groups];                                    \
     }

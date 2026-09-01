@@ -30,7 +30,7 @@ rules this checks are what keeps those honest:
      declared uint32_t, most often.  Declare the local uint16_t and the cast
      goes.  Casting what global_ptr *returns* to a typed C pointer is a different
      thing and is fine.
-  5. The only pointer constant is `SENTINEL_PTR`.  An address written into a
+  5. The only pointer constant is `END_PTR`.  An address written into a
      call - `global_ptr(0x6b9c)`, or a #define standing for one - is a place in
      the image that has not been given a field yet, and naming it is the fix.
   6. A `_fn` field holds a **routine's** address - something the game calls
@@ -329,7 +329,7 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                     if is_constant(arg, src):
                         add("pointer-constant", arg,
                             "%s(%s) - the only pointer constant this program "
-                            "has is SENTINEL_PTR. An address written into a "
+                            "has is END_PTR. An address written into a "
                             "call is a field of the struct that has not been "
                             "named yet" % (name, text(arg, src)))
 
@@ -539,7 +539,7 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
 def is_constant(node, src):
     """A literal address, or a #define standing for one.
 
-    SENTINEL_PTR is the exception and the only one: it is what ends a chain
+    END_PTR is the exception and the only one: it is what ends a chain
     and it is not an address.  Everything else written as a constant where a
     pointer goes is a place in the image with no name.
     """
@@ -554,7 +554,7 @@ def is_constant(node, src):
         return True
     if node.type == "identifier":
         name = text(node, src)
-        return name != "SENTINEL_PTR" and name.isupper() and "_" in name + "_"
+        return name != "END_PTR" and name.isupper() and "_" in name + "_"
     return False
 
 
@@ -645,7 +645,7 @@ def classify_store(rhs, field, known, src):
                 if fn is not None and text(fn, src) in WORD_FUNCS:
                     return "advanced"
     lit = text(node, src)
-    if lit == "SENTINEL_PTR" or (node.type == "number_literal"
+    if lit == "END_PTR" or (node.type == "number_literal"
                                  and lit.lower() in ("0xffff", "65535")):
         return "terminator"             # what ends a chain, not a pointer
     who = root_name(node, src)
