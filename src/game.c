@@ -7404,9 +7404,13 @@ void anim_step(void)
         return;
     global.anim_count = global.anim_rate;
     global.anim_ptr += 2;                   /* one word along */
-    const anim_loop_t *loop = (const anim_loop_t *)animations_ptr(global.anim_ptr);
-    if (loop->ends == SENTINEL_PTR)
-        global.anim_ptr = loop->resume_ptr;
+    /* The end is only found by arriving at it, which is why this is read at
+     * every step and why the six animations can be different lengths and
+     * share one walk: the sentinel where an entry would be, and after it the
+     * entry to carry on from. Away from the end those two words are just the
+     * next two entries. */
+    if (animations_w(global.anim_ptr) == SENTINEL_PTR)
+        global.anim_ptr = animations_w(global.anim_ptr + 2);
 }
 
 /* 1ac2:3c35  bonus_script

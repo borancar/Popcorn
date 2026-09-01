@@ -1330,25 +1330,10 @@ ENSURE_SIZE(anim_sprite_t, 32);
 typedef anim_sprite_t anim_group_t[6];
 ENSURE_SIZE(anim_group_t, 192);
 
-/* What closes an animation's list. A list is plain words - one group offset a
- * step - and this is the four bytes after the last of them: a SENTINEL_PTR
- * where an entry would be, and then the entry to carry on from.
- *
- * anim_step reads it at **every** step, because the only way to find the end
- * is to arrive at it - which is also why the six animations can be different
- * lengths and share one walk. Away from the end these two words are just the
- * next two entries and neither field means what it is named, so this is worth
- * reading only when `ends` holds the sentinel. */
-typedef struct __attribute__((packed)) {
-    uint16_t ends;                  /* 0x00 SENTINEL_PTR, where an entry would be */
-    uint16_t resume_ptr;            /* 0x02 the entry to start again from */
-} anim_loop_t;
-ENSURE_SIZE(anim_loop_t, 4);
-
 /* One animation: the order, and then the pictures. `entry` holds offsets
- * into this segment, one a step, and `loop` is what closes it: the
- * SENTINEL_PTR that stops the walk, and where anim_step resumes - which for
- * all six is their own first entry.
+ * into this segment, one a step, and the two words after them close it: a
+ * SENTINEL_PTR where an entry would be, and where anim_step resumes - which
+ * for all six is their own first entry.
  * The groups follow immediately and only this animation's entries point into
  * them.
  *
@@ -1356,7 +1341,8 @@ ENSURE_SIZE(anim_loop_t, 4);
  * animation holds or reverses - which is why the counts differ. */
 #define ANIM_SCRIPT(entries, groups) struct __attribute__((packed)) { \
         uint16_t     entry[entries];   /* one group offset a step */   \
-        anim_loop_t  loop;             /* the sentinel, and the target */ \
+        uint16_t     ends;             /* SENTINEL_PTR */              \
+        uint16_t     resume_ptr;       /* and where to carry on from */ \
         anim_group_t group[groups];                                    \
     }
 
