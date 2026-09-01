@@ -4006,11 +4006,18 @@ void read_new_key(uint32_t which)
     (void)which;
 }
 
-/* 1ac2:108c  score_before
+/* 1ac2:108c  score_before - the comparison **inside** it, not the whole of it
  *
- * Is the six-digit score at `b` lower than the one at `a`? The
- * hall-of-fame sort walks the table with this. `scasb` compares and steps, so
- * the first digit that differs decides.
+ * Is the six-digit score at `b` lower than the one at `a`? `scasb` compares
+ * and steps, so the first digit that differs decides.
+ *
+ * The routine at 1ac2:108c is the whole insertion step: this comparison, and
+ * around it a `dec dh` walk of the table that shifts an entry down with
+ * `rep movsw` of nine words whenever the comparison says to. That walk is in
+ * screen_results, where a memmove of hsc_entry_t says what nine words meant.
+ * Splitting it that way is why verify.c does not dispatch this address: the
+ * original writes eighteen bytes where this writes none, and a harness whose
+ * unit is the routine cannot check half of one.
  */
 int32_t score_before(const uint8_t *a, const uint8_t *b)
 {

@@ -375,9 +375,15 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x55e5:
         intro_reveal();
         return 1;
-    case 0x108c:                        /* score_before(si, di) */
-        g_result = score_before(g_image + r[R_SI], g_image + r[R_DI]);
-        return 1;
+    /* 1ac2:108c is deliberately **not** dispatched. The C `score_before` is
+     * the six-digit comparison at its heart, and the routine at that address
+     * is the whole insertion step: it walks the table with `dec dh`, and on
+     * `ja` it shifts an entry down with `rep movsw` of nine words. The port
+     * does that shifting in screen_results, where a memmove says it plainly,
+     * so calling the fragment here compares a routine that writes eighteen
+     * bytes against one that writes none - which is exactly what it reported,
+     * on the one call in two where a swap happened. A fragment cannot be
+     * checked by a harness whose unit is the routine. */
     case 0x34c5:                        /* morph_begin(bx, si, dx) */
         morph_begin(&entity_ptr(r[R_BX])->p.morph, r[R_SI], r[R_DX]);
         return 1;
