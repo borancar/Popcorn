@@ -1380,7 +1380,7 @@ frames:
          * during the walk is called in the same frame it was born. */
         global.entity_prev_ptr = global_off(&global.entity_head);
         uint16_t node_ptr = global.entity_head.next_ptr;
-        while (node_ptr != SENTINEL_PTR) {
+        while (node_ptr != END_PTR) {
             entity_call(entity_ptr(node_ptr));
             if (global.entity_remove == 0) {
                 global.entity_prev_ptr = node_ptr;
@@ -2608,7 +2608,7 @@ void walker_step(uint32_t x)
     global.walker_anim_ptr += 2;
     walker_draw(x);
     global.walker_anim_ptr += 2;
-    if (global_w(global.walker_anim_ptr) == SENTINEL_PTR)
+    if (global_w(global.walker_anim_ptr) == END_PTR)
         global.walker_anim_ptr = global_off(global.walker_frame_ptr);
 }
 
@@ -2909,9 +2909,9 @@ entity_t *entity_alloc(void)
      * See the note on entity_free_ptr: 0x3138 read as a node has its `next` at
      * 0x3144, which *is* entity_head, so the sentinel's link is the list. */
     uint16_t node_ptr = global_off(&global.entity_head);
-    while (entity_ptr(node_ptr)->next_ptr != SENTINEL_PTR)
+    while (entity_ptr(node_ptr)->next_ptr != END_PTR)
         node_ptr = entity_ptr(node_ptr)->next_ptr;
-    entity_ptr(taken_ptr)->next_ptr = SENTINEL_PTR;  /* the end of it */
+    entity_ptr(taken_ptr)->next_ptr = END_PTR;  /* the end of it */
     entity_ptr(node_ptr)->next_ptr = taken_ptr;
     return entity_ptr(taken_ptr);
 }
@@ -3018,7 +3018,7 @@ static int32_t entity_anim(ent_anim_t *a,
     uint32_t x = a->sprite.x, y = a->sprite.y;
     draw(x, y, global_ptr(global_w(cur_ptr - 2)));  /* the one before, to erase */
     uint16_t next_ptr = global_w(cur_ptr);
-    if (next_ptr == SENTINEL_PTR)
+    if (next_ptr == END_PTR)
         return -1;                      /* the animation is over */
     draw(x, y, global_ptr(next_ptr));
     a->sprite.frame_ptr = cur_ptr + 2;
@@ -3057,7 +3057,7 @@ void entity_crumble(ent_anim_t *a)
     xor_sprite_16x7(x, y, global_ptr(global_w(cur_ptr - 2)));
     xor_sprite_16x7(x, y, global_ptr(global_w(cur_ptr)));
     a->sprite.frame_ptr = cur_ptr + 2;
-    if (global_w(a->sprite.frame_ptr) == SENTINEL_PTR)
+    if (global_w(a->sprite.frame_ptr) == END_PTR)
         global.entity_remove = 1;
 }
 
@@ -3134,7 +3134,7 @@ void entity_hatch(ent_hatch_t *h)
         bonus_release(h);
     }
     h->script_ptr += 2;
-    if (global_w(h->script_ptr) == SENTINEL_PTR) {
+    if (global_w(h->script_ptr) == END_PTR) {
         ((mark_t *)global_ptr(h->mark_ptr))->taken = 0;
         global.entity_remove = 1;
     }
@@ -3623,7 +3623,7 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
         if ((s->timer >> 4) == 0) {
             s->timer = s->period;
             s->frame_ptr += 2;
-            if (global_w(s->frame_ptr) == SENTINEL_PTR)
+            if (global_w(s->frame_ptr) == END_PTR)
                 s->frame_ptr = global_w(s->frame_ptr + 2);
         }
         sprite_shift_draw(x, y, global_ptr(global_w(s->frame_ptr)));  /* draw */
@@ -3868,7 +3868,7 @@ static void entity_farewell(entity_t *e)
 void entities_clear(void)
 {
     uint16_t node_ptr = global.entity_head.next_ptr;
-    while (node_ptr != SENTINEL_PTR) {
+    while (node_ptr != END_PTR) {
         entity_t *e = entity_ptr(node_ptr);
         entity_farewell(e);
         uint16_t next_ptr = e->next_ptr;
@@ -3876,7 +3876,7 @@ void entities_clear(void)
         global.entity_free_ptr = node_ptr;
         node_ptr = next_ptr;
     }
-    global.entity_head.next_ptr = SENTINEL_PTR;
+    global.entity_head.next_ptr = END_PTR;
 }
 
 /* 1ac2:0521  screen_level_done - the same, and then the between-levels
@@ -3899,7 +3899,7 @@ void life_lost(void)
     level_colours();
     global.entity_prev_ptr = global_off(&global.entity_head);
     uint16_t node_ptr = global.entity_head.next_ptr;
-    while (node_ptr != SENTINEL_PTR) {
+    while (node_ptr != END_PTR) {
         entity_t *e = entity_ptr(node_ptr);
         if (e->handler_fn == ENTITY_ANIM_BRICK_FN) {     /* this one stays */
             global.entity_prev_ptr = node_ptr;
@@ -5264,7 +5264,7 @@ static void player_record_init(player_t *p)
     memset(p->score, '0', sizeof p->score);
     p->level = assets.levels[0];
     for (int32_t i = 0; i < 6; i++)
-        p->state[i] = SENTINEL_PTR;
+        p->state[i] = END_PTR;
 }
 
 void play_prepare(void)
@@ -5978,7 +5978,7 @@ void ending_column(void)
          * every one of the eight columns plays the whole list at 0xb7a2 from
          * the beginning. Hoisting it out, which is what this used to do, gave
          * each column one frame of the animation and then ran off the end. */
-        for (int32_t f = 0; global.sparkle_ptr[f] != SENTINEL_PTR; f++) {
+        for (int32_t f = 0; global.sparkle_ptr[f] != END_PTR; f++) {
             const uint8_t *src = global_ptr(global.sparkle_ptr[f]);
             uint32_t d = di;
             for (int32_t r = 0; r < 0x0f; r++) {
@@ -6828,10 +6828,10 @@ int32_t ball_after_endgame(ball_t *b)
             /* `mov si, 0x6abe` is teleport_out_ptr[1], and the walk starts
              * at 1 for the reason every frame list here does: each pass
              * erases [i - 1] before drawing [i], so entry 0 is the blank the
-             * first pass rubs out. The list ends at the SENTINEL_PTR in
+             * first pass rubs out. The list ends at the END_PTR in
              * entry 8. */
             for (uint32_t i = 1;
-                 global.teleport_out_ptr[i] != SENTINEL_PTR; i++) {
+                 global.teleport_out_ptr[i] != END_PTR; i++) {
                 /* 1ac2:4769. The stretch between the ball reaching the
                  * chamber and the curtain starting had no sync of its own,
                  * so it was the one part of the transition still compared by
@@ -7187,7 +7187,7 @@ int32_t next_player(const char *dir)
     /* And its entities, count first. */
     p->ent_count = 0;
     for (uint16_t node_ptr = global.entity_head.next_ptr;
-         node_ptr != SENTINEL_PTR;
+         node_ptr != END_PTR;
          node_ptr = entity_ptr(node_ptr)->next_ptr)
         /* Twelve of the node's fourteen: the handler and the variant, but
          * not `next`, which the restore rebuilds by allocating. */
@@ -7406,10 +7406,10 @@ void anim_step(void)
     global.anim_ptr += 2;                   /* one word along */
     /* The end is only found by arriving at it, which is why this is read at
      * every step and why the six animations can be different lengths and
-     * share one walk: the sentinel where an entry would be, and after it the
+     * share one walk: the END_PTR where an entry would be, and after it the
      * entry to carry on from. Away from the end those two words are just the
      * next two entries. */
-    if (animations_w(global.anim_ptr) == SENTINEL_PTR)
+    if (animations_w(global.anim_ptr) == END_PTR)
         global.anim_ptr = animations_w(global.anim_ptr + 2);
 }
 
