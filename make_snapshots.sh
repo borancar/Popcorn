@@ -151,6 +151,14 @@ $PY snapshot.py "$D/twoplayer.snap" --resume "$D/level11.snap" --seconds 2 \
     --poke-str "0x356a=     AL     " --poke-str 0x357a=001000 \
     --poke 0x3576=0 --poke 0x3f08=2 --poke 0x3f09=1
 
+# ...and the same game over. twoplayer.snap leaves the *current* player with
+# five lives, so the game over it is built for is minutes of play away and no
+# route reached it: 0x13c9 is the live count and 0x2e73 the balls in play, so
+# one life and no ball is the next frame. This is what runs hsc_sort's second
+# entry and screen_game_over with two players to order.
+$PY snapshot.py "$D/twoplayer_go.snap" --resume "$D/twoplayer.snap" \
+    --seconds 2 --poke 0x13c9=1 --poke 0x2e73=0
+
 # A field with holes in it. Cell 0x0c is not a brick - it is what brick 11
 # leaves behind - so nothing reaches the three routines that draw it unless a
 # level containing one is played. Poking 0x0c into the *table* rather than the
