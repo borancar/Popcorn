@@ -263,6 +263,11 @@ void restore_screen(void)
  * caught in starts three above it, the same three that `paddle_x - 3` puts
  * on the left. */
 #define PADDLE_Y           184
+/* The band the ball is caught in: from where a ball resting on the paddle
+ * has its y - three above, which is the ball's own height less one - down
+ * to the paddle's last row. */
+#define PADDLE_TOP    (PADDLE_Y - (BALL_HEIGHT - 1))  /* 181 */
+#define PADDLE_BOTTOM (PADDLE_Y + PADDLE_ROWS - 1)    /* 190 */
 #define PADDLE_BYTES        11          /* five words and a byte: 44 pixels */
 #define PADDLE_IMAGE  (PADDLE_ROWS * PADDLE_BYTES)   /* 77 bytes */
 
@@ -1319,8 +1324,13 @@ int32_t play_loop(void)
 
     /* The serve: ball 0 on the paddle, the other two idle. */
     ball_t *b = &global.balls[0];
-    b->x = b->prev_x = 112;
-    b->y = b->prev_y = 181;
+    /* Centred on the paddle where the paddle starts, and resting on it.
+     * 1ac2:19c0 writes both as constants - `mov byte [di], 0x70` and
+     * `mov byte [di+1], 0xb5` - so these are worked out here rather than
+     * read back off paddle_x, which would be a load the original does not
+     * do. PADDLE_TOP is where a ball sitting on the paddle has its y. */
+    b->x = b->prev_x = WALL_RIGHT / 2 + (INITIAL_PADDLE_WIDTH - BALL_WIDTH) / 2;
+    b->y = b->prev_y = PADDLE_TOP;
     b->dy = 1;
     b->dx = 2;
     b->dir_x = 0;
@@ -2000,8 +2010,6 @@ void ball_after(ball_t *b)
  * level with the side, which is what stops one that has just come off from
  * immediately catching the side on the way out.
  */
-#define PADDLE_TOP    (PADDLE_Y - 3)                  /* 181 */
-#define PADDLE_BOTTOM (PADDLE_Y + PADDLE_ROWS - 1)    /* 190 */
 #define SOUND_PADDLE     1
 
 /* The common tail of every top-of-paddle bounce: reverse vertically, anchor
