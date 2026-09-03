@@ -58,11 +58,11 @@ void ball_step(ball_t *b)
 
     if (dx >= dy) {                     /* x is the major axis */
         off_x = b->acc_x;
-        off_y = dy ? (uint32_t)(off_x * dy) / dx : 0;
+        off_y = dy ? (uint16_t)(off_x * dy) / dx : 0;
         b->acc_x++;
     } else {                            /* y is the major axis */
         off_y = b->acc_y;
-        off_x = dx ? (uint32_t)(off_y * dx) / dy : 0;
+        off_x = dx ? (uint16_t)(off_y * dx) / dy : 0;
         b->acc_y++;
     }
     /* The direction flags negate each axis independently. The original does
@@ -2576,7 +2576,7 @@ void score_add(void)
     /* The original loads the score's top word and `xchg bl,bh` to put it the
      * way round the threshold is stored. Reading the two digits by name in
      * that order is the same thing without the swap. */
-    uint16_t top = (uint32_t)(global.score_text[0] << 8) | global.score_text[1];
+    uint16_t top = (uint16_t)(global.score_text[0] << 8) | global.score_text[1];
     if (top >= thresh) {
         thresh += 2;
         if ((thresh & 0xff) > '9')
@@ -2767,7 +2767,7 @@ void level_draw(void)
 
     /* Closing the hatch, one frame every fourth step of the walk. */
     for (uint16_t f = 0; f < 20; f++) {
-        uint8_t ch = (uint32_t)(0x14 - f);
+        uint8_t ch = 20 - f;
         if (!(ch & 3))
             hatch_frame(global_ptr(global.hatch_shut_ptr[f >> 2]), hx, hy);
         for (uint16_t d = 0; d < 75; d++)
@@ -6038,7 +6038,7 @@ uint16_t ending_blobs(void)
     for (;;) {
         for (uint16_t i = 0; i < 15; i++)
             game_delay();
-        uint16_t pos = (uint32_t)(si[0] | (si[1] << 8));
+        uint16_t pos = si[0] | (si[1] << 8);
         si += 2;
         if (pos == 0)
             return prev;
@@ -7526,7 +7526,7 @@ int32_t bonus_script(ent_anim_t *b, uint16_t *px, uint16_t *py)
     uint8_t cl = b->arg.move.steps;
 
     if (al & 0x80) {                    /* a leftward step */
-        uint8_t mag = (uint32_t)(-(int32_t)(int8_t)al);
+        uint8_t mag = -(int8_t)al;
         if (cl < mag)
             cl = 8;                     /* it would go through the wall */
         else
