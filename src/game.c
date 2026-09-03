@@ -93,35 +93,40 @@ void ball_step(ball_t *b)
  */
 /* How big the two things that move are. Both are measured rather than
  * assumed: the ball off ball_start_sprite, whose four words draw a blob four
- * pixels across and four rows down, and the paddle off paddle_sets[0], which
- * is what play_prepare copies into paddle_width. */
+ * pixels across and four rows down, and the paddle off its own sprite, which
+ * lights columns 0 to 27 of the 44 the image is wide.
+ *
+ * Note that paddle_sets[0].width holds **27**, not 28: the game stores the
+ * last column rather than the count, which is why paddle_x + paddle_width is
+ * the paddle's right *edge* and not one past it. That is a fact about the
+ * data, and the constant here is the width. */
 #define BALL_WIDTH             4
 #define BALL_HEIGHT            4
-#define INITIAL_PADDLE_WIDTH  27
+#define INITIAL_PADDLE_WIDTH  28
 
 /* The playfield's edges. They live here rather than beside ball_after,
  * which used to be the only thing that wanted them: play_prepare puts the
  * paddle's left limit on WALL_LEFT.
  *
- * These are the walls themselves, not what the ball's x may be set to. The
- * ball's x is the left of a four-wide sprite, so it turns three short of
- * WALL_RIGHT and is lost three short of FLOOR - the tests say so where they
- * stand, rather than the subtraction being folded into the name.
+ * WALL_RIGHT and FLOOR are the first column and the first row **outside**
+ * the field - 200, which the original spells nowhere. Every x here is a
+ * left edge, so what a thing may be set to is 200 less its own width, and
+ * that one rule covers both of them: the ball turns at 196 and the paddle
+ * stops at 172, and each has its right edge resting on 199. morph_step
+ * keeps the paddle's true while it grows, taking off paddle_max whatever it
+ * adds to paddle_width.
  *
- * 199 is spelled nowhere in the original. It is where the ball's right edge
- * sits at the moment it turns, and it is the sum paddle_x + paddle_width
- * always makes - morph_step keeps that true while the paddle grows, taking
- * off paddle_max whatever it adds to paddle_width. The paddle's width runs
- * from its x to its right *side* rather than across a sprite, which is why
- * the paddle is allowed the pixel the ball is not.
+ * The ball and the paddle really do stop level with each other. The pixel
+ * that looks like a difference is in the data rather than the geometry:
+ * paddle_sets[].width is the paddle's last column, one less than its width.
  *
  * WALL_RIGHT and FLOOR are the same number and stay two names, because the
  * ball turning round at the side and being lost at the bottom are not the
  * same event. */
 #define WALL_LEFT              8
 #define WALL_TOP               4
-#define WALL_RIGHT           199
-#define FLOOR                199
+#define WALL_RIGHT           200
+#define FLOOR                200
 
 #define REPEAT_RESET  5
 
@@ -1907,7 +1912,7 @@ void ball_after(ball_t *b)
     }
 
     uint32_t x = b->x, y = b->y;
-    if (x <= WALL_LEFT || x >= WALL_RIGHT - (BALL_WIDTH - 1)) {
+    if (x <= WALL_LEFT || x >= WALL_RIGHT - BALL_WIDTH) {
         runtime.sound_request = SOUND_BOUNCE;
         b->dir_x = (x <= WALL_LEFT) ? 0 : 1;
         b->acc_x = 1;
@@ -1916,7 +1921,7 @@ void ball_after(ball_t *b)
          * WALL_LEFT + 1, and the right is where a ball whose right edge
          * touches WALL_RIGHT sits, less one more. */
         b->anchor_x = (uint8_t)(x <= WALL_LEFT ? WALL_LEFT + 1
-                                              : WALL_RIGHT - BALL_WIDTH);
+                                              : WALL_RIGHT - BALL_WIDTH - 1);
         b->anchor_y = (uint8_t)y;
         b->bounces++;
     }
@@ -1932,7 +1937,7 @@ void ball_after(ball_t *b)
 
     ball_bricks(b);                     /* 1ac2:254d */
 
-    if (b->y != FLOOR - (BALL_HEIGHT - 1)) {
+    if (b->y != FLOOR - BALL_HEIGHT) {
         ball_paddle(b);                 /* 1ac2:2316 */
         return;
     }
@@ -6827,7 +6832,7 @@ int32_t ball_after_endgame(ball_t *b)
     io_frame_sync_extra(SYNC_ENDGAME);
     uint32_t x = b->x, y = b->y;
 
-    if (x <= WALL_LEFT || x >= WALL_RIGHT - (BALL_WIDTH - 1)) {
+    if (x <= WALL_LEFT || x >= WALL_RIGHT - BALL_WIDTH) {
         b->dir_x = (x <= WALL_LEFT) ? 0 : 1;
         runtime.sound_request = SOUND_BOUNCE;
         b->acc_x = 1;
@@ -6836,7 +6841,7 @@ int32_t ball_after_endgame(ball_t *b)
          * WALL_LEFT + 1, and the right is where a ball whose right edge
          * touches WALL_RIGHT sits, less one more. */
         b->anchor_x = (uint8_t)(x <= WALL_LEFT ? WALL_LEFT + 1
-                                              : WALL_RIGHT - BALL_WIDTH);
+                                              : WALL_RIGHT - BALL_WIDTH - 1);
         b->anchor_y = (uint8_t)y;
     }
 
@@ -6905,7 +6910,7 @@ int32_t ball_after_endgame(ball_t *b)
         return 0;
     }
 
-    if (b->y != FLOOR - (BALL_HEIGHT - 1)) {
+    if (b->y != FLOOR - BALL_HEIGHT) {
         ball_paddle(b);
         return 0;
     }
