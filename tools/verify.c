@@ -396,7 +396,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
          * capsule at the origin, take a different branch, and draw
          * twice from the PRNG where the original drew nothing. The
          * failure that reported was the harness's, not the port's. */
-        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
         g_result = bonus_steer(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
@@ -406,7 +406,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
          * capsule at the origin, take a different branch, and draw
          * twice from the PRNG where the original drew nothing. The
          * failure that reported was the harness's, not the port's. */
-        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
         g_result = bonus_script(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
@@ -419,22 +419,22 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * file. What is compared is the decision, which is the part with the cell
      * arithmetic in it; the step itself is one `inc` behind that decision. */
     case 0x3c66: {                      /* bonus_move_right(bx, cl, al) */
-        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
         g_result = bonus_move_right(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     case 0x3caf: {                      /* bonus_move_up */
-        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
         g_result = bonus_move_up(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     case 0x3cf3: {                      /* bonus_move_left */
-        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
         g_result = bonus_move_left(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     case 0x3d3c: {                      /* bonus_move_down */
-        uint32_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
         g_result = bonus_move_down(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
