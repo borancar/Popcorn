@@ -1255,7 +1255,7 @@ int32_t play_loop(void)
      * is. The original stores them with one `mov [0x1410], ax`, which needs
      * the units in the high half to come out in the right order; as the two
      * characters they are there is no order to get right. */
-    uint32_t n = (global.level_number + 1) & 0xff;
+    uint8_t n = global.level_number + 1;
     global.level_num_text[0] = (char)('0' + n / 10);
     global.level_num_text[1] = (char)('0' + n % 10);
 
