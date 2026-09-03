@@ -1251,13 +1251,13 @@ int32_t play_loop(void)
         g_resume_at_frame_top = 0;
         goto frames;
     }
-    /* The level number, drawn into the header bar as two digits - the units
-     * in the high byte and the tens in the low, so that laid out in memory
-     * they read the right way round. Adding to both halves at once is what
-     * turns the pair into text. */
+    /* The level number, written as the two digits of " TABLEAU 00 " that it
+     * is. The original stores them with one `mov [0x1410], ax`, which needs
+     * the units in the high half to come out in the right order; as the two
+     * characters they are there is no order to get right. */
     uint32_t n = (global.level_number + 1) & 0xff;
-    global.level_num_text =
-        (uint16_t)(((n % 10) << 8 | (n / 10)) + (('0' << 8) + '0'));
+    global.level_num_text[0] = (char)('0' + n / 10);
+    global.level_num_text[1] = (char)('0' + n % 10);
 
     uint32_t di = 0x177e;
     for (int32_t i = 0; i < 12; i++, di += 2) {
