@@ -1585,8 +1585,8 @@ void io_set_int09_installed(int32_t on);
  * `--rgbi`, which both binaries take. */
 void io_set_rgbi(int32_t on);
 
-uint32_t io_cp437_utf8(char *out, uint32_t n, uint32_t cap, uint8_t c);
-void io_print_dos(const char *what, const uint8_t *dos, uint32_t n);
+uint16_t io_cp437_utf8(char *out, uint16_t n, uint16_t cap, uint8_t c);
+void io_print_dos(const char *what, const uint8_t *dos, uint16_t n);
 
 
 /* ------------------------------------------------------- the game code ---

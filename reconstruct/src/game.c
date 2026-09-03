@@ -7692,11 +7692,11 @@ int32_t cheat_sequence(char key)
     {
         uint8_t line[256];
         /* `n` indexes a buffer this port owns rather than a register the
-         * original has, and it stays wide on purpose: as a uint8_t the
-         * `n < sizeof line` below can never be false, and a bounds check
-         * that cannot fail is one that stops protecting the moment the
-         * buffer shrinks. */
-        uint32_t n = 0;
+         * original has. A uint8_t would make the `n < sizeof line` below
+         * unfalsifiable - the buffer is 256 - and a bounds check that cannot
+         * fail stops protecting the moment the buffer shrinks. A word can
+         * still be too big for it, which is the point of having it. */
+        uint16_t n = 0;
         uint8_t ah = ' ';
         const uint8_t *s = runtime.cheat_text;
         for (;;) {

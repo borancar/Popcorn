@@ -815,7 +815,7 @@ static const uint16_t cp437_high[128] = {
     0x00b0, 0x2219, 0x00b7, 0x221a, 0x207f, 0x00b2, 0x25a0, 0x00a0,
 };
 
-uint32_t io_cp437_utf8(char *out, uint32_t n, uint32_t cap, uint8_t c)
+uint16_t io_cp437_utf8(char *out, uint16_t n, uint16_t cap, uint8_t c)
 {
     uint32_t u = c < 0x80 ? c : cp437_high[c - 0x80];
     if (u < 0x80) {
@@ -834,11 +834,11 @@ uint32_t io_cp437_utf8(char *out, uint32_t n, uint32_t cap, uint8_t c)
     return n;
 }
 
-void io_print_dos(const char *what, const uint8_t *dos, uint32_t n)
+void io_print_dos(const char *what, const uint8_t *dos, uint16_t n)
 {
     char line[1024];
-    uint32_t k = 0;
-    for (uint32_t i = 0; i < n; i++)
+    uint16_t k = 0;
+    for (uint16_t i = 0; i < n; i++)
         k = io_cp437_utf8(line, k, sizeof line, dos[i]);
     line[k] = 0;
     fprintf(stderr, "popcorn: [%s] %s\n", what, line);
