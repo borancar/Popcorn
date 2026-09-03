@@ -1655,9 +1655,12 @@ retry:
  *     if (y & 1) di += 0x2000           odd scan lines live in the far half
  *     di += (y >> 1) * 80               `shl ax,4` then `shl ax,2` twice more
  */
-static uint32_t cga_at(uint32_t x, uint32_t y)
+/* A pixel position to the byte that holds it. x and y are the byte registers
+ * the original keeps a position in, and the answer is DI, so all three are
+ * the width they are in the machine. */
+static uint16_t cga_at(uint8_t x, uint8_t y)
 {
-    uint32_t di = x >> 2;
+    uint16_t di = x >> 2;
     if (y & 1)
         di += CGA_PLANE;
     return di + (y >> 1) * CGA_STRIDE;
