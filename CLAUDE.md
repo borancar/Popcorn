@@ -337,6 +337,26 @@ it runs rather than the job it does. It writes one of those three prompts.
   original depended on - `int16_t` says "this truncation is the `imul`'s" in a
   way `short` does not, and a bare `int` says nothing at all. `char` stays
   `char` for actual strings.
+
+- **A register keeps its width.** Where a routine transposes operations the
+  original does in a register, the C carries that register's width. `SI` and
+  `DI` are **`uint16_t`** - as parameters, as locals, and as return types -
+  and a byte register is a `uint8_t`. `cga_at` returns a DI and takes an x
+  that arrives in CX; the four `cga_*_row` steppers are that DI; a local
+  holding `AL` is a `uint8_t` and `uint32_t al = expr & 0xff` is the mask
+  doing what the type is for.
+
+  Say it separately from the rule above because the wide version *works*
+  almost always: offsets stay under 64K, positions under 256, and the
+  truncation never happens - so it survives every test and shows up only on
+  the input that overflows. `cga_at`'s x was narrowed to `uint8_t` on exactly
+  that reasoning and every check passed, including the routine that can pass
+  it 319. Write the width from what the register is, not from what the values
+  reach.
+
+  Narrowing a type is the one change in this sweep that the compiler notices,
+  so it is checked against the original rather than by comparing binaries.
+
 - The C port is **structured C that reads as a game**, not transliterated
   register-shuffling — checked against the emulator rather than assumed. If a
   routine genuinely cannot be written honestly as structured C, write it
