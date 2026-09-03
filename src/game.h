@@ -553,7 +553,7 @@ typedef struct __attribute__((packed)) {
         char    level_text[12];
         struct __attribute__((packed)) {
             uint8_t _lt0[9];
-            uint16_t level_num_text;    /* 0x1410 tens in the low byte */
+            char     level_num_text[2]; /* 0x1410 the tens, then the units */
             uint8_t _lt1;
         };
     };
