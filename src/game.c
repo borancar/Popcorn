@@ -256,6 +256,13 @@ void restore_screen(void)
  */
 #define PADDLE_ROW_BASE 0x1cc0
 #define PADDLE_ROWS          7
+/* The paddle's top row on screen, which is PADDLE_ROW_BASE said as a y:
+ * 0x1cc0 is 92 * CGA_STRIDE, and row n of the even plane is screen line
+ * 2n. Everything about where the paddle sits is measured from here - it is
+ * seven rows tall, so it ends on PADDLE_BOTTOM, and the band the ball is
+ * caught in starts three above it, the same three that `paddle_x - 3` puts
+ * on the left. */
+#define PADDLE_Y           184
 #define PADDLE_BYTES        11          /* five words and a byte: 44 pixels */
 #define PADDLE_IMAGE  (PADDLE_ROWS * PADDLE_BYTES)   /* 77 bytes */
 
@@ -1288,7 +1295,7 @@ int32_t play_loop(void)
      * not a position of its own. It is doubled because input_mouse reads a
      * 640-wide screen and halves it, which makes the pointer's space twice
      * the paddle's. */
-    io_mouse_warp(global.paddle_x * 2, 184);
+    io_mouse_warp(global.paddle_x * 2, PADDLE_Y);
 
     paddle_row_offsets(global.paddle_x, &global.paddle_rows[0]);
     memcpy(global.paddle_pix[0], global.paddle_sprites[0][0], 39 * 2);
@@ -1993,8 +2000,8 @@ void ball_after(ball_t *b)
  * level with the side, which is what stops one that has just come off from
  * immediately catching the side on the way out.
  */
-#define PADDLE_TOP    181
-#define PADDLE_BOTTOM 190
+#define PADDLE_TOP    (PADDLE_Y - 3)                  /* 181 */
+#define PADDLE_BOTTOM (PADDLE_Y + PADDLE_ROWS - 1)    /* 190 */
 #define SOUND_PADDLE     1
 
 /* The common tail of every top-of-paddle bounce: reverse vertically, anchor
