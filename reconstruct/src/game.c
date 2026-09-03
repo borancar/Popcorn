@@ -100,14 +100,6 @@ void ball_step(ball_t *b)
  * last column rather than the count, which is why paddle_x + paddle_width is
  * the paddle's right *edge* and not one past it. That is a fact about the
  * data, and the constant here is the width. */
-/* Where a level starts the paddle. 1ac2:18ef loads it once into CX, stores
- * it as both paddle_x and paddle_prev_x, and then `shl cx,1` at 1ac2:1920
- * turns the same number into the pointer position INT 33h AX=4 is given -
- * because input_mouse reads a 640-wide screen and halves it. So the two
- * hundred below is this hundred doubled, not a coordinate of its own, and
- * not the wall it happens to equal. */
-#define PADDLE_START_X       100
-
 #define BALL_WIDTH             4
 #define BALL_HEIGHT            4
 #define INITIAL_PADDLE_WIDTH  28
@@ -1269,7 +1261,11 @@ int32_t play_loop(void)
         di = cga_next_row(di);
     }
 
-    global.paddle_x = global.paddle_prev_x = PADDLE_START_X;
+    /* Half the field. The original writes a bare `mov cx, 0x64` at
+     * 1ac2:18ef and stores it as both, so the halving is this port's
+     * reading of what the hundred is for, not something the original
+     * spells out. */
+    global.paddle_x = global.paddle_prev_x = WALL_RIGHT / 2;
     global.paddle_kind = 0;
     /* `mov ax, [di+2] / ... / mov [0x2d3a], al` - the width is the **low**
      * byte of the word at 0x2d0f, not the high one at 0x2d10. With the high
@@ -1280,7 +1276,11 @@ int32_t play_loop(void)
     global.paddle_min = WALL_LEFT;
     global.repeat_count = 5;
     global.repeat_div = 5;
-    io_mouse_warp(PADDLE_START_X * 2, 184);   /* 1ac2:1920 `shl cx,1` */
+    /* The same half-field position, in the pointer's own units: input_mouse
+     * reads a 640-wide screen and halves it, so the mouse space is exactly
+     * twice the paddle's and WALL_RIGHT / 2 doubled is WALL_RIGHT. That
+     * doubling is 1ac2:1920's `shl cx,1`, on the CX the line above set. */
+    io_mouse_warp(WALL_RIGHT, 184);
 
     paddle_row_offsets(global.paddle_x, &global.paddle_rows[0]);
     memcpy(global.paddle_pix[0], global.paddle_sprites[0][0], 39 * 2);
