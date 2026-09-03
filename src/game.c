@@ -358,7 +358,7 @@ void draw_paddle(const uint8_t *sprite)
 #define FONT_ROWS      12
 #define FONT_GLYPH     24
 
-static uint32_t glyph_of(char c)
+static uint8_t glyph_of(char c)
 {
     /* The cursor is 0xff, which is not a character and is negative in a
      * signed char, so the comparisons are done on the byte. */
@@ -394,7 +394,7 @@ void draw_char(char c, uint16_t di)
  * replay can be made deterministic by feeding it a fixed sequence.
  */
 
-uint32_t game_random(uint32_t ticks, uint32_t limit)
+uint8_t game_random(uint32_t ticks, uint8_t limit)
 {
     io_log_random(limit);               /* for sidebyside.py, no-op otherwise */
     uint16_t ax = ticks & 0xffff;
@@ -654,7 +654,7 @@ void intro_curtain(void)
         game_delay();
 
     for (uint32_t rows = 1; rows != 106; rows++) {
-        uint32_t n = (CURTAIN_ROW * (rows & 0xff)) & 0xffff;
+        uint16_t n = CURTAIN_ROW * (rows & 0xff);
         memcpy(global.scratch2.curtain_work, global.curtain_image[105 - rows], n);
 
         for (uint32_t i = 0; i < n && i < 0xbd; i++) {
@@ -2219,7 +2219,7 @@ void ball_bricks(ball_t *b)
     probe_cell_at((x + 3) & 0xff, (y + 3) & 0xff, &global.hits[2]);
     probe_cell_at(x, (y + 3) & 0xff, &global.hits[3]);
 
-    uint32_t n = global.hit_count;
+    uint8_t n = global.hit_count;
     if (n == 0)
         return;
 
@@ -2349,7 +2349,7 @@ static void brick_degrade(hit_t *hit, uint32_t from, uint32_t to)
 
 /* Pick one of the bonus kinds by the cumulative weights at 0x33b1: walk the
  * table until an entry is at least random(0xff) and take that index. */
-static uint32_t bonus_kind(void)
+static uint8_t bonus_kind(void)
 {
     uint32_t r = game_random(io_ticks(), 255);
     uint32_t i = 0;
@@ -2477,7 +2477,7 @@ void brick_8(hit_t *hit, ball_t *ball)
  * reaches. So several cell values have to come out as the one value that
  * names their routine, or the two sides disagree over a brick they both got
  * right - which is exactly what frame 206,783 was. */
-static uint32_t brick_tag(uint32_t v)
+static uint8_t brick_tag(uint8_t v)
 {
     if (v == 12 || (v >= 24 && v <= 29)) return 4;    /* all 0x3221 */
     if (v >= 17 && v <= 21) return 16;                /* all 0x2ccd */
@@ -2658,7 +2658,7 @@ void walker_draw(uint32_t x)
     const uint8_t *frame = global_ptr(global_w(global.walker_anim_ptr));
     memcpy(global.walker_work, frame, sizeof global.walker_work);
 
-    for (uint32_t n = (x & 3) * 2; n > 0; n--) {
+    for (uint8_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < 7; r++) {
             uint8_t *row = global.walker_work[r];
             uint8_t carry = 0;
@@ -2849,7 +2849,7 @@ void panel_draw(void)
     /* Twelve life markers, four to a row: `al & 0xfc` steps along the row and
      * `(al & 3) * 0xa8` steps down. Ones past the lives left are blanked
      * rather than skipped, so a lost life is rubbed out. */
-    for (uint32_t n = 1; n <= 12; n++) {
+    for (uint8_t n = 1; n <= 12; n++) {
         uint32_t k = n - 1;
         uint8_t *d = &global.panel[62][8] + (k & 0xfc) + (k & 3) * 0xa8;
         int32_t lit = n <= global.lives;
@@ -3028,7 +3028,7 @@ void cell_set_three(ent_anim_t *a)
  */
 void cells_restore(void)
 {
-    uint32_t n = global.level.teleports;
+    uint8_t n = global.level.teleports;
     for (uint32_t i = 0; i < n; i++)
         global.level.cells[global.level.teleport[i]] = 9;
     global.entity_remove = 1;
@@ -3072,7 +3072,7 @@ void xor_sprite_20x16(uint16_t x, uint16_t y, const uint8_t *src)
 void sprite_shift_draw(uint16_t x, uint16_t y, const uint8_t *src)
 {
     memcpy(global.sprite_work, src, sizeof global.sprite_work);
-    for (uint32_t n = (x & 3) * 2; n > 0; n--) {
+    for (uint8_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < 16; r++) {
             uint8_t *row = global.sprite_work[r];
             uint8_t carry = 0;
@@ -3467,7 +3467,7 @@ void brick_9(hit_t *hit, ball_t *ball)
         return;
     brick_score(0, 0, 0x0502);
 
-    uint32_t n = global.level.teleports;
+    uint8_t n = global.level.teleports;
     for (uint32_t i = 0; i < n; i++)
         global.level.cells[global.level.teleport[i]] = 4;
 
@@ -3915,7 +3915,7 @@ void draw_paddle_shifted(const uint8_t *sprite)
     paddle_row_offsets(x, &global.paddle_rows[0]);
     memcpy(global.paddle_pix[0], sprite, PADDLE_IMAGE + 1);
 
-    for (uint32_t n = (x & 3) * 2; n > 0; n--) {
+    for (uint8_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < PADDLE_ROWS; r++) {
             uint8_t *row = &global.paddle_pix[0][r * PADDLE_BYTES];
             uint8_t carry = 0;
@@ -4795,7 +4795,7 @@ int32_t name_field(uint16_t di, uint8_t *abort)
      * three. memmove is that walk. The space then goes at rec+0: after the
      * eleven steps `si` is rec-1 and the store is `[si+1]`. */
     uint8_t *rec = global.players[global.player_digit - '1'].name;
-    for (uint32_t n = shift; n > 0; n--) {
+    for (uint8_t n = shift; n > 0; n--) {
         memmove(rec + 1, rec, 11);
         rec[0] = ' ';                   /* 1ac2:146b */
     }
@@ -5182,7 +5182,7 @@ void menu_banner_tick(void)
  */
 uint16_t particle_random(uint16_t ax, uint32_t ticks, uint16_t limit)
 {
-    uint32_t n = global.particle_count;
+    uint16_t n = global.particle_count;
     /* `lodsw` from the base of the block, particle_count times - so it reads
      * the first n words rather than one field of each record, and where a
      * word falls inside a record is not something it knows or cares about. */
@@ -5239,7 +5239,7 @@ uint16_t particle_init(particle_t *p, uint16_t ax_in)
  */
 void menu_particles_tick(void)
 {
-    uint32_t n = global.particle_count;
+    uint16_t n = global.particle_count;
     for (uint32_t k = 0; k < n; k++) {
         particle_t *p = &global.particles[k];
 
@@ -5269,7 +5269,7 @@ void menu_particles_tick(void)
  * verifier has to pass what the original had or the two diverge. */
 void menu_particles_init(uint16_t ax_in)
 {
-    uint32_t n = global.particle_count;
+    uint16_t n = global.particle_count;
     uint16_t ax = ax_in;
     for (uint32_t i = 0; i < n; i++)
         ax = particle_init(&global.particles[i], ax);
@@ -5354,7 +5354,7 @@ static void player_record_init(player_t *p)
 
 void play_prepare(void)
 {
-    for (uint32_t n = 0; n < global.player_count; n++) {
+    for (uint8_t n = 0; n < global.player_count; n++) {
         player_record_init(&global.players[n]);
         global.players[n].ent_count = 0;
     }
@@ -5602,7 +5602,7 @@ void hsc_sort(void)
 {
     hsc_entry_t *b = &global.hsc[10];
     const hsc_entry_t *a = global.scratch2.hsc_scratch;
-    for (uint32_t n = global.player_count; n > 0; n--, a++)
+    for (uint8_t n = global.player_count; n > 0; n--, a++)
         *hsc_bubble(a, b) = *a;
 }
 
@@ -5952,7 +5952,7 @@ void field_marks_wide(uint16_t di, uint32_t rows)
     di = pillar_pair(di, 0x4001);
     di = pillar_pair(di, 0x500f);
     di = pillar_pair(di, 0x4435);
-    for (uint32_t n = rows; n > 0; n--) {
+    for (uint8_t n = rows; n > 0; n--) {
         di = pillar_pair(di, 0xd43f);
         di = pillar_pair(di, 0x1005);
     }
@@ -6184,7 +6184,7 @@ void ending_plot(uint16_t x, uint16_t y)
  * starting point */
 void ending_particles_init(uint16_t ax)
 {
-    uint32_t n = global.particle_count;
+    uint16_t n = global.particle_count;
     for (uint32_t i = 0; i < n; i++)
         ax = ending_particle_init(&global.particles[i], ax);
     /* 1ac2:5a43 has no `ret` of its own: it **falls through** into
@@ -6198,7 +6198,7 @@ void ending_particles_init(uint16_t ax)
  * place of the BIOS pixel call and ending_particle_init to re-launch */
 void ending_particles_tick(void)
 {
-    uint32_t n = global.particle_count;
+    uint16_t n = global.particle_count;
     for (uint32_t k = 0; k < n; k++) {
         particle_t *p = &global.particles[k];
 
@@ -7686,7 +7686,13 @@ int32_t cheat_sequence(char key)
     io_cga_mode(3);
     {
         uint8_t line[256];
-        uint32_t n = 0, ah = 0x20;
+        /* `n` indexes a buffer this port owns rather than a register the
+         * original has, and it stays wide on purpose: as a uint8_t the
+         * `n < sizeof line` below can never be false, and a bounds check
+         * that cannot fail is one that stops protecting the moment the
+         * buffer shrinks. */
+        uint32_t n = 0;
+        uint8_t ah = ' ';
         const uint8_t *s = runtime.cheat_text;
         for (;;) {
             uint32_t c = (*s++ ^ ah) ^ 0xaa;
