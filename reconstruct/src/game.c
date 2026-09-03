@@ -91,25 +91,40 @@ void ball_step(ball_t *b)
  * *both* held it moves in the direction of whichever key was pressed most
  * recently, which the INT 09h handler records at [0x2d4a].
  */
-/* The playfield's edges, in the x and y the ball and the paddle are held in.
- * They live here rather than beside ball_after, which is where they used to
- * be and is no longer the only thing that needs them: play_prepare puts the
- * paddle's left limit on WALL_LEFT.
+/* How big the two things that move are. Both are measured rather than
+ * assumed: the ball off ball_start_sprite, whose four words draw a blob four
+ * pixels across and four rows down, and the paddle off paddle_sets[0], which
+ * is what play_prepare copies into paddle_width. */
+#define BALL_WIDTH             4
+#define BALL_HEIGHT            4
+#define INITIAL_PADDLE_WIDTH  27
+
+/* The playfield's last column, and its last row, which are the same 199.
  *
- * The right edge itself is **199**, and neither of these is it. Every x here
- * is a left edge, so what a thing may be set to is 199 less its own width:
- * the ball turns at 196, three short, and the paddle stops at 172, which is
- * 199 less the 27 it is wide - and morph_step keeps that true as it grows,
- * moving paddle_max down by whatever it adds to paddle_width. 199 is not
- * spelled anywhere; it is the sum those pairs always make.
+ * It is spelled nowhere in the original. It is where the ball's right edge
+ * sits at the moment it turns, and it is the sum paddle_x + paddle_width
+ * always makes - morph_step keeps that true while the paddle grows, taking
+ * off paddle_max whatever it adds to paddle_width. Everything below is
+ * measured back from it.
  *
- * FLOOR and WALL_RIGHT are the same number and stay two names, because the
- * ball turning round at the side and being lost at the bottom are not the
- * same event. */
-#define WALL_LEFT     8
-#define WALL_RIGHT  196
-#define WALL_TOP      4
-#define FLOOR       196
+ * The two conventions differ by one and that is not a mistake: the ball's x
+ * is the left of a four-wide sprite, so its limit is the edge less three,
+ * while the paddle's width runs from its x to its right *side*, so the
+ * paddle is allowed the pixel the ball is not. */
+#define FIELD_EDGE           199
+
+/* The edges, in the x and y the ball and the paddle are held in. They live
+ * here rather than beside ball_after, which used to be the only thing that
+ * wanted them: play_prepare puts the paddle's left limit on WALL_LEFT.
+ *
+ * WALL_RIGHT and FLOOR come to the same number and stay two names, because
+ * the ball turning round at the side and being lost at the bottom are not
+ * the same event - and because one is the ball's width and the other its
+ * height, which happen to be equal and need not stay so. */
+#define WALL_LEFT              8
+#define WALL_TOP               4
+#define WALL_RIGHT  (FIELD_EDGE - BALL_WIDTH + 1)      /* 196 */
+#define FLOOR       (FIELD_EDGE - BALL_HEIGHT + 1)     /* 196 */
 
 #define REPEAT_RESET  5
 
@@ -1251,7 +1266,7 @@ int32_t play_loop(void)
      * byte the width came out zero, and a zero-width paddle clamps to the
      * left wall the moment the mouse is read. */
     global.paddle_width = global.paddle_sets[0].width;
-    global.paddle_max = 172;
+    global.paddle_max = FIELD_EDGE - INITIAL_PADDLE_WIDTH;
     global.paddle_min = WALL_LEFT;
     global.repeat_count = 5;
     global.repeat_div = 5;
@@ -6997,7 +7012,7 @@ static int32_t bonus_end_level_run(void)
     panel_reveal();
 
     global.paddle_kind = 0;
-    global.paddle_max = 172;
+    global.paddle_max = FIELD_EDGE - INITIAL_PADDLE_WIDTH;
     global.paddle_min = WALL_LEFT;
     global.paddle_width = global.paddle_sets[0].width;
     blit_xor(global.paddle_pix[0], &global.paddle_rows[0]);
