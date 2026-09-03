@@ -186,7 +186,7 @@ void input_mouse(uint32_t mouse_x, uint32_t buttons)
 {
     global.key_action = (buttons & 3) ? 1 : 0;
 
-    uint8_t x = (uint8_t)((mouse_x >> 1) & 0xff);
+    uint8_t x = mouse_x >> 1;
     if (x > global.paddle_max)
         x = global.paddle_max;
     else if (x < global.paddle_min)
@@ -409,7 +409,7 @@ uint32_t game_random(uint32_t ticks, uint32_t limit)
 
     /* `add al,ah` then `xor ah,ah` then `div dl`: folded to eight bits before
      * the divide, so the result really is only ever 0..255 wide. */
-    uint32_t al = ((ax & 0xff) + (ax >> 8)) & 0xff;
+    uint8_t al = (ax & 0xff) + (ax >> 8);
     return limit ? al % limit : 0;
 }
 
@@ -1706,7 +1706,7 @@ static uint16_t cga_at(uint16_t x, uint16_t y)
 uint32_t draw_brick_row(uint32_t y)
 {
     uint32_t di = cga_at(0, y) + BRICK_LEFT;
-    uint32_t row = (y - BRICK_TOP) & 0xff;
+    uint8_t row = y - BRICK_TOP;
     uint32_t sub = (row & 7) * 4;
     const uint8_t *cells = &global.level.cells[(row >> 3) * BRICK_COLS];
 
@@ -1838,7 +1838,7 @@ void level_intro(void)
      * here - `mov cx,3` and down to -1 - which is not the same order as the
      * sweep up, and shows: they trail the reveal instead of leading it. */
     while (global.sweep_y[0] != 0xb3) {
-        uint32_t y = (global.sweep_y[0] - 6) & 0xff;
+        uint8_t y = global.sweep_y[0] - 6;
         draw_brick_row(y);              /* 1ac2:2034 */
         field_backdrop((y + 1) & 0xff); /* 1ac2:1fc1 */
         for (int32_t k = 3; k >= 0; k--) {
@@ -2066,16 +2066,16 @@ void ball_paddle(ball_t *b)
     if (y > PADDLE_TOP && b->dir_y != 1) {
         /* The sides. Only the two single columns just outside the paddle
          * count, which is why this is an equality and not a range. */
-        uint32_t left = (global.paddle_x - 3) & 0xff;
+        uint8_t left = global.paddle_x - 3;
         uint32_t bx = b->x;
         int32_t from_left = 1;
         if (bx != left) {
-            uint32_t off = (bx - left) & 0xff;
+            uint8_t off = bx - left;
             if (off != ((global.paddle_width + 3) & 0xff))
                 return;
             from_left = 0;
         }
-        uint32_t depth = (y - 0xb6) & 0xff;
+        uint8_t depth = y - 0xb6;
         b->dir_y = (depth <= 5) ? 1 : 0;
         b->dir_x = (uint8_t)from_left;
         b->anchor_x = from_left
@@ -2090,10 +2090,10 @@ void ball_paddle(ball_t *b)
     }
 
     /* The top. */
-    uint32_t left = (global.paddle_x - 3) & 0xff;
+    uint8_t left = global.paddle_x - 3;
     if (b->x < left)
         return;
-    uint32_t off = (b->x - left) & 0xff;
+    uint8_t off = b->x - left;
 
     if (off <= 10) {                            /* the left end */
         paddle_slope(b, global.slope_top[off]);
@@ -2101,10 +2101,10 @@ void ball_paddle(ball_t *b)
         paddle_bounce_up(b);
         return;
     }
-    uint32_t span = (global.paddle_width + 3) & 0xff;
+    uint8_t span = global.paddle_width + 3;
     if (off > span)
         return;
-    uint32_t from_right = (span - off) & 0xff;
+    uint8_t from_right = span - off;
     if (from_right <= 10) {                     /* the right end */
         paddle_slope(b, global.slope_top[from_right]);
         b->dir_x = 0;                         /* away to the right */
@@ -2213,7 +2213,7 @@ void ball_bricks(ball_t *b)
 {
     global.hit_count = 0;
 
-    uint32_t x = (b->x - 8) & 0xff, y = (b->y - 6) & 0xff;
+    uint8_t x = b->x - 8, y = b->y - 6;
     probe_cell_at(x, y, &global.hits[0]);
     probe_cell_at((x + 3) & 0xff, y, &global.hits[1]);
     probe_cell_at((x + 3) & 0xff, (y + 3) & 0xff, &global.hits[2]);
@@ -2549,7 +2549,7 @@ void score_add(void)
     for (int32_t i = 5; i >= 0; i--) {          /* least significant first */
         uint32_t sum = (global.score_text[i] & 0x0f) + global.score_add[i]
                      + (carry ? 1 : 0);
-        uint32_t adjusted = (sum + 6) & 0xff;
+        uint8_t adjusted = sum + 6;
         carry = (adjusted & 0xf0) || (sum & 0xf0);
         global.score_text[i] = (uint8_t)('0' | ((carry ? adjusted : sum) & 0x0f));
     }
@@ -2590,7 +2590,7 @@ void extra_life(void)
 {
     if (global.lives == 12)
         return;
-    uint32_t n = (global.lives - 1) & 0xff;
+    uint8_t n = global.lives - 1;
     uint32_t di = 0x3a7c + (n & 0xfc) + (n & 3) * 0xf0;
     for (int32_t r = 0; r < 5; r++) {
         for (int32_t b = 0; b < 4; b++)
@@ -2721,7 +2721,7 @@ static void hatch_frame(const uint8_t *src, uint32_t x, uint32_t y)
 void level_draw(void)
 {
     /* The paddle's own hatch is the last of the eight field marks. */
-    uint32_t hx = global.field_marks[7].x, hy = (global.field_marks[7].y - 1) & 0xff;
+    uint8_t hx = global.field_marks[7].x, hy = (global.field_marks[7].y - 1);
 
     global.paddle_x = 200;
     for (int32_t f = 0; f < 5; f++) {
@@ -2734,7 +2734,7 @@ void level_draw(void)
      * the same layout extra_life draws them in, and the same trap. The
      * `sub di, 4` only puts back what `rep stosw` advanced, and the step
      * that follows is forwards. */
-    uint32_t n = (global.lives - 1) & 0xff;
+    uint8_t n = global.lives - 1;
     uint32_t di = LIVES_MARK + (n & 0xfc) + (n & 3) * 0xf0;
     for (int32_t r = 0; r < 5; r++) {
         for (int32_t b = 0; b < 4; b++)
@@ -3716,7 +3716,7 @@ void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
 
     /* The laser shot, if one is in flight. */
     if (global.laser_on == 2) {
-        uint32_t sy = (global.laser_y + 2) & 0xff;
+        uint8_t sy = global.laser_y + 2;
         uint32_t by = s->y;
         if (((sy + 1) & 0xff) >= by && sy <= ((by + 0x0f) & 0xff)) {
             uint32_t sx = global.laser_x, bxx = s->x;
@@ -4024,8 +4024,8 @@ int32_t ball_on_paddle(ball_t *b)
     if (global.hold_timer == HOLD_RESET) {
         /* Not holding one yet: is this ball landing on the paddle? */
         uint32_t y = b->y;
-        uint32_t left = (global.paddle_x - 3) & 0xff;
-        uint32_t off = (b->x - left) & 0xff;
+        uint8_t left = global.paddle_x - 3;
+        uint8_t off = b->x - left;
         if (y < PADDLE_TOP || y > PADDLE_BOTTOM || b->x < left ||
             off > ((global.paddle_width + 3) & 0xff)) {
             global.hold_timer = (uint16_t)(HOLD_RESET);
@@ -4147,7 +4147,7 @@ void laser_fire(void)
     if (global.paddle_morphing == 0 && global.laser_on != 2) {
         if (global.key_action != 1)
             return;
-        uint32_t x = (global.paddle_x + 4) & 0xff;
+        uint8_t x = global.paddle_x + 4;
         runtime.sound_request = SHOT_SOUND;
         global.laser_x = (uint8_t)x;
         uint32_t y = global.laser_y;
@@ -4173,7 +4173,7 @@ void laser_fire(void)
 
     /* Probe the two cells the shot covers. */
     global.hit_count = 0;
-    uint32_t py = (x - 8) & 0xff, px = (y - 6) & 0xff;
+    uint8_t py = x - 8, px = y - 6;
     probe_cell_at(py, px, &global.hits[0]);
     probe_cell_at((py + 19) & 0xff, px, &global.hits[1]);
     if (global.hit_count == 0)
@@ -4648,7 +4648,7 @@ void level_between(void)
 {
     for (int32_t i = 0; i < 4; i++) {
         mark_t *m = &global.field_marks[i];
-        uint32_t x = m->x, y = (m->y - 10) & 0xff;
+        uint8_t x = m->x, y = (m->y - 10);
         m->taken = 0;
         uint32_t di = cga_at(x, y);
         for (int32_t r = 0; r < 37; r++) {
@@ -4725,7 +4725,7 @@ int32_t name_field(uint32_t di, uint8_t *abort)
     di += 2;
 
     for (;;) {
-        uint32_t c = io_get_key() & 0xff;
+        uint8_t c = io_get_key();
         if (!c) {
             if (!io_pump())
                 return 0;
@@ -5045,7 +5045,7 @@ void field_marks(void)
 {
     for (int32_t i = 0; i < 8; i++) {
         mark_t *m = &global.field_marks[i];
-        uint32_t x = m->x, y = (m->y - 10) & 0xff;
+        uint8_t x = m->x, y = (m->y - 10);
         m->taken = 0;
         uint32_t di = cga_at(x, y);
         for (int32_t r = 0; r < 31; r++) {
@@ -5805,7 +5805,7 @@ void screen_restore(void)
  */
 void brick_11_after(uint32_t x, uint32_t y)
 {
-    uint32_t row = (y - 6) & 0xff;
+    uint8_t row = y - 6;
     const uint8_t *src = &assets.hole_picture[row][((x >> 2) & 0xff) - 2];
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 8; r++) {
@@ -5830,7 +5830,7 @@ void brick_11_after(uint32_t x, uint32_t y)
  */
 void cell_hole_draw(uint32_t x, uint32_t y)
 {
-    uint32_t row = (y - 6) & 0xff;
+    uint8_t row = y - 6;
     const uint8_t *src = &assets.hole_picture[row][((x >> 2) & 0xff) - 2];
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 8; r++) {
@@ -5997,7 +5997,7 @@ uint32_t ending_particle_init(particle_t *p, uint32_t ax_in)
 void ending_blob(uint32_t pos)
 {
     uint32_t al = (pos & 0xff) >> 2;
-    uint32_t ah = (pos >> 8) & 0xff;
+    uint8_t ah = pos >> 8;
     uint32_t di = al;
     if (ah & 1)
         di += CGA_PLANE;
@@ -6234,7 +6234,7 @@ uint32_t ending_walk(uint32_t bl, uint32_t bh, uint32_t dx)
      * to read it from. Modelling a register as memory works right up until
      * something else is in the register. */
 
-    uint32_t target = (80 - ((bl << 3) & 0xff)) & 0xff;
+    uint8_t target = 80 - ((bl << 3) & 0xff);
     assets.blob_target = (uint8_t)target;
     while (((dx >> 8) & 0xff) != target) {
         uint32_t next = (dx - 0x400) & 0xffff;   /* `sub ah,4` */
@@ -7312,7 +7312,7 @@ int32_t next_player(const char *dir)
      * bumping the second is 20,000, not 2,000. They are pulled out with
      * `and ax,0x0e0f`, bumped, and carried by hand. */
     uint32_t al = global.score_text[0] & 0x0f;
-    uint32_t ah = ((global.score_text[1] & 0x0e) + 2) & 0xff;
+    uint8_t ah = (global.score_text[1] & 0x0e) + 2;
     if (ah >= 10) {
         al++;
         ah = 0;
@@ -7517,11 +7517,11 @@ int32_t bonus_script(ent_anim_t *b, uint32_t *px, uint32_t *py)
     uint32_t si = b->script;
     b->script = (uint16_t)(si + 2);
     uint32_t word = global_w(si);
-    uint32_t al = word & 0xff, ah = (word >> 8) & 0xff;
+    uint8_t al = word, ah = word >> 8;
     uint32_t cl = b->arg.move.steps;
 
     if (al & 0x80) {                    /* a leftward step */
-        uint32_t mag = (uint32_t)(-(int32_t)(int8_t)al) & 0xff;
+        uint8_t mag = (uint32_t)(-(int32_t)(int8_t)al);
         if (cl < mag)
             cl = 8;                     /* it would go through the wall */
         else
