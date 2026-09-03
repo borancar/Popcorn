@@ -1231,10 +1231,10 @@ void game_input(void)
  * generalise over. */
 static void net_step(uint8_t reload)
 {
-    uint32_t di = global.net_pos;
+    uint16_t di = global.net_pos;
     g_vram[di & (CGA_SIZE - 1)] = 0;
     g_vram[(di + 1) & (CGA_SIZE - 1)] = 0;
-    global.net_pos = (uint16_t)cga_next_row(di);
+    global.net_pos = cga_next_row(di);
     global.net_timer = reload;
 }
 
@@ -1477,9 +1477,9 @@ frames:
                 /* One cell off the bar. `stosw` leaves di two on, and the
                  * two `dec di` put it back, so what follows is a plain step
                  * to the next scan line - the bar drains downwards. */
-                uint32_t di = global.extra_pos;
+                uint16_t di = global.extra_pos;
                 vram_setw(di, 0);
-                global.extra_pos = (uint16_t)(cga_next_row(di));
+                global.extra_pos = cga_next_row(di);
                 global.extra_timer = 400;
             }
             global.serve_timeout--;
