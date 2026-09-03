@@ -1251,9 +1251,13 @@ int32_t play_loop(void)
         g_resume_at_frame_top = 0;
         goto frames;
     }
-    /* The level number, drawn into the header bar as two digits. */
+    /* The level number, drawn into the header bar as two digits - the units
+     * in the high byte and the tens in the low, so that laid out in memory
+     * they read the right way round. Adding to both halves at once is what
+     * turns the pair into text. */
     uint32_t n = (global.level_number + 1) & 0xff;
-    global.level_num_text = (uint16_t)(((n % 10) << 8 | (n / 10)) + 0x3030);
+    global.level_num_text =
+        (uint16_t)(((n % 10) << 8 | (n / 10)) + (('0' << 8) + '0'));
 
     uint32_t di = 0x177e;
     for (int32_t i = 0; i < 12; i++, di += 2) {
@@ -2547,7 +2551,7 @@ void score_add(void)
                      + (carry ? 1 : 0);
         uint32_t adjusted = (sum + 6) & 0xff;
         carry = (adjusted & 0xf0) || (sum & 0xf0);
-        global.score_text[i] = (uint8_t)(0x30 | ((carry ? adjusted : sum) & 0x0f));
+        global.score_text[i] = (uint8_t)('0' | ((carry ? adjusted : sum) & 0x0f));
     }
     /* Redraw the six digits into the panel. */
     uint32_t di = 0x15d2;
@@ -2570,8 +2574,8 @@ void score_add(void)
     uint32_t top = (uint32_t)(global.score_text[0] << 8) | global.score_text[1];
     if (top >= thresh) {
         thresh += 2;
-        if ((thresh & 0xff) >= 0x3a)
-            thresh = (thresh & 0xff00) + 0x100 + 0x30;
+        if ((thresh & 0xff) > '9')
+            thresh = (thresh & 0xff00) + 0x100 + '0';
         global.extra_at = (uint16_t)thresh;
         extra_life();
     }
