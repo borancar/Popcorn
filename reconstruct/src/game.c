@@ -1912,7 +1912,11 @@ void ball_after(ball_t *b)
         b->dir_x = (x <= WALL_LEFT) ? 0 : 1;
         b->acc_x = 1;
         b->acc_y = 0;
-        b->anchor_x = (uint8_t)(x <= WALL_LEFT ? 9 : 0xc3);
+        /* Anchored one clear of whichever wall it struck: the left is
+         * WALL_LEFT + 1, and the right is where a ball whose right edge
+         * touches WALL_RIGHT sits, less one more. */
+        b->anchor_x = (uint8_t)(x <= WALL_LEFT ? WALL_LEFT + 1
+                                              : WALL_RIGHT - BALL_WIDTH);
         b->anchor_y = (uint8_t)y;
         b->bounces++;
     }
@@ -6828,7 +6832,11 @@ int32_t ball_after_endgame(ball_t *b)
         runtime.sound_request = SOUND_BOUNCE;
         b->acc_x = 1;
         b->acc_y = 0;
-        b->anchor_x = (uint8_t)(x <= WALL_LEFT ? 9 : 0xc3);
+        /* Anchored one clear of whichever wall it struck: the left is
+         * WALL_LEFT + 1, and the right is where a ball whose right edge
+         * touches WALL_RIGHT sits, less one more. */
+        b->anchor_x = (uint8_t)(x <= WALL_LEFT ? WALL_LEFT + 1
+                                              : WALL_RIGHT - BALL_WIDTH);
         b->anchor_y = (uint8_t)y;
     }
 
