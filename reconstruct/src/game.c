@@ -1235,10 +1235,10 @@ int32_t play_loop(void)
     global.paddle_min = 8;
     global.repeat_count = 5;
     global.repeat_div = 5;
-    io_mouse_warp(0x64 * 2, 0xb8);
+    io_mouse_warp(100 * 2, 184);
 
     paddle_row_offsets(global.paddle_x, &global.paddle_rows[0]);
-    memcpy(global.paddle_pix[0], global.paddle_sprites[0][0], 0x27 * 2);
+    memcpy(global.paddle_pix[0], global.paddle_sprites[0][0], 39 * 2);
     global.ball_alive = 1;
     memcpy(global.balls[0].sprite, global.ball_start_sprite, sizeof global.balls[0].sprite);
     global.frame_delay_set = 0x1f4;
@@ -2523,7 +2523,7 @@ void extra_life(void)
  * One band of the playfield's background: 48 bytes - the full 192-pixel width
  * - by eight scan lines, at `y`. The pattern comes from a table of eight at
  * 0x6d95 chosen by `[0x2efb] >> 3`, and that counter advances every call and
- * wraps at 0x27, so the backdrop drifts while a level is being revealed.
+ * wraps at 39, so the backdrop drifts while a level is being revealed.
  *
  * This is what clears the previous screen. The level sweep calls it one line
  * ahead of the brick row it is drawing, so the backdrop arrives just before
