@@ -1600,7 +1600,7 @@ void input_keyboard(void);                              /* 1ac2:1712 */
 void input_mouse(uint32_t mouse_x, uint32_t buttons);   /* 1ac2:169f */
 void save_screen(void);                                 /* 1ac2:5099 */
 void restore_screen(void);                              /* 1ac2:50bc */
-void paddle_row_offsets(uint32_t x, paddle_rows_t *rows); /* 1ac2:22de */
+void paddle_row_offsets(uint16_t x, paddle_rows_t *rows); /* 1ac2:22de */
 void blit_xor(const uint8_t *pixels, const paddle_rows_t *rows); /* 1ac2:2281 */
 void draw_paddle(const uint8_t *sprite);                /* 1ac2:221a */
 void draw_char(char c, uint16_t di);              /* 1ac2:0c64 */
@@ -1695,9 +1695,9 @@ void play_frame(void);            /* 1ac2:1212 */
 uint16_t frame_band(uint16_t di, uint32_t fill);  /* 1ac2:1354 */
 void panel_reveal(void);          /* 1ac2:0911 */
 void field_marks(void);           /* 1ac2:0598 */
-void field_marks_wide(uint16_t di, uint32_t rows);  /* 1ac2:0a1d */
+void field_marks_wide(uint16_t di, uint16_t rows);  /* 1ac2:0a1d */
 uint16_t ending_particle_init(particle_t *p, uint16_t ax_in); /* 1ac2:59f7 */
-void ending_blob(uint32_t pos);   /* 1ac2:5c36 */
+void ending_blob(uint16_t pos);   /* 1ac2:5c36 */
 uint16_t ending_blobs(void);          /* 1ac2:5b80 */
 void ending_column(void);         /* 1ac2:5317 */
 
@@ -1716,20 +1716,20 @@ extern int32_t g_resume_in_bonus;       /* lockstep: rejoin inside the bonus */
 extern int32_t g_start_level;           /* --level N, or -1 for the first */
 extern int32_t g_in_bonus;              /* the end-of-level bonus is running */
 int32_t  play_loop(void);             /* 1ac2:1873 - transcribed */
-uint16_t draw_text(const char *src, uint32_t count, uint16_t di); /* 1ac2:10d1 */
+uint16_t draw_text(const char *src, uint16_t count, uint16_t di); /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
-void walker_draw(uint32_t x);     /* 1ac2:1e50 */
-void walker_step(uint32_t x);     /* 1ac2:1e23 */
+void walker_draw(uint16_t x);     /* 1ac2:1e50 */
+void walker_step(uint16_t x);     /* 1ac2:1e23 */
 void ball_draw(const void *rows, uint16_t x, uint16_t y);    /* 1ac2:2881 */
 int32_t  ball_redraw(ball_t *b);  /* 1ac2:2827 */
 int32_t  ball_on_paddle(ball_t *b); /* 1ac2:2e1e */
-void read_new_key(uint32_t which);  /* 1ac2:1614 */
+void read_new_key(uint16_t which);  /* 1ac2:1614 */
 int32_t  score_before(const uint8_t *a, const uint8_t *b); /* 1ac2:108c */
 void ball_after(ball_t *b);   /* 1ac2:247f */
 int32_t  ball_after_endgame(ball_t *b);  /* 1ac2:45a1 */
 void ball_bricks(ball_t *b);  /* 1ac2:254d */
 void brick_hit(hit_t *hit, uint8_t *cell, ball_t *ball);
-void xor_sprite_16xn(uint16_t x, uint16_t y, const uint8_t *src, uint32_t rows); /* 1ac2:40f2 */
+void xor_sprite_16xn(uint16_t x, uint16_t y, const uint8_t *src, uint16_t rows); /* 1ac2:40f2 */
 void brick_1(hit_t *hit, ball_t *ball);     /* 1ac2:28cb */
 void brick_2(hit_t *hit, ball_t *ball);     /* 1ac2:2985 */
 void brick_3(hit_t *hit, ball_t *ball);     /* 1ac2:2a3f */
@@ -1791,7 +1791,7 @@ void entity_unknown(entity_t *e);
 void entity_multiball(void);  /* 1ac2:3717 */
 void entity_unlink(entity_t *node); /* 1ac2:3257 */
 entity_t *entity_alloc(void);      /* 1ac2:3232 */
-uint16_t draw_run(uint8_t c, uint32_t count, uint16_t di); /* 1ac2:10c5 */
+uint16_t draw_run(uint8_t c, uint16_t count, uint16_t di); /* 1ac2:10c5 */
 void draw_cursor(uint16_t di);    /* 1ac2:14a7 */
 void define_keys_prompt(uint32_t src, uint32_t dst);            /* 1ac2:1642 */
 void flash_bar(uint32_t pattern); /* 1ac2:3146 */
@@ -1805,12 +1805,12 @@ void entity_sparkle(ent_anim_t *a); /* 1ac2:3aee */
 void entity_crumble(ent_anim_t *a); /* 1ac2:3b2a */
 void entity_hatch(ent_hatch_t *h);   /* 1ac2:390d */
 void bonus_release(const ent_hatch_t *h);  /* 1ac2:39a1 */
-int32_t  bonus_move_right(ent_anim_t *b, uint32_t *px, uint32_t *py); /* 1ac2:3c66 */
-int32_t  bonus_move_left(ent_anim_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3cf3 */
-int32_t  bonus_move_up(ent_anim_t *b, uint32_t *px, uint32_t *py);    /* 1ac2:3caf */
-int32_t  bonus_move_down(ent_anim_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3d3c */
-int32_t  bonus_steer(ent_anim_t *b, uint32_t *px, uint32_t *py);  /* 1ac2:3bf7 */
-int32_t  bonus_script(ent_anim_t *b, uint32_t *px, uint32_t *py); /* 1ac2:3c35 */
+int32_t  bonus_move_right(ent_anim_t *b, uint16_t *px, uint16_t *py); /* 1ac2:3c66 */
+int32_t  bonus_move_left(ent_anim_t *b, uint16_t *px, uint16_t *py);  /* 1ac2:3cf3 */
+int32_t  bonus_move_up(ent_anim_t *b, uint16_t *px, uint16_t *py);    /* 1ac2:3caf */
+int32_t  bonus_move_down(ent_anim_t *b, uint16_t *px, uint16_t *py);  /* 1ac2:3d3c */
+int32_t  bonus_steer(ent_anim_t *b, uint16_t *px, uint16_t *py);  /* 1ac2:3bf7 */
+int32_t  bonus_script(ent_anim_t *b, uint16_t *px, uint16_t *py); /* 1ac2:3c35 */
 void anim_step(void);       /* 1ac2:1a6f */
 void drop_duplicate_hits(void);   /* 1ac2:27b7 */
 hsc_entry_t *hsc_bubble(const hsc_entry_t *a, hsc_entry_t *b); /* 1ac2:4d5d */
@@ -1837,7 +1837,7 @@ void level_intro(void);           /* 1ac2:1eb9 */
 uint16_t draw_brick_row(uint16_t y);  /* 1ac2:2034 */
 void draw_sprite_20x6(uint16_t x, uint16_t y, const uint8_t *src); /* 1ac2:20b9 */
 void cell_special(uint8_t row, uint8_t col, uint16_t di); /* 1ac2:41e5 */
-void field_backdrop(uint32_t y);  /* 1ac2:1fc1 */
+void field_backdrop(uint16_t y);  /* 1ac2:1fc1 */
 void life_lost(void);             /* 1ac2:0735 */
 void entities_clear(void);        /* 1ac2:055e */
 void level_between(void);         /* 1ac2:05f8 */
