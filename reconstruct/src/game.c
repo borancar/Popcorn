@@ -7757,10 +7757,10 @@ void brick_animated(hit_t *hit, ball_t *ball)
         ball->bounces++;
 
     uint8_t *cell = global_ptr(hit->cell_ptr);
-    uint32_t was = *cell;
-    uint32_t now = (was + 8) & 0xff;    /* marked, not cleared */
-    *cell = (uint8_t)now;
-    uint32_t piece = was & 0x0f;
+    uint8_t was = *cell;
+    uint8_t now = was + 8;              /* marked, not cleared */
+    *cell = now;
+    uint8_t piece = was & 0x0f;
 
     /* Remember what this piece turned into, indexed by the **new** cell value:
      * 1ac2:2d25 takes DH, which is was + 8, not DL. Only cells 16 to 21 reach
