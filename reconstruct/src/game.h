@@ -99,7 +99,7 @@ typedef struct __attribute__((packed)) {
     uint16_t t;         /* 0x06 the time, stepped by dir */
     uint16_t h;         /* 0x08 the parabola's height now */
     uint16_t h0;        /* 0x0a and at launch, so y is y0 + h - h0 */
-    uint16_t dir;       /* 0x0c 1 or 0xffff: which way t walks */
+    int16_t  dir;       /* 0x0c +1 or -1: which way t walks */
     uint16_t speed;     /* 0x0e the horizontal step the parabola is scaled by */
 } particle_t;
 ENSURE_SIZE(particle_t, 16);
@@ -131,7 +131,7 @@ static inline uint16_t particle_height(uint16_t speed, uint16_t t)
 
 static inline void particle_step(particle_t *p)
 {
-    p->t = (uint16_t)(p->t + p->dir);
+    p->t += p->dir;
     p->h = particle_height(p->speed, p->t);
 }
 
@@ -1644,8 +1644,8 @@ void game_main(const char *dir, const char *levels);
  * one remaining stub is entity_unknown; see stubs.c.
  */
 void menu_particles_init(uint16_t ax_in);   /* 1ac2:5476 */
-void plot_pixel(uint16_t x, uint16_t y, uint32_t colour);
-void plot_pixel_xor(uint16_t x, uint16_t y, uint32_t colour);
+void plot_pixel(uint16_t x, uint16_t y, uint8_t colour);
+void plot_pixel_xor(uint16_t x, uint16_t y, uint8_t colour);
 void menu_particles_tick(void);   /* 1ac2:53c2 */
 void menu_banner_tick(void);      /* 1ac2:50df */
 void banner_shift(void);          /* 1ac2:5140 */
@@ -1756,7 +1756,7 @@ void brick_11(hit_t *hit, ball_t *ball);    /* 1ac2:2d68 */
 void xor_sprite_16x7(uint16_t x, uint16_t y, const uint8_t *src); /* 1ac2:3b64 */
 void score_add(void);             /* 1ac2:413d */
 void extra_life(void);            /* 1ac2:318b */
-void fill_column(uint16_t di, uint32_t value);  /* 1ac2:41b1 */
+void fill_column(uint16_t di, uint16_t value);  /* 1ac2:41b1 */
 void bonus_points(void);          /* 1ac2:2daa */
 void bonus_catch(void);           /* 1ac2:2def */
 void bonus_laser(void);           /* 1ac2:2e03 */
@@ -1797,7 +1797,7 @@ void entity_unlink(entity_t *node); /* 1ac2:3257 */
 entity_t *entity_alloc(void);      /* 1ac2:3232 */
 uint16_t draw_run(uint8_t c, uint16_t count, uint16_t di); /* 1ac2:10c5 */
 void draw_cursor(uint16_t di);    /* 1ac2:14a7 */
-void define_keys_prompt(uint32_t src, uint32_t dst);            /* 1ac2:1642 */
+void define_keys_prompt(uint16_t src, uint16_t dst);            /* 1ac2:1642 */
 void flash_bar(uint32_t pattern); /* 1ac2:3146 */
 void cell_set_three(ent_anim_t *a); /* 1ac2:3668 */
 void cells_restore(void);         /* 1ac2:36fb */
