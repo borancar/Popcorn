@@ -1604,7 +1604,7 @@ void paddle_row_offsets(uint32_t x, paddle_rows_t *rows); /* 1ac2:22de */
 void blit_xor(const uint8_t *pixels, const paddle_rows_t *rows); /* 1ac2:2281 */
 void draw_paddle(const uint8_t *sprite);                /* 1ac2:221a */
 void draw_char(char c, uint16_t di);              /* 1ac2:0c64 */
-uint32_t game_random(uint32_t ticks, uint32_t limit);   /* 1ac2:40c0 */
+uint8_t  game_random(uint32_t ticks, uint8_t limit);    /* 1ac2:40c0 */
 void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
 void sound_tick(void);                                  /* 1ac2:0097 */
