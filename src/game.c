@@ -475,12 +475,19 @@ void sound_tick(void)
  * loops - `mov cx,50 / call delay / loop` - and spinning would burn a core
  * to no purpose.
  */
+/* The delay routine's first byte, when POPSPEED has turned the delay off:
+ * 1ac2:164c is `push cx / mov cx,N / loop $ / pop cx`, and speed 1 patches
+ * that first byte to a bare `ret`. So this is an 8086 opcode rather than a
+ * count, which is why it is the one number in game_delay still written as
+ * one - and it is tested in three places, which is why it has a name. */
+#define OP_RET  0xc3
+
 #define CYCLES_PER_LOOP 17
 #define CPU_HZ          8000000.0
 
 void game_delay(void)
 {
-    if (runtime.delay_entry == 0xc3)   /* patched to a bare `ret` */
+    if (runtime.delay_entry == OP_RET)      /* patched: no delay at all */
         return;
     io_delay_cycles(runtime.delay_count * CYCLES_PER_LOOP);
 }
@@ -500,8 +507,8 @@ void game_delay(void)
 void read_speed_setting(uint32_t speed)
 {
     if (speed == 1) {
-        runtime.delay_entry = 0xc3;
-        runtime.delay_count = (uint16_t)( 0);
+        runtime.delay_entry = OP_RET;
+        runtime.delay_count = 0;
         return;
     }
     if (speed == 0)
@@ -1292,7 +1299,7 @@ int32_t play_loop(void)
     global.repeat_div = 0;
     global.key_action = 0;
     global.speed_step = global.speed_limit = 250;
-    if (runtime.delay_entry != 0xc3) {
+    if (runtime.delay_entry != OP_RET) {
         global.speed_step = 3;
         global.speed_limit = 3;
     }
