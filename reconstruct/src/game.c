@@ -1348,7 +1348,7 @@ int32_t play_loop(void)
 
     /* Wait for the action key, or two thousand ticks, before serving. */
     if (global.input_active_fn != INPUT_DEMO_FN) {
-        global.serve_timeout = (uint16_t)(0x7d0);
+        global.serve_timeout = 2000;
         for (;;) {
             global.serve_timeout = (uint16_t)(global.serve_timeout - 1);
             if (global.serve_timeout == 0)
@@ -7540,7 +7540,7 @@ int32_t bonus_script(ent_anim_t *b, uint32_t *px, uint32_t *py)
 void bonus_stop_monsters(void)
 {
     global.extra_on = 1;
-    global.serve_timeout = (uint16_t)(0x2710);
+    global.serve_timeout = 10000;
     global.extra_timer = 400;
     fill_column(0x1a8b, 0xaaaa);
     global.extra_pos = (uint16_t)(0x1a8b);
