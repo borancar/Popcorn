@@ -550,7 +550,7 @@ void build_shifted_sprites(void)
                 uint8_t *r = out + row * PADDLE_BYTES;
                 /* One pixel is two bits, so the shift is done twice. */
                 for (int32_t twice = 0; twice < 2; twice++) {
-                    uint32_t carry = 0;
+                    uint8_t carry = 0;
                     for (int32_t b = 0; b < PADDLE_BYTES; b++) {
                         uint32_t v = r[b];
                         r[b] = (uint8_t)((v >> 1) | (carry << 7));
@@ -626,7 +626,7 @@ void intro_curtain(void)
             for (int32_t i = 0; i < 50; i++)
                 game_delay();
             ah = ((ah << 2) | 3) & 0xff;        /* two `stc; rcl ah,1` */
-            uint32_t al = 0x55 & ah;
+            uint8_t al = 0x55 & ah;
 
             io_wait_retrace();
             uint16_t di = di0;
@@ -658,7 +658,7 @@ void intro_curtain(void)
         memcpy(global.scratch2.curtain_work, global.curtain_image[105 - rows], n);
 
         for (uint32_t i = 0; i < n && i < 0xbd; i++) {
-            uint32_t al = global.scratch2.curtain_work[i], out = 0;
+            uint8_t al = global.scratch2.curtain_work[i], out = 0;
             for (int32_t k = 0; k < 4; k++) {
                 uint32_t hi = (al >> 7) & 1;
                 al = (al << 1) & 0xff;
@@ -760,7 +760,7 @@ void intro_reveal(void)
 {
     uint32_t bx0 = 0x230;
     for (int32_t dl = 52; dl > 0; dl--, bx0++) {
-        uint32_t al = 0xc0;
+        uint8_t al = 0xc0;
         uint16_t di0 = bx0;
         for (int32_t dh = 4; dh > 0; dh--) {
             al &= 0x55;
@@ -1008,7 +1008,7 @@ void game_main(const char *dir, const char *levels)
                 continue;
             }
 
-            uint32_t key = io_get_key();
+            uint16_t key = io_get_key();
 
             /* 1ac2:0213 is a chain of compares, not a table, and the cheat
              * matcher sits in the middle of it at 1ac2:0240 rather than at
@@ -1124,7 +1124,7 @@ static void input_keys_mouse(void)
 {
     if (!io_key_ready())
         return;                         /* 1ac2:1658 */
-    uint32_t key = io_get_key();
+    uint16_t key = io_get_key();
 
     /* 1ac2:165e is F9, and it is **not** repeated here. The original reaches
      * it only with the mouse, because the keyboard mode installs a handler
@@ -1134,7 +1134,7 @@ static void input_keys_mouse(void)
      * toggle twice and look exactly like F9 not working. */
     if (key == ((KEY_ESC << 8) | KEY_ESCAPE_CHAR)) {   /* 1ac2:1669 */
         screen_stash();                 /* 1ac2:4ba9 */
-        uint32_t k;
+        uint16_t k;
         do {
             io_present();
             if (!io_pump())
@@ -1167,7 +1167,7 @@ static void input_keys_keyboard(void)
         return;
     screen_stash();                     /* 1ac2:4ba9 */
     restore_int09();                    /* 1ac2:03d1 */
-    uint32_t k;
+    uint16_t k;
     do {
         io_present();
         if (!io_pump())
@@ -1711,7 +1711,7 @@ uint16_t draw_brick_row(uint16_t y)
     const uint8_t *cells = &global.level.cells[(row >> 3) * BRICK_COLS];
 
     for (int32_t c = 0; c < BRICK_COLS; c++, di += BRICK_BYTES) {
-        uint32_t cell = cells[c];
+        uint8_t cell = cells[c];
         if (cell == 0x0c) {
             cell_special(row & 0xff, c, di);
             continue;
@@ -2305,7 +2305,7 @@ static void brick_score(uint16_t a, uint16_t b, uint16_t c)
 
 /* The common opening: score, sound, and clear the ball's bounce counter. */
 static void brick_common(ball_t *ball, uint32_t sound,
-                         uint32_t a, uint32_t b, uint32_t c)
+                         uint16_t a, uint16_t b, uint16_t c)
 {
     brick_score(a, b, c);
     runtime.sound_request = (uint8_t)sound;
@@ -2545,7 +2545,7 @@ void xor_sprite_16x7(uint16_t x, uint16_t y, const uint8_t *src)
  */
 void score_add(void)
 {
-    uint32_t carry = 0;
+    uint8_t carry = 0;
     for (int32_t i = 5; i >= 0; i--) {          /* least significant first */
         uint32_t sum = (global.score_text[i] & 0x0f) + global.score_add[i]
                      + (carry ? 1 : 0);
@@ -2661,7 +2661,7 @@ void walker_draw(uint32_t x)
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < 7; r++) {
             uint8_t *row = global.walker_work[r];
-            uint32_t carry = 0;
+            uint8_t carry = 0;
             for (int32_t b = 0; b < 3; b++) {
                 uint32_t v = row[b];
                 row[b] = (uint8_t)((v >> 1) | (carry << 7));
@@ -3075,7 +3075,7 @@ void sprite_shift_draw(uint16_t x, uint16_t y, const uint8_t *src)
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < 16; r++) {
             uint8_t *row = global.sprite_work[r];
-            uint32_t carry = 0;
+            uint8_t carry = 0;
             for (int32_t b = 0; b < 5; b++) {
                 uint32_t v = row[b];
                 row[b] = (uint8_t)((v >> 1) | (carry << 7));
@@ -3168,7 +3168,7 @@ void bonus_release(const ent_hatch_t *h)
     b->sprite.timer = kind->timer;       /* one word in the original */
     b->sprite.period = kind->period;
 
-    uint32_t al = h->x;
+    uint8_t al = h->x;
     if (al) {
         al = (al - 8) & 0xff;
         b->arg.move.mode = 2;
@@ -3481,7 +3481,7 @@ void brick_9(hit_t *hit, ball_t *ball)
         hit->cell_ptr;
 
     /* A cell that is not this one. */
-    uint32_t cell, idx;
+    uint8_t cell, idx;
     do {
         idx = global.level.teleport[game_random(io_ticks(), n)];
         cell = global_off(global.level.cells) + idx;
@@ -3687,7 +3687,7 @@ void bonus_hits_ball(const ent_sprite_t *s, const ball_t *ball)
 /* Which ball the collision found - the original's DI across 3df1/3f20. */
 static int32_t g_hit_ball;              /* an index: 0 was the original's default */
 
-void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny)
+void bonus_update(ent_sprite_t *s, uint16_t nx, uint16_t ny)
 {
     global.hit_kind = 0;
 
@@ -3918,7 +3918,7 @@ void draw_paddle_shifted(const uint8_t *sprite)
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
         for (int32_t r = 0; r < PADDLE_ROWS; r++) {
             uint8_t *row = &global.paddle_pix[0][r * PADDLE_BYTES];
-            uint32_t carry = 0;
+            uint8_t carry = 0;
             for (int32_t b = 0; b < PADDLE_BYTES; b++) {
                 uint32_t v = row[b];
                 row[b] = (uint8_t)((v >> 1) | (carry << 7));
@@ -4382,7 +4382,7 @@ void bonus_slower_ball(void)
 /* The dispatch at 1ac2:337d. Kind 8 ends the level and is not here: it throws
  * four words off the stack and jumps into 0x4210, which no C call can do, so
  * it is handled where the morph animation calls this. */
-void bonus_effect(uint32_t kind)
+void bonus_effect(uint8_t kind)
 {
     switch (kind) {
     case 0: bonus_points(); break;
@@ -4565,7 +4565,7 @@ void entity_paddle_fx(ent_morph_t *m)
      * `pending` is 1 while shrinking the old paddle and 0 while growing the
      * new one. */
     uint16_t table_ptr;
-    uint32_t kind;
+    uint8_t kind;
     if (m->pending != 0) {
         table_ptr = global_off(global.paddle_shrink);
         global.paddle_step = 0;
@@ -4596,7 +4596,7 @@ void entity_paddle_fx(ent_morph_t *m)
 
 /* 1ac2:34c5  morph_begin - start a stage: remember its sprite list and run
  * the first frame. */
-void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint32_t kind)
+void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint8_t kind)
 {
     m->sprites_ptr = global_table_w(table_ptr, kind);
     m->step = 6;
@@ -4669,7 +4669,7 @@ void level_between(void)
     for (int32_t row = 0; row < 14; row++, y += 8) {
         uint32_t x = 8;
         for (int32_t col = 0; col < 12; col++, x += 0x10) {
-            uint32_t cell = global.level.cells[row * 12 + col];
+            uint8_t cell = global.level.cells[row * 12 + col];
             if (cell == 0x0c) {
                 cell_hole_draw(x, y);
                 continue;
@@ -4900,7 +4900,7 @@ uint8_t screen_player_names(void)
 
 uint16_t frame_band(uint16_t di, uint32_t fill)
 {
-    uint32_t phase = runtime.frame_phase;
+    uint8_t phase = runtime.frame_phase;
     for (int32_t i = 0; i < 3; i++)
         g_vram[(di + i) & (CGA_SIZE - 1)] = global.frame_corner_left[phase][i];
     di += 3;
@@ -5317,7 +5317,7 @@ void banner_shift(void)
     uint16_t di = BANNER_ROW;
     for (int32_t row = 0; row < 6; row++) {
         for (int32_t twice = 0; twice < 2; twice++) {
-            uint32_t carry = 0;
+            uint8_t carry = 0;
             for (int32_t b = 0; b < BANNER_LEN; b++) {
                 uint32_t a = (di - b) & (CGA_SIZE - 1);
                 uint32_t v = g_vram[a];
@@ -5495,7 +5495,7 @@ void play_teardown(void)
  * *cell index* - `(di - 0x2f18) % 12` on a vram offset - and picked the wrong
  * four bytes. `di` steps four a column, so it cycled with period three.
  */
-void cell_special(uint32_t row, uint32_t col, uint16_t di)
+void cell_special(uint8_t row, uint8_t col, uint16_t di)
 {
     const uint8_t *src = &assets.hole_picture[row & 0xff][col * 4];
     for (int32_t b = 0; b < 4; b++)
@@ -5996,7 +5996,7 @@ uint16_t ending_particle_init(particle_t *p, uint16_t ax_in)
  */
 void ending_blob(uint32_t pos)
 {
-    uint32_t al = (pos & 0xff) >> 2;
+    uint8_t al = (pos & 0xff) >> 2;
     uint8_t ah = pos >> 8;
     uint16_t di = al;
     if (ah & 1)
@@ -6163,7 +6163,7 @@ void ending_plot(uint16_t x, uint16_t y)
     uint16_t di = (y & 1) ? CGA_PLANE : 0;
     uint32_t row = y >> 1;
     di += row * CGA_STRIDE;
-    uint32_t phase = ((x & 1) ? 1 : 0) + ((x & 2) ? 2 : 0);
+    uint8_t phase = ((x & 1) ? 1 : 0) + ((x & 2) ? 2 : 0);
     di += x >> 2;
 
     uint16_t d = di;
@@ -7311,7 +7311,7 @@ int32_t next_player(const char *dir)
      * they came back with - the two digits are the score's top two of six, so
      * bumping the second is 20,000, not 2,000. They are pulled out with
      * `and ax,0x0e0f`, bumped, and carried by hand. */
-    uint32_t al = global.score_text[0] & 0x0f;
+    uint8_t al = global.score_text[0] & 0x0f;
     uint8_t ah = (global.score_text[1] & 0x0e) + 2;
     if (ah >= 10) {
         al++;
@@ -7593,7 +7593,7 @@ static void demo_clamp(void)
 void input_demo(void)
 {
     if (io_key_ready()) {
-        uint32_t key = io_get_key();
+        uint16_t key = io_get_key();
         if ((key >> 8) == 0x44) {               /* F10 */
             employee_enter();                   /* 1ac2:4ae0 */
             while ((io_get_key() >> 8) == 0x44)
@@ -7666,7 +7666,7 @@ void input_demo(void)
 int32_t cheat_sequence(char key)
 {
     const uint8_t *at = runtime_ptr(runtime.cheat_cursor_ptr);
-    uint32_t al = (uint8_t)key ^ 0xaa;
+    uint8_t al = (uint8_t)key ^ 0xaa;
 
     if (al != at[0]) {
         /* Not the next one. The same key twice is not a failure. */

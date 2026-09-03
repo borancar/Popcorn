@@ -414,7 +414,7 @@ int32_t io_key_ready(void)
     return key_head != key_tail;
 }
 
-uint32_t io_get_key(void)
+uint16_t io_get_key(void)
 {
     if (key_pinned) {
         uint32_t k = pinned_key;

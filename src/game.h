@@ -1569,7 +1569,7 @@ void io_delay_cycles(uint32_t cycles); /* what the busy-wait at 0x164c cost */
 void io_frame_pace(void);              /* one play-loop frame, against the 60 Hz screen */
 extern uint32_t g_play_hz;             /* measured play-loop rate, 326 Hz */
 int32_t  io_key_ready(void);               /* INT 16h AH=01 */
-uint32_t io_get_key(void);             /* INT 16h AH=00: scan<<8 | ascii */
+uint16_t io_get_key(void);             /* INT 16h AH=00: scan<<8 | ascii */
 void io_flush_keys(void);
 void io_script_key_shift(uint32_t scan, uint32_t ms, int32_t shift);
 #define io_script_key(scan, ms) io_script_key_shift((scan), (ms), 0)
@@ -1764,7 +1764,7 @@ void bonus_slower_ball(void);     /* 1ac2:31e8 */
 void bonus_stop_monsters(void);   /* 1ac2:3200 */
 int32_t bonus_end_level(void);    /* 1ac2:2da0 */
 int32_t bonus_end_level_body(void); /* 1ac2:4210 */
-void bonus_effect(uint32_t kind);
+void bonus_effect(uint8_t kind);
 void scroll_up_band(void);        /* 1ac2:2109 */
 void scroll_down_band(void);      /* 1ac2:2148 */
 void draw_paddle_raw(const uint8_t *src);/* 1ac2:22a9 */
@@ -1776,13 +1776,13 @@ void play_teardown(void);         /* 1ac2:41d4 */
 void entity_call(entity_t *e);  /* the call at 1ac2:1b5e */
 void entity_capsule(ent_fall_t *f); /* 1ac2:3273 */
 void entity_paddle_fx(ent_morph_t *m); /* 1ac2:3386 */
-void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint32_t kind); /* 1ac2:34c5 */
+void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint8_t kind); /* 1ac2:34c5 */
 void morph_step(ent_morph_t *m);       /* 1ac2:34d7 */
 void entity_popup(ent_fall_t *f);   /* 1ac2:3561 */
 void entity_capsule_frames(ent_fall_t *f, uint16_t table_ptr);
 void entity_ball_hold(ent_anim_t *a); /* 1ac2:37e0 */
 void ball_place(ball_t *ball, uint16_t x, uint16_t y);
-void bonus_update(ent_sprite_t *s, uint32_t nx, uint32_t ny); /* 1ac2:3df1 */
+void bonus_update(ent_sprite_t *s, uint16_t nx, uint16_t ny); /* 1ac2:3df1 */
 uint16_t pixel_xor(uint16_t x, uint16_t y);        /* 1ac2:30dd */
 void shot_xor(uint16_t x, uint16_t y);             /* 1ac2:306b */
 void bonus_hits_ball(const ent_sprite_t *s, const ball_t *ball);  /* 1ac2:3f20 */
@@ -1836,7 +1836,7 @@ void level_colours(void);         /* 1ac2:044b */
 void level_intro(void);           /* 1ac2:1eb9 */
 uint16_t draw_brick_row(uint16_t y);  /* 1ac2:2034 */
 void draw_sprite_20x6(uint16_t x, uint16_t y, const uint8_t *src); /* 1ac2:20b9 */
-void cell_special(uint32_t row, uint32_t col, uint16_t di); /* 1ac2:41e5 */
+void cell_special(uint8_t row, uint8_t col, uint16_t di); /* 1ac2:41e5 */
 void field_backdrop(uint32_t y);  /* 1ac2:1fc1 */
 void life_lost(void);             /* 1ac2:0735 */
 void entities_clear(void);        /* 1ac2:055e */
