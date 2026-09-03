@@ -314,7 +314,7 @@ void io_pin_mouse(uint32_t x, uint32_t buttons)
 }
 
 
-void io_mouse_warp(uint32_t x, uint32_t y)
+void io_mouse_warp(uint16_t x, uint16_t y)
 {
     /* A warp is what the next read returns, in lockstep as much as here: the
      * play loop centres the pointer at 1ac2:1925 before the serve, and a port
