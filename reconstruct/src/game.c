@@ -1655,10 +1655,17 @@ retry:
  *     if (y & 1) di += 0x2000           odd scan lines live in the far half
  *     di += (y >> 1) * 80               `shl ax,4` then `shl ax,2` twice more
  */
-/* A pixel position to the byte that holds it. x and y are the byte registers
- * the original keeps a position in, and the answer is DI, so all three are
- * the width they are in the machine. */
-static uint16_t cga_at(uint8_t x, uint8_t y)
+/* A pixel position to the byte that holds it. The answer is DI and is
+ * sixteen bits for that reason; x is sixteen bits for a different one.
+ *
+ * Most callers hand it a position out of a uint8_t field and a byte would
+ * carry those. plot_pixel is the exception and it decides the type: it is
+ * INT 10h AH=0Ch, whose column arrives in **CX**, a word, and its caller
+ * admits any x up to 319. No path that runs today gets near that - the
+ * menu's kernels launch from 104 and swing about 35 either way - so a byte
+ * would truncate nothing and every test here would pass. That is the reason
+ * to write the width down rather than measure it. */
+static uint16_t cga_at(uint16_t x, uint16_t y)
 {
     uint16_t di = x >> 2;
     if (y & 1)
