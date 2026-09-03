@@ -392,24 +392,28 @@ void draw_char(char c, uint16_t di)
  * The tick counter is the only part the port has to stand in for; everything
  * else is in the image. `ticks` is passed in rather than read here so that a
  * replay can be made deterministic by feeding it a fixed sequence.
+ *
+ * It arrives as a word, which is all the original reads: `mov ax,[0x6c]` on
+ * the low half of the counter, and AX is what the stirring runs in from
+ * there. io_ticks hands over the whole dword and the narrowing at the call
+ * is that `mov`.
  */
 
-uint8_t game_random(uint32_t ticks, uint8_t limit)
+uint8_t game_random(uint16_t ticks, uint8_t limit)
 {
     io_log_random(limit);               /* for sidebyside.py, no-op otherwise */
-    uint16_t ax = ticks & 0xffff;
     /* Ten words out of the **entity pool**, from entity 2's variant on:
      * 0x3164 is entities[2] plus two, so what gets folded in is whatever the
      * entities happen to be holding this frame. */
     const uint8_t *stir = (const uint8_t *)&global.entities[2].p;
     for (uint16_t i = 0; i < 10; i++)
-        ax = (ax + stir[i * 2] + (stir[i * 2 + 1] << 8)) & 0xffff;
-    ax = (ax + global.rng_state) & 0xffff;
-    global.rng_state = (uint16_t)((global.rng_state + 0x5ec5) & 0xffff);
+        ticks += stir[i * 2] + (stir[i * 2 + 1] << 8);
+    ticks += global.rng_state;
+    global.rng_state += 0x5ec5;
 
     /* `add al,ah` then `xor ah,ah` then `div dl`: folded to eight bits before
      * the divide, so the result really is only ever 0..255 wide. */
-    uint8_t al = (ax & 0xff) + (ax >> 8);
+    uint8_t al = (ticks & 0xff) + (ticks >> 8);
     return limit ? al % limit : 0;
 }
 
@@ -618,35 +622,36 @@ void load_high_scores(const char *dir)
 
 void intro_curtain(void)
 {
-    uint32_t ah = 0, dl = 0xff, di0 = 0x213f;
+    uint8_t  ah = 0, dl = 0xff;
+    uint16_t di0 = 0x213f;
 
     for (uint16_t bx = 26; bx > 0; bx--, di0--) {
         ah = 0;
         for (uint16_t dh = 4; dh > 0; dh--) {
             for (uint16_t i = 0; i < 50; i++)
                 game_delay();
-            ah = ((ah << 2) | 3) & 0xff;        /* two `stc; rcl ah,1` */
+            ah = (ah << 2) | 3;                 /* two `stc; rcl ah,1` */
             uint8_t al = 0x55 & ah;
 
             io_wait_retrace();
             uint16_t di = di0;
             for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
-                g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
+                g_vram[di & (CGA_SIZE - 1)] = al;
             di = (di0 - 0x1fb0) & 0xffff;
             for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
-                g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
+                g_vram[di & (CGA_SIZE - 1)] = al;
 
             if (bx == 1) {
                 /* The last column is drawn a second time from `dl`, which is
                  * rotated with carry *clear*, so it empties as `ah` fills. */
-                dl = (dl << 2) & 0xff;
+                dl = dl << 2;
                 al = 0x55 & dl;
                 di = 0x213f;
                 for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
-                    g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
+                    g_vram[di & (CGA_SIZE - 1)] = al;
                 di = (0x213f - 0x1fb0) & 0xffff;
                 for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
-                    g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
+                    g_vram[di & (CGA_SIZE - 1)] = al;
             }
         }
     }
@@ -766,7 +771,7 @@ void intro_reveal(void)
             al &= 0x55;
             uint16_t di = di0;
             for (uint16_t cl = 7; cl > 0; cl--, di += 0x370)
-                g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
+                g_vram[di & (CGA_SIZE - 1)] = al;
             for (uint16_t i = 0; i < 25; i++)
                 game_delay();
             al = ((al >> 1) | 0x80) & 0xff;     /* stc; rcr al,1 */
@@ -1563,7 +1568,7 @@ int32_t g_resume_in_bonus;
 /* popcorn-dev --level N: which level a game starts on, or -1 for the first,
  * which is what the game does. Watching what goes wrong on level 34 should
  * not mean playing thirty-three levels to reach it. */
-int32_t g_start_level = -1;
+uint8_t g_start_level = NO_START_LEVEL;
 
 void play_session(void)
 {
@@ -1583,7 +1588,7 @@ void play_session(void)
     global.lives = 5;
 
     /* A demo starts on a random level; a game always starts on the first. */
-    uint32_t lv = game_random(io_ticks(), 30);
+    uint8_t lv = game_random(io_ticks(), 30);
     if (global.input_active_fn != INPUT_DEMO_FN)
         lv = 0;
     /* popcorn-dev --level N. The draw above still happens: it is one of the
@@ -1591,9 +1596,9 @@ void play_session(void)
      * game takes, so a level started this way would not be the level that is
      * played normally. Overriding the result afterwards leaves the sequence
      * exactly where the game put it. */
-    if (g_start_level >= 0)
-        lv = (uint32_t)g_start_level;
-    global.level_number = (uint8_t)lv;
+    if (g_start_level != NO_START_LEVEL)
+        lv = g_start_level;
+    global.level_number = lv;
     global.level_src_ptr = assets_off(&assets.levels[global.level_number]);
     panel_draw();
 
@@ -1957,8 +1962,8 @@ void ball_after(ball_t *b)
         b->anchor_x = b->x;
         b->anchor_y = b->y;
         b->acc_x = b->acc_y = 0;
-        b->dy = (uint8_t)(game_random(io_ticks(), 5) + 1);
-        b->dx = (uint8_t)(game_random(io_ticks(), 5) + 1);
+        b->dy = game_random(io_ticks(), 5) + 1;
+        b->dx = game_random(io_ticks(), 5) + 1;
     }
 
     uint16_t x = b->x, y = b->y;
@@ -2351,7 +2356,7 @@ static void brick_degrade(hit_t *hit, uint32_t from, uint32_t to)
  * table until an entry is at least random(0xff) and take that index. */
 static uint8_t bonus_kind(void)
 {
-    uint16_t r = game_random(io_ticks(), 255);
+    uint8_t r = game_random(io_ticks(), 255);
     uint16_t i = 0;
     while (global.bonus_odds[i] < r)
         i++;
@@ -3161,7 +3166,7 @@ void bonus_release(const ent_hatch_t *h)
     e->handler_fn = ENTITY_BONUS_FN;
     ent_anim_t *b = &e->p.anim;
     b->arg.move.mode = 0;
-    b->arg.move.steps = (uint8_t)(game_random(io_ticks(), 60) + 9);
+    b->arg.move.steps = game_random(io_ticks(), 60) + 9;
 
     const bonus_kind_t *kind = &global.bonus_kinds[game_random(io_ticks(), 8)];
     b->sprite.frame_ptr = kind->frame_ptr;
@@ -3353,12 +3358,12 @@ int32_t bonus_steer(ent_anim_t *b, uint16_t *px, uint16_t *py)
         if (moved)
             return 1;
     }
-    b->arg.move.mode = (uint8_t)game_random(io_ticks(), 4);
+    b->arg.move.mode = game_random(io_ticks(), 4);
     if (b->arg.move.mode == 1) {
         b->arg.move.steps = 0xff;
         return 1;
     }
-    b->arg.move.steps = (uint8_t)game_random(io_ticks(), 61);
+    b->arg.move.steps = game_random(io_ticks(), 61);
     return 1;
 }
 
@@ -3803,8 +3808,8 @@ void entity_bonus(ent_anim_t *b)
 
     {   /* A ball: fresh slope, re-anchor, and reverse both ways. */
         ball_t *b = &global.balls[g_hit_ball];
-        b->dy = (uint8_t)(game_random(io_ticks(), 7) + 1);
-        b->dx = (uint8_t)(game_random(io_ticks(), 7) + 1);
+        b->dy = game_random(io_ticks(), 7) + 1;
+        b->dx = game_random(io_ticks(), 7) + 1;
         b->anchor_x = b->x;
         b->anchor_y = b->y;
         b->acc_x = b->acc_y = 0;
@@ -5180,7 +5185,7 @@ void menu_banner_tick(void)
  * threads its answer from one call to the next - starting from zero gives a
  * different sequence and the two runs diverge from the very first kernel.
  */
-uint16_t particle_random(uint16_t ax, uint32_t ticks, uint16_t limit)
+uint16_t particle_random(uint16_t ax, uint16_t ticks, uint16_t limit)
 {
     uint16_t n = global.particle_count;
     /* `lodsw` from the base of the block, particle_count times - so it reads
@@ -5188,9 +5193,9 @@ uint16_t particle_random(uint16_t ax, uint32_t ticks, uint16_t limit)
      * word falls inside a record is not something it knows or cares about. */
     const uint8_t *p = (const uint8_t *)global.particles;
     for (uint16_t i = 0; i < n; i++)
-        ax = (ax + p[i * 2] + (p[i * 2 + 1] << 8)) & 0xffff;
-    ax = (ax + ticks) & 0xffff;
-    ax = (ax + global.particle_seed) & 0xffff;
+        ax += p[i * 2] + (p[i * 2 + 1] << 8);
+    ax += ticks;
+    ax += global.particle_seed;
     if (!limit)
         return 0;
     global.particle_seed = (uint16_t)(global.particle_seed + ax / limit);
