@@ -1604,7 +1604,7 @@ void paddle_row_offsets(uint16_t x, paddle_rows_t *rows); /* 1ac2:22de */
 void blit_xor(const uint8_t *pixels, const paddle_rows_t *rows); /* 1ac2:2281 */
 void draw_paddle(const uint8_t *sprite);                /* 1ac2:221a */
 void draw_char(char c, uint16_t di);              /* 1ac2:0c64 */
-uint8_t  game_random(uint32_t ticks, uint8_t limit);    /* 1ac2:40c0 */
+uint8_t  game_random(uint16_t ticks, uint8_t limit);    /* 1ac2:40c0 */
 void speaker_on(void);                                  /* 1ac2:0085 */
 void speaker_off(void);                                 /* 1ac2:0090 */
 void sound_tick(void);                                  /* 1ac2:0097 */
@@ -1650,7 +1650,7 @@ void menu_particles_tick(void);   /* 1ac2:53c2 */
 void menu_banner_tick(void);      /* 1ac2:50df */
 void banner_shift(void);          /* 1ac2:5140 */
 void brick_11_after(uint16_t x, uint16_t y);  /* 1ac2:4c4b */
-uint16_t particle_random(uint16_t ax, uint32_t ticks, uint16_t limit); /* 1ac2:5448 */
+uint16_t particle_random(uint16_t ax, uint16_t ticks, uint16_t limit); /* 1ac2:5448 */
 uint16_t particle_init(particle_t *p, uint16_t ax_in);  /* 1ac2:548a */
 void menu_arrow(void);            /* 1ac2:490d */
 void arrow_head(uint16_t di);     /* 1ac2:492f */
@@ -1713,7 +1713,11 @@ void panel_finish(void);          /* 1ac2:09c5 */
 extern int32_t g_resume_at_frame_top;   /* lockstep: skip play_loop's prologue */
 extern int32_t g_resume_in_session;     /* lockstep: rejoin play_session's retry loop */
 extern int32_t g_resume_in_bonus;       /* lockstep: rejoin inside the bonus */
-extern int32_t g_start_level;           /* --level N, or -1 for the first */
+/* popcorn-dev --level N. Levels are 0 to 49, so 0xff is free to mean "not
+ * asked for" - the same all-ones idiom END_PTR uses, and the reason this
+ * is a byte rather than a signed word with -1 in it. */
+#define NO_START_LEVEL  0xff
+extern uint8_t g_start_level;
 extern int32_t g_in_bonus;              /* the end-of-level bonus is running */
 int32_t  play_loop(void);             /* 1ac2:1873 - transcribed */
 uint16_t draw_text(const char *src, uint16_t count, uint16_t di); /* 1ac2:10d1 */

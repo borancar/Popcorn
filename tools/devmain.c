@@ -204,7 +204,7 @@ int32_t main(int32_t argc, char **argv)
             resume = argv[++i];
         else if (!strcmp(argv[i], "--level") && i + 1 < argc) {
             int32_t n = atoi(argv[++i]);
-            g_start_level = n < 0 ? 0 : n > 0x31 ? 0x31 : n;
+            g_start_level = (uint8_t)(n < 0 ? 0 : n > 49 ? 49 : n);
         }
         else if (!strcmp(argv[i], "--cmdline") && i + 1 < argc)
             levels = argv[++i];
