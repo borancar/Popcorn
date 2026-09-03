@@ -99,32 +99,29 @@ void ball_step(ball_t *b)
 #define BALL_HEIGHT            4
 #define INITIAL_PADDLE_WIDTH  27
 
-/* The playfield's last column, and its last row, which are the same 199.
+/* The playfield's edges. They live here rather than beside ball_after,
+ * which used to be the only thing that wanted them: play_prepare puts the
+ * paddle's left limit on WALL_LEFT.
  *
- * It is spelled nowhere in the original. It is where the ball's right edge
+ * These are the walls themselves, not what the ball's x may be set to. The
+ * ball's x is the left of a four-wide sprite, so it turns three short of
+ * WALL_RIGHT and is lost three short of FLOOR - the tests say so where they
+ * stand, rather than the subtraction being folded into the name.
+ *
+ * 199 is spelled nowhere in the original. It is where the ball's right edge
  * sits at the moment it turns, and it is the sum paddle_x + paddle_width
  * always makes - morph_step keeps that true while the paddle grows, taking
- * off paddle_max whatever it adds to paddle_width. Everything below is
- * measured back from it.
+ * off paddle_max whatever it adds to paddle_width. The paddle's width runs
+ * from its x to its right *side* rather than across a sprite, which is why
+ * the paddle is allowed the pixel the ball is not.
  *
- * The two conventions differ by one and that is not a mistake: the ball's x
- * is the left of a four-wide sprite, so its limit is the edge less three,
- * while the paddle's width runs from its x to its right *side*, so the
- * paddle is allowed the pixel the ball is not. */
-#define FIELD_EDGE           199
-
-/* The edges, in the x and y the ball and the paddle are held in. They live
- * here rather than beside ball_after, which used to be the only thing that
- * wanted them: play_prepare puts the paddle's left limit on WALL_LEFT.
- *
- * WALL_RIGHT and FLOOR come to the same number and stay two names, because
- * the ball turning round at the side and being lost at the bottom are not
- * the same event - and because one is the ball's width and the other its
- * height, which happen to be equal and need not stay so. */
+ * WALL_RIGHT and FLOOR are the same number and stay two names, because the
+ * ball turning round at the side and being lost at the bottom are not the
+ * same event. */
 #define WALL_LEFT              8
 #define WALL_TOP               4
-#define WALL_RIGHT  (FIELD_EDGE - BALL_WIDTH + 1)      /* 196 */
-#define FLOOR       (FIELD_EDGE - BALL_HEIGHT + 1)     /* 196 */
+#define WALL_RIGHT           199
+#define FLOOR                199
 
 #define REPEAT_RESET  5
 
@@ -1266,7 +1263,7 @@ int32_t play_loop(void)
      * byte the width came out zero, and a zero-width paddle clamps to the
      * left wall the moment the mouse is read. */
     global.paddle_width = global.paddle_sets[0].width;
-    global.paddle_max = FIELD_EDGE - INITIAL_PADDLE_WIDTH;
+    global.paddle_max = WALL_RIGHT - INITIAL_PADDLE_WIDTH;
     global.paddle_min = WALL_LEFT;
     global.repeat_count = 5;
     global.repeat_div = 5;
@@ -1910,7 +1907,7 @@ void ball_after(ball_t *b)
     }
 
     uint32_t x = b->x, y = b->y;
-    if (x <= WALL_LEFT || x >= WALL_RIGHT) {
+    if (x <= WALL_LEFT || x >= WALL_RIGHT - (BALL_WIDTH - 1)) {
         runtime.sound_request = SOUND_BOUNCE;
         b->dir_x = (x <= WALL_LEFT) ? 0 : 1;
         b->acc_x = 1;
@@ -1931,7 +1928,7 @@ void ball_after(ball_t *b)
 
     ball_bricks(b);                     /* 1ac2:254d */
 
-    if (b->y != FLOOR) {
+    if (b->y != FLOOR - (BALL_HEIGHT - 1)) {
         ball_paddle(b);                 /* 1ac2:2316 */
         return;
     }
@@ -6826,7 +6823,7 @@ int32_t ball_after_endgame(ball_t *b)
     io_frame_sync_extra(SYNC_ENDGAME);
     uint32_t x = b->x, y = b->y;
 
-    if (x <= WALL_LEFT || x >= WALL_RIGHT) {
+    if (x <= WALL_LEFT || x >= WALL_RIGHT - (BALL_WIDTH - 1)) {
         b->dir_x = (x <= WALL_LEFT) ? 0 : 1;
         runtime.sound_request = SOUND_BOUNCE;
         b->acc_x = 1;
@@ -6900,7 +6897,7 @@ int32_t ball_after_endgame(ball_t *b)
         return 0;
     }
 
-    if (b->y != FLOOR) {
+    if (b->y != FLOOR - (BALL_HEIGHT - 1)) {
         ball_paddle(b);
         return 0;
     }
@@ -7012,7 +7009,7 @@ static int32_t bonus_end_level_run(void)
     panel_reveal();
 
     global.paddle_kind = 0;
-    global.paddle_max = FIELD_EDGE - INITIAL_PADDLE_WIDTH;
+    global.paddle_max = WALL_RIGHT - INITIAL_PADDLE_WIDTH;
     global.paddle_min = WALL_LEFT;
     global.paddle_width = global.paddle_sets[0].width;
     blit_xor(global.paddle_pix[0], &global.paddle_rows[0]);

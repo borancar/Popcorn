@@ -603,7 +603,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  paddle_morphing;           /* 0x2d3b a grow or shrink is running. Was two names for one byte: PADDLE_SUPPRESS, because the play loop stops drawing the paddle itself, and PADDLE_FORCE_DRAW, because draw_paddle_shifted redraws even when x has not moved */
     uint16_t morph_owner;               /* 0x2d3c the entity running it, so a second capsule does not fight the first */
     uint8_t  paddle_min;                /* 0x2d3e 8, which is WALL_LEFT: the paddle stops where the ball does. Nothing moves it. Was also PADDLE_LOW */
-    uint8_t  paddle_max;                /* 0x2d3f FIELD_EDGE - INITIAL_PADDLE_WIDTH, and it moves as the paddle grows: morph_step adds a width delta to paddle_width and subtracts the same from this (1ac2:34f0 and 1ac2:34f6), so the two always sum to FIELD_EDGE. Was also PADDLE_HIGH */
+    uint8_t  paddle_max;                /* 0x2d3f WALL_RIGHT - INITIAL_PADDLE_WIDTH, and it moves as the paddle grows: morph_step adds a width delta to paddle_width and subtracts the same from this (1ac2:34f0 and 1ac2:34f6), so the two always sum to WALL_RIGHT - the paddle's right side rests against the wall whatever width it is. Was also PADDLE_HIGH */
     uint8_t  repeat_count;              /* 0x2d40 frames until the held key moves the paddle again */
     uint8_t  _pad_08[4];
     uint16_t input_active_fn;           /* 0x2d45 the input routine in use, as the address the game calls through: 0x1654 mouse, 0x16d2 keyboard, 0x1785 demo. `_fn` because it is a **routine**, not data - a pointer the game calls rather than reads */
