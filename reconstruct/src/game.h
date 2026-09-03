@@ -1643,7 +1643,7 @@ void game_main(const char *dir, const char *levels);
  * this is where they were declared - nothing below is outstanding. The port's
  * one remaining stub is entity_unknown; see stubs.c.
  */
-void menu_particles_init(uint32_t ax_in);   /* 1ac2:5476 */
+void menu_particles_init(uint16_t ax_in);   /* 1ac2:5476 */
 void plot_pixel(uint16_t x, uint16_t y, uint32_t colour);
 void plot_pixel_xor(uint16_t x, uint16_t y, uint32_t colour);
 void menu_particles_tick(void);   /* 1ac2:53c2 */
@@ -1843,7 +1843,7 @@ void entities_clear(void);        /* 1ac2:055e */
 void level_between(void);         /* 1ac2:05f8 */
 void screen_game_over(void);      /* 1ac2:0473 */
 void ending_plot(uint16_t x, uint16_t y);     /* 1ac2:5add */
-void ending_particles_init(uint32_t ax); /* 1ac2:5a43 */
+void ending_particles_init(uint16_t ax); /* 1ac2:5a43 */
 void ending_particles_tick(void); /* 1ac2:5a56 */
 int32_t next_player(const char *dir);/* 1ac2:0d2e */
 void screen_results(const char *dir);   /* 1ac2:0ea3 */
