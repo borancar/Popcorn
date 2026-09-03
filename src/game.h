@@ -641,7 +641,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  laser_y;                   /* 0x2e7f the shot in flight; starts at 0xb3, the paddle's row */
     uint8_t  laser_x;                   /* 0x2e80 */
     uint8_t  net_on;                    /* 0x2e81 the safety net across the floor. **These four were named SHOT_ON, SHOT_LIFE, SHOT_TIMER and SHOT_POS, as though they were the laser's** - but 1ac2:3119, bonus_net, writes 0x2e81, 0x2e82 and 0x2e84, and the play loop's countdown over them ends in the same flash_bar(0x1554) the net's arrival plays. The laser is 0x2e7e-0x2e80 and nothing else */
-    uint16_t net_life;                  /* 0x2e82 frames the net lasts; bonus_net sets 0x1388, five thousand */
+    uint16_t net_life;                  /* 0x2e82 frames the net lasts; bonus_net sets 5000 */
     uint8_t  net_timer;                 /* 0x2e84 its redraw counter, reloaded with 200 */
     uint16_t net_pos;                   /* 0x2e85 where it is drawn */
     uint16_t extra_pos;                 /* 0x2e87 */

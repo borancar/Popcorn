@@ -1350,7 +1350,7 @@ int32_t play_loop(void)
     if (global.input_active_fn != INPUT_DEMO_FN) {
         global.serve_timeout = 2000;
         for (;;) {
-            global.serve_timeout = (uint16_t)(global.serve_timeout - 1);
+            global.serve_timeout--;
             if (global.serve_timeout == 0)
                 break;
             for (int32_t i = 0; i < 15; i++)
@@ -1465,14 +1465,14 @@ frames:
         if (global.net_on) {
             if (--global.net_timer == 0)
                 net_step(200);
-            global.net_life = (uint16_t)(global.net_life - 1);
+            global.net_life--;
             if (global.net_life == 0) {
                 global.net_on = 0;
                 flash_bar(0x1554);
             }
         }
         if (global.extra_on) {
-            global.extra_timer = (uint16_t)(global.extra_timer - 1);
+            global.extra_timer--;
             if (global.extra_timer == 0) {
                 /* One cell off the bar. `stosw` leaves di two on, and the
                  * two `dec di` put it back, so what follows is a plain step
@@ -1482,7 +1482,7 @@ frames:
                 global.extra_pos = (uint16_t)(cga_next_row(di));
                 global.extra_timer = 400;
             }
-            global.serve_timeout = (uint16_t)(global.serve_timeout - 1);
+            global.serve_timeout--;
             if (global.serve_timeout == 0)
                 global.extra_on = 0;
         }
@@ -4028,14 +4028,14 @@ int32_t ball_on_paddle(ball_t *b)
 
     int32_t release = global.key_action == 1;
     if (!release) {
-        global.hold_timer = (uint16_t)(global.hold_timer - 1);
+        global.hold_timer--;
         if (global.hold_timer == 0) {
             release = 1;
         } else if (((global.speed_limit - 1) & 0xff) == global.speed_step) {
             /* On the frame the ball would have moved, the timer runs down
              * twice, so a held ball is let go after the same amount of play
              * however fast the level has become. */
-            global.hold_timer = (uint16_t)(global.hold_timer - 1);
+            global.hold_timer--;
             if (global.hold_timer == 0)
                 release = 1;
         }
