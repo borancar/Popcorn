@@ -54,7 +54,7 @@ const char *g_dir = "";
 void ball_step(ball_t *b)
 {
     uint8_t dy = b->dy, dx = b->dx;
-    uint32_t off_x, off_y;
+    uint8_t off_x, off_y;
 
     if (dx >= dy) {                     /* x is the major axis */
         off_x = b->acc_x;
@@ -156,12 +156,12 @@ void input_keyboard(void)
      * never comes up because x never gets below the minimum in the first
      * place. Transcribed as it is rather than as it should be. */
     if (!go_left) {
-        uint8_t x = (uint8_t)(global.paddle_x + 1);
+        uint8_t x = global.paddle_x + 1;
         if (x > global.paddle_max)
             x = global.paddle_max;
         global.paddle_x = x;
     } else {
-        uint8_t x = (uint8_t)(global.paddle_x - 1);
+        uint8_t x = global.paddle_x - 1;
         if (x < global.paddle_min)
             x = global.paddle_min;
         global.paddle_x = x;
@@ -182,7 +182,7 @@ void input_keyboard(void)
  * not saturated.  Kept here because a pointer beyond 510 would wrap rather
  * than pin to the right wall, and that is the game's behaviour.
  */
-void input_mouse(uint32_t mouse_x, uint32_t buttons)
+void input_mouse(uint16_t mouse_x, uint16_t buttons)
 {
     global.key_action = (buttons & 3) ? 1 : 0;
 
@@ -273,9 +273,9 @@ void restore_screen(void)
 
 void paddle_row_offsets(uint16_t x, paddle_rows_t *rows)
 {
-    uint32_t off = (x >> 2) + PADDLE_ROW_BASE;
+    uint16_t off = (x >> 2) + PADDLE_ROW_BASE;
     for (uint16_t r = 0; r < PADDLE_ROWS; r++) {
-        rows->at[r] = (uint16_t)off;
+        rows->at[r] = off;
         off = cga_next_row(off);
     }
 }
@@ -331,7 +331,7 @@ void draw_paddle(const uint8_t *sprite)
            PADDLE_IMAGE + 1);
 
     uint16_t x = global.paddle_x;
-    global.paddle_prev_x = (uint8_t)x;
+    global.paddle_prev_x = x;
     paddle_row_offsets(x, &global.paddle_rows[0]);
 
     /* Pick the copy pre-shifted to this pixel within its byte. */
@@ -362,7 +362,7 @@ static uint8_t glyph_of(char c)
 {
     /* The cursor is 0xff, which is not a character and is negative in a
      * signed char, so the comparisons are done on the byte. */
-    uint8_t u = (uint8_t)c;
+    uint8_t u = c;
     if (u == ':')  return 0x26;
     if (u == 0xff) return 0x27;         /* the text-entry cursor */
     if (u == '-')  return 0x0b;
@@ -474,7 +474,7 @@ void sound_tick(void)
         return;
     }
     runtime.sound_ptr += 2;
-    runtime.sound_timer = (uint8_t)(note >> 8);
+    runtime.sound_timer = (note >> 8);
     io_sound(((note & 0xff) << 8) | 1);
 }
 
@@ -520,7 +520,7 @@ void game_delay(void)
  * Nothing sets that vector under the port, so `speed` comes from the command
  * line or defaults the way an unrun POPSPEED would.
  */
-void read_speed_setting(uint32_t speed)
+void read_speed_setting(uint8_t speed)
 {
     if (speed == 1) {
         runtime.delay_entry = OP_RET;
@@ -665,9 +665,9 @@ void intro_curtain(void)
         for (uint16_t i = 0; i < n && i < 0xbd; i++) {
             uint8_t al = global.scratch2.curtain_work[i], out = 0;
             for (uint16_t k = 0; k < 4; k++) {
-                uint32_t hi = (al >> 7) & 1;
+                uint8_t hi = (al >> 7) & 1;
                 al = (al << 1) & 0xff;
-                uint32_t lo = (al >> 7) & 1;
+                uint8_t lo = (al >> 7) & 1;
                 al = (al << 1) & 0xff;
                 out = hi ? (((out << 1) | 1) << 1 | lo) & 0xff
                          : (out << 2) & 0xff;
@@ -701,7 +701,7 @@ void intro_curtain(void)
  * backwards, so the source pointer runs continuously up through the image
  * while the destination steps one scan line at a time.
  */
-static void logo_pass(const uint8_t *src, uint32_t dest, int32_t rows,
+static void logo_pass(const uint8_t *src, uint16_t dest, int32_t rows,
                       int32_t erase, int32_t back)
 {
     const uint8_t *si = src;
@@ -763,7 +763,7 @@ void intro_logo(void)
  */
 void intro_reveal(void)
 {
-    uint32_t bx0 = 0x230;
+    uint16_t bx0 = 0x230;
     for (uint16_t dl = 52; dl > 0; dl--, bx0++) {
         uint8_t al = 0xc0;
         uint16_t di0 = bx0;
@@ -924,7 +924,7 @@ static void menu_redraw(void)
     global.particle_count = 80;
     menu_particles_init(0xb800);
     global.banner_state = 2;
-    global.banner_ptr = (uint16_t)global_off(global.banner_text);
+    global.banner_ptr = global_off(global.banner_text);
 }
 
 void game_main(const char *dir, const char *levels)
@@ -1712,7 +1712,7 @@ uint16_t draw_brick_row(uint16_t y)
 {
     uint16_t di = cga_at(0, y) + BRICK_LEFT;
     uint8_t row = y - BRICK_TOP;
-    uint32_t sub = (row & 7) * 4;
+    uint8_t sub = (row & 7) * 4;
     const uint8_t *cells = &global.level.cells[(row >> 3) * BRICK_COLS];
 
     for (uint16_t c = 0; c < BRICK_COLS; c++, di += BRICK_BYTES) {
@@ -2309,11 +2309,11 @@ static void brick_score(uint16_t a, uint16_t b, uint16_t c)
 }
 
 /* The common opening: score, sound, and clear the ball's bounce counter. */
-static void brick_common(ball_t *ball, uint32_t sound,
+static void brick_common(ball_t *ball, uint8_t sound,
                          uint16_t a, uint16_t b, uint16_t c)
 {
     brick_score(a, b, c);
-    runtime.sound_request = (uint8_t)sound;
+    runtime.sound_request = sound;
     if (ball)
         ball->bounces = 0;
 }
@@ -2325,7 +2325,7 @@ static void brick_common(ball_t *ball, uint32_t sound,
  * for it put the slot pointer's high byte, 0x2f, where the original had the
  * previous occupant's value - one byte, 62,536 frames in. */
 static entity_t *brick_entity(hit_t *hit, uint16_t handler_fn,
-                             uint16_t frames_ptr, uint32_t rate)
+                             uint16_t frames_ptr, uint8_t rate)
 {
     entity_t *e = entity_alloc();
     e->handler_fn = handler_fn;
@@ -2552,11 +2552,11 @@ void score_add(void)
 {
     uint8_t carry = 0;
     for (int16_t i = 5; i >= 0; i--) {          /* least significant first */
-        uint32_t sum = (global.score_text[i] & 0x0f) + global.score_add[i]
+        uint8_t sum = (global.score_text[i] & 0x0f) + global.score_add[i]
                      + (carry ? 1 : 0);
         uint8_t adjusted = sum + 6;
         carry = (adjusted & 0xf0) || (sum & 0xf0);
-        global.score_text[i] = (uint8_t)('0' | ((carry ? adjusted : sum) & 0x0f));
+        global.score_text[i] = ('0' | ((carry ? adjusted : sum) & 0x0f));
     }
     /* Redraw the six digits into the panel. */
     uint16_t di = 0x15d2;
@@ -2581,7 +2581,7 @@ void score_add(void)
         thresh += 2;
         if ((thresh & 0xff) > '9')
             thresh = (thresh & 0xff00) + 0x100 + '0';
-        global.extra_at = (uint16_t)thresh;
+        global.extra_at = thresh;
         extra_life();
     }
 }
@@ -2636,10 +2636,10 @@ void field_backdrop(uint16_t y)
     /* `shr al,1` three times looking for a set bit, then `cmp al,4`: the
      * counter resets only when its low three bits are clear and it has
      * reached the last of the eight patterns. */
-    uint32_t p = global.backdrop_phase;
+    uint8_t p = global.backdrop_phase;
     if ((p & 7) == 0 && (p >> 3) == 4)
         p = 0xff;
-    global.backdrop_phase = (uint8_t)(p + 1);
+    global.backdrop_phase = (p + 1);
 }
 
 /* ========================================================================
@@ -2767,7 +2767,7 @@ void level_draw(void)
 
     /* Closing the hatch, one frame every fourth step of the walk. */
     for (uint16_t f = 0; f < 20; f++) {
-        uint32_t ch = (uint32_t)(0x14 - f);
+        uint8_t ch = (uint32_t)(0x14 - f);
         if (!(ch & 3))
             hatch_frame(global_ptr(global.hatch_shut_ptr[f >> 2]), hx, hy);
         for (uint16_t d = 0; d < 75; d++)
@@ -2828,7 +2828,7 @@ void level_draw(void)
 
 static void panel_char(uint8_t c, uint8_t *dest)
 {
-    uint32_t g;
+    uint8_t g;
     if (c == '-')                       g = 0x0b;
     else if (c <= ' ')                  g = 0;
     else if (c <= '9')                  g = c - 0x2f;
@@ -2866,7 +2866,7 @@ void panel_draw(void)
 
     /* Reveal it. Each pass redraws one more row than the last, from the
      * bottom of the panel upwards, so it wipes on rather than appearing. */
-    uint32_t bottom = PANEL_ON_SCREEN;
+    uint16_t bottom = PANEL_ON_SCREEN;
     for (uint16_t rows = 1; rows != PANEL_ROWS; rows++) {
         uint16_t d = bottom;
         io_wait_retrace();
@@ -2966,7 +2966,7 @@ void define_keys_prompt(uint16_t src, uint16_t dst)
  * playfield. Called with the pattern in DX, so the same routine both draws it
  * and rubs it out.
  */
-void flash_bar(uint32_t pattern)
+void flash_bar(uint16_t pattern)
 {
     uint16_t di = 0x3ef2;
     for (uint16_t i = 0; i < 24; i++, di += 2) {
@@ -3609,7 +3609,7 @@ void entity_ball_hold(ent_anim_t *a)
 
     /* Hit: let the ball go, and score for it unless the hit was type 1. */
     global.entity_remove = 1;
-    uint32_t ry = a->sprite.y;      /* 1ac2:3897 reloads it */
+    uint8_t ry = a->sprite.y;      /* 1ac2:3897 reloads it */
     if (global.hit_kind != 1) {
         brick_score(0, 0, 0x0303);
         ry = (ry + 4) & 0xff;
@@ -3916,7 +3916,7 @@ void draw_paddle_shifted(const uint8_t *sprite)
            PADDLE_IMAGE + 1);
 
     uint16_t x = global.paddle_x;
-    global.paddle_prev_x = (uint8_t)x;
+    global.paddle_prev_x = x;
     paddle_row_offsets(x, &global.paddle_rows[0]);
     memcpy(global.paddle_pix[0], sprite, PADDLE_IMAGE + 1);
 
@@ -4033,13 +4033,13 @@ int32_t ball_on_paddle(ball_t *b)
         uint8_t off = b->x - left;
         if (y < PADDLE_TOP || y > PADDLE_BOTTOM || b->x < left ||
             off > ((global.paddle_width + 3) & 0xff)) {
-            global.hold_timer = (uint16_t)(HOLD_RESET);
+            global.hold_timer = (HOLD_RESET);
             return 1;
         }
         b->y = PADDLE_TOP;
         b->state = 2;                 /* held */
         global.hold_timer -= global.speed_limit;
-        global.hold_offset = (uint8_t)(b->x - global.paddle_x);
+        global.hold_offset = (b->x - global.paddle_x);
         ball_redraw(b);
         runtime.sound_request = SOUND_CATCH;
         return 0;
@@ -4069,7 +4069,7 @@ int32_t ball_on_paddle(ball_t *b)
         return 0;
     }
 
-    global.hold_timer = (uint16_t)(HOLD_RESET);
+    global.hold_timer = (HOLD_RESET);
     ball_after(b);
     b->dir_y = 1;                     /* away, upwards */
     b->y = 180;
@@ -4154,7 +4154,7 @@ void laser_fire(void)
             return;
         uint8_t x = global.paddle_x + 4;
         runtime.sound_request = SHOT_SOUND;
-        global.laser_x = (uint8_t)x;
+        global.laser_x = x;
         uint16_t y = global.laser_y;
         laser_dot_rows(x, y, 0);
         laser_dot_rows((x + 19) & 0xff, y, 0);
@@ -4240,8 +4240,8 @@ void entity_capsule_frames(ent_fall_t *f, uint16_t table_ptr)
         /* Level with the paddle: does it overlap? The comparison is done in
          * sixteen bits with an `adc ch,0`, so a paddle at the right-hand edge
          * does not wrap. */
-        uint32_t right = (f->x + 0x0e) & 0xffff;
-        uint32_t px = global.paddle_x;
+        uint8_t right = (f->x + 0x0e) & 0xffff;
+        uint8_t px = global.paddle_x;
         if (right >= px &&
             (right - 0x0f) <= (px + global.paddle_width)) {
             /* Caught. The node stays where it is and becomes a different
@@ -4314,7 +4314,7 @@ void bonus_catch(void)
     if (global.caught != 0)
         return;
     global.caught = 1;
-    global.hold_timer = (uint16_t)(HOLD_RESET);
+    global.hold_timer = (HOLD_RESET);
 }
 
 /* 1ac2:2e03  bonus 3 - the laser */
@@ -4351,7 +4351,7 @@ void bonus_net(void)
     global.net_life = 5000;
     global.net_timer = 200;
     fill_column(0x1a77, 0xaaaa);
-    global.net_pos = (uint16_t)(0x1a77);
+    global.net_pos = (0x1a77);
 }
 
 /* 1ac2:315b  bonus 6 - every ball in play reverses vertically and re-anchors
@@ -4504,7 +4504,7 @@ void entity_paddle_fx(ent_morph_t *m)
     /* The morph is the node's, not the arm's: morph_owner is what stops a
      * second capsule from fighting the first, and what it holds is the
      * original's BX. */
-    const uint16_t self = (uint16_t)global_off(entity_of(m));
+    const uint16_t self = global_off(entity_of(m));
 
     if (global.paddle_morphing == 0) {
         /* Nothing is morphing. If the paddle is already the kind this capsule
@@ -4629,7 +4629,7 @@ void morph_step(ent_morph_t *m)
     }
     /* Done growing: install the new paddle and apply the effect. */
     uint8_t kind = m->to;
-    global.paddle_kind = (uint8_t)kind;
+    global.paddle_kind = kind;
     global.paddle_width = global.paddle_sets[kind].width;
     global.paddle_morphing = 0;
     morph_finish(m);
@@ -4722,7 +4722,7 @@ void level_between(void)
 int32_t name_field(uint16_t di, uint8_t *abort)
 {
     uint8_t *name = global.players[global.player_digit - '1'].name;
-    uint32_t len = 0;
+    uint8_t len = 0;
     *abort = 0;
 
     di -= 2;
@@ -4858,7 +4858,7 @@ uint8_t screen_player_names(void)
     uint16_t di = 0x142;
     for (;;) {
         uint16_t top = di;                      /* pushed at 1ac2:10f2 */
-        uint32_t label = name_bar(top, 0xaaaa); /* pushed at 1ac2:110e */
+        uint16_t label = name_bar(top, 0xaaaa); /* pushed at 1ac2:110e */
 
         draw_text(global.name_prompt, NAME_WIDTH, label);
         name_bar((label + 0x1e0) & 0xffff, 0xaaaa);
@@ -4903,7 +4903,7 @@ uint8_t screen_player_names(void)
  * pieces and the border does not repeat.
  * ===================================================================== */
 
-uint16_t frame_band(uint16_t di, uint32_t fill)
+uint16_t frame_band(uint16_t di, uint16_t fill)
 {
     uint8_t phase = runtime.frame_phase;
     for (uint16_t i = 0; i < 3; i++)
@@ -4933,7 +4933,7 @@ void play_frame(void)
     runtime.frame_phase = 0;
 
     uint16_t di = 0x1e50;
-    static const uint32_t fills[6] = { 0xffff, 0x5555, 0x5454, 0x5555, 0, 0 };
+    static const uint16_t fills[6] = { 0xffff, 0x5555, 0x5454, 0x5555, 0, 0 };
     for (uint16_t i = 0; i < 6; i++) {
         frame_band(di, fills[i]);
         if (i < 5)
@@ -5669,7 +5669,7 @@ void border_animate(void)
         border_draw(di);
         di = border_step(di);
         border_erase(di);
-        runtime.border_pos[i] = (uint16_t)di;
+        runtime.border_pos[i] = di;
     }
 }
 
@@ -5898,7 +5898,7 @@ void border_setup(void)
 
     uint16_t di = 0;
     for (uint16_t i = 0; i < 14; i++) {
-        runtime.border_pos[i] = (uint16_t)di;
+        runtime.border_pos[i] = di;
         border_erase(di);
         for (uint16_t k = 0; k < 7; k++)
             di = border_step(di);
@@ -6034,7 +6034,7 @@ uint16_t ending_blobs(void)
      * is that block for the whole ending sequence, which is why 0x289d is
      * blob_script rather than an address 49KB lower. */
     const uint8_t *si = assets.blob_script;
-    uint32_t prev = 0;
+    uint16_t prev = 0;
     for (;;) {
         for (uint16_t i = 0; i < 15; i++)
             game_delay();
@@ -6240,7 +6240,7 @@ uint16_t ending_walk(uint8_t bl, uint8_t bh, uint16_t dx)
      * something else is in the register. */
 
     uint8_t target = 80 - ((bl << 3) & 0xff);
-    assets.blob_target = (uint8_t)target;
+    assets.blob_target = target;
     while (((dx >> 8) & 0xff) != target) {
         uint16_t next = (dx - 0x400) & 0xffff;   /* `sub ah,4` */
         for (uint16_t i = 0; i < 15; i++)
@@ -6252,7 +6252,7 @@ uint16_t ending_walk(uint8_t bl, uint8_t bh, uint16_t dx)
     }
 
     target = (((bh << 3) + 8) & 0xff);
-    assets.blob_target = (uint8_t)target;
+    assets.blob_target = target;
     while ((dx & 0xff) != target) {
         uint16_t next = (dx - 4) & 0xffff;       /* `sub al,4` */
         for (uint16_t i = 0; i < 15; i++)
@@ -6334,10 +6334,10 @@ void screen_all_levels_done(void)
     const uint8_t *walk = assets.walk_script;
     for (uint16_t bh = 0; bh != 24; bh++) {
         io_frame_sync_extra(SYNC_ENDING);       /* 1ac2:59c0, the pass */
-        for (uint32_t bl = 5; bl > 0; bl--) {
+        for (uint8_t bl = 5; bl > 0; bl--) {
             if (!*walk++)                       /* 1ac2:59c2, lodsb */
                 continue;
-            uint32_t blobs = ending_blobs();    /* 1ac2:59c9 */
+            uint16_t blobs = ending_blobs();    /* 1ac2:59c9 */
             ending_walk(bl, bh, blobs);         /* 1ac2:59ce */
         }
     }
@@ -6380,9 +6380,9 @@ void screen_all_levels_done(void)
  * action, and `[0x2d4c + cx]` turns that into 0x2d4e, 0x2d4d or 0x2d4c - so
  * the three state bytes run backwards against the three scan codes.
  */
-void int09_handler(uint32_t scan)
+void int09_handler(uint8_t scan)
 {
-    uint32_t make = scan <= 0x7f;
+    uint8_t make = scan <= 0x7f;
 
     if ((scan & 0xff) == global.key_scan_l)
         global.last_dir = 0;
@@ -6391,16 +6391,16 @@ void int09_handler(uint32_t scan)
     if (scan == 0xc3)                   /* F9 released */
         runtime.sound_on ^= 1;
     if (make)
-        global.last_make = (uint8_t)scan;
+        global.last_make = scan;
 
     /* The original walks the three scan codes and stores into the flags
      * *backwards* - `[global.key_action + (2 - i)]` - because the two triples are
      * laid out in opposite orders. Unrolled, so that is a fact you can see
      * rather than one you have to work out. */
-    uint32_t code = scan & 0x7f;
-    if (code == global.key_scan_l) { global.key_left   = (uint8_t)make; return; }
-    if (code == global.key_scan_r) { global.key_right  = (uint8_t)make; return; }
-    if (code == global.key_scan_a) { global.key_action = (uint8_t)make; return; }
+    uint8_t code = scan & 0x7f;
+    if (code == global.key_scan_l) { global.key_left = make; return; }
+    if (code == global.key_scan_r) { global.key_right = make; return; }
+    if (code == global.key_scan_a) { global.key_action = make; return; }
 }
 
 /* ========================================================================
@@ -6450,7 +6450,7 @@ void intro_paddle(void)
             uint16_t di = 0x1900;
             const uint8_t *s = &global.paddle_sprites[0][phase][8 - bh];
             for (uint16_t dl = 7; dl > 0; dl--) {
-                for (uint32_t b = 0; b < bh; b++)
+                for (uint8_t b = 0; b < bh; b++)
                     g_vram[(di + b) & (CGA_SIZE - 1)] = s[b];
                 s += PADDLE_BYTES;
                 di = cga_next_row(di);
@@ -6729,7 +6729,7 @@ void screen_end_of_game(void)
         const uint8_t *src = global.eog_overlay;
         uint8_t *dst = global.scratch2.eog_band;
         for (uint16_t i = 0; i < EOG_BAND_LEN; i++, src++, dst++) {
-            uint32_t old = *dst, add = *src, out = old;
+            uint8_t old = *dst, add = *src, out = old;
             for (int16_t shift = 6; shift >= 0; shift -= 2) {
                 uint8_t mask = 3u << shift;
                 if ((old & mask) == 0)
@@ -6744,7 +6744,7 @@ void screen_end_of_game(void)
         for (uint16_t b = 0; b < EOG_WIDTH; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = from[b];
         di = cga_next_row(di);
-        global.eog_screen_at = (uint16_t)(di);
+        global.eog_screen_at = (di);
 
         const uint8_t *m = global.scratch2.eog_band;
         for (uint16_t r = 15; r > 0; r--) {
@@ -6830,7 +6830,7 @@ static void endgame_curtain(int32_t cells)
         io_frame_sync_extra(SYNC_CURTAIN);
         uint16_t d = bp, wrote = bp;
         for (uint16_t r = 7; r > 0; r--) {
-            uint32_t s = cga_next_row(d);
+            uint16_t s = cga_next_row(d);
             for (uint16_t b = 0; b < 26 * 2; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] =
                     g_vram[(s + b) & (CGA_SIZE - 1)];
@@ -7171,7 +7171,7 @@ static int32_t bonus_end_level_run(void)
      * and CX are the masks and shift two bits a pass. The halves go on
      * **crossed** - `and ah, bl` then `and al, bh` - because the word was
      * loaded little-endian and the mask is written the other way round. */
-    uint32_t mask_l = 0xffff, mask_r = 0xffff;
+    uint16_t mask_l = 0xffff, mask_r = 0xffff;
     for (uint16_t pass = 8; pass > 0; pass--) {
         mask_l = (mask_l << 2) & 0xffff;
         mask_r = (mask_r >> 2) & 0xffff;
@@ -7292,7 +7292,7 @@ int32_t next_player(const char *dir)
     /* Move on to the next player who still has lives. */
     const player_t *q;
     do {
-        global.cur_player = (uint8_t)
+        global.cur_player = 
             ((global.cur_player + 1) % global.player_count);
         q = &global.players[global.cur_player];
     } while (q->lives == 0);
@@ -7322,7 +7322,7 @@ int32_t next_player(const char *dir)
         al++;
         ah = 0;
     }
-    global.extra_at = (uint16_t)(((al + '0') << 8) | (ah + '0'));
+    global.extra_at = (((al + '0') << 8) | (ah + '0'));
     return 0;
 }
 
@@ -7565,7 +7565,7 @@ void bonus_stop_monsters(void)
     global.serve_timeout = 10000;
     global.extra_timer = 400;
     fill_column(0x1a8b, 0xaaaa);
-    global.extra_pos = (uint16_t)(0x1a8b);
+    global.extra_pos = (0x1a8b);
 }
 
 /* ========================================================================
@@ -7612,7 +7612,7 @@ void input_demo(void)
         }
     }
 
-    uint32_t chasing = runtime.demo_ball;
+    uint8_t chasing = runtime.demo_ball;
     if (chasing != 0xff) {
         ball_t *b = &global.balls[chasing];
         if (b->y >= DEMO_CHASE_Y &&
@@ -7622,8 +7622,8 @@ void input_demo(void)
              * demo fires as well as chases. */
             global.key_action = global.laser_on != 0;
 
-            uint32_t ball_x = b->x;
-            uint32_t paddle = global.paddle_x;
+            uint8_t ball_x = b->x;
+            uint8_t paddle = global.paddle_x;
             if (ball_x < paddle) {
                 if (paddle != global.paddle_min)
                     global.paddle_x--;
@@ -7643,7 +7643,7 @@ void input_demo(void)
         if (b->y > DEMO_CHASE_Y &&
             b->state != 0 &&
             b->dir_y != 1) {
-            runtime.demo_ball = (uint8_t)cl;
+            runtime.demo_ball = cl;
             demo_clamp();
             return;
         }
@@ -7671,7 +7671,7 @@ void input_demo(void)
 int32_t cheat_sequence(char key)
 {
     const uint8_t *at = runtime_ptr(runtime.cheat_cursor_ptr);
-    uint8_t al = (uint8_t)key ^ 0xaa;
+    uint8_t al = key ^ 0xaa;
 
     if (al != at[0]) {
         /* Not the next one. The same key twice is not a failure. */
@@ -7682,7 +7682,7 @@ int32_t cheat_sequence(char key)
         return 0;
     }
 
-    runtime.cheat_last = (uint8_t)al;
+    runtime.cheat_last = al;
     runtime.cheat_cursor_ptr++;
     if (at[1] != 0xaa)
         return 1;                       /* more to go */
