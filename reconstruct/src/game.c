@@ -1276,11 +1276,12 @@ int32_t play_loop(void)
     global.paddle_min = WALL_LEFT;
     global.repeat_count = 5;
     global.repeat_div = 5;
-    /* The same half-field position, in the pointer's own units: input_mouse
-     * reads a 640-wide screen and halves it, so the mouse space is exactly
-     * twice the paddle's and WALL_RIGHT / 2 doubled is WALL_RIGHT. That
-     * doubling is 1ac2:1920's `shl cx,1`, on the CX the line above set. */
-    io_mouse_warp(WALL_RIGHT, 184);
+    /* `shl cx,1` at 1ac2:1920, and CX still holds what was stored into
+     * paddle_x at 1ac2:18f5 - so this is the paddle's own x, doubled, and
+     * not a position of its own. It is doubled because input_mouse reads a
+     * 640-wide screen and halves it, which makes the pointer's space twice
+     * the paddle's. */
+    io_mouse_warp(global.paddle_x * 2, 184);
 
     paddle_row_offsets(global.paddle_x, &global.paddle_rows[0]);
     memcpy(global.paddle_pix[0], global.paddle_sprites[0][0], 39 * 2);
