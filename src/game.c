@@ -1729,7 +1729,7 @@ void level_intro(void)
     global.sweep_y[0] = 0xb3;
 
     /* Up the screen, laying the backdrop over what was there. */
-    while (global.sweep_y[0] != 0x0c) {
+    while (global.sweep_y[0] != 12) {
         io_frame_sync_extra(SYNC_INTRO);        /* 1ac2:1f13 */
         field_backdrop((global.sweep_y[0] - 7) & 0xff);
         for (uint32_t k = 0; k < 4; k++) {
@@ -2503,7 +2503,7 @@ void score_add(void)
  */
 void extra_life(void)
 {
-    if (global.lives == 0x0c)
+    if (global.lives == 12)
         return;
     uint32_t n = (global.lives - 1) & 0xff;
     uint32_t di = 0x3a7c + (n & 0xfc) + (n & 3) * 0xf0;
@@ -3119,7 +3119,7 @@ void entity_hatch(ent_hatch_t *h)
         return;
 
     const uint8_t *src = global_ptr(global_w(h->script_ptr));
-    uint32_t di = cga_at(h->x, (h->y - 0x0a) & 0xff);
+    uint32_t di = cga_at(h->x, (h->y - 10) & 0xff);
     for (int32_t r = 0; r < 37; r++) {
         g_vram[di & (CGA_SIZE - 1)] = src[r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] = src[r * 2 + 1];
@@ -3168,7 +3168,7 @@ int32_t bonus_move_right(ent_anim_t *b, uint32_t *px, uint32_t *py)
     if (x >= 184)
         return 0;
     const uint8_t *cell = cell_at((y - 6) & 0xff, (x + 8) & 0xff);
-    if (cell[0] || cell[0x0c])
+    if (cell[0] || cell[12])
         return 0;
     if ((((y - 6) & 7) != 0) && cell[24])
         return 0;
@@ -3184,7 +3184,7 @@ int32_t bonus_move_left(ent_anim_t *b, uint32_t *px, uint32_t *py)
     if (x <= 8)
         return 0;
     const uint8_t *cell = cell_at((y - 6) & 0xff, (x - 9) & 0xff);
-    if (cell[0] || cell[0x0c])
+    if (cell[0] || cell[12])
         return 0;
     if ((((y - 6) & 7) != 0) && cell[24])
         return 0;
@@ -3233,7 +3233,7 @@ int32_t bonus_move_down(ent_anim_t *b, uint32_t *px, uint32_t *py)
         return 1;
     }
 
-    const uint8_t *cell = cell_at((y + 0x0a) & 0xff, (x - 8) & 0xff);
+    const uint8_t *cell = cell_at((y + 10) & 0xff, (x - 8) & 0xff);
     if (cell[0])
         return 0;
     if ((((x - 8) & 0x0f) != 0) && cell[1])
@@ -3524,7 +3524,7 @@ void entity_ball_hold(ent_anim_t *a)
         brick_score(0, 0, 0x0303);
         ry = (ry + 4) & 0xff;
     }
-    ball_place(ball_ptr(a->arg.ball_ptr), (a->sprite.x + 8) & 0xff, (ry + 0x0c) & 0xff);
+    ball_place(ball_ptr(a->arg.ball_ptr), (a->sprite.x + 8) & 0xff, (ry + 12) & 0xff);
     if (global.hit_kind != 3)
         brick_score(0, 0, 5);
 }
@@ -4563,7 +4563,7 @@ void level_between(void)
 {
     for (int32_t i = 0; i < 4; i++) {
         mark_t *m = &global.field_marks[i];
-        uint32_t x = m->x, y = (m->y - 0x0a) & 0xff;
+        uint32_t x = m->x, y = (m->y - 10) & 0xff;
         m->taken = 0;
         uint32_t di = cga_at(x, y);
         for (int32_t r = 0; r < 37; r++) {
@@ -4665,7 +4665,7 @@ int32_t name_field(uint32_t di, uint8_t *abort)
              * The character itself goes when the cursor moves back onto it:
              * di drops two cells, draw_cursor puts glyph 0xff one past that,
              * which is exactly where the deleted character was. */
-            draw_char(len == 0x0c ? ' ' : '-', di);
+            draw_char(len == 12 ? ' ' : '-', di);
             di -= 4;
             len--;
             draw_cursor(di);
@@ -4684,7 +4684,7 @@ int32_t name_field(uint32_t di, uint8_t *abort)
             c &= 0xdf;                  /* fold to upper case */
         int32_t ok = (c == ' ' || c == '-' ||
                   (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'));
-        if (!ok || len == 0x0c)
+        if (!ok || len == 12)
             continue;
         *name++ = (uint8_t)c;
         len++;
@@ -4960,7 +4960,7 @@ void field_marks(void)
 {
     for (int32_t i = 0; i < 8; i++) {
         mark_t *m = &global.field_marks[i];
-        uint32_t x = m->x, y = (m->y - 0x0a) & 0xff;
+        uint32_t x = m->x, y = (m->y - 10) & 0xff;
         m->taken = 0;
         uint32_t di = cga_at(x, y);
         for (int32_t r = 0; r < 31; r++) {
@@ -5040,7 +5040,7 @@ void bonus_spawn(void)
     if (m->taken != 0)
         return;                         /* that hatch is already open */
     const uint8_t *cell = &global.level.cells[m->cell];
-    if (cell[0] != 0 || cell[0x0c] != 0)
+    if (cell[0] != 0 || cell[12] != 0)
         return;                         /* still bricked over */
 
     m->taken = 1;
@@ -5128,7 +5128,7 @@ uint32_t particle_init(particle_t *p, uint32_t ax_in)
     p->speed = (uint16_t)ax;
     ax = (particle_random(ax, io_ticks(), 70) - 35) & 0xffff;
     if (ax == 0)
-        ax = 0x0a;
+        ax = 10;
     p->t0 = (uint16_t)ax;
     p->t = (uint16_t)ax;
     p->dir = ax >= 0x8000 ? 1 : 0xffff;
@@ -5565,7 +5565,7 @@ uint32_t border_step(uint32_t di)
     uint32_t row = di / CGA_STRIDE, col = di % CGA_STRIDE;
     if (row == 0)
         return (col == 50) ? di + 0x140 : di + 2;
-    if (row == 0x60)
+    if (row == 96)
         return (col == 0) ? di - 0x140 : di - 2;
     return (col == 50) ? di + 0x140 : di - 0x140;
 }
@@ -5728,7 +5728,7 @@ void brick_11_after(uint32_t x, uint32_t y)
         g_vram[(di + 1) & (CGA_SIZE - 1)] ^= src[1];
         g_vram[(di + 2) & (CGA_SIZE - 1)] ^= src[2];
         g_vram[(di + 3) & (CGA_SIZE - 1)] ^= src[3];
-        src += 0x30;
+        src += 48;
         di = cga_next_row(di);
     }
 }
@@ -5751,7 +5751,7 @@ void cell_hole_draw(uint32_t x, uint32_t y)
     for (int32_t r = 0; r < 8; r++) {
         for (int32_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
-        src += 0x30;
+        src += 48;
         di = cga_next_row(di);
     }
 }
@@ -5891,7 +5891,7 @@ uint32_t ending_particle_init(particle_t *p, uint32_t ax_in)
     p->speed = (uint16_t)ax;
     ax = (particle_random(ax, io_ticks(), 70) - 35) & 0xffff;
     if (ax == 0)
-        ax = 0x0a;
+        ax = 10;
     p->t0 = (uint16_t)ax;
     p->t = (uint16_t)ax;
     p->dir = ax >= 0x8000 ? 1 : 0xffff;
@@ -6811,7 +6811,7 @@ int32_t ball_after_endgame(ball_t *b)
          * so the bounce is for x **outside** 0x60..0x6b. Inverted, the ball
          * bounced in the gap and fell through the wall, and then it was drawn
          * somewhere the original never put it. */
-        if (x < 0x60 || x >= 0x6c) {
+        if (x < 96 || x >= 108) {
             b->dir_y = 0;
             b->bounces++;
             b->acc_x = 0;
@@ -6839,9 +6839,9 @@ int32_t ball_after_endgame(ball_t *b)
                 io_frame_sync_extra(SYNC_CURTAIN);
                 for (int32_t d = 0; d < 327; d++)
                     game_delay();
-                xor_sprite_16x7(0x60, 0x38,
+                xor_sprite_16x7(96, 56,
                                 global_ptr(global.teleport_out_ptr[i - 1]));
-                xor_sprite_16x7(0x60, 0x38,
+                xor_sprite_16x7(96, 56,
                                 global_ptr(global.teleport_out_ptr[i]));
             }
             level_tally();
@@ -6853,16 +6853,16 @@ int32_t ball_after_endgame(ball_t *b)
             endgame_curtain(0);         /* 1ac2:4794 leaves BP alone */
             return 1;
         }
-        /* Between the chambers: the sides of the funnel at x 0x60 and 0x6c.
+        /* Between the chambers: the sides of the funnel at x 96 and 108.
          * 1ac2:4738 is `cmp al,0x6c / jb no-bounce`, so the right wall
          * catches the ball at 0x6c itself, not one past it. With `>` the ball
          * slipped through on the exact pixel - two thousand steps into the
          * funnel before the two sides noticed. */
-        if (x <= 0x60 || x >= 0x6c) {
-            b->dir_x = (x <= 0x60) ? 0 : 1;
+        if (x <= 96 || x >= 108) {
+            b->dir_x = (x <= 96) ? 0 : 1;
             b->acc_x = 1;
             b->acc_y = 0;
-            b->anchor_x = (uint8_t)(x <= 0x60 ? 0x61 : 0x6b);
+            b->anchor_x = (uint8_t)(x <= 96 ? 97 : 107);
             b->anchor_y = (uint8_t)y;
             runtime.sound_request = SOUND_BOUNCE;
         }
@@ -7040,7 +7040,7 @@ static int32_t bonus_end_level_run(void)
      * walks **up** the level by 0x0c a time, not down: the loop's `pop si` at
      * 1ac2:43e7 takes the value after the second row's lodsb. */
     uint32_t si = (global.level_src_ptr + 0xb8) & 0xffff;
-    for (int32_t n = 14; n > 0; n--, si = (si + 0x0c) & 0xffff) {
+    for (int32_t n = 14; n > 0; n--, si = (si + 12) & 0xffff) {
         banner_row(assets_ptr(si));
         banner_row(assets_ptr(si));
         banner_blank();
@@ -7055,7 +7055,7 @@ static int32_t bonus_end_level_run(void)
         screen_scroll_up();
     }
 
-    /* 1ac2:4482  The funnel: 0x30 rows, each two marks four bytes apart with
+    /* 1ac2:4482  The funnel: 48 rows, each two marks four bytes apart with
      * blank either side. Every fourth row is marked 0xd1 rather than 0xd5,
      * which is what gives the walls their rungs. */
     for (int32_t dl = 48; dl > 0; dl--) {
@@ -7224,7 +7224,7 @@ int32_t next_player(const char *dir)
      * `and ax,0x0e0f`, bumped, and carried by hand. */
     uint32_t al = global.score_text[0] & 0x0f;
     uint32_t ah = ((global.score_text[1] & 0x0e) + 2) & 0xff;
-    if (ah >= 0x0a) {
+    if (ah >= 10) {
         al++;
         ah = 0;
     }
@@ -7332,7 +7332,7 @@ void screen_results(const char *dir)
     for (uint32_t k = 0; k < global.player_count; k++) {  /* 1ac2:0fa4 */
         const hsc_entry_t *rec = &global.scratch2.hsc_scratch[k];
         d = draw_run(' ', 2, d);
-        d = draw_text(rec->name, 0x0c, d);
+        d = draw_text(rec->name, 12, d);
         d = draw_run(' ', 2, d);
         d = draw_text((const char *)rec->score, 6, d);
         d = draw_run(' ', 2, d);
