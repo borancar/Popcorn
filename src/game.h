@@ -1124,8 +1124,11 @@ uint8_t *exepack_load(const char *path, size_t *out_len);
 
 extern uint8_t g_vram[CGA_SIZE];
 
-/* Step a CGA offset on by one scan line, the way the game does. */
-static inline uint32_t cga_next_row(uint32_t di)
+/* Step a CGA offset on by one scan line, the way the game does. DI is a
+ * 16-bit register and these are that register, so they are that wide -
+ * which is also what makes the wrap at the end of the odd half the
+ * original's rather than something C would do differently. */
+static inline uint16_t cga_next_row(uint16_t di)
 {
     return di < CGA_PLANE ? di + CGA_PLANE : di - (CGA_PLANE - CGA_STRIDE);
 }
@@ -1140,19 +1143,19 @@ static inline uint32_t cga_next_row(uint32_t di)
  * Getting this wrong sends an offset of 0x2000 to 0x3fb0, past the bottom of
  * the visible screen into the padding at the end of the plane. That is what
  * the frame's scroll was doing. */
-static inline uint32_t cga_prev_row(uint32_t di)
+static inline uint16_t cga_prev_row(uint16_t di)
 {
     return di >= CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
 }
 
 /* intro_logo's pair: `ja`, so 0x2000 goes the other way. Only 1ac2:54d6 uses
  * these, at 54f6, 5535, 557a and 55b6. */
-static inline uint32_t cga_prev_row_ja(uint32_t di)
+static inline uint16_t cga_prev_row_ja(uint16_t di)
 {
     return di > CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
 }
 
-static inline uint32_t cga_next_row_ja(uint32_t di)
+static inline uint16_t cga_next_row_ja(uint16_t di)
 {
     return di > CGA_PLANE ? di - (CGA_PLANE - CGA_STRIDE) : di + CGA_PLANE;
 }
