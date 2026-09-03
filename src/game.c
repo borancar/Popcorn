@@ -1570,7 +1570,10 @@ void play_session(void)
 
     memcpy(global.player_name, global.players[0].name, sizeof global.players[0].name);
     memset(global.score_text, '0', sizeof global.score_text);
-    global.extra_at = 0x3032;               /* the first one at "20" */
+    /* The first extra life at "20". Byte-swapped against the score, as the
+     * field is: the word is '0' in the high half and '2' in the low, which
+     * is '2' then '0' laid out in memory. 1ac2:0312 writes 0x3032. */
+    global.extra_at = ('0' << 8) + '2';
     global.cur_player = 0;
     global.live_count = global.player_count;
     global.lives = 5;
@@ -7310,7 +7313,7 @@ int32_t next_player(const char *dir)
         al++;
         ah = 0;
     }
-    global.extra_at = (uint16_t)(((al + 0x30) << 8) | (ah + 0x30));
+    global.extra_at = (uint16_t)(((al + '0') << 8) | (ah + '0'));
     return 0;
 }
 
