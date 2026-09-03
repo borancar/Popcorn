@@ -274,7 +274,7 @@ void restore_screen(void)
 void paddle_row_offsets(uint32_t x, paddle_rows_t *rows)
 {
     uint32_t off = (x >> 2) + PADDLE_ROW_BASE;
-    for (int32_t r = 0; r < PADDLE_ROWS; r++) {
+    for (uint16_t r = 0; r < PADDLE_ROWS; r++) {
         rows->at[r] = (uint16_t)off;
         off = cga_next_row(off);
     }
@@ -289,10 +289,10 @@ void paddle_row_offsets(uint32_t x, paddle_rows_t *rows)
  */
 void blit_xor(const uint8_t *pixels, const paddle_rows_t *rows)
 {
-    for (int32_t r = 0; r < PADDLE_ROWS; r++) {
+    for (uint16_t r = 0; r < PADDLE_ROWS; r++) {
         uint16_t di = rows->at[r];
         const uint8_t *row = pixels + r * PADDLE_BYTES;
-        for (int32_t b = 0; b < PADDLE_BYTES; b++)
+        for (uint16_t b = 0; b < PADDLE_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] ^= row[b];
     }
 }
@@ -374,7 +374,7 @@ static uint8_t glyph_of(char c)
 void draw_char(char c, uint16_t di)
 {
     const uint8_t (*g)[2] = global.font[glyph_of(c)];
-    for (int32_t r = 0; r < FONT_ROWS; r++) {
+    for (uint16_t r = 0; r < FONT_ROWS; r++) {
         g_vram[di & (CGA_SIZE - 1)] = g[r][0];
         g_vram[(di + 1) & (CGA_SIZE - 1)] = g[r][1];
         di = cga_next_row(di);
@@ -402,7 +402,7 @@ uint8_t game_random(uint32_t ticks, uint8_t limit)
      * 0x3164 is entities[2] plus two, so what gets folded in is whatever the
      * entities happen to be holding this frame. */
     const uint8_t *stir = (const uint8_t *)&global.entities[2].p;
-    for (int32_t i = 0; i < 10; i++)
+    for (uint16_t i = 0; i < 10; i++)
         ax = (ax + stir[i * 2] + (stir[i * 2 + 1] << 8)) & 0xffff;
     ax = (ax + global.rng_state) & 0xffff;
     global.rng_state = (uint16_t)((global.rng_state + 0x5ec5) & 0xffff);
@@ -542,16 +542,16 @@ void read_speed_setting(uint32_t speed)
  */
 void build_shifted_sprites(void)
 {
-    for (int32_t set = 0; set < 4; set++) {
-        for (int32_t phase = 1; phase < 4; phase++) {
+    for (uint16_t set = 0; set < 4; set++) {
+        for (uint16_t phase = 1; phase < 4; phase++) {
             uint8_t *out = global.paddle_sprites[set][phase];
             memcpy(out, global.paddle_sprites[set][phase - 1], PADDLE_IMAGE);
-            for (int32_t row = 0; row < PADDLE_ROWS; row++) {
+            for (uint16_t row = 0; row < PADDLE_ROWS; row++) {
                 uint8_t *r = out + row * PADDLE_BYTES;
                 /* One pixel is two bits, so the shift is done twice. */
-                for (int32_t twice = 0; twice < 2; twice++) {
+                for (uint16_t twice = 0; twice < 2; twice++) {
                     uint8_t carry = 0;
-                    for (int32_t b = 0; b < PADDLE_BYTES; b++) {
+                    for (uint16_t b = 0; b < PADDLE_BYTES; b++) {
                         uint32_t v = r[b];
                         r[b] = (uint8_t)((v >> 1) | (carry << 7));
                         carry = v & 1;
@@ -620,20 +620,20 @@ void intro_curtain(void)
 {
     uint32_t ah = 0, dl = 0xff, di0 = 0x213f;
 
-    for (int32_t bx = 26; bx > 0; bx--, di0--) {
+    for (uint16_t bx = 26; bx > 0; bx--, di0--) {
         ah = 0;
-        for (int32_t dh = 4; dh > 0; dh--) {
-            for (int32_t i = 0; i < 50; i++)
+        for (uint16_t dh = 4; dh > 0; dh--) {
+            for (uint16_t i = 0; i < 50; i++)
                 game_delay();
             ah = ((ah << 2) | 3) & 0xff;        /* two `stc; rcl ah,1` */
             uint8_t al = 0x55 & ah;
 
             io_wait_retrace();
             uint16_t di = di0;
-            for (int32_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
+            for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                 g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
             di = (di0 - 0x1fb0) & 0xffff;
-            for (int32_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
+            for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                 g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
 
             if (bx == 1) {
@@ -642,15 +642,15 @@ void intro_curtain(void)
                 dl = (dl << 2) & 0xff;
                 al = 0x55 & dl;
                 di = 0x213f;
-                for (int32_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
+                for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                     g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
                 di = (0x213f - 0x1fb0) & 0xffff;
-                for (int32_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
+                for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                     g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
             }
         }
     }
-    for (int32_t i = 0; i < 50; i++)
+    for (uint16_t i = 0; i < 50; i++)
         game_delay();
 
     for (uint32_t rows = 1; rows != 106; rows++) {
@@ -659,7 +659,7 @@ void intro_curtain(void)
 
         for (uint32_t i = 0; i < n && i < 0xbd; i++) {
             uint8_t al = global.scratch2.curtain_work[i], out = 0;
-            for (int32_t k = 0; k < 4; k++) {
+            for (uint16_t k = 0; k < 4; k++) {
                 uint32_t hi = (al >> 7) & 1;
                 al = (al << 1) & 0xff;
                 uint32_t lo = (al >> 7) & 1;
@@ -674,12 +674,12 @@ void intro_curtain(void)
         uint16_t di = 52;
         io_wait_retrace();
         for (uint32_t r = 0; r < rows; r++) {
-            for (int32_t b = 0; b < CURTAIN_ROW; b++)
+            for (uint16_t b = 0; b < CURTAIN_ROW; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] = row[b];
             row += CURTAIN_ROW;
             di = cga_next_row(di);
         }
-        for (int32_t i = 0; i < 40; i++)
+        for (uint16_t i = 0; i < 40; i++)
             game_delay();
     }
 }
@@ -701,9 +701,9 @@ static void logo_pass(const uint8_t *src, uint32_t dest, int32_t rows,
 {
     const uint8_t *si = src;
     uint16_t di = dest;
-    for (int32_t n = rows; n > 0; n--) {
+    for (uint16_t n = rows; n > 0; n--) {
         uint32_t bx = di;
-        for (int32_t i = 0; i < 12; i++) {          /* 12 words */
+        for (uint16_t i = 0; i < 12; i++) {          /* 12 words */
             /* `movsw` copies the word **at** si and si+1 and *then* steps
              * both pointers - by +2 with the direction flag clear, by -2 with
              * it set. Writing at si-1 and si-2 for the backward case instead
@@ -721,7 +721,7 @@ static void logo_pass(const uint8_t *src, uint32_t dest, int32_t rows,
          * behind the row and walks down; forwards it starts at the row and
          * walks up. Twenty bytes either way. */
         uint32_t w = back ? di - 4 : di;
-        for (int32_t i = 0; i < 10; i++) {
+        for (uint16_t i = 0; i < 10; i++) {
             uint32_t a = w & (CGA_SIZE - 1), b = (w + 1) & (CGA_SIZE - 1);
             if (erase) {
                 g_vram[a] ^= 0xff;
@@ -733,7 +733,7 @@ static void logo_pass(const uint8_t *src, uint32_t dest, int32_t rows,
             w = back ? w - 2 : w + 2;
         }
         di = bx;
-        for (int32_t i = 0; i < 50; i++)
+        for (uint16_t i = 0; i < 50; i++)
             game_delay();
     }
 }
@@ -759,15 +759,15 @@ void intro_logo(void)
 void intro_reveal(void)
 {
     uint32_t bx0 = 0x230;
-    for (int32_t dl = 52; dl > 0; dl--, bx0++) {
+    for (uint16_t dl = 52; dl > 0; dl--, bx0++) {
         uint8_t al = 0xc0;
         uint16_t di0 = bx0;
-        for (int32_t dh = 4; dh > 0; dh--) {
+        for (uint16_t dh = 4; dh > 0; dh--) {
             al &= 0x55;
             uint16_t di = di0;
-            for (int32_t cl = 7; cl > 0; cl--, di += 0x370)
+            for (uint16_t cl = 7; cl > 0; cl--, di += 0x370)
                 g_vram[di & (CGA_SIZE - 1)] = (uint8_t)al;
-            for (int32_t i = 0; i < 25; i++)
+            for (uint16_t i = 0; i < 25; i++)
                 game_delay();
             al = ((al >> 1) | 0x80) & 0xff;     /* stc; rcr al,1 */
             al = ((al >> 1) | 0x80) & 0xff;
@@ -775,7 +775,7 @@ void intro_reveal(void)
     }
 
     uint16_t bp = 0xa0;
-    for (int32_t band = 0; band < 7; band++, bp += 0x370) {
+    for (uint16_t band = 0; band < 7; band++, bp += 0x370) {
         for (uint32_t bx = 1; bx < 53; bx++) {
             /* The slice is anchored 0x33 into the band and widens to the
              * left, a byte a pass, which is why the original holds that far
@@ -783,13 +783,13 @@ void intro_reveal(void)
             const uint8_t *si = &assets.reveal[band][0x33 - (bx - 1)];
             uint16_t di = bp;
             io_wait_retrace();
-            for (int32_t dl = 21; dl > 0; dl--) {
+            for (uint16_t dl = 21; dl > 0; dl--) {
                 for (uint32_t i = 0; i < bx; i++)
                     g_vram[(di + i) & (CGA_SIZE - 1)] = si[i];
                 si += 52;
                 di = cga_next_row(di);
             }
-            for (int32_t i = 0; i < 10; i++)
+            for (uint16_t i = 0; i < 10; i++)
                 game_delay();
         }
     }
@@ -804,20 +804,20 @@ void intro_reveal(void)
 void intro_scroll(void)
 {
     const uint8_t *feed = assets.scroll_rows[0];
-    for (int32_t bl = 26; bl > 0; bl--) {
+    for (uint16_t bl = 26; bl > 0; bl--) {
         uint16_t di = 0x1b33;
         io_wait_retrace();
-        for (int32_t bh = 25; bh > 0; bh--) {
+        for (uint16_t bh = 25; bh > 0; bh--) {
             uint32_t src = cga_next_row(di);
-            for (int32_t i = 0; i < 49; i++)
+            for (uint16_t i = 0; i < 49; i++)
                 g_vram[(di + i) & (CGA_SIZE - 1)] =
                     g_vram[(src + i) & (CGA_SIZE - 1)];
             di = src;
         }
-        for (int32_t i = 0; i < 49; i++)
+        for (uint16_t i = 0; i < 49; i++)
             g_vram[(0x3ef3 + i) & (CGA_SIZE - 1)] = feed[i];
         feed += 0x31;
-        for (int32_t i = 0; i < 25; i++)
+        for (uint16_t i = 0; i < 25; i++)
             game_delay();
     }
 }
@@ -1260,13 +1260,13 @@ int32_t play_loop(void)
     global.level_num_text[1] = (char)('0' + n % 10);
 
     uint16_t di = 0x177e;
-    for (int32_t i = 0; i < 12; i++, di += 2) {
+    for (uint16_t i = 0; i < 12; i++, di += 2) {
         g_vram[di & (CGA_SIZE - 1)] = 0xaa;
         g_vram[(di + 1) & (CGA_SIZE - 1)] = 0xaa;
     }
     draw_text(global.level_text, 0xc, 0x377e);
     di = 0x377e + 0x1e0;
-    for (int32_t i = 0; i < 12; i++, di += 2) {
+    for (uint16_t i = 0; i < 12; i++, di += 2) {
         g_vram[di & (CGA_SIZE - 1)] = 0xaa;
         g_vram[(di + 1) & (CGA_SIZE - 1)] = 0xaa;
     }
@@ -1278,8 +1278,8 @@ int32_t play_loop(void)
      * what `rep stosw` advanced; taking it literally walks the wipe left a
      * band a row and leaves the banner on screen under everything else. */
     di = 0x177e;
-    for (int32_t dl = 14; dl > 0; dl--) {
-        for (int32_t i = 0; i < 24; i++)
+    for (uint16_t dl = 14; dl > 0; dl--) {
+        for (uint16_t i = 0; i < 24; i++)
             g_vram[(di + i) & (CGA_SIZE - 1)] = 0;
         di = cga_next_row(di);
     }
@@ -1357,7 +1357,7 @@ int32_t play_loop(void)
             global.serve_timeout--;
             if (global.serve_timeout == 0)
                 break;
-            for (int32_t i = 0; i < 15; i++)
+            for (uint16_t i = 0; i < 15; i++)
                 game_delay();
             game_input();
             if (global.key_action == 1)
@@ -1403,7 +1403,7 @@ frames:
         }
 
         if (--global.speed_step != 0) {
-            for (int32_t i = 0; i < 3; i++) {
+            for (uint16_t i = 0; i < 3; i++) {
                 ball_t *ball = &global.balls[i];
                 uint8_t st = ball->state;
                 if (st == 0 || st >= 3)
@@ -1495,7 +1495,7 @@ frames:
          * empty loops, minus one per point of it. Kept for its shape - the
          * frame is paced on the refresh below, so this no longer sets a
          * speed, and the [0x33d6] taper rides on io_frame_pace instead. */
-        for (int32_t i = 3 - global.bonus_live; i > 0; i--)
+        for (uint16_t i = 3 - global.bonus_live; i > 0; i--)
             io_delay_cycles(180 * CYCLES_PER_LOOP);
 
         if (global.extra_on != 1 && global.bonus_pending != 3 &&
@@ -1710,7 +1710,7 @@ uint16_t draw_brick_row(uint16_t y)
     uint32_t sub = (row & 7) * 4;
     const uint8_t *cells = &global.level.cells[(row >> 3) * BRICK_COLS];
 
-    for (int32_t c = 0; c < BRICK_COLS; c++, di += BRICK_BYTES) {
+    for (uint16_t c = 0; c < BRICK_COLS; c++, di += BRICK_BYTES) {
         uint8_t cell = cells[c];
         if (cell == 0x0c) {
             cell_special(row & 0xff, c, di);
@@ -1724,7 +1724,7 @@ uint16_t draw_brick_row(uint16_t y)
             ? animations_ptr(global.cell_bitmap.animated_ptr[cell - 24])
             : global_ptr(global.cell_bitmap.plain_ptr[cell]);
         src += sub;
-        for (int32_t b = 0; b < BRICK_BYTES; b++)
+        for (uint16_t b = 0; b < BRICK_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
     }
     return di;
@@ -1738,8 +1738,8 @@ uint16_t draw_brick_row(uint16_t y)
 void draw_sprite_20x6(uint16_t x, uint16_t y, const uint8_t *src)
 {
     uint16_t di = cga_at(x, y);
-    for (int32_t r = 0; r < 6; r++) {
-        for (int32_t b = 0; b < 5; b++)
+    for (uint16_t r = 0; r < 6; r++) {
+        for (uint16_t b = 0; b < 5; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[r * 5 + b];
         di = cga_next_row(di);
     }
@@ -1775,7 +1775,7 @@ void draw_sprite_20x6(uint16_t x, uint16_t y, const uint8_t *src)
 
 static void intro_pause(int32_t n)
 {
-    for (int32_t i = 0; i < n; i++)
+    for (uint16_t i = 0; i < n; i++)
         game_delay();                   /* 1ac2:164c */
 }
 
@@ -1783,13 +1783,13 @@ void level_intro(void)
 {
     /* The panel scrolls up, a fresh row feeding in at the bottom. */
     const uint8_t *feed = global.backdrop[0];
-    for (int32_t bl = 8; bl > 0; bl--) {
+    for (uint16_t bl = 8; bl > 0; bl--) {
         /* 1ac2:1ec4. The intro runs *before* the play loop, so io_frame_sync
          * has not started and none of this is compared by anything - the same
          * gap the ending and the results screen were in. */
         io_frame_sync_extra(SYNC_INTRO);
         scroll_up_band();               /* 1ac2:2109 */
-        for (int32_t i = 0; i < 24 * 2; i++)
+        for (uint16_t i = 0; i < 24 * 2; i++)
             g_vram[(0x3ef2 + i) & (CGA_SIZE - 1)] = feed[i];
         feed += 24 * 2;
         io_delay_cycles(2000 * CYCLES_PER_LOOP);
@@ -1798,10 +1798,10 @@ void level_intro(void)
             return;
     }
     feed = global.intro_feed[0];
-    for (int32_t bl = 19; bl > 0; bl--) {
+    for (uint16_t bl = 19; bl > 0; bl--) {
         io_frame_sync_extra(SYNC_INTRO);        /* 1ac2:1ee0 */
         scroll_up_band();
-        for (int32_t i = 0; i < 5; i++)
+        for (uint16_t i = 0; i < 5; i++)
             g_vram[(0x3f08 + i) & (CGA_SIZE - 1)] = feed[i];
         feed += 5;
         io_delay_cycles(2300 * CYCLES_PER_LOOP);
@@ -1841,7 +1841,7 @@ void level_intro(void)
         uint8_t y = global.sweep_y[0] - 6;
         draw_brick_row(y);              /* 1ac2:2034 */
         field_backdrop((y + 1) & 0xff); /* 1ac2:1fc1 */
-        for (int32_t k = 3; k >= 0; k--) {
+        for (int16_t k = 3; k >= 0; k--) {
             sweep_t *st = &global.sweep[k];
             if (st->timer == 0) {
                 st->timer = st->period;
@@ -1857,7 +1857,7 @@ void level_intro(void)
     }
 
     /* The panel back down. */
-    for (int32_t n = 27; n > 0; n--) {
+    for (uint16_t n = 27; n > 0; n--) {
         scroll_down_band();             /* 1ac2:2148 */
         intro_pause(0xc);
         io_present();
@@ -1882,7 +1882,7 @@ void ball_draw(const void *rows, uint16_t x, uint16_t y)
 {
     const uint8_t *p = rows;
     uint16_t di = cga_at(x, y);
-    for (int32_t r = 0; r < 4; r++) {
+    for (uint16_t r = 0; r < 4; r++) {
         g_vram[di & (CGA_SIZE - 1)] ^= p[r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] ^= p[r * 2 + 1];
         di = cga_next_row(di);
@@ -1916,7 +1916,7 @@ int32_t ball_redraw(ball_t *b)
 
     uint32_t shift = (b->x & 3) * 2;
     if (shift) {
-        for (int32_t r = 0; r < 4; r++) {
+        for (uint16_t r = 0; r < 4; r++) {
             uint32_t w = b->sprite[r];
             b->sprite[r] = (uint16_t)((w >> shift) | (w << (16 - shift)));
         }
@@ -2163,11 +2163,11 @@ void probe_cell_at(uint16_t x, uint16_t y, hit_t *hit)
  */
 void drop_duplicate_hits(void)
 {
-    for (int32_t i = 0; i < 3; i++) {
+    for (uint16_t i = 0; i < 3; i++) {
         if (!global.hits[i].cell_ptr)
             continue;
         uint32_t centre = global.hits[i].centre;
-        for (int32_t j = i + 1; j < 4; j++)
+        for (uint16_t j = i + 1; j < 4; j++)
             if (global.hits[j].cell_ptr && global.hits[j].centre == centre)
                 global.hits[j].cell_ptr = 0;
     }
@@ -2277,7 +2277,7 @@ void ball_bricks(ball_t *b)
     b->acc_x = b->acc_y = 1;
     drop_duplicate_hits();
 
-    for (int32_t i = 0; i < 4; i++) {
+    for (uint16_t i = 0; i < 4; i++) {
         if (global.hits[i].cell_ptr)
             brick_hit(&global.hits[i],
                       global_ptr(global.hits[i].cell_ptr), b);
@@ -2523,8 +2523,8 @@ void brick_hit(hit_t *hit, uint8_t *cell, ball_t *ball)
 void xor_sprite_16x7(uint16_t x, uint16_t y, const uint8_t *src)
 {
     uint16_t di = cga_at(x, y);
-    for (int32_t r = 0; r < 7; r++) {
-        for (int32_t b = 0; b < 4; b++)
+    for (uint16_t r = 0; r < 7; r++) {
+        for (uint16_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] ^= src[r * 4 + b];
         di = cga_next_row(di);
     }
@@ -2546,7 +2546,7 @@ void xor_sprite_16x7(uint16_t x, uint16_t y, const uint8_t *src)
 void score_add(void)
 {
     uint8_t carry = 0;
-    for (int32_t i = 5; i >= 0; i--) {          /* least significant first */
+    for (int16_t i = 5; i >= 0; i--) {          /* least significant first */
         uint32_t sum = (global.score_text[i] & 0x0f) + global.score_add[i]
                      + (carry ? 1 : 0);
         uint8_t adjusted = sum + 6;
@@ -2555,7 +2555,7 @@ void score_add(void)
     }
     /* Redraw the six digits into the panel. */
     uint16_t di = 0x15d2;
-    for (int32_t i = 0; i < 6; i++, di += 2)
+    for (uint16_t i = 0; i < 6; i++, di += 2)
         draw_char((char)global.score_text[i], di);
 
     /* An extra life every time the score reaches global.extra_at, which then
@@ -2592,8 +2592,8 @@ void extra_life(void)
         return;
     uint8_t n = global.lives - 1;
     uint16_t di = 0x3a7c + (n & 0xfc) + (n & 3) * 0xf0;
-    for (int32_t r = 0; r < 5; r++) {
-        for (int32_t b = 0; b < 4; b++)
+    for (uint16_t r = 0; r < 5; r++) {
+        for (uint16_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = global.life_sprite[r][b];
         /* `sub di, 4` only puts back what `rep movsw` advanced, and what
          * follows is the ordinary step to the next scan line. */
@@ -2622,8 +2622,8 @@ void field_backdrop(uint32_t y)
     io_log_random(0x1fc1);              /* tagged, for sidebyside's per-frame list */
     uint16_t di = cga_at(0, y) + BRICK_LEFT;
     const uint8_t *src = global_ptr(global.backdrop_ptr[(global.backdrop_phase >> 3) & 7]);
-    for (int32_t r = 0; r < 8; r++) {
-        for (int32_t b = 0; b < BACKDROP_BYTES; b++)
+    for (uint16_t r = 0; r < 8; r++) {
+        for (uint16_t b = 0; b < BACKDROP_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
         src += BACKDROP_BYTES;
         di = cga_next_row(di);
@@ -2659,10 +2659,10 @@ void walker_draw(uint32_t x)
     memcpy(global.walker_work, frame, sizeof global.walker_work);
 
     for (uint8_t n = (x & 3) * 2; n > 0; n--) {
-        for (int32_t r = 0; r < 7; r++) {
+        for (uint16_t r = 0; r < 7; r++) {
             uint8_t *row = global.walker_work[r];
             uint8_t carry = 0;
-            for (int32_t b = 0; b < 3; b++) {
+            for (uint16_t b = 0; b < 3; b++) {
                 uint32_t v = row[b];
                 row[b] = (uint8_t)((v >> 1) | (carry << 7));
                 carry = v & 1;
@@ -2671,7 +2671,7 @@ void walker_draw(uint32_t x)
     }
 
     uint16_t di = (x >> 2) + WALKER_ROW;
-    for (int32_t r = 0; r < 7; r++) {
+    for (uint16_t r = 0; r < 7; r++) {
         g_vram[di & (CGA_SIZE - 1)] ^= global.walker_work[r][0];
         g_vram[(di + 1) & (CGA_SIZE - 1)] ^= global.walker_work[r][1];
         g_vram[(di + 2) & (CGA_SIZE - 1)] ^= global.walker_work[r][2];
@@ -2702,7 +2702,7 @@ void walker_step(uint32_t x)
 static void hatch_frame(const uint8_t *src, uint16_t x, uint16_t y)
 {
     uint16_t di = cga_at(x, y);
-    for (int32_t r = 0; r < 19; r++) {
+    for (uint16_t r = 0; r < 19; r++) {
         g_vram[di & (CGA_SIZE - 1)] = src[r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] = src[r * 2 + 1];
         di = cga_next_row(di);
@@ -2724,9 +2724,9 @@ void level_draw(void)
     uint8_t hx = global.field_marks[7].x, hy = (global.field_marks[7].y - 1);
 
     global.paddle_x = 200;
-    for (int32_t f = 0; f < 5; f++) {
+    for (uint16_t f = 0; f < 5; f++) {
         hatch_frame(global_ptr(global.hatch_open_ptr[f]), hx, hy);
-        for (int32_t i = 0; i < 300; i++)
+        for (uint16_t i = 0; i < 300; i++)
             game_delay();
     }
 
@@ -2736,8 +2736,8 @@ void level_draw(void)
      * that follows is forwards. */
     uint8_t n = global.lives - 1;
     uint16_t di = LIVES_MARK + (n & 0xfc) + (n & 3) * 0xf0;
-    for (int32_t r = 0; r < 5; r++) {
-        for (int32_t b = 0; b < 4; b++)
+    for (uint16_t r = 0; r < 5; r++) {
+        for (uint16_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = 0;
         di = cga_next_row(di);
     }
@@ -2750,8 +2750,8 @@ void level_draw(void)
     global.paddle_x = 198;
     walker_draw(0xc8);
     global.walker_anim_ptr += 2;
-    for (int32_t i = 0; i < 9; i++) {
-        for (int32_t d = 0; d < 75; d++)
+    for (uint16_t i = 0; i < 9; i++) {
+        for (uint16_t d = 0; d < 75; d++)
             game_delay();
         walker_step(global.paddle_x);
         global.paddle_x -= 2;
@@ -2761,11 +2761,11 @@ void level_draw(void)
     }
 
     /* Closing the hatch, one frame every fourth step of the walk. */
-    for (int32_t f = 0; f < 20; f++) {
+    for (uint16_t f = 0; f < 20; f++) {
         uint32_t ch = (uint32_t)(0x14 - f);
         if (!(ch & 3))
             hatch_frame(global_ptr(global.hatch_shut_ptr[f >> 2]), hx, hy);
-        for (int32_t d = 0; d < 75; d++)
+        for (uint16_t d = 0; d < 75; d++)
             game_delay();
         walker_step(global.paddle_x);
         global.paddle_x -= 2;
@@ -2776,22 +2776,22 @@ void level_draw(void)
     while (global.paddle_x >= 109) {
         walker_step(global.paddle_x);
         global.paddle_x -= 2;
-        for (int32_t d = 0; d < 75; d++)
+        for (uint16_t d = 0; d < 75; d++)
             game_delay();
         io_present();
         if (!io_pump())
             return;
     }
 
-    for (int32_t f = 0; f < 6; f++) {
+    for (uint16_t f = 0; f < 6; f++) {
         const uint8_t *src = global_ptr(global.walker_drop_ptr[f]);
         uint16_t d = 0x1cd9;
-        for (int32_t r = 0; r < 7; r++) {
-            for (int32_t b = 0; b < 7; b++)
+        for (uint16_t r = 0; r < 7; r++) {
+            for (uint16_t b = 0; b < 7; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] = src[r * 7 + b];
             d = cga_next_row(d);
         }
-        for (int32_t i = 0; i < 327; i++)
+        for (uint16_t i = 0; i < 327; i++)
             game_delay();
         io_present();
         if (!io_pump())
@@ -2830,7 +2830,7 @@ static void panel_char(uint8_t c, uint8_t *dest)
     else if (c >= 'A')                  g = c - 0x35;
     else                                g = 0x0b;
     const uint8_t (*src)[2] = global.font[g];
-    for (int32_t r = 0; r < FONT_ROWS; r++, dest += PANEL_STRIDE) {
+    for (uint16_t r = 0; r < FONT_ROWS; r++, dest += PANEL_STRIDE) {
         dest[0] = src[r][0];
         dest[1] = src[r][1];
     }
@@ -2839,11 +2839,11 @@ static void panel_char(uint8_t c, uint8_t *dest)
 void panel_draw(void)
 {
     uint8_t *dest = &global.panel[9][2];
-    for (int32_t i = 0; i < 12; i++, dest += 2)
+    for (uint16_t i = 0; i < 12; i++, dest += 2)
         panel_char(global.player_name[i], dest);
 
     dest = &global.panel[31][14];
-    for (int32_t i = 0; i < 6; i++, dest += 2)
+    for (uint16_t i = 0; i < 6; i++, dest += 2)
         panel_char(global.score_text[i], dest);
 
     /* Twelve life markers, four to a row: `al & 0xfc` steps along the row and
@@ -2853,8 +2853,8 @@ void panel_draw(void)
         uint32_t k = n - 1;
         uint8_t *d = &global.panel[62][8] + (k & 0xfc) + (k & 3) * 0xa8;
         int32_t lit = n <= global.lives;
-        for (int32_t r = 0; r < 5; r++, d += PANEL_STRIDE) {
-            for (int32_t b = 0; b < 4; b++)
+        for (uint16_t r = 0; r < 5; r++, d += PANEL_STRIDE) {
+            for (uint16_t b = 0; b < 4; b++)
                 d[b] = lit ? global.life_sprite[r][b] : 0;
         }
     }
@@ -2866,11 +2866,11 @@ void panel_draw(void)
         uint16_t d = bottom;
         io_wait_retrace();
         for (uint32_t r = 0; r < rows; r++) {
-            for (int32_t b = 0; b < PANEL_STRIDE; b++)
+            for (uint16_t b = 0; b < PANEL_STRIDE; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] = global.panel[r][b];
             d = cga_next_row(d);
         }
-        for (int32_t i = 0; i < 50; i++)
+        for (uint16_t i = 0; i < 50; i++)
             game_delay();
         bottom = cga_prev_row(bottom);
         io_present();
@@ -2964,7 +2964,7 @@ void define_keys_prompt(uint32_t src, uint32_t dst)
 void flash_bar(uint32_t pattern)
 {
     uint16_t di = 0x3ef2;
-    for (int32_t i = 0; i < 24; i++, di += 2) {
+    for (uint16_t i = 0; i < 24; i++, di += 2) {
         g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)pattern;
         g_vram[(di + 1) & (CGA_SIZE - 1)] ^= (uint8_t)(pattern >> 8);
     }
@@ -3053,8 +3053,8 @@ void cells_restore(void)
 void xor_sprite_20x16(uint16_t x, uint16_t y, const uint8_t *src)
 {
     uint16_t di = cga_at(x, y);
-    for (int32_t r = 0; r < 16; r++) {
-        for (int32_t b = 0; b < 5; b++)
+    for (uint16_t r = 0; r < 16; r++) {
+        for (uint16_t b = 0; b < 5; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] ^= src[r * 5 + b];
         di = cga_next_row(di);
     }
@@ -3073,10 +3073,10 @@ void sprite_shift_draw(uint16_t x, uint16_t y, const uint8_t *src)
 {
     memcpy(global.sprite_work, src, sizeof global.sprite_work);
     for (uint8_t n = (x & 3) * 2; n > 0; n--) {
-        for (int32_t r = 0; r < 16; r++) {
+        for (uint16_t r = 0; r < 16; r++) {
             uint8_t *row = global.sprite_work[r];
             uint8_t carry = 0;
-            for (int32_t b = 0; b < 5; b++) {
+            for (uint16_t b = 0; b < 5; b++) {
                 uint32_t v = row[b];
                 row[b] = (uint8_t)((v >> 1) | (carry << 7));
                 carry = v & 1;
@@ -3205,7 +3205,7 @@ void entity_hatch(ent_hatch_t *h)
 
     const uint8_t *src = global_ptr(global_w(h->script_ptr));
     uint16_t di = cga_at(h->x, (h->y - 10) & 0xff);
-    for (int32_t r = 0; r < 37; r++) {
+    for (uint16_t r = 0; r < 37; r++) {
         g_vram[di & (CGA_SIZE - 1)] = src[r * 2];
         g_vram[(di + 1) & (CGA_SIZE - 1)] = src[r * 2 + 1];
         di = cga_next_row(di);
@@ -3367,7 +3367,7 @@ void xor_sprite_16xn(uint16_t x, uint16_t y, const uint8_t *src, uint32_t rows)
 {
     uint16_t di = cga_at(x, y);
     for (uint32_t r = 0; r < rows; r++) {
-        for (int32_t b = 0; b < 4; b++)
+        for (uint16_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] ^= src[r * 4 + b];
         di = cga_next_row(di);
     }
@@ -3640,11 +3640,11 @@ uint16_t pixel_xor(uint16_t x, uint16_t y)
  */
 void shot_xor(uint16_t x, uint16_t y)
 {
-    for (int32_t side = 0; side < 2; side++) {
+    for (uint16_t side = 0; side < 2; side++) {
         uint32_t sx = side ? (x + 19) & 0xff : x;
         uint32_t mask = 0xc0 >> ((sx & 3) * 2);
         uint16_t di = pixel_xor(sx, y);
-        for (int32_t r = 0; r < 2; r++) {
+        for (uint16_t r = 0; r < 2; r++) {
             di = cga_next_row(di);
             g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
         }
@@ -3748,7 +3748,7 @@ void bonus_update(ent_sprite_t *s, uint16_t nx, uint16_t ny)
     /* Any ball in play. Which one matched matters: the original leaves it in
      * DI and entity_bonus bounces *that* ball, not the first one it can find
      * afterwards. */
-    for (int32_t i = 0; i < 3; i++) {
+    for (uint16_t i = 0; i < 3; i++) {
         ball_t *ball = &global.balls[i];
         if (ball->state != 1)
             continue;
@@ -3855,9 +3855,9 @@ settle:
 void scroll_up_band(void)
 {
     uint16_t di = 0x1ae2;
-    for (int32_t r = 27; r > 0; r--) {
+    for (uint16_t r = 27; r > 0; r--) {
         uint16_t si = cga_next_row(di);
-        for (int32_t b = 0; b < 48; b++)
+        for (uint16_t b = 0; b < 48; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] =
                 g_vram[(si + b) & (CGA_SIZE - 1)];
         di = si;
@@ -3867,9 +3867,9 @@ void scroll_up_band(void)
 void scroll_down_band(void)
 {
     uint16_t si = 0x1ef2;
-    for (int32_t r = 27; r > 0; r--) {
+    for (uint16_t r = 27; r > 0; r--) {
         uint16_t di = cga_next_row(si);
-        for (int32_t b = 0; b < 48; b++)
+        for (uint16_t b = 0; b < 48; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] =
                 g_vram[(si + b) & (CGA_SIZE - 1)];
         si = cga_prev_row(si);
@@ -3885,8 +3885,8 @@ void scroll_down_band(void)
 void draw_paddle_raw(const uint8_t *src)
 {
     uint16_t di = (global.paddle_x >> 2) + PADDLE_ROW_BASE;
-    for (int32_t r = 0; r < 16; r++) {
-        for (int32_t b = 0; b < 7; b++)
+    for (uint16_t r = 0; r < 16; r++) {
+        for (uint16_t b = 0; b < 7; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[r * 7 + b];
         di = cga_next_row(di);
     }
@@ -3916,10 +3916,10 @@ void draw_paddle_shifted(const uint8_t *sprite)
     memcpy(global.paddle_pix[0], sprite, PADDLE_IMAGE + 1);
 
     for (uint8_t n = (x & 3) * 2; n > 0; n--) {
-        for (int32_t r = 0; r < PADDLE_ROWS; r++) {
+        for (uint16_t r = 0; r < PADDLE_ROWS; r++) {
             uint8_t *row = &global.paddle_pix[0][r * PADDLE_BYTES];
             uint8_t carry = 0;
-            for (int32_t b = 0; b < PADDLE_BYTES; b++) {
+            for (uint16_t b = 0; b < PADDLE_BYTES; b++) {
                 uint32_t v = row[b];
                 row[b] = (uint8_t)((v >> 1) | (carry << 7));
                 carry = v & 1;
@@ -4106,7 +4106,7 @@ void read_new_key(uint32_t which)
  */
 int32_t score_before(const uint8_t *a, const uint8_t *b)
 {
-    for (int32_t i = 0; i < 6; i++)
+    for (uint16_t i = 0; i < 6; i++)
         if (a[i] != b[i])
             return a[i] > b[i];
     return 0;
@@ -4179,7 +4179,7 @@ void laser_fire(void)
     if (global.hit_count == 0)
         return;
 
-    for (int32_t i = 0; i < 2; i++) {
+    for (uint16_t i = 0; i < 2; i++) {
         if (global.hits[i].cell_ptr)    /* BP is zero: no ball struck this */
             brick_hit(&global.hits[i],
                       global_ptr(global.hits[i].cell_ptr), (ball_t *)0);
@@ -4280,7 +4280,7 @@ void entity_capsule_frames(ent_fall_t *f, uint16_t table_ptr)
  * column stays put while the rows advance. */
 void fill_column(uint16_t di, uint32_t value)
 {
-    for (int32_t i = 0; i < 25; i++) {
+    for (uint16_t i = 0; i < 25; i++) {
         g_vram[di & (CGA_SIZE - 1)] = (uint8_t)value;
         g_vram[(di + 1) & (CGA_SIZE - 1)] = (uint8_t)(value >> 8);
         di = cga_next_row(di);
@@ -4353,7 +4353,7 @@ void bonus_net(void)
  * where it is */
 void bonus_reverse(void)
 {
-    for (int32_t i = 0; i < 3; i++) {
+    for (uint16_t i = 0; i < 3; i++) {
         ball_t *b = &global.balls[i];
         if (b->state == 0)
             continue;
@@ -4423,7 +4423,7 @@ void entity_multiball(void)
 
     /* Find one that is in play to copy. */
     ball_t *src = (ball_t *)0;
-    for (int32_t i = 0; i < 3; i++) {
+    for (uint16_t i = 0; i < 3; i++) {
         ball_t *b = &global.balls[i];
         if (b->state != 0) {
             src = b;
@@ -4437,7 +4437,7 @@ void entity_multiball(void)
     uint32_t dy = src->dy, dx = src->dx;
     uint32_t x = src->x, y = src->y;
 
-    for (int32_t i = 0; i < 3; i++) {
+    for (uint16_t i = 0; i < 3; i++) {
         ball_t *si = &global.balls[i];
         if (si->state != 0)
             continue;
@@ -4456,7 +4456,7 @@ void entity_multiball(void)
         memcpy(b->sprite, global.ball_start_sprite, sizeof b->sprite);
         uint32_t shift = (b->x & 3) * 2;
         if (shift) {
-            for (int32_t r = 0; r < 4; r++) {
+            for (uint16_t r = 0; r < 4; r++) {
                 uint32_t w = b->sprite[r];
                 b->sprite[r] = (uint16_t)((w >> shift) | (w << (16 - shift)));
             }
@@ -4522,7 +4522,7 @@ void entity_paddle_fx(ent_morph_t *m)
             /* Losing the catch: release anything held. */
             global.caught = 0;
             global.hold_timer = 1120;
-            for (int32_t i = 0; i < 3; i++) {
+            for (uint16_t i = 0; i < 3; i++) {
                 ball_t *ball = &global.balls[i];
                 ball_t *b = ball;
                 if (b->state != 2)
@@ -4646,19 +4646,19 @@ void morph_step(ent_morph_t *m)
 
 void level_between(void)
 {
-    for (int32_t i = 0; i < 4; i++) {
+    for (uint16_t i = 0; i < 4; i++) {
         mark_t *m = &global.field_marks[i];
         uint8_t x = m->x, y = (m->y - 10);
         m->taken = 0;
         uint16_t di = cga_at(x, y);
-        for (int32_t r = 0; r < 37; r++) {
+        for (uint16_t r = 0; r < 37; r++) {
             g_vram[di & (CGA_SIZE - 1)] = global.mark_sprite[r][0];
             g_vram[(di + 1) & (CGA_SIZE - 1)] = global.mark_sprite[r][1];
             di = cga_next_row(di);
         }
     }
 
-    for (int32_t i = 0; i < 24; i++) {
+    for (uint16_t i = 0; i < 24; i++) {
         g_vram[(0xa2 + i * 2) & (CGA_SIZE - 1)] = 0;
         g_vram[(0xa3 + i * 2) & (CGA_SIZE - 1)] = 0;
         g_vram[(0x20a2 + i * 2) & (CGA_SIZE - 1)] = 0;
@@ -4666,9 +4666,9 @@ void level_between(void)
     }
 
     uint32_t y = 6;
-    for (int32_t row = 0; row < 14; row++, y += 8) {
+    for (uint16_t row = 0; row < 14; row++, y += 8) {
         uint32_t x = 8;
-        for (int32_t col = 0; col < 12; col++, x += 0x10) {
+        for (uint16_t col = 0; col < 12; col++, x += 0x10) {
             uint8_t cell = global.level.cells[row * 12 + col];
             if (cell == 0x0c) {
                 cell_hole_draw(x, y);
@@ -4681,8 +4681,8 @@ void level_between(void)
                 ? animations_ptr(global.cell_bitmap.animated_ptr[cell - 24])
                 : global_ptr(global.cell_bitmap.plain_ptr[cell]);
             uint16_t di = cga_at(x, y);
-            for (int32_t r = 0; r < 8; r++) {
-                for (int32_t b = 0; b < 4; b++)
+            for (uint16_t r = 0; r < 8; r++) {
+                for (uint16_t b = 0; b < 4; b++)
                     g_vram[(di + b) & (CGA_SIZE - 1)] = src[r * 4 + b];
                 di = cga_next_row(di);
             }
@@ -4691,8 +4691,8 @@ void level_between(void)
 
     /* And the empty band under the bricks, 0x29 rows of 48 bytes. */
     uint16_t bp = 0x1272;
-    for (int32_t r = 0; r < 41; r++, bp += CGA_STRIDE) {
-        for (int32_t i = 0; i < 48; i++) {
+    for (uint16_t r = 0; r < 41; r++, bp += CGA_STRIDE) {
+        for (uint16_t i = 0; i < 48; i++) {
             g_vram[(bp + i) & (CGA_SIZE - 1)] = 0;
             g_vram[(bp + CGA_PLANE + i) & (CGA_SIZE - 1)] = 0;
         }
@@ -4824,7 +4824,7 @@ int32_t name_field(uint16_t di, uint8_t *abort)
 
 static uint16_t name_bar(uint16_t di, uint32_t word)
 {
-    for (int32_t i = 0; i < NAME_WIDTH; i++)
+    for (uint16_t i = 0; i < NAME_WIDTH; i++)
         vram_setw((di + i * 2) & 0xffff, word);
     return cga_next_row(di);
 }
@@ -4837,7 +4837,7 @@ static uint16_t panel_row(uint16_t di, uint32_t lead, uint32_t mid,
 {
     uint16_t d = di;
     g_vram[d++ & (CGA_SIZE - 1)] = (uint8_t)lead;
-    for (int32_t i = 0; i < (has_tail ? 0x2e : 0x2f); i++)
+    for (uint16_t i = 0; i < (has_tail ? 0x2e : 0x2f); i++)
         g_vram[(d + i) & (CGA_SIZE - 1)] = (uint8_t)mid;
     if (has_tail)
         g_vram[(d + 0x2e) & (CGA_SIZE - 1)] = (uint8_t)tail;
@@ -4863,7 +4863,7 @@ uint8_t screen_player_names(void)
         if (done) {
             /* Rub the box out and start: fourteen rows of nothing. */
             uint16_t d = top;
-            for (int32_t r = 0; r < 14; r++)
+            for (uint16_t r = 0; r < 14; r++)
                 d = name_bar(d, 0);
             global.player_digit = '1';
             return 0;
@@ -4901,14 +4901,14 @@ uint8_t screen_player_names(void)
 uint16_t frame_band(uint16_t di, uint32_t fill)
 {
     uint8_t phase = runtime.frame_phase;
-    for (int32_t i = 0; i < 3; i++)
+    for (uint16_t i = 0; i < 3; i++)
         g_vram[(di + i) & (CGA_SIZE - 1)] = global.frame_corner_left[phase][i];
     di += 3;
-    for (int32_t i = 0; i < 23; i++, di += 2) {
+    for (uint16_t i = 0; i < 23; i++, di += 2) {
         g_vram[di & (CGA_SIZE - 1)] = (uint8_t)fill;
         g_vram[(di + 1) & (CGA_SIZE - 1)] = (uint8_t)(fill >> 8);
     }
-    for (int32_t i = 0; i < 3; i++)
+    for (uint16_t i = 0; i < 3; i++)
         g_vram[(di + i) & (CGA_SIZE - 1)] = global.frame_corner_right[phase][i];
     runtime.frame_phase++;
     return di + 3;
@@ -4929,7 +4929,7 @@ void play_frame(void)
 
     uint16_t di = 0x1e50;
     static const uint32_t fills[6] = { 0xffff, 0x5555, 0x5454, 0x5555, 0, 0 };
-    for (int32_t i = 0; i < 6; i++) {
+    for (uint16_t i = 0; i < 6; i++) {
         frame_band(di, fills[i]);
         if (i < 5)
             di = cga_next_row(di);
@@ -4937,10 +4937,10 @@ void play_frame(void)
 
     /* The walls. Each pass scrolls the column up six rows and caps it. */
     uint16_t bp = 0x3e00;
-    for (int32_t pass = 194; pass > 0; pass--) {
+    for (uint16_t pass = 194; pass > 0; pass--) {
         io_wait_retrace();
         di = bp;
-        for (int32_t dh = 6; dh > 0; dh--) {
+        for (uint16_t dh = 6; dh > 0; dh--) {
             /* Copy the row below over this one. `rep movsw` leaves SI
              * 52 on and the `sub di, 52` puts it back, so what the next
              * iteration works on is the row just read - not 52 to the left
@@ -4948,7 +4948,7 @@ void play_frame(void)
              * a third of a line every row, which smears the white band at
              * the top of the frame across the whole screen. */
             uint32_t src = cga_next_row(di);
-            for (int32_t i = 0; i < 26 * 2; i++)
+            for (uint16_t i = 0; i < 26 * 2; i++)
                 g_vram[(di + i) & (CGA_SIZE - 1)] =
                     g_vram[(src + i) & (CGA_SIZE - 1)];
             di = src;
@@ -4958,7 +4958,7 @@ void play_frame(void)
         uint32_t cap = (runtime.frame_phase & 3) ? 0x50 : 0x10;
         g_vram[di++ & (CGA_SIZE - 1)] = 0x0d;
         g_vram[di++ & (CGA_SIZE - 1)] = (uint8_t)cap;
-        for (int32_t i = 0; i < 24; i++, di += 2) {
+        for (uint16_t i = 0; i < 24; i++, di += 2) {
             g_vram[di & (CGA_SIZE - 1)] = 0;
             g_vram[(di + 1) & (CGA_SIZE - 1)] = 0;
         }
@@ -4978,8 +4978,8 @@ void play_frame(void)
     }
 
     panel_reveal();                     /* 1ac2:0911 */
-    for (int32_t b = 5; b > 0; b--)
-        for (int32_t i = 0; i < 327; i++)
+    for (uint16_t b = 5; b > 0; b--)
+        for (uint16_t i = 0; i < 327; i++)
             game_delay();
     panel_finish();                     /* 1ac2:09c5 */
 }
@@ -4995,12 +4995,12 @@ void play_frame(void)
 void panel_reveal(void)
 {
     uint16_t di = 0;
-    for (int32_t i = 0; i < 100; i++, di += CGA_STRIDE) {
+    for (uint16_t i = 0; i < 100; i++, di += CGA_STRIDE) {
         vram_setw(di, 0x500d);
         vram_setw(di + 50, 0x500d);
     }
     di = CGA_PLANE;
-    for (int32_t i = 0; i < 50; i++, di += CGA_STRIDE * 2) {
+    for (uint16_t i = 0; i < 50; i++, di += CGA_STRIDE * 2) {
         vram_setw(di, 0x500d);
         vram_setw(di + 50, 0x500d);
         vram_setw(di + CGA_STRIDE, 0x100d);
@@ -5008,11 +5008,11 @@ void panel_reveal(void)
     }
 
     /* The top edge: a solid row, then a lighter one under it. */
-    for (int32_t i = 0; i < 25; i++)
+    for (uint16_t i = 0; i < 25; i++)
         vram_setw(i * 2, 0xffff);
-    for (int32_t i = 0; i < 25; i++)
+    for (uint16_t i = 0; i < 25; i++)
         vram_setw(CGA_STRIDE + i * 2, 0x1515);
-    for (int32_t i = 0; i < 50; i++) {
+    for (uint16_t i = 0; i < 50; i++) {
         g_vram[(CGA_PLANE + i) & (CGA_SIZE - 1)] = 0x55;
         g_vram[(CGA_PLANE + CGA_STRIDE + i) & (CGA_SIZE - 1)] = 0x55;
     }
@@ -5022,14 +5022,14 @@ void panel_reveal(void)
      * tables read straight through, three bytes per row, not one row drawn
      * seven times. frame_band takes a single row out of the same two. */
     di = 0;
-    for (int32_t r = 0; r < 7; r++) {
-        for (int32_t i = 0; i < 3; i++)
+    for (uint16_t r = 0; r < 7; r++) {
+        for (uint16_t i = 0; i < 3; i++)
             g_vram[(di + i) & (CGA_SIZE - 1)] = global.frame_corner_left[r][i];
         di = cga_next_row(di);
     }
     di = 0x31;
-    for (int32_t r = 0; r < 7; r++) {
-        for (int32_t i = 0; i < 3; i++)
+    for (uint16_t r = 0; r < 7; r++) {
+        for (uint16_t i = 0; i < 3; i++)
             g_vram[(di + i) & (CGA_SIZE - 1)] = global.frame_corner_right[r][i];
         di = cga_next_row(di);
     }
@@ -5043,12 +5043,12 @@ void panel_reveal(void)
  */
 void field_marks(void)
 {
-    for (int32_t i = 0; i < 8; i++) {
+    for (uint16_t i = 0; i < 8; i++) {
         mark_t *m = &global.field_marks[i];
         uint8_t x = m->x, y = (m->y - 10);
         m->taken = 0;
         uint16_t di = cga_at(x, y);
-        for (int32_t r = 0; r < 31; r++) {
+        for (uint16_t r = 0; r < 31; r++) {
             g_vram[di & (CGA_SIZE - 1)] = global.mark_sprite[r][0];
             g_vram[(di + 1) & (CGA_SIZE - 1)] = global.mark_sprite[r][1];
             di = cga_next_row(di);
@@ -5065,7 +5065,7 @@ void field_marks(void)
 void panel_finish(void)
 {
     uint16_t di = 0x1cc0;
-    for (int32_t pass = 0; pass < 6; pass++) {
+    for (uint16_t pass = 0; pass < 6; pass++) {
         /* 1ac2:09d1, the **top** of the pass. After the drawing instead puts
          * this side a pass ahead - the same slip the ending sync had. */
         io_frame_sync_extra(SYNC_CURTAIN);
@@ -5078,7 +5078,7 @@ void panel_finish(void)
         d = (d - 0x780) & 0xffff;
         field_marks_wide(d, pass);
         di = di > CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
-        for (int32_t i = 0; i < 327; i++)
+        for (uint16_t i = 0; i < 327; i++)
             game_delay();
         io_present();
         if (!io_pump())
@@ -5161,7 +5161,7 @@ void menu_banner_tick(void)
     banner_shift();                     /* 1ac2:5140 */
 
     uint16_t di = 0x38a9;
-    for (int32_t i = 0; i < 6; i++) {
+    for (uint16_t i = 0; i < 6; i++) {
         if (global.scratch1.banner_cell[i] & global.banner_state)
             g_vram[di & (CGA_SIZE - 1)] ^= 3;
         di = cga_next_row(di);
@@ -5315,10 +5315,10 @@ void plot_pixel_xor(uint16_t x, uint16_t y, uint32_t colour)
 void banner_shift(void)
 {
     uint16_t di = BANNER_ROW;
-    for (int32_t row = 0; row < 6; row++) {
-        for (int32_t twice = 0; twice < 2; twice++) {
+    for (uint16_t row = 0; row < 6; row++) {
+        for (uint16_t twice = 0; twice < 2; twice++) {
             uint8_t carry = 0;
-            for (int32_t b = 0; b < BANNER_LEN; b++) {
+            for (uint16_t b = 0; b < BANNER_LEN; b++) {
                 uint32_t a = (di - b) & (CGA_SIZE - 1);
                 uint32_t v = g_vram[a];
                 g_vram[a] = (uint8_t)((v << 1) | carry);
@@ -5348,7 +5348,7 @@ static void player_record_init(player_t *p)
     p->level_number = 0;
     memset(p->score, '0', sizeof p->score);
     p->level = assets.levels[0];
-    for (int32_t i = 0; i < 6; i++)
+    for (uint16_t i = 0; i < 6; i++)
         p->state[i] = END_PTR;
 }
 
@@ -5392,8 +5392,8 @@ void demo_start(void)
 /* 1ac2:492f  arrow_head - the nine rows of arrow_head_sprite */
 void arrow_head(uint16_t di)
 {
-    for (int32_t r = 0; r < 9; r++) {
-        for (int32_t b = 0; b < 5; b++)
+    for (uint16_t r = 0; r < 9; r++) {
+        for (uint16_t b = 0; b < 5; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] ^= global.arrow_head_sprite[r][b];
         di = cga_next_row(di);
     }
@@ -5404,12 +5404,12 @@ void arrow_head(uint16_t di)
  * in the middle. The blank rows only step the offset. */
 void arrow_tail(uint16_t di)
 {
-    for (int32_t r = 0; r < 4; r++)
+    for (uint16_t r = 0; r < 4; r++)
         di = cga_next_row(di);
-    for (int32_t b = 0; b < 5; b++)
+    for (uint16_t b = 0; b < 5; b++)
         g_vram[(di + b) & (CGA_SIZE - 1)] ^= 0x55;
     di = cga_next_row(di);
-    for (int32_t r = 0; r < 4; r++)
+    for (uint16_t r = 0; r < 4; r++)
         di = cga_next_row(di);
 }
 
@@ -5498,7 +5498,7 @@ void play_teardown(void)
 void cell_special(uint8_t row, uint8_t col, uint16_t di)
 {
     const uint8_t *src = &assets.hole_picture[row & 0xff][col * 4];
-    for (int32_t b = 0; b < 4; b++)
+    for (uint16_t b = 0; b < 4; b++)
         g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
 }
 
@@ -5581,9 +5581,9 @@ hsc_entry_t *hsc_bubble(const hsc_entry_t *a, hsc_entry_t *b)
      * advanced 0x12 is one record back, not one and a half: taking that
      * instruction at face value moved the window six bytes too far a pass
      * and shifted the wrong record. */
-    for (int32_t n = 10; n > 0; n--) {
+    for (uint16_t n = 10; n > 0; n--) {
         int32_t higher = 0;
-        for (int32_t i = 0; i < 6; i++) {
+        for (uint16_t i = 0; i < 6; i++) {
             if (a->score[i] != b[-1].score[i]) {
                 higher = a->score[i] > b[-1].score[i];
                 break;
@@ -5623,7 +5623,7 @@ void hsc_save(const char *dir)
 /* 1ac2:4ff1  border_draw - eight words from cs:0x506d down a column */
 void border_draw(uint16_t di)
 {
-    for (int32_t i = 0; i < 8; i++) {
+    for (uint16_t i = 0; i < 8; i++) {
         vram_setw(di, runtime.border_spr[i]);
         di = cga_next_row(di);
     }
@@ -5632,7 +5632,7 @@ void border_draw(uint16_t di)
 /* 1ac2:4fd3  border_erase - the same eight rows, blanked */
 void border_erase(uint16_t di)
 {
-    for (int32_t i = 0; i < 8; i++) {
+    for (uint16_t i = 0; i < 8; i++) {
         vram_setw(di, 0);
         di = cga_next_row(di);
     }
@@ -5659,7 +5659,7 @@ uint16_t border_step(uint16_t di)
  * redrawn, with their positions kept in the code segment at 0x507d */
 void border_animate(void)
 {
-    for (int32_t i = 0; i < 14; i++) {
+    for (uint16_t i = 0; i < 14; i++) {
         uint16_t di = runtime.border_pos[i];
         border_draw(di);
         di = border_step(di);
@@ -5681,9 +5681,9 @@ void border_row(uint16_t di)
      * carried on down the interlace throughout rather than reset per pass.
      * What was here before called border_draw 26 times, which is neither
      * the count nor the operation. */
-    for (int32_t n = 23; n > 0; n--) {
+    for (uint16_t n = 23; n > 0; n--) {
         uint16_t si = 0x506d;
-        for (int32_t r = 0; r < 8; r++, si += 2) {
+        for (uint16_t r = 0; r < 8; r++, si += 2) {
             uint32_t w = runtime_w(si);
             g_vram[di & (CGA_SIZE - 1)] = (uint8_t)w;
             g_vram[(di + 1) & (CGA_SIZE - 1)] = (uint8_t)(w >> 8);
@@ -5699,9 +5699,9 @@ void border_block(uint16_t di)
      * across. 0x5045 is the same eight words with the push/pop taken out and
      * a count of 0x17, which is what makes one a row of blocks and the other
      * a column - and is why the two were transcribed into each other. */
-    for (int32_t n = 26; n > 0; n--, di += 2) {
+    for (uint16_t n = 26; n > 0; n--, di += 2) {
         uint16_t d = di;
-        for (int32_t i = 0; i < 8; i++) {
+        for (uint16_t i = 0; i < 8; i++) {
             vram_setw(d, runtime.border_spr[i]);
             d = cga_next_row(d);
         }
@@ -5727,9 +5727,9 @@ void screen_scroll_up(void)
      * and draws it at the end. */
     io_frame_sync_extra(SYNC_SCROLL);              /* --sync-scroll, for the driver */
     uint16_t di = 19;
-    for (int32_t n = 111; n > 0; n--) {
+    for (uint16_t n = 111; n > 0; n--) {
         uint16_t si = cga_next_row(di);
-        for (int32_t b = 0; b < 14; b++)
+        for (uint16_t b = 0; b < 14; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] =
                 g_vram[(si + b) & (CGA_SIZE - 1)];
         di = si;                        /* 1ac2:48a1 restores the row start */
@@ -5746,7 +5746,7 @@ void screen_scroll_up(void)
  */
 void level_tally(void)
 {
-    for (int32_t i = 0; i < 168; i++) {
+    for (uint16_t i = 0; i < 168; i++) {
         uint32_t v = global.level.cells[i];
         global.score_add_pair[0] = 0;
         global.score_add_pair[1] = global.cell_score[v][0];
@@ -5767,9 +5767,9 @@ void screen_stash(void)
     speaker_off();
     uint8_t *keep = global.scratch2.screen_stash;
     uint16_t si = 0x1900;
-    for (int32_t half = 0; half < 2; half++) {
-        for (int32_t r = 0; r < 20; r++) {
-            for (int32_t b = 0; b < 50; b++)
+    for (uint16_t half = 0; half < 2; half++) {
+        for (uint16_t r = 0; r < 20; r++) {
+            for (uint16_t b = 0; b < 50; b++)
                 keep[b] = g_vram[(si + b) & (CGA_SIZE - 1)];
             keep += 50;
             si += 50 + 0x1e;
@@ -5777,8 +5777,8 @@ void screen_stash(void)
         si = 0x3900;
     }
     uint16_t di = 0x1900;
-    for (int32_t r = 0; r < 38; r++) {
-        for (int32_t b = 0; b < 50; b++)
+    for (uint16_t r = 0; r < 38; r++) {
+        for (uint16_t b = 0; b < 50; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = global.pause_overlay[r][b];
         di = cga_next_row(di);
     }
@@ -5808,7 +5808,7 @@ void brick_11_after(uint16_t x, uint16_t y)
     uint8_t row = y - 6;
     const uint8_t *src = &assets.hole_picture[row][((x >> 2) & 0xff) - 2];
     uint16_t di = cga_at(x, y);
-    for (int32_t r = 0; r < 8; r++) {
+    for (uint16_t r = 0; r < 8; r++) {
         g_vram[di & (CGA_SIZE - 1)] ^= src[0];
         g_vram[(di + 1) & (CGA_SIZE - 1)] ^= src[1];
         g_vram[(di + 2) & (CGA_SIZE - 1)] ^= src[2];
@@ -5833,8 +5833,8 @@ void cell_hole_draw(uint16_t x, uint16_t y)
     uint8_t row = y - 6;
     const uint8_t *src = &assets.hole_picture[row][((x >> 2) & 0xff) - 2];
     uint16_t di = cga_at(x, y);
-    for (int32_t r = 0; r < 8; r++) {
-        for (int32_t b = 0; b < 4; b++)
+    for (uint16_t r = 0; r < 8; r++) {
+        for (uint16_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[b];
         src += 48;
         di = cga_next_row(di);
@@ -5847,9 +5847,9 @@ void screen_unstash(void)
 {
     const uint8_t *keep = global.scratch2.screen_stash;
     uint16_t di = 0x1900;
-    for (int32_t half = 0; half < 2; half++) {
-        for (int32_t r = 0; r < 20; r++) {
-            for (int32_t b = 0; b < 50; b++)
+    for (uint16_t half = 0; half < 2; half++) {
+        for (uint16_t r = 0; r < 20; r++) {
+            for (uint16_t b = 0; b < 50; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] = keep[b];
             keep += 50;
             di += 50 + 0x1e;
@@ -5892,10 +5892,10 @@ void border_setup(void)
     border_row(0x172);
 
     uint16_t di = 0;
-    for (int32_t i = 0; i < 14; i++) {
+    for (uint16_t i = 0; i < 14; i++) {
         runtime.border_pos[i] = (uint16_t)di;
         border_erase(di);
-        for (int32_t k = 0; k < 7; k++)
+        for (uint16_t k = 0; k < 7; k++)
             di = border_step(di);
     }
 }
@@ -5914,14 +5914,14 @@ void border_setup(void)
 int32_t tall_sprite(const uint8_t **si, uint16_t di)
 {
     const uint8_t *src = *si;
-    for (int32_t r = 0; r < 15; r++) {
-        for (int32_t b = 0; b < 4; b++)
+    for (uint16_t r = 0; r < 15; r++) {
+        for (uint16_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[r * 4 + b];
         di = cga_next_row(di);
     }
     *si = src + TALL_SPRITE_BYTES;
 
-    for (int32_t n = 1200; n > 0; n--) {
+    for (uint16_t n = 1200; n > 0; n--) {
         if (io_key_ready()) {
             io_get_key();
             return 1;
@@ -6007,7 +6007,7 @@ void ending_blob(uint32_t pos)
      * 0x28d9 as a plain image offset - which is right almost everywhere else
      * in this program, and is why it was written that way - takes the sprite
      * from 49KB below where the original takes it. */
-    for (int32_t r = 0; r < 8; r++) {
+    for (uint16_t r = 0; r < 8; r++) {
         g_vram[di & (CGA_SIZE - 1)] ^= assets.ending_mark[r][0];
         g_vram[(di + 1) & (CGA_SIZE - 1)] ^= assets.ending_mark[r][1];
         di = cga_next_row(di);
@@ -6031,7 +6031,7 @@ uint16_t ending_blobs(void)
     const uint8_t *si = assets.blob_script;
     uint32_t prev = 0;
     for (;;) {
-        for (int32_t i = 0; i < 15; i++)
+        for (uint16_t i = 0; i < 15; i++)
             game_delay();
         uint32_t pos = (uint32_t)(si[0] | (si[1] << 8));
         si += 2;
@@ -6058,22 +6058,22 @@ uint16_t ending_blobs(void)
 void ending_column(void)
 {
     uint16_t di = 0x34f8;
-    for (int32_t dh = 8; dh > 0; dh--) {
+    for (uint16_t dh = 8; dh > 0; dh--) {
         /* **bx is reloaded here**, at 1ac2:531c, inside the outer loop - so
          * every one of the eight columns plays the whole list at 0xb7a2 from
          * the beginning. Hoisting it out, which is what this used to do, gave
          * each column one frame of the animation and then ran off the end. */
-        for (int32_t f = 0; global.sparkle_ptr[f] != END_PTR; f++) {
+        for (uint16_t f = 0; global.sparkle_ptr[f] != END_PTR; f++) {
             const uint8_t *src = global_ptr(global.sparkle_ptr[f]);
             uint16_t d = di;
-            for (int32_t r = 0; r < 15; r++) {
-                for (int32_t b = 0; b < 4; b++)
+            for (uint16_t r = 0; r < 15; r++) {
+                for (uint16_t b = 0; b < 4; b++)
                     g_vram[(d + b) & (CGA_SIZE - 1)] = src[b];
                 src += 5;               /* four copied, one skipped */
                 d = cga_next_row(d);
             }
             /* 1ac2:5348 - a hundred delays, watching for a key throughout. */
-            for (int32_t i = 0; i < 100; i++) {
+            for (uint16_t i = 0; i < 100; i++) {
                 if (io_key_ready()) {
                     io_get_key();
                     return;
@@ -6083,8 +6083,8 @@ void ending_column(void)
         }
         /* The list ran out: blank the column (1ac2:535f). */
         uint16_t d = di;
-        for (int32_t r = 0; r < 15; r++) {
-            for (int32_t b = 0; b < 4; b++)
+        for (uint16_t r = 0; r < 15; r++) {
+            for (uint16_t b = 0; b < 4; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] = 0;
             d = cga_next_row(d);
         }
@@ -6107,8 +6107,8 @@ void screen_game_over(void)
     memcpy(global.paddle_pix[0], global.game_over_paddle, sizeof global.game_over_paddle);
 
     uint16_t di = 0x1cc2;
-    for (int32_t r = 0; r < 8; r++) {
-        for (int32_t i = 0; i < 24; i++)
+    for (uint16_t r = 0; r < 8; r++) {
+        for (uint16_t i = 0; i < 24; i++)
             vram_setw(di + i * 2, 0);
         di = cga_next_row(di);
     }
@@ -6117,10 +6117,10 @@ void screen_game_over(void)
     uint32_t kind = global.paddle_kind;
     if (kind) {
         uint16_t si = global.paddle_grow[kind];
-        for (int32_t f = 0; f < 6; f++, si += 2) {
+        for (uint16_t f = 0; f < 6; f++, si += 2) {
             io_wait_retrace();
             draw_paddle_shifted(global_ptr(global_w(si)));
-            for (int32_t i = 0; i < 150; i++)
+            for (uint16_t i = 0; i < 150; i++)
                 game_delay();
             io_present();
             if (!io_pump())
@@ -6132,7 +6132,7 @@ void screen_game_over(void)
     for (uint16_t si = 0x9bb0; global_w(si); si += 2) {
         io_wait_retrace();
         draw_paddle_raw(global_ptr(global_w(si)));
-        for (int32_t i = 0; i < 150; i++)
+        for (uint16_t i = 0; i < 150; i++)
             game_delay();
         io_present();
         if (!io_pump())
@@ -6167,7 +6167,7 @@ void ending_plot(uint16_t x, uint16_t y)
     di += x >> 2;
 
     uint16_t d = di;
-    for (int32_t i = 0; i < 4; i++) {
+    for (uint16_t i = 0; i < 4; i++) {
         uint16_t bits = global.particle_sprites[phase][i];
         g_vram[d & (CGA_SIZE - 1)] ^= (uint8_t)bits;
         g_vram[(d + 1) & (CGA_SIZE - 1)] ^= (uint8_t)(bits >> 8);
@@ -6238,7 +6238,7 @@ uint16_t ending_walk(uint8_t bl, uint8_t bh, uint16_t dx)
     assets.blob_target = (uint8_t)target;
     while (((dx >> 8) & 0xff) != target) {
         uint32_t next = (dx - 0x400) & 0xffff;   /* `sub ah,4` */
-        for (int32_t i = 0; i < 15; i++)
+        for (uint16_t i = 0; i < 15; i++)
             game_delay();
         io_wait_retrace();
         ending_blob(next);
@@ -6250,7 +6250,7 @@ uint16_t ending_walk(uint8_t bl, uint8_t bh, uint16_t dx)
     assets.blob_target = (uint8_t)target;
     while ((dx & 0xff) != target) {
         uint32_t next = (dx - 4) & 0xffff;       /* `sub al,4` */
-        for (int32_t i = 0; i < 15; i++)
+        for (uint16_t i = 0; i < 15; i++)
             game_delay();
         io_wait_retrace();
         ending_blob(next);
@@ -6276,8 +6276,8 @@ void screen_all_levels_done(void)
      * cannot tell "finished" from "hung". */
     fprintf(stderr, "popcorn: the last level is finished - "
                     "screen_all_levels_done (1ac2:5940)\n");
-    for (int32_t n = 50; n > 0; n--)
-        for (int32_t i = 0; i < 200; i++)
+    for (uint16_t n = 50; n > 0; n--)
+        for (uint16_t i = 0; i < 200; i++)
             game_delay();
 
     memset(global.level.cells, 0, sizeof global.level.cells);
@@ -6301,13 +6301,13 @@ void screen_all_levels_done(void)
         const uint8_t *band = assets.ending_band[0];
         io_wait_retrace();
         for (uint32_t r = 0; r < bh; r++) {
-            for (int32_t b = 0; b < 26; b++)
+            for (uint16_t b = 0; b < 26; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] = band[b];
             band += 26;
             di = cga_next_row(di);      /* the `sub` undoes `rep movsb` */
         }
         bp = cga_prev_row(bp);
-        for (int32_t i = 0; i < 5; i++)
+        for (uint16_t i = 0; i < 5; i++)
             game_delay();
         io_present();
         if (!io_pump())
@@ -6440,17 +6440,17 @@ void intro_paddle(void)
      * that is against the wall stays put while more of it appears. Each pass
      * plays the four pixel phases in turn. */
     for (uint32_t bh = 1; bh <= 8; bh++) {
-        for (int32_t phase = 0; phase < 4; phase++) {
+        for (uint16_t phase = 0; phase < 4; phase++) {
             io_wait_retrace();
             uint16_t di = 0x1900;
             const uint8_t *s = &global.paddle_sprites[0][phase][8 - bh];
-            for (int32_t dl = 7; dl > 0; dl--) {
+            for (uint16_t dl = 7; dl > 0; dl--) {
                 for (uint32_t b = 0; b < bh; b++)
                     g_vram[(di + b) & (CGA_SIZE - 1)] = s[b];
                 s += PADDLE_BYTES;
                 di = cga_next_row(di);
             }
-            for (int32_t i = 0; i < 25; i++)
+            for (uint16_t i = 0; i < 25; i++)
                 game_delay();
             io_present();
             if (!io_pump())
@@ -6460,18 +6460,18 @@ void intro_paddle(void)
 
     /* And across, whole this time and from the start of the sprite. */
     for (uint32_t bh = 0; bh < 22; bh++) {
-        for (int32_t phase = 0; phase < 4; phase++) {
+        for (uint16_t phase = 0; phase < 4; phase++) {
             io_wait_retrace();
             uint16_t di = (0x1900 + bh) & 0xffff;
             const uint8_t *s = global.paddle_sprites[0][phase];
-            for (int32_t dl = 7; dl > 0; dl--) {
+            for (uint16_t dl = 7; dl > 0; dl--) {
                 g_vram[di & (CGA_SIZE - 1)] = 0;
-                for (int32_t b = 0; b < 8; b++)
+                for (uint16_t b = 0; b < 8; b++)
                     g_vram[(di + 1 + b) & (CGA_SIZE - 1)] = s[b];
                 s += PADDLE_BYTES;
                 di = cga_next_row(di);
             }
-            for (int32_t i = 0; i < 25; i++)
+            for (uint16_t i = 0; i < 25; i++)
                 game_delay();
             io_present();
             if (!io_pump())
@@ -6561,7 +6561,7 @@ int32_t level_load_file(const char *dir)
  */
 void set_crtc(const uint8_t *params)
 {
-    for (int32_t i = 0; i < 12; i++)
+    for (uint16_t i = 0; i < 12; i++)
         (void)params[i];
 }
 
@@ -6587,7 +6587,7 @@ void set_crtc(const uint8_t *params)
 
 static uint16_t hsc_bar(uint16_t di)
 {
-    for (int32_t i = 0; i < HSC_WIDTH; i++)
+    for (uint16_t i = 0; i < HSC_WIDTH; i++)
         vram_setw((di + i * 2) & 0xffff, 0xaaaa);
     return cga_next_row(di);
 }
@@ -6596,7 +6596,7 @@ void screen_high_scores(void)
 {
     border_setup();
 
-    for (int32_t i = 0; i < HSC_WIDTH; i++)
+    for (uint16_t i = 0; i < HSC_WIDTH; i++)
         vram_setw(0x142 + i * 2, 0xaaaa);
 
     /* HIGH SCORE, a glyph at a time - the original really does have ten
@@ -6617,7 +6617,7 @@ void screen_high_scores(void)
 
     di = (di + HSC_LINE) & 0xffff;
 
-    for (int32_t row = 0; row < HSC_COUNT; row++) {
+    for (uint16_t row = 0; row < HSC_COUNT; row++) {
         const hsc_entry_t *e = &global.hsc[row];
         di = draw_run(' ', 2, di);
         di = draw_text(e->name, 12, di);
@@ -6634,8 +6634,8 @@ void screen_high_scores(void)
         di = hsc_bar(di);
 
     /* The border animates until a key, 0x181 delays a step, 0xff steps. */
-    for (int32_t dl = 255; dl > 0; dl--) {
-        for (int32_t n = 385; n > 0; n--) {
+    for (uint16_t dl = 255; dl > 0; dl--) {
+        for (uint16_t n = 385; n > 0; n--) {
             if (io_key_ready()) {
                 io_get_key();
                 return;
@@ -6702,8 +6702,8 @@ void screen_end_of_game(void)
     /* The screen into the image - not screen to screen, and DI does not go
      * back to where it started each row. */
     uint16_t si = 8, di = 0;
-    for (int32_t n = 150; n > 0; n--) {
-        for (int32_t b = 0; b < EOG_WIDTH; b++)
+    for (uint16_t n = 150; n > 0; n--) {
+        for (uint16_t b = 0; b < EOG_WIDTH; b++)
             global.scratch1.eog_saved[di + b] = g_vram[(si + b) & (CGA_SIZE - 1)];
         di += EOG_WIDTH;
         si = cga_next_row(si);
@@ -6717,15 +6717,15 @@ void screen_end_of_game(void)
     global.eog_screen_at = 8;
     global.eog_build_ptr = global_off(&global.scratch1.eog_saved[EOG_WIDTH]);
 
-    for (int32_t pass = 135; pass > 0; pass--) {
+    for (uint16_t pass = 135; pass > 0; pass--) {
         /* The band as it stands, from the saved screen - not from vram. */
         memcpy(global.scratch2.eog_band, global_ptr(global.eog_build_ptr), EOG_BAND_LEN);
 
         const uint8_t *src = global.eog_overlay;
         uint8_t *dst = global.scratch2.eog_band;
-        for (int32_t i = 0; i < EOG_BAND_LEN; i++, src++, dst++) {
+        for (uint16_t i = 0; i < EOG_BAND_LEN; i++, src++, dst++) {
             uint32_t old = *dst, add = *src, out = old;
-            for (int32_t shift = 6; shift >= 0; shift -= 2) {
+            for (int16_t shift = 6; shift >= 0; shift -= 2) {
                 uint32_t mask = 3u << shift;
                 if ((old & mask) == 0)
                     out += add & mask;
@@ -6736,14 +6736,14 @@ void screen_end_of_game(void)
         /* One band on screen from the saved copy, then the merged block. */
         di = global.eog_screen_at;
         const uint8_t *from = global_ptr((global.eog_build_ptr - EOG_WIDTH) & 0xffff);
-        for (int32_t b = 0; b < EOG_WIDTH; b++)
+        for (uint16_t b = 0; b < EOG_WIDTH; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = from[b];
         di = cga_next_row(di);
         global.eog_screen_at = (uint16_t)(di);
 
         const uint8_t *m = global.scratch2.eog_band;
-        for (int32_t r = 15; r > 0; r--) {
-            for (int32_t b = 0; b < EOG_WIDTH; b++)
+        for (uint16_t r = 15; r > 0; r--) {
+            for (uint16_t b = 0; b < EOG_WIDTH; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] = m[b];
             m += EOG_WIDTH;             /* `rep movsb` carries SI forward */
             di = cga_next_row(di);
@@ -6756,7 +6756,7 @@ void screen_end_of_game(void)
     }
 
     /* A key, or 7200 ticks of waiting for one. */
-    for (int32_t n = 7200; n > 0; n--) {
+    for (uint16_t n = 7200; n > 0; n--) {
         if (io_key_ready()) {
             io_get_key();
             return;                     /* 1ac2:5314 - straight out */
@@ -6770,7 +6770,7 @@ void screen_end_of_game(void)
      * more - SI carries forward inside tall_sprite, so every call is the next
      * frame rather than the same one again. */
     int32_t keyed = 0;
-    for (int32_t g = 0; g < 7 && !keyed; g++) {
+    for (uint16_t g = 0; g < 7 && !keyed; g++) {
         uint32_t at = (0x34f0 + global.eog_groups[g].at) & 0xffff;
         const uint8_t *sprite = global_ptr(global.eog_groups[g].sprite_ptr);
 
@@ -6824,9 +6824,9 @@ static void endgame_curtain(int32_t cells)
          * not the curtain". */
         io_frame_sync_extra(SYNC_CURTAIN);
         uint16_t d = bp, wrote = bp;
-        for (int32_t r = 7; r > 0; r--) {
+        for (uint16_t r = 7; r > 0; r--) {
             uint32_t s = cga_next_row(d);
-            for (int32_t b = 0; b < 26 * 2; b++)
+            for (uint16_t b = 0; b < 26 * 2; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] =
                     g_vram[(s + b) & (CGA_SIZE - 1)];
             wrote = d;                  /* the row just written */
@@ -6861,7 +6861,7 @@ static void endgame_curtain(int32_t cells)
         g_vram[(d + 1) & (CGA_SIZE - 1)] = (uint8_t)cap;
 
         bp = cga_prev_row(bp);
-        for (int32_t i = 0; i < 15; i++)
+        for (uint16_t i = 0; i < 15; i++)
             game_delay();
         global.sweep_y[0]--;
         io_present();
@@ -6926,7 +6926,7 @@ int32_t ball_after_endgame(ball_t *b)
                  * so it was the one part of the transition still compared by
                  * nothing - and it is where the level is still on screen. */
                 io_frame_sync_extra(SYNC_CURTAIN);
-                for (int32_t d = 0; d < 327; d++)
+                for (uint16_t d = 0; d < 327; d++)
                     game_delay();
                 xor_sprite_16x7(96, 56,
                                 global_ptr(global.teleport_out_ptr[i - 1]));
@@ -7006,14 +7006,14 @@ int32_t ball_after_endgame(ball_t *b)
 static void banner_row(const uint8_t *cells)
 {
     uint16_t di = BANNER_ROW_VRAM;
-    for (int32_t i = 0; i < 19; i++)
+    for (uint16_t i = 0; i < 19; i++)
         g_vram[di++ & (CGA_SIZE - 1)] = 0;
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
-    for (int32_t i = 0; i < 12; i++) {
+    for (uint16_t i = 0; i < 12; i++) {
         g_vram[di++ & (CGA_SIZE - 1)] = assets.banner_xlat[cells[i]][0];
     }
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
-    for (int32_t i = 0; i < 19; i++)
+    for (uint16_t i = 0; i < 19; i++)
         g_vram[di++ & (CGA_SIZE - 1)] = 0;
     screen_scroll_up();
 }
@@ -7024,13 +7024,13 @@ static void banner_row(const uint8_t *cells)
 static void banner_blank(void)
 {
     uint16_t di = BANNER_ROW_VRAM;
-    for (int32_t i = 0; i < 19; i++)
+    for (uint16_t i = 0; i < 19; i++)
         g_vram[di++ & (CGA_SIZE - 1)] = 0;
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
-    for (int32_t i = 0; i < 12; i++)
+    for (uint16_t i = 0; i < 12; i++)
         g_vram[di++ & (CGA_SIZE - 1)] = 0;
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
-    for (int32_t i = 0; i < 19; i++)
+    for (uint16_t i = 0; i < 19; i++)
         g_vram[di++ & (CGA_SIZE - 1)] = 0;
     screen_scroll_up();
 }
@@ -7079,7 +7079,7 @@ static int32_t bonus_end_level_run(void)
      * with a fresh cap laid on each. */
     uint16_t bp = 0x20a0;
     global.paddle_morphing = 0xff;
-    for (int32_t dh = 112; dh > 0; dh--) {
+    for (uint16_t dh = 112; dh > 0; dh--) {
         io_wait_retrace();
         /* `rep movsw` at 1ac2:4282 has SI on the band's row and DI one row
          * **below** it, so each pass copies a row *down*; SI then steps *up*
@@ -7088,9 +7088,9 @@ static int32_t bonus_end_level_run(void)
          * which is the identity - copied the same two rows six times and
          * never moved. */
         uint16_t si = bp;
-        for (int32_t dl = 6; dl > 0; dl--) {
+        for (uint16_t dl = 6; dl > 0; dl--) {
             uint16_t d = cga_next_row(si);
-            for (int32_t b = 0; b < 26 * 2; b++)
+            for (uint16_t b = 0; b < 26 * 2; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] =
                     g_vram[(si + b) & (CGA_SIZE - 1)];
             si = cga_prev_row(si);
@@ -7098,9 +7098,9 @@ static int32_t bonus_end_level_run(void)
         uint16_t di = cga_next_row(si);
         if (dh == 0x70)
             di = 0;
-        for (int32_t i = 0; i < 26; i++)
+        for (uint16_t i = 0; i < 26; i++)
             vram_setw(di + i * 2, 0);
-        for (int32_t i = 0; i < 120; i++) {
+        for (uint16_t i = 0; i < 120; i++) {
             input_and_draw_paddle();
             global.paddle_morphing = 0;
         }
@@ -7115,10 +7115,10 @@ static int32_t bonus_end_level_run(void)
     /* The banner. **Two** fixed rows, 0x2b39 then 0x2b6d, each scrolled in
      * (1ac2:42e5 and 1ac2:42fa), then a blank one - the transcription had
      * only the second of the three. */
-    for (int32_t i = 0; i < 26; i++)
+    for (uint16_t i = 0; i < 26; i++)
         vram_setw(BANNER_ROW_VRAM + i * 2, global.results_rows[0][i]);
     screen_scroll_up();
-    for (int32_t i = 0; i < 26; i++)
+    for (uint16_t i = 0; i < 26; i++)
         vram_setw(BANNER_ROW_VRAM + i * 2, global.results_rows[1][i]);
     screen_scroll_up();
     banner_blank();
@@ -7129,7 +7129,7 @@ static int32_t bonus_end_level_run(void)
      * walks **up** the level by 0x0c a time, not down: the loop's `pop si` at
      * 1ac2:43e7 takes the value after the second row's lodsb. */
     uint16_t si = (global.level_src_ptr + 0xb8) & 0xffff;
-    for (int32_t n = 14; n > 0; n--, si = (si + 12) & 0xffff) {
+    for (uint16_t n = 14; n > 0; n--, si = (si + 12) & 0xffff) {
         banner_row(assets_ptr(si));
         banner_row(assets_ptr(si));
         banner_blank();
@@ -7138,8 +7138,8 @@ static int32_t bonus_end_level_run(void)
     /* Seven more fixed rows, 52 apart like the first two - 0x2ba1 through
      * 0x2cd9, at 1ac2:43ef to 1ac2:447f. The transcription went straight from
      * the level's cells to the fresh ball and had none of what follows. */
-    for (int32_t r = 0; r < 7; r++) {
-        for (int32_t i = 0; i < 26; i++)
+    for (uint16_t r = 0; r < 7; r++) {
+        for (uint16_t i = 0; i < 26; i++)
             vram_setw(BANNER_ROW_VRAM + i * 2, global.results_rows[2 + r][i]);
         screen_scroll_up();
     }
@@ -7147,16 +7147,16 @@ static int32_t bonus_end_level_run(void)
     /* 1ac2:4482  The funnel: 48 rows, each two marks four bytes apart with
      * blank either side. Every fourth row is marked 0xd1 rather than 0xd5,
      * which is what gives the walls their rungs. */
-    for (int32_t dl = 48; dl > 0; dl--) {
+    for (uint16_t dl = 48; dl > 0; dl--) {
         uint16_t di = BANNER_ROW_VRAM;
-        for (int32_t i = 0; i < 23; i++)
+        for (uint16_t i = 0; i < 23; i++)
             g_vram[di++ & (CGA_SIZE - 1)] = 0;
         uint8_t mark = (dl & 3) ? 0xd5 : 0xd1;
         g_vram[di++ & (CGA_SIZE - 1)] = mark;
-        for (int32_t i = 0; i < 4; i++)
+        for (uint16_t i = 0; i < 4; i++)
             g_vram[di++ & (CGA_SIZE - 1)] = 0;
         g_vram[di++ & (CGA_SIZE - 1)] = mark;
-        for (int32_t i = 0; i < 23; i++)
+        for (uint16_t i = 0; i < 23; i++)
             g_vram[di++ & (CGA_SIZE - 1)] = 0;
         screen_scroll_up();
     }
@@ -7167,11 +7167,11 @@ static int32_t bonus_end_level_run(void)
      * **crossed** - `and ah, bl` then `and al, bh` - because the word was
      * loaded little-endian and the mask is written the other way round. */
     uint32_t mask_l = 0xffff, mask_r = 0xffff;
-    for (int32_t pass = 8; pass > 0; pass--) {
+    for (uint16_t pass = 8; pass > 0; pass--) {
         mask_l = (mask_l << 2) & 0xffff;
         mask_r = (mask_r >> 2) & 0xffff;
         uint16_t di = 0x1198;
-        for (int32_t row = 4; row > 0; row--) {
+        for (uint16_t row = 4; row > 0; row--) {
             g_vram[di & (CGA_SIZE - 1)] &= (uint8_t)(mask_l >> 8);
             g_vram[(di + 1) & (CGA_SIZE - 1)] &= (uint8_t)mask_l;
             g_vram[(di + 2) & (CGA_SIZE - 1)] &= (uint8_t)(mask_r >> 8);
@@ -7179,7 +7179,7 @@ static int32_t bonus_end_level_run(void)
             di = cga_next_row(di);
         }
         input_and_draw_paddle();
-        for (int32_t i = 0; i < 40; i++)
+        for (uint16_t i = 0; i < 40; i++)
             game_delay();
     }
 
@@ -7211,9 +7211,9 @@ static int32_t bonus_end_level_run(void)
         int32_t how = ball_after_endgame(&global.balls[0]);
         if (how)
             return how;
-        for (int32_t i = 0; i < 4; i++) {
+        for (uint16_t i = 0; i < 4; i++) {
             sound_tick();
-            for (int32_t k = 0; k < 9; k++)
+            for (uint16_t k = 0; k < 9; k++)
                 game_delay();
         }
         io_present();
@@ -7396,7 +7396,7 @@ void screen_results(const char *dir)
      * The panel is drawn with `draw_run(' ', n)`: glyph 0 is not blank, it is
      * a solid block of colour 2, so a run of spaces *is* the red ground the
      * text sits on. HSC_LINE is the step from one text line to the next. */
-    for (int32_t i = 0; i < 24; i++)              /* 1ac2:0f08 */
+    for (uint16_t i = 0; i < 24; i++)              /* 1ac2:0f08 */
         vram_setw(0xf2 + i * 2, 0xaaaa);
 
     uint16_t d = 0x20f2;
@@ -7427,8 +7427,8 @@ void screen_results(const char *dir)
         d = draw_run(' ', 2, d);
         /* 1ac2:0fca - two scan lines of bar between the rows. */
         d = (d + HSC_LINE) & 0xffff;
-        for (int32_t r = 0; r < 2; r++) {
-            for (int32_t i = 0; i < 24; i++)
+        for (uint16_t r = 0; r < 2; r++) {
+            for (uint16_t i = 0; i < 24; i++)
                 vram_setw((d + i * 2) & 0xffff, 0xaaaa);
             d = cga_next_row(d);
         }
@@ -7436,7 +7436,7 @@ void screen_results(const char *dir)
 
     /* 1ac2:1006 - the rest of the panel, down to the bottom bar at 0x1f42. */
     while ((d & 0xffff) != 0x1f42) {
-        for (int32_t i = 0; i < 24; i++)
+        for (uint16_t i = 0; i < 24; i++)
             vram_setw((d + i * 2) & 0xffff, 0xaaaa);
         d = cga_next_row(d);
     }
@@ -7448,7 +7448,7 @@ void screen_results(const char *dir)
 
     /* 1ac2:1035 - the results stand until a key or until the two nested
      * counts of 0xc8 run out. */
-    for (int32_t dl = 200; dl > 0; dl--) {
+    for (uint16_t dl = 200; dl > 0; dl--) {
         /* 1ac2:1037, the outer pass. Nothing else in this screen is a frame:
          * the whole of it - the cleared field, the intro over it, the bar and
          * the names - is drawn before the wait begins, so one comparison here
@@ -7456,7 +7456,7 @@ void screen_results(const char *dir)
          * it the results screen cannot be compared at all: io_frame_sync
          * lives in the play loop, and by here the play loop is over. */
         io_frame_sync_extra(SYNC_RESULTS);
-        for (int32_t n = 200; n > 0; n--) {
+        for (uint16_t n = 200; n > 0; n--) {
             if (io_key_ready()) {
                 io_get_key();
                 results_finish(dir);
@@ -7732,8 +7732,8 @@ int32_t cheat_sequence(char key)
 void draw_anim_cell(const anim_sprite_t *sprite, uint16_t x, uint16_t y)
 {
     uint16_t di = cga_at(x, y);
-    for (int32_t r = 0; r < 8; r++) {
-        for (int32_t b = 0; b < 4; b++)
+    for (uint16_t r = 0; r < 8; r++) {
+        for (uint16_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = (*sprite)[r][b];
         di = cga_next_row(di);
     }
