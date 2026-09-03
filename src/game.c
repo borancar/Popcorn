@@ -1735,7 +1735,7 @@ uint32_t draw_brick_row(uint32_t y)
  * Six rows of five bytes at a pixel position - the popcorn kernels the level
  * intro sweeps down the screen.
  */
-void draw_sprite_20x6(uint32_t x, uint32_t y, const uint8_t *src)
+void draw_sprite_20x6(uint16_t x, uint16_t y, const uint8_t *src)
 {
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 6; r++) {
@@ -1878,7 +1878,7 @@ void level_intro(void)
  * typed pointer to them claims an alignment they do not have, and GCC is right
  * to warn about it. Bytes have no alignment to get wrong, and bytes are what
  * goes into video memory anyway. */
-void ball_draw(const void *rows, uint32_t x, uint32_t y)
+void ball_draw(const void *rows, uint16_t x, uint16_t y)
 {
     const uint8_t *p = rows;
     uint32_t di = cga_at(x, y);
@@ -2132,7 +2132,7 @@ void ball_paddle(ball_t *b)
  * A hit records the cell's address in the slot and the brick's centre after
  * it, and counts itself in [0x2e74].
  */
-void probe_cell_at(uint32_t x, uint32_t y, hit_t *hit)
+void probe_cell_at(uint16_t x, uint16_t y, hit_t *hit)
 {
     if (x > 191 || y > 196) {
         hit->cell_ptr = 0;
@@ -2520,7 +2520,7 @@ void brick_hit(hit_t *hit, uint8_t *cell, ball_t *ball)
  * apart but only seven of them are drawn - the eighth is the gap between
  * rows - so this both draws a brick and, run again, rubs it out.
  */
-void xor_sprite_16x7(uint32_t x, uint32_t y, const uint8_t *src)
+void xor_sprite_16x7(uint16_t x, uint16_t y, const uint8_t *src)
 {
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 7; r++) {
@@ -2699,7 +2699,7 @@ void walker_step(uint32_t x)
 
 /* One strip of the hatch the creature comes out of: 19 rows of one word at a
  * fixed position, from a list of frames. */
-static void hatch_frame(const uint8_t *src, uint32_t x, uint32_t y)
+static void hatch_frame(const uint8_t *src, uint16_t x, uint16_t y)
 {
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 19; r++) {
@@ -3050,7 +3050,7 @@ void cells_restore(void)
  * ===================================================================== */
 
 /* 1ac2:406a  xor_sprite_20x16 - sixteen rows of five bytes, XORed in */
-void xor_sprite_20x16(uint32_t x, uint32_t y, const uint8_t *src)
+void xor_sprite_20x16(uint16_t x, uint16_t y, const uint8_t *src)
 {
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 16; r++) {
@@ -3069,7 +3069,7 @@ void xor_sprite_20x16(uint32_t x, uint32_t y, const uint8_t *src)
  * loop here is the same operation.
  */
 
-void sprite_shift_draw(uint32_t x, uint32_t y, const uint8_t *src)
+void sprite_shift_draw(uint16_t x, uint16_t y, const uint8_t *src)
 {
     memcpy(global.sprite_work, src, sizeof global.sprite_work);
     for (uint32_t n = (x & 3) * 2; n > 0; n--) {
@@ -3090,7 +3090,7 @@ void sprite_shift_draw(uint32_t x, uint32_t y, const uint8_t *src)
  * one, advance. Shared by the handlers below, which differ only in which
  * drawing routine they use and what they do when the list ends. */
 static int32_t entity_anim(ent_anim_t *a,
-                           void (*draw)(uint32_t, uint32_t, const uint8_t *))
+                           void (*draw)(uint16_t, uint16_t, const uint8_t *))
 {
     if (--a->sprite.timer != 0)
         return 0;                       /* not time for the next frame yet */
@@ -3363,7 +3363,7 @@ int32_t bonus_steer(ent_anim_t *b, uint32_t *px, uint32_t *py)
 }
 
 /* 1ac2:40f2  xor_sprite_16xn - like 0x3b64 but the caller says how many rows */
-void xor_sprite_16xn(uint32_t x, uint32_t y, const uint8_t *src, uint32_t rows)
+void xor_sprite_16xn(uint16_t x, uint16_t y, const uint8_t *src, uint32_t rows)
 {
     uint32_t di = cga_at(x, y);
     for (uint32_t r = 0; r < rows; r++) {
@@ -3413,7 +3413,7 @@ void entity_plain(ent_anim_t *a)
 /* Put a ball down at a point and set it going upwards: position, anchor and
  * both accumulators, a fresh sprite, and draw it. Three handlers do exactly
  * this and only the offsets they add differ. */
-void ball_place(ball_t *ball, uint32_t x, uint32_t y)
+void ball_place(ball_t *ball, uint16_t x, uint16_t y)
 {
     ball_t *b = ball;
     b->x = b->prev_x = b->anchor_x = (uint8_t)x;
@@ -3624,7 +3624,7 @@ void entity_ball_hold(ent_anim_t *a)
  * right `(x & 3) * 2` bits to the pixel wanted. Returns the framebuffer offset
  * it used, because 1ac2:306b carries on from there down the next two rows.
  */
-uint32_t pixel_xor(uint32_t x, uint32_t y)
+uint32_t pixel_xor(uint16_t x, uint16_t y)
 {
     uint32_t di = cga_at(x, y);
     uint32_t mask = 0xc0 >> ((x & 3) * 2);
@@ -3638,7 +3638,7 @@ uint32_t pixel_xor(uint32_t x, uint32_t y)
  * each end of the paddle. Drawing it twice rubs it out, and it leaves
  * [0x2e7e] at 1 to say a shot is on its way.
  */
-void shot_xor(uint32_t x, uint32_t y)
+void shot_xor(uint16_t x, uint16_t y)
 {
     for (int32_t side = 0; side < 2; side++) {
         uint32_t sx = side ? (x + 19) & 0xff : x;
@@ -4128,7 +4128,7 @@ int32_t score_before(const uint8_t *a, const uint8_t *b)
  * ===================================================================== */
 #define SHOT_SOUND 5
 
-static void laser_dot_rows(uint32_t x, uint32_t y, int32_t moving)
+static void laser_dot_rows(uint16_t x, uint16_t y, int32_t moving)
 {
     uint32_t mask = 0xc0 >> ((x & 3) * 2);
     uint32_t di = pixel_xor(x, y);
@@ -5278,7 +5278,7 @@ void menu_particles_init(uint32_t ax_in)
 /* INT 10h AH=0Ch in mode 05h: one pixel, two bits, in the byte that holds it.
  * The virtual screen the game plots into is 320 wide, so `cx` is used as it
  * comes rather than halved. */
-void plot_pixel(uint32_t x, uint32_t y, uint32_t colour)
+void plot_pixel(uint16_t x, uint16_t y, uint32_t colour)
 {
     if (x >= CGA_W || y >= CGA_H)
         return;
@@ -5289,7 +5289,7 @@ void plot_pixel(uint32_t x, uint32_t y, uint32_t colour)
 }
 
 /* The same with bit 7 of AL set: XOR rather than replace. */
-void plot_pixel_xor(uint32_t x, uint32_t y, uint32_t colour)
+void plot_pixel_xor(uint16_t x, uint16_t y, uint32_t colour)
 {
     if (x >= CGA_W || y >= CGA_H)
         return;
@@ -5803,7 +5803,7 @@ void screen_restore(void)
  * 0xc46:0x28f0, indexed the same way cell_special indexes it but with the
  * column taken from `(x >> 2) - 2` rather than from the cell address.
  */
-void brick_11_after(uint32_t x, uint32_t y)
+void brick_11_after(uint16_t x, uint16_t y)
 {
     uint8_t row = y - 6;
     const uint8_t *src = &assets.hole_picture[row][((x >> 2) & 0xff) - 2];
@@ -5828,7 +5828,7 @@ void brick_11_after(uint32_t x, uint32_t y)
  * four bytes from 0xc46:0x28f0 at row * 0x30 + (x >> 2) - 2, stepping 0x30
  * bytes a row. level_between uses it for a cell of 0x0c.
  */
-void cell_hole_draw(uint32_t x, uint32_t y)
+void cell_hole_draw(uint16_t x, uint16_t y)
 {
     uint8_t row = y - 6;
     const uint8_t *src = &assets.hole_picture[row][((x >> 2) & 0xff) - 2];
@@ -6158,7 +6158,7 @@ void screen_game_over(void)
  * picks the half of the interlace, bits 0 and 1 of the column pick one of four
  * pre-shifted sprites in particle_sprites.
  */
-void ending_plot(uint32_t x, uint32_t y)
+void ending_plot(uint16_t x, uint16_t y)
 {
     uint32_t di = (y & 1) ? CGA_PLANE : 0;
     uint32_t row = y >> 1;
@@ -7723,7 +7723,7 @@ int32_t cheat_sequence(char key)
 /* 1ac2:3bac  draw_anim_cell - one animated brick's sprite, copied not XORed.
  * Eight rows of four bytes is the sprite's own shape, so it subscripts rather
  * than stepping an offset. */
-void draw_anim_cell(const anim_sprite_t *sprite, uint32_t x, uint32_t y)
+void draw_anim_cell(const anim_sprite_t *sprite, uint16_t x, uint16_t y)
 {
     uint32_t di = cga_at(x, y);
     for (int32_t r = 0; r < 8; r++) {
