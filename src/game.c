@@ -311,7 +311,7 @@ void draw_paddle(const uint8_t *sprite)
      * at all - this is compensation for what the redraw itself cost, which is
      * what keeps the game running at one speed whether the paddle is moving
      * or not. It is not a score. */
-    global.frame_delay -= 0x1e0;            /* the uint16_t is the `& 0xffff` */
+    global.frame_delay -= 480;            /* the uint16_t is the `& 0xffff` */
 
     /* What is on screen now becomes what has to be erased. */
     global.paddle_rows[1] = global.paddle_rows[0];
@@ -1287,16 +1287,16 @@ int32_t play_loop(void)
     memcpy(global.paddle_pix[0], global.paddle_sprites[0][0], 39 * 2);
     global.ball_alive = 1;
     memcpy(global.balls[0].sprite, global.ball_start_sprite, sizeof global.balls[0].sprite);
-    global.frame_delay_set = 0x1f4;
+    global.frame_delay_set = 500;
     global.key_right = global.key_left = 0;
     global.repeat_div = 0;
     global.key_action = 0;
-    global.speed_step = global.speed_limit = 0xfa;
+    global.speed_step = global.speed_limit = 250;
     if (runtime.delay_entry != 0xc3) {
         global.speed_step = 3;
         global.speed_limit = 3;
     }
-    global.speed_timer = 0x4e20;
+    global.speed_timer = 20000;
     global.entity_remove = 0;
     global.bonus_pending = global.bonus_live = global.bonus_cap = 0;
     global.paddle_morphing = 0;
@@ -1368,8 +1368,8 @@ frames:
          * often, up to the limit - the level speeds up the longer it runs. */
         global.speed_timer--;
         if (global.speed_timer == 0) {
-            global.speed_timer = 0x61a8;
-            if (global.speed_limit != 0xff)
+            global.speed_timer = 25000;
+            if (global.speed_limit != 255)
                 global.speed_limit++;
             global.speed_step = global.speed_limit;
         }
@@ -1456,7 +1456,7 @@ frames:
                 uint32_t di = global.extra_pos;
                 vram_setw(di, 0);
                 global.extra_pos = (uint16_t)(cga_next_row(di));
-                global.extra_timer = (uint16_t)(0x190);
+                global.extra_timer = 400;
             }
             global.serve_timeout = (uint16_t)(global.serve_timeout - 1);
             if (global.serve_timeout == 0)
@@ -1468,10 +1468,10 @@ frames:
          * frame is paced on the refresh below, so this no longer sets a
          * speed, and the [0x33d6] taper rides on io_frame_pace instead. */
         for (int32_t i = 3 - global.bonus_live; i > 0; i--)
-            io_delay_cycles(0xb4 * CYCLES_PER_LOOP);
+            io_delay_cycles(180 * CYCLES_PER_LOOP);
 
         if (global.extra_on != 1 && global.bonus_pending != 3 &&
-            game_random(io_ticks(), 0x86) == 0)
+            game_random(io_ticks(), 134) == 0)
             bonus_spawn();
 
         sound_tick();
@@ -1552,7 +1552,7 @@ void play_session(void)
     global.lives = 5;
 
     /* A demo starts on a random level; a game always starts on the first. */
-    uint32_t lv = game_random(io_ticks(), 0x1e);
+    uint32_t lv = game_random(io_ticks(), 30);
     if (global.input_active_fn != INPUT_DEMO_FN)
         lv = 0;
     /* popcorn-dev --level N. The draw above still happens: it is one of the
@@ -1751,7 +1751,7 @@ void level_intro(void)
         for (int32_t i = 0; i < 24 * 2; i++)
             g_vram[(0x3ef2 + i) & (CGA_SIZE - 1)] = feed[i];
         feed += 24 * 2;
-        io_delay_cycles(0x7d0 * CYCLES_PER_LOOP);
+        io_delay_cycles(2000 * CYCLES_PER_LOOP);
         io_present();
         if (!io_pump())
             return;
@@ -1763,7 +1763,7 @@ void level_intro(void)
         for (int32_t i = 0; i < 5; i++)
             g_vram[(0x3f08 + i) & (CGA_SIZE - 1)] = feed[i];
         feed += 5;
-        io_delay_cycles(0x8fc * CYCLES_PER_LOOP);
+        io_delay_cycles(2300 * CYCLES_PER_LOOP);
         io_present();
         if (!io_pump())
             return;
@@ -2312,7 +2312,7 @@ static void brick_degrade(hit_t *hit, uint32_t from, uint32_t to)
  * table until an entry is at least random(0xff) and take that index. */
 static uint32_t bonus_kind(void)
 {
-    uint32_t r = game_random(io_ticks(), 0xff);
+    uint32_t r = game_random(io_ticks(), 255);
     uint32_t i = 0;
     while (global.bonus_odds[i] < r)
         i++;
@@ -3122,7 +3122,7 @@ void bonus_release(const ent_hatch_t *h)
     e->handler_fn = ENTITY_BONUS_FN;
     ent_anim_t *b = &e->p.anim;
     b->arg.move.mode = 0;
-    b->arg.move.steps = (uint8_t)(game_random(io_ticks(), 0x3c) + 9);
+    b->arg.move.steps = (uint8_t)(game_random(io_ticks(), 60) + 9);
 
     const bonus_kind_t *kind = &global.bonus_kinds[game_random(io_ticks(), 8)];
     b->sprite.frame_ptr = kind->frame_ptr;
@@ -3319,7 +3319,7 @@ int32_t bonus_steer(ent_anim_t *b, uint32_t *px, uint32_t *py)
         b->arg.move.steps = 0xff;
         return 1;
     }
-    b->arg.move.steps = (uint8_t)game_random(io_ticks(), 0x3d);
+    b->arg.move.steps = (uint8_t)game_random(io_ticks(), 61);
     return 1;
 }
 
@@ -3450,7 +3450,7 @@ void brick_9(hit_t *hit, ball_t *ball)
 
     entity_t *timer = entity_alloc();
     timer->handler_fn = ENTITY_CELLS_TIMER_FN;
-    timer->p.cells.left = 0x514;
+    timer->p.cells.left = 1300;
 
     entity_t *e = entity_alloc();
     e->handler_fn = ENTITY_BALL_ARRIVE_FN;
@@ -3481,7 +3481,7 @@ void brick_10(hit_t *hit, ball_t *ball)
     a->sprite.frame_ptr = global_off(global.brick10_hold_ptr);
     a->sprite.x = (uint8_t)x;
     a->sprite.y = (uint8_t)y;
-    a->sprite.timer = a->sprite.period = 0x69;
+    a->sprite.timer = a->sprite.period = 105;
     sprite_shift_draw(x, y, global.brick10_hold[0][0]);
 
     ball_t *b = ball;
@@ -3795,7 +3795,7 @@ settle:
      * one line here that has to look outside the capsule. */
     entity_of(b)->handler_fn = ENTITY_SPARKLE_FN;
     b->sprite.frame_ptr = global_off(&global.sparkle_ptr[1]);
-    b->sprite.timer = b->sprite.period = 0x0f;
+    b->sprite.timer = b->sprite.period = 15;
     global.bonus_live--;
     sprite_shift_draw(b->sprite.x, b->sprite.y,
                       global_ptr(global_w(b->sprite.frame_ptr - 2)));  /* a sparkle */
@@ -3865,7 +3865,7 @@ void draw_paddle_shifted(const uint8_t *sprite)
     if (!global.paddle_morphing &&
         global.paddle_x == global.paddle_prev_x)
         return;
-    global.frame_delay -= 0x1f3;          /* the uint16_t is the `& 0xffff` */
+    global.frame_delay -= 499;          /* the uint16_t is the `& 0xffff` */
 
     global.paddle_rows[1] = global.paddle_rows[0];
     memcpy(global.paddle_pix[1], global.paddle_pix[0],
@@ -4304,8 +4304,8 @@ void bonus_net(void)
         global.net_on = 1;
         flash_bar(0x1554);
     }
-    global.net_life = (uint16_t)(0x1388);
-    global.net_timer = 0xc8;
+    global.net_life = 5000;
+    global.net_timer = 200;
     fill_column(0x1a77, 0xaaaa);
     global.net_pos = (uint16_t)(0x1a77);
 }
@@ -4337,7 +4337,7 @@ void bonus_slower_ball(void)
         global.speed_limit--;
         global.speed_step = global.speed_limit;
     }
-    global.speed_timer = 0x4e20;
+    global.speed_timer = 20000;
 }
 
 /* The dispatch at 1ac2:337d. Kind 8 ends the level and is not here: it throws
@@ -4482,7 +4482,7 @@ void entity_paddle_fx(ent_morph_t *m)
         if (m->to != 3) {
             /* Losing the catch: release anything held. */
             global.caught = 0;
-            global.hold_timer = (uint16_t)(0x460);
+            global.hold_timer = 1120;
             for (int32_t i = 0; i < 3; i++) {
                 ball_t *ball = &global.balls[i];
                 ball_t *b = ball;
@@ -4932,7 +4932,7 @@ void play_frame(void)
          * delay routine. Calling it 1500 times a pass, 0xc2 passes, is a
          * third of a million trips through the platform layer for a wait
          * the original spends entirely inside two instructions. */
-        io_delay_cycles(0x5dc * CYCLES_PER_LOOP);
+        io_delay_cycles(1500 * CYCLES_PER_LOOP);
         io_present();
         if (!io_pump())
             return;
@@ -5098,7 +5098,7 @@ void bonus_spawn(void)
     h->x = m->x;
     h->y = m->y;
     h->wait = 0;
-    h->phase = 0x2bc;
+    h->phase = 700;
     h->script_ptr = global_off(global.hatch_script_ptr);
 }
 
@@ -6716,7 +6716,7 @@ void screen_end_of_game(void)
             return;
     }
 
-    /* A key, or 0x1c20 ticks of waiting for one. */
+    /* A key, or 7200 ticks of waiting for one. */
     for (int32_t n = 7200; n > 0; n--) {
         if (io_key_ready()) {
             io_get_key();
@@ -7519,7 +7519,7 @@ void bonus_stop_monsters(void)
 {
     global.extra_on = 1;
     global.serve_timeout = (uint16_t)(0x2710);
-    global.extra_timer = (uint16_t)(0x190);
+    global.extra_timer = 400;
     fill_column(0x1a8b, 0xaaaa);
     global.extra_pos = (uint16_t)(0x1a8b);
 }
