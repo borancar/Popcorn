@@ -43,6 +43,15 @@ rules this checks are what keeps those honest:
      without a pointer type: `table` is an array of somethings, and the C
      that means it is `global_w(table[index])`.
 
+  8. A **32-bit type has to earn it**.  An 8086 does 32-bit arithmetic in
+     DX:AX and nowhere else, so a `uint32_t` or an `int32_t` in a transcribed
+     routine is a claim: that the value really is wider than the register the
+     original keeps it in.  Usually it is not, and the wide version *works* -
+     offsets stay under 64K and positions under 256, so the truncation never
+     happens and no test notices.  The two that are genuine are named in
+     WIDE_OK below; everything else is either a C loop counter, a flag, or a
+     register that should be as wide as the register.
+
 And one thing it reports without complaining about: `global_ptr(global_w(x))`, a
 pointer **to** a pointer.  The game keeps tables of frame addresses, so a
 cursor into one needs both steps and two indirections are right there - the
@@ -113,6 +122,17 @@ SEGMENT_OF = {
     "assets_ptr": "assets",
     "runtime_ptr": "runtime", "runtime_w": "runtime",
     "vram_setw": "vram",
+}
+
+# The 32-bit values this program genuinely has, and why.  Everything else
+# that is uint32_t or int32_t is either C scaffolding - a loop counter, a
+# flag, an index into a buffer the port owns - or a register written wider
+# than it is.
+WIDE_OK = {
+    "ticks":  "the BIOS counter at 0040:006C is a dword",
+    "io_ticks": "likewise",
+    "first":  "particle_height's imul, whose product is DX:AX before idiv",
+    "prod":   "likewise",
 }
 
 # The argument that is an offset.  global_setw(off, value) writes the second.
@@ -293,13 +313,41 @@ def ptr_fields(paths):
 
 
 def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
-          segments, all_fields):
+          segments, all_fields, wide, wide_loops):
     src = open(path, "rb").read()
     tree = Parser(C).parse(src)
     rel = os.path.relpath(path)
 
     def add(rule, node, msg):
         findings.append((rule, rel, node.start_point[0] + 1, msg))
+
+    # Rule 8: every 32-bit type, so each one is a decision rather than a
+    # default.  A `for` counter is C scaffolding and says nothing about the
+    # machine, so those are counted and not listed - what is left is the
+    # worklist.
+    for n in walk(tree.root_node):
+        if n.type not in ("declaration", "parameter_declaration",
+                          "function_definition"):
+            continue
+        t = n.child_by_field_name("type")
+        if t is None or text(t, src) not in ("uint32_t", "int32_t"):
+            continue
+        if n.type == "declaration" and n.parent is not None \
+                and n.parent.type == "for_statement":
+            wide_loops[0] += 1
+            continue
+        who = None
+        for sub in walk(n):
+            if sub.type == "identifier":
+                who = text(sub, src)
+                break
+        if who is None or who in WIDE_OK:
+            continue
+        kind = {"parameter_declaration": "parameter",
+                "function_definition": "return",
+                "declaration": "local"}[n.type]
+        wide.setdefault(who, set()).add(
+            "%s:%d %s %s" % (rel, n.start_point[0] + 1, text(t, src), kind))
 
     for n in walk(tree.root_node):
         if n.type == "call_expression":
@@ -692,8 +740,10 @@ def main():
     known_fn = fn_fields(a.files)
     fields = struct_fields(a.files)
     findings, candidates, segments = [], {}, {}
+    wide, wide_loops = {}, [0]
     for f in a.files:
-        check(f, known, known_fn, findings, candidates, segments, fields)
+        check(f, known, known_fn, findings, candidates, segments, fields,
+              wide, wide_loops)
 
     # A stored offset read against more than one segment.  Informational: it
     # can be right - a field that legitimately retargets - but at most one
@@ -759,6 +809,26 @@ def main():
     report("locals feeding an accessor",
            "not the rename, but each one is a pointer the routine is "
            "holding in an integer", local_side)
+
+    # The rule's reasoning is about transcribed code. The platform layer is
+    # the port's own and answers to the host: milliseconds, cycle counts and
+    # a palette are as wide as they need to be.
+    def is_platform(uses):
+        return all("sdl_io.c" in u or " io_" in u or " g_" in u for u in uses)
+
+    transcribed = {k: v for k, v in wide.items()
+                   if not (k.startswith(("io_", "g_")) or is_platform(v))}
+    platform = {k: v for k, v in wide.items() if k not in transcribed}
+
+    report("32-bit where the machine has 16",
+           "an 8086 does 32-bit arithmetic in DX:AX and nowhere else, so "
+           "each of these is a claim to check - %d `for` counters are C "
+           "scaffolding and not listed" % wide_loops[0], transcribed)
+    report("32-bit in the platform layer",
+           "the port's own code rather than a transcribed register - "
+           "milliseconds, cycles and a palette are as wide as the host "
+           "wants them, and this list is here to stay small rather than to "
+           "reach zero", platform)
 
     print("\n%d flagged, %d fields named _ptr, %d named _fn"
           % (len(findings), len(known), len(known_fn)))
