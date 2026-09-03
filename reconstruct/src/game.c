@@ -91,6 +91,17 @@ void ball_step(ball_t *b)
  * *both* held it moves in the direction of whichever key was pressed most
  * recently, which the INT 09h handler records at [0x2d4a].
  */
+/* The playfield's edges, in the x and y the ball and the paddle are held in.
+ * They live here rather than beside ball_after, which is where they used to
+ * be and is no longer the only thing that needs them: play_prepare puts the
+ * paddle's left limit on WALL_LEFT. FLOOR and WALL_RIGHT are the same 196
+ * and stay two names, because the ball turning round at the side and being
+ * lost at the bottom are not the same event. */
+#define WALL_LEFT     8
+#define WALL_RIGHT  196
+#define WALL_TOP      4
+#define FLOOR       196
+
 #define REPEAT_RESET  5
 
 void input_keyboard(void)
@@ -1232,7 +1243,7 @@ int32_t play_loop(void)
      * left wall the moment the mouse is read. */
     global.paddle_width = global.paddle_sets[0].width;
     global.paddle_max = 172;
-    global.paddle_min = 8;
+    global.paddle_min = WALL_LEFT;
     global.repeat_count = 5;
     global.repeat_div = 5;
     io_mouse_warp(100 * 2, 184);
@@ -1860,10 +1871,6 @@ int32_t ball_redraw(ball_t *b)
  * [0x2e81] is the safety net - the extra floor a bonus can put up. With it
  * live the ball bounces off the bottom instead of being lost.
  */
-#define WALL_LEFT   0x08
-#define WALL_RIGHT  0xc4
-#define WALL_TOP    0x04
-#define FLOOR       0xc4
 #define SOUND_BOUNCE   2
 
 void ball_after(ball_t *b)
@@ -6982,7 +6989,7 @@ static int32_t bonus_end_level_run(void)
 
     global.paddle_kind = 0;
     global.paddle_max = 172;
-    global.paddle_min = 8;
+    global.paddle_min = WALL_LEFT;
     global.paddle_width = global.paddle_sets[0].width;
     blit_xor(global.paddle_pix[0], &global.paddle_rows[0]);
 
