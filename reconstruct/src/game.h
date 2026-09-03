@@ -1597,7 +1597,7 @@ void io_print_dos(const char *what, const uint8_t *dos, uint32_t n);
  */
 void ball_step(ball_t *b);                          /* 1ac2:27d7 */
 void input_keyboard(void);                              /* 1ac2:1712 */
-void input_mouse(uint32_t mouse_x, uint32_t buttons);   /* 1ac2:169f */
+void input_mouse(uint16_t mouse_x, uint16_t buttons);   /* 1ac2:169f */
 void save_screen(void);                                 /* 1ac2:5099 */
 void restore_screen(void);                              /* 1ac2:50bc */
 void paddle_row_offsets(uint16_t x, paddle_rows_t *rows); /* 1ac2:22de */
@@ -1623,7 +1623,7 @@ void io_frame_sync_extra(int32_t which);
 void io_lockstep_extra_sync(int32_t mask);
 int32_t io_grabbed(void);
 void game_delay(void);                                  /* 1ac2:164c */
-void read_speed_setting(uint32_t speed);                /* 1ac2:5680 */
+void read_speed_setting(uint8_t speed);                /* 1ac2:5680 */
 void build_shifted_sprites(void);                       /* 1ac2:14b3 */
 void load_high_scores(const char *dir);                 /* 1ac2:4d96 */
 void intro_curtain(void);                               /* 1ac2:078b */
@@ -1631,7 +1631,7 @@ void intro_logo(void);                                  /* 1ac2:54d6 */
 void intro_reveal(void);                                /* 1ac2:55e5 */
 void intro_scroll(void);                                /* 1ac2:4a7a */
 void intro_paddle(void);                                /* 1ac2:49bc */
-void int09_handler(uint32_t scan);                      /* 1ac2:03e3 */
+void int09_handler(uint8_t scan);                      /* 1ac2:03e3 */
 int32_t  drive_check(void);                                 /* 1ac2:4dea */
 int32_t  drive_writable(void);                              /* 1ac2:4e04 */
 void game_main(const char *dir, const char *levels);
@@ -1692,7 +1692,7 @@ void set_crtc(const uint8_t *params); /* 1ac2:4b7a */
 uint8_t screen_player_names(void);  /* 1ac2:10de */
 int32_t  name_field(uint16_t di, uint8_t *abort); /* 1ac2:13b8 */
 void play_frame(void);            /* 1ac2:1212 */
-uint16_t frame_band(uint16_t di, uint32_t fill);  /* 1ac2:1354 */
+uint16_t frame_band(uint16_t di, uint16_t fill);  /* 1ac2:1354 */
 void panel_reveal(void);          /* 1ac2:0911 */
 void field_marks(void);           /* 1ac2:0598 */
 void field_marks_wide(uint16_t di, uint16_t rows);  /* 1ac2:0a1d */
@@ -1798,7 +1798,7 @@ entity_t *entity_alloc(void);      /* 1ac2:3232 */
 uint16_t draw_run(uint8_t c, uint16_t count, uint16_t di); /* 1ac2:10c5 */
 void draw_cursor(uint16_t di);    /* 1ac2:14a7 */
 void define_keys_prompt(uint16_t src, uint16_t dst);            /* 1ac2:1642 */
-void flash_bar(uint32_t pattern); /* 1ac2:3146 */
+void flash_bar(uint16_t pattern); /* 1ac2:3146 */
 void cell_set_three(ent_anim_t *a); /* 1ac2:3668 */
 void cells_restore(void);         /* 1ac2:36fb */
 
