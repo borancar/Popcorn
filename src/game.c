@@ -397,7 +397,7 @@ void draw_char(char c, uint16_t di)
 uint32_t game_random(uint32_t ticks, uint32_t limit)
 {
     io_log_random(limit);               /* for sidebyside.py, no-op otherwise */
-    uint32_t ax = ticks & 0xffff;
+    uint16_t ax = ticks & 0xffff;
     /* Ten words out of the **entity pool**, from entity 2's variant on:
      * 0x3164 is entities[2] plus two, so what gets folded in is whatever the
      * entities happen to be holding this frame. */
@@ -774,7 +774,7 @@ void intro_reveal(void)
         }
     }
 
-    uint32_t bp = 0xa0;
+    uint16_t bp = 0xa0;
     for (int32_t band = 0; band < 7; band++, bp += 0x370) {
         for (uint32_t bx = 1; bx < 53; bx++) {
             /* The slice is anchored 0x33 into the band and widens to the
@@ -2252,7 +2252,7 @@ void ball_bricks(ball_t *b)
         while (i < 4 && !global.hits[i].cell_ptr)
             i++;
         if (i < 4) {
-            uint32_t d = global.hit_dirs[i];
+            uint8_t  d = global.hit_dirs[i];
             b->dir_x = (uint8_t)(d & 0xff);
             b->dir_y = (uint8_t)(d >> 8);
             b->anchor_y = (uint8_t)(b->y + (b->dir_y ? -1 : 1));
@@ -2785,7 +2785,7 @@ void level_draw(void)
 
     for (int32_t f = 0; f < 6; f++) {
         const uint8_t *src = global_ptr(global.walker_drop_ptr[f]);
-        uint32_t d = 0x1cd9;
+        uint16_t d = 0x1cd9;
         for (int32_t r = 0; r < 7; r++) {
             for (int32_t b = 0; b < 7; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] = src[r * 7 + b];
@@ -2863,7 +2863,7 @@ void panel_draw(void)
      * bottom of the panel upwards, so it wipes on rather than appearing. */
     uint32_t bottom = PANEL_ON_SCREEN;
     for (uint32_t rows = 1; rows != PANEL_ROWS; rows++) {
-        uint32_t d = bottom;
+        uint16_t d = bottom;
         io_wait_retrace();
         for (uint32_t r = 0; r < rows; r++) {
             for (int32_t b = 0; b < PANEL_STRIDE; b++)
@@ -3856,7 +3856,7 @@ void scroll_up_band(void)
 {
     uint16_t di = 0x1ae2;
     for (int32_t r = 27; r > 0; r--) {
-        uint32_t si = cga_next_row(di);
+        uint16_t si = cga_next_row(di);
         for (int32_t b = 0; b < 48; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] =
                 g_vram[(si + b) & (CGA_SIZE - 1)];
@@ -3866,7 +3866,7 @@ void scroll_up_band(void)
 
 void scroll_down_band(void)
 {
-    uint32_t si = 0x1ef2;
+    uint16_t si = 0x1ef2;
     for (int32_t r = 27; r > 0; r--) {
         uint16_t di = cga_next_row(si);
         for (int32_t b = 0; b < 48; b++)
@@ -4551,7 +4551,7 @@ void entity_paddle_fx(ent_morph_t *m)
             draw_paddle(global_ptr(global.paddle_sets[global.paddle_kind].sprites_ptr));
             return;
         }
-        uint32_t si = m->sprites_ptr + m->step * 2;
+        uint16_t si = m->sprites_ptr + m->step * 2;
         draw_paddle_shifted(global_ptr(global_w(si)));
         return;
     }
@@ -4608,7 +4608,7 @@ void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint32_t kind)
 void morph_step(ent_morph_t *m)
 {
     m->step--;
-    uint32_t si = m->sprites_ptr + m->step * 2;
+    uint16_t si = m->sprites_ptr + m->step * 2;
     draw_paddle_shifted(global_ptr(global_w(si)));
 
     global.paddle_width += global.paddle_step;
@@ -4690,7 +4690,7 @@ void level_between(void)
     }
 
     /* And the empty band under the bricks, 0x29 rows of 48 bytes. */
-    uint32_t bp = 0x1272;
+    uint16_t bp = 0x1272;
     for (int32_t r = 0; r < 41; r++, bp += CGA_STRIDE) {
         for (int32_t i = 0; i < 48; i++) {
             g_vram[(bp + i) & (CGA_SIZE - 1)] = 0;
@@ -4835,7 +4835,7 @@ static uint16_t name_bar(uint16_t di, uint32_t word)
 static uint16_t panel_row(uint16_t di, uint32_t lead, uint32_t mid,
                           uint32_t tail, int32_t has_tail)
 {
-    uint32_t d = di;
+    uint16_t d = di;
     g_vram[d++ & (CGA_SIZE - 1)] = (uint8_t)lead;
     for (int32_t i = 0; i < (has_tail ? 0x2e : 0x2f); i++)
         g_vram[(d + i) & (CGA_SIZE - 1)] = (uint8_t)mid;
@@ -4862,7 +4862,7 @@ uint8_t screen_player_names(void)
         int32_t done = name_field((label + 22) & 0xffff, &abort);
         if (done) {
             /* Rub the box out and start: fourteen rows of nothing. */
-            uint32_t d = top;
+            uint16_t d = top;
             for (int32_t r = 0; r < 14; r++)
                 d = name_bar(d, 0);
             global.player_digit = '1';
@@ -4878,7 +4878,7 @@ uint8_t screen_player_names(void)
         }
 
         /* The box just filled in becomes an engraved panel. */
-        uint32_t d = (top + 0x280) & 0xffff;
+        uint16_t d = (top + 0x280) & 0xffff;
         d = panel_row(d, 0x3f, 0xff, 0xfc, 1);
         d = panel_row(d, 0xf5, 0x55, 0,    0);
         d = panel_row(d, 0xd5, 0x15, 0,    0);
@@ -4936,7 +4936,7 @@ void play_frame(void)
     }
 
     /* The walls. Each pass scrolls the column up six rows and caps it. */
-    uint32_t bp = 0x3e00;
+    uint16_t bp = 0x3e00;
     for (int32_t pass = 194; pass > 0; pass--) {
         io_wait_retrace();
         di = bp;
@@ -5069,7 +5069,7 @@ void panel_finish(void)
         /* 1ac2:09d1, the **top** of the pass. After the drawing instead puts
          * this side a pass ahead - the same slip the ending sync had. */
         io_frame_sync_extra(SYNC_CURTAIN);
-        uint32_t d = di;
+        uint16_t d = di;
         field_marks_wide(d, pass);
         d = (d - 0x7d0) & 0xffff;
         field_marks_wide(d, pass);
@@ -5209,7 +5209,7 @@ uint16_t particle_init(particle_t *p, uint16_t ax_in)
 {
     p->x0 = 0x68;
     p->y0 = 0xa0;
-    uint32_t ax = (particle_random(ax_in, io_ticks(), 6) + 8) & 0xffff;
+    uint16_t ax = (particle_random(ax_in, io_ticks(), 6) + 8) & 0xffff;
     p->speed = (uint16_t)ax;
     ax = (particle_random(ax, io_ticks(), 70) - 35) & 0xffff;
     if (ax == 0)
@@ -5267,10 +5267,10 @@ void menu_particles_tick(void)
 /* `ax_in` is the seed the caller happened to leave in AX. It changes only
  * which kernels you get, so at the real call site anything will do - but the
  * verifier has to pass what the original had or the two diverge. */
-void menu_particles_init(uint32_t ax_in)
+void menu_particles_init(uint16_t ax_in)
 {
     uint32_t n = global.particle_count;
-    uint32_t ax = ax_in;
+    uint16_t ax = ax_in;
     for (uint32_t i = 0; i < n; i++)
         ax = particle_init(&global.particles[i], ax);
 }
@@ -5682,7 +5682,7 @@ void border_row(uint16_t di)
      * What was here before called border_draw 26 times, which is neither
      * the count nor the operation. */
     for (int32_t n = 23; n > 0; n--) {
-        uint32_t si = 0x506d;
+        uint16_t si = 0x506d;
         for (int32_t r = 0; r < 8; r++, si += 2) {
             uint32_t w = runtime_w(si);
             g_vram[di & (CGA_SIZE - 1)] = (uint8_t)w;
@@ -5700,7 +5700,7 @@ void border_block(uint16_t di)
      * a count of 0x17, which is what makes one a row of blocks and the other
      * a column - and is why the two were transcribed into each other. */
     for (int32_t n = 26; n > 0; n--, di += 2) {
-        uint32_t d = di;
+        uint16_t d = di;
         for (int32_t i = 0; i < 8; i++) {
             vram_setw(d, runtime.border_spr[i]);
             d = cga_next_row(d);
@@ -5728,7 +5728,7 @@ void screen_scroll_up(void)
     io_frame_sync_extra(SYNC_SCROLL);              /* --sync-scroll, for the driver */
     uint16_t di = 19;
     for (int32_t n = 111; n > 0; n--) {
-        uint32_t si = cga_next_row(di);
+        uint16_t si = cga_next_row(di);
         for (int32_t b = 0; b < 14; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] =
                 g_vram[(si + b) & (CGA_SIZE - 1)];
@@ -5766,7 +5766,7 @@ void screen_stash(void)
 {
     speaker_off();
     uint8_t *keep = global.scratch2.screen_stash;
-    uint32_t si = 0x1900;
+    uint16_t si = 0x1900;
     for (int32_t half = 0; half < 2; half++) {
         for (int32_t r = 0; r < 20; r++) {
             for (int32_t b = 0; b < 50; b++)
@@ -5972,7 +5972,7 @@ uint16_t ending_particle_init(particle_t *p, uint16_t ax_in)
 {
     p->x0 = 0x68;
     p->y0 = 0x98;
-    uint32_t ax = (particle_random(ax_in, io_ticks(), 3) + 8) & 0xffff;
+    uint16_t ax = (particle_random(ax_in, io_ticks(), 3) + 8) & 0xffff;
     p->speed = (uint16_t)ax;
     ax = (particle_random(ax, io_ticks(), 70) - 35) & 0xffff;
     if (ax == 0)
@@ -6065,7 +6065,7 @@ void ending_column(void)
          * each column one frame of the animation and then ran off the end. */
         for (int32_t f = 0; global.sparkle_ptr[f] != END_PTR; f++) {
             const uint8_t *src = global_ptr(global.sparkle_ptr[f]);
-            uint32_t d = di;
+            uint16_t d = di;
             for (int32_t r = 0; r < 15; r++) {
                 for (int32_t b = 0; b < 4; b++)
                     g_vram[(d + b) & (CGA_SIZE - 1)] = src[b];
@@ -6082,7 +6082,7 @@ void ending_column(void)
             }
         }
         /* The list ran out: blank the column (1ac2:535f). */
-        uint32_t d = di;
+        uint16_t d = di;
         for (int32_t r = 0; r < 15; r++) {
             for (int32_t b = 0; b < 4; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] = 0;
@@ -6116,7 +6116,7 @@ void screen_game_over(void)
 
     uint32_t kind = global.paddle_kind;
     if (kind) {
-        uint32_t si = global.paddle_grow[kind];
+        uint16_t si = global.paddle_grow[kind];
         for (int32_t f = 0; f < 6; f++, si += 2) {
             io_wait_retrace();
             draw_paddle_shifted(global_ptr(global_w(si)));
@@ -6129,7 +6129,7 @@ void screen_game_over(void)
         blit_xor(global.paddle_pix[0], &global.paddle_rows[0]);
     }
 
-    for (uint32_t si = 0x9bb0; global_w(si); si += 2) {
+    for (uint16_t si = 0x9bb0; global_w(si); si += 2) {
         io_wait_retrace();
         draw_paddle_raw(global_ptr(global_w(si)));
         for (int32_t i = 0; i < 150; i++)
@@ -6166,7 +6166,7 @@ void ending_plot(uint16_t x, uint16_t y)
     uint32_t phase = ((x & 1) ? 1 : 0) + ((x & 2) ? 2 : 0);
     di += x >> 2;
 
-    uint32_t d = di;
+    uint16_t d = di;
     for (int32_t i = 0; i < 4; i++) {
         uint16_t bits = global.particle_sprites[phase][i];
         g_vram[d & (CGA_SIZE - 1)] ^= (uint8_t)bits;
@@ -6182,7 +6182,7 @@ void ending_plot(uint16_t x, uint16_t y)
 
 /* 1ac2:5a43  ending_particles_init - every record launched from the lower
  * starting point */
-void ending_particles_init(uint32_t ax)
+void ending_particles_init(uint16_t ax)
 {
     uint32_t n = global.particle_count;
     for (uint32_t i = 0; i < n; i++)
@@ -6283,7 +6283,7 @@ void screen_all_levels_done(void)
     memset(global.level.cells, 0, sizeof global.level.cells);
     level_intro();
 
-    uint32_t bp = 0x3ef2;
+    uint16_t bp = 0x3ef2;
     for (uint32_t bh = 1; bh != 0x5c; bh++) {
         /* 1ac2:596c, the **top** of the pass - before the band is drawn, not
          * after. Without a sync here this screen has none at all: a lockstep
@@ -6701,7 +6701,7 @@ void screen_end_of_game(void)
 {
     /* The screen into the image - not screen to screen, and DI does not go
      * back to where it started each row. */
-    uint32_t si = 8, di = 0;
+    uint16_t si = 8, di = 0;
     for (int32_t n = 150; n > 0; n--) {
         for (int32_t b = 0; b < EOG_WIDTH; b++)
             global.scratch1.eog_saved[di + b] = g_vram[(si + b) & (CGA_SIZE - 1)];
@@ -6814,7 +6814,7 @@ static void endgame_curtain(int32_t cells)
     vram_setw(di, 0x5555);
     vram_setw(di + 2, 0x5555);
 
-    uint32_t bp = 0x3130;
+    uint16_t bp = 0x3130;
     for (uint32_t ah = 112; ah > 0; ah--) {
         /* 1ac2:467f, the top of the pass. This sync spent a while in
          * level_intro's reveal loop instead - a different routine in a
@@ -6823,7 +6823,7 @@ static void endgame_curtain(int32_t cells)
          * Which read as "the whole curtain differs" and was really "this is
          * not the curtain". */
         io_frame_sync_extra(SYNC_CURTAIN);
-        uint32_t d = bp, wrote = bp;
+        uint16_t d = bp, wrote = bp;
         for (int32_t r = 7; r > 0; r--) {
             uint32_t s = cga_next_row(d);
             for (int32_t b = 0; b < 26 * 2; b++)
@@ -7077,7 +7077,7 @@ static int32_t bonus_end_level_run(void)
 
     /* The wall closing in: 0x70 passes of a 26-word band scrolled up six rows
      * with a fresh cap laid on each. */
-    uint32_t bp = 0x20a0;
+    uint16_t bp = 0x20a0;
     global.paddle_morphing = 0xff;
     for (int32_t dh = 112; dh > 0; dh--) {
         io_wait_retrace();
@@ -7087,9 +7087,9 @@ static int32_t bonus_end_level_run(void)
          * into the row above, and stepping DI by cga_prev_row(cga_next_row(di)),
          * which is the identity - copied the same two rows six times and
          * never moved. */
-        uint32_t si = bp;
+        uint16_t si = bp;
         for (int32_t dl = 6; dl > 0; dl--) {
-            uint32_t d = cga_next_row(si);
+            uint16_t d = cga_next_row(si);
             for (int32_t b = 0; b < 26 * 2; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] =
                     g_vram[(si + b) & (CGA_SIZE - 1)];
@@ -7128,7 +7128,7 @@ static int32_t bonus_end_level_run(void)
      * row's lodsb so the second reads the same twelve - and a blank. And si
      * walks **up** the level by 0x0c a time, not down: the loop's `pop si` at
      * 1ac2:43e7 takes the value after the second row's lodsb. */
-    uint32_t si = (global.level_src_ptr + 0xb8) & 0xffff;
+    uint16_t si = (global.level_src_ptr + 0xb8) & 0xffff;
     for (int32_t n = 14; n > 0; n--, si = (si + 12) & 0xffff) {
         banner_row(assets_ptr(si));
         banner_row(assets_ptr(si));
@@ -7399,7 +7399,7 @@ void screen_results(const char *dir)
     for (int32_t i = 0; i < 24; i++)              /* 1ac2:0f08 */
         vram_setw(0xf2 + i * 2, 0xaaaa);
 
-    uint32_t d = 0x20f2;
+    uint16_t d = 0x20f2;
     d = draw_run(' ', 24, d);                     /* 1ac2:0f1a */
 
     d = (d + HSC_LINE) & 0xffff;                    /* the heading */
@@ -7514,7 +7514,7 @@ void anim_step(void)
  */
 int32_t bonus_script(ent_anim_t *b, uint32_t *px, uint32_t *py)
 {
-    uint32_t si = b->script;
+    uint16_t si = b->script;
     b->script = (uint16_t)(si + 2);
     uint32_t word = global_w(si);
     uint8_t al = word, ah = word >> 8;
