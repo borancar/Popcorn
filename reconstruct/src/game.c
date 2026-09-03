@@ -1229,13 +1229,13 @@ void game_input(void)
  * could serve a laser shot too. It never did - it has one caller, the net's -
  * and naming its variables correctly left the parameters with nothing to
  * generalise over. */
-static void net_step(uint32_t reload)
+static void net_step(uint8_t reload)
 {
     uint32_t di = global.net_pos;
     g_vram[di & (CGA_SIZE - 1)] = 0;
     g_vram[(di + 1) & (CGA_SIZE - 1)] = 0;
     global.net_pos = (uint16_t)cga_next_row(di);
-    global.net_timer = (uint8_t)reload;
+    global.net_timer = reload;
 }
 
 /* Set by the lockstep harness when it is resuming from a snapshot taken at a
@@ -1464,7 +1464,7 @@ frames:
 
         if (global.net_on) {
             if (--global.net_timer == 0)
-                net_step(0xc8);
+                net_step(200);
             global.net_life = (uint16_t)(global.net_life - 1);
             if (global.net_life == 0) {
                 global.net_on = 0;
@@ -2278,11 +2278,11 @@ void ball_bricks(ball_t *b)
  * ===================================================================== */
 #define SOUND_BRICK      3
 
-static void brick_score(uint32_t a, uint32_t b, uint32_t c)
+static void brick_score(uint16_t a, uint16_t b, uint16_t c)
 {
-    global.score_add_pair[0] = (uint16_t)a;
-    global.score_add_pair[1] = (uint16_t)b;
-    global.score_add_pair[2] = (uint16_t)c;
+    global.score_add_pair[0] = a;
+    global.score_add_pair[1] = b;
+    global.score_add_pair[2] = c;
     score_add();                        /* 1ac2:413d */
 }
 
