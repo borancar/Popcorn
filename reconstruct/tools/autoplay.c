@@ -30,7 +30,10 @@
 #define PADDLE_WIDTH    0x2d3a          /* live; the morphs change it */
 #define PADDLE_KIND     0x2d39
 #define BOT_PADDLE_W    27              /* fallback only: 0x2d0d+2 */
-#define PADDLE_Y        186
+/* Where the bot aims, which is **not** game.h's PADDLE_Y of 184: that one is
+ * the paddle's top row, and this is two lower - the line the bot wants the
+ * ball to arrive on. Two numbers, two meanings, so two names. */
+#define BOT_PADDLE_Y    186
 #define PADDLE_LIP      3               /* `left = paddle_x - 3` */
 #define BOUNCE_Y        0xb5
 #define CEILING_Y       6
@@ -174,7 +177,7 @@ static int32_t paddle_width(void)
 static int32_t predict(int32_t x, int32_t y, int32_t dx, int32_t dy,
                        int32_t x_neg)
 {
-    int32_t drop = PADDLE_Y - y;
+    int32_t drop = BOT_PADDLE_Y - y;
     if (drop <= 0 || dy == 0)
         return x;
     int32_t end = x_neg ? x - drop * dx / dy : x + drop * dx / dy;
@@ -197,8 +200,8 @@ static int32_t frames_to_paddle(const struct ball *b)
         major = 1;
     if (b->dy <= 0)
         return 9999;
-    int32_t drop = b->dy_up ? (b->y - CEILING_Y) + (PADDLE_Y - CEILING_Y)
-                            : PADDLE_Y - b->y;
+    int32_t drop = b->dy_up ? (b->y - CEILING_Y) + (BOT_PADDLE_Y - CEILING_Y)
+                            : BOT_PADDLE_Y - b->y;
     if (drop <= 0)
         return 0;
     /* drop / (dy/major) * 1.5, in integers. */

@@ -394,11 +394,12 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
     # below wants `type name` and cannot see the `*`, which is why the first
     # widening of rule 10 still missed `*name++ = (uint8_t)c`.
     for raw in src.decode("utf8", "replace").split("\n"):
-        for d in re.finditer(r"\b(?:const\s+)?(u?int(?:8|16|32)_t)\s*\*"
-                             r"\s*(\w+)", raw):
-            seen = deref_width.get(d.group(2), d.group(1))
-            deref_width[d.group(2)] = (d.group(1) if seen == d.group(1)
-                                       else "?")
+        for d in re.finditer(r"\b(?:const\s+)?(u?int(?:8|16|32)_t)\s*"
+                             r"(?:\*\s*(\w+)|(\w+)\s*\[)", raw):
+            width = d.group(1)
+            name = d.group(2) or d.group(3)
+            seen = deref_width.get(name, width)
+            deref_width[name] = width if seen == width else "?"
 
     local_width = {}
     for raw in src.decode("utf8", "replace").split("\n"):
@@ -481,6 +482,15 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
         # own declaration carries the width.
         m = re.search(r"^\s*\*\s*(?:\+\+)?(\w+)\s*(?:\+\+|--)?\s*="
                       r"\s*\((u?int(?:8|16|32)_t)\)", line)
+        if m and deref_width.get(m.group(1)) == m.group(2):
+            casts.setdefault(m.group(2), set()).add(
+                "%s:%d %s" % (rel, i, line.strip()[:58]))
+            continue
+        # A subscript is a target too, and so is a compound assignment into
+        # one: `g_vram[i] ^= (uint8_t)x` truncates on the store like any
+        # other. The width is the array's element type.
+        m = re.search(r"^\s*(\w+)\s*\[.*\]\s*[-+|&^*]?=\s*"
+                      r"\((u?int(?:8|16|32)_t)\)", line)
         if m and deref_width.get(m.group(1)) == m.group(2):
             casts.setdefault(m.group(2), set()).add(
                 "%s:%d %s" % (rel, i, line.strip()[:58]))

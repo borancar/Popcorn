@@ -21,7 +21,6 @@
  * transcribed routine checkable against the binary.
  */
 #define IMAGE_LEN   0x208b0
-#define CODE_BASE   0x1ac20
 
 extern uint8_t *g_image;                /* the whole unpacked load image */
 
@@ -32,7 +31,7 @@ extern uint8_t *g_image;                /* the whole unpacked load image */
  * consistent. ENSURE_BALL_AT checks each offset and the size at compile time.
  *
  * The two four-word sprite arrays were reached a byte at a time, assembling
- * and splitting words by hand (`b[B_SPRITE + r*2] | b[B_SPRITE + r*2+1] << 8`).
+ * and splitting words by hand from a bare offset into the image.
  * As uint16_t they are just indexed, on the same little-endian assumption the
  * rest of the struct makes.
  */
@@ -259,7 +258,7 @@ typedef struct __attribute__((packed)) {
                 } move;
             } arg;
             ent_sprite_t sprite; /* 0x04..0x09 */
-            uint16_t script;    /* 0x0a bonus: cursor into the movement script.
+            uint16_t script_ptr; /* 0x0a bonus: cursor into the movement script.
                                  * The animations proper never touch these two
                                  * bytes, which is what lets the capsule share
                                  * their record. */
@@ -305,7 +304,6 @@ typedef struct __attribute__((packed)) {
             uint8_t  bonus;  /* 0x0a the capsule kind to apply when it lands */
             uint8_t  _r;
 } ent_morph_t;
-
 
 /* The handlers a node dispatches to. The game keeps the routine's own
  * address in the node and rewrites it to change the node's kind, so these
@@ -370,7 +368,6 @@ ENSURE_SIZE(entity_t, 0x0e);
 ENSURE_ENTITY_AT(handler_fn, 0x00);
 ENSURE_ENTITY_AT(p, 0x02);
 ENSURE_ENTITY_AT(next_ptr, 0x0c);
-
 
 /* The seven video-memory offsets a paddle is drawn at, one per scan line.
  * A struct rather than a bare uint16_t[7] so that a pointer to it can be
@@ -445,6 +442,21 @@ typedef struct __attribute__((packed)) {
 } hit_dir_t;
 ENSURE_SIZE(hit_dir_t, 2);
 
+/* One frame of a capsule's homing script - the 200 entries at 0x8320. The
+ * original reads it with `lodsw` and splits AL from AH, and the two halves
+ * are a **displacement from where the script took over**, not a step: the
+ * anchor in arg.move.steps is never written again while it runs, so entry n
+ * is an absolute position along a fixed path. Those 200 trace a loop. */
+typedef struct __attribute__((packed)) {
+    int8_t  dx;                     /* 0x00 from the x bonus_move_down saved */
+    int8_t  dy;                     /* 0x01 from BONUS_HOMING_Y + 1, and -1
+                                     * here means stay where you are - a row
+                                     * *above* the handover, which a falling
+                                     * capsule can never want, so the value is
+                                     * free to be a marker */
+} bonus_step_t;
+ENSURE_SIZE(bonus_step_t, 2);
+
 /* One note of a tune, which the original reads as a word and uses as two
  * bytes. `pitch` is the **high byte of the PIT divisor** - the port sends
  * `(pitch << 8) | 1`, which is the `out 0x42,1 / out 0x42,al` pair - so the
@@ -474,7 +486,6 @@ typedef struct __attribute__((packed)) {
 } hit_t;
 ENSURE_SIZE(hit_t, 4);
 
-
 /* Scan codes, as the menu and the name entry test them. The high byte of what
  * INT 16h returns is the scan code and the low byte the character, which is
  * why the menu switches on the high byte and the name field takes the low. */
@@ -489,6 +500,10 @@ ENSURE_SIZE(hit_t, 4);
 #define KEY_F8           0x42
 #define KEY_F9           0x43
 #define KEY_F10          0x44
+/* Bit 7 of a scan code is the **break** flag: clear as the key goes down,
+ * set as it comes back up. So a release is the make code with this on, and
+ * masking it off gives the key either way. */
+#define KEY_BREAK        0x80
 /* And the three characters the name field reads, which are ASCII and not
  * scan codes. */
 #define KEY_BACKSPACE    0x08
@@ -500,7 +515,6 @@ ENSURE_SIZE(hit_t, 4);
  * it - so a terminator of zero and a valid pointer would be the same value.
  * Spelled as -1 in the pointer's own width, which is what it is. */
 #define END_PTR ((uint16_t)-1U)
-
 
 /* ------------------------------------------------------------------------
  * The load image as a **structure**, laid over the same bytes as g_image.
@@ -830,7 +844,6 @@ typedef struct __attribute__((packed)) {
  * the snapshot loader, the verifier, exepack - works through. */
 #define global (*(global_t *)g_image)
 
-
 /* offsetof checked at compile time. _Static_assert is C11 and this is C99, so
  * it is the negative-array-size trick; the failure message names the field. */
 #define ENSURE_GLOBAL_AT(field, off) \
@@ -1144,9 +1157,204 @@ uint8_t *exepack_load(const char *path, size_t *out_len);
 #define CGA_H        200
 #define CGA_STRIDE    80               /* bytes per scan line */
 #define CGA_PLANE 0x2000               /* offset of the odd-line half */
+
+/* ========================================================================
+ * The game's own constants - what the original spells as an immediate and
+ * this port gives a name. They were in game.c beside the routines that use
+ * them; they are here so one place says what the screen is made of.
+ * ===================================================================== */
+
+#define BALL_WIDTH             4
+#define BALL_HEIGHT            4
+#define CAPSULE_SIZE          16      /* a falling capsule's box */
+
+#define PANEL_NET_X          220
+#define PANEL_M_X            300
+#define PANEL_BAR_Y          168
+
+#define BONUS_HOMING_Y       120
+#define LASER_SPAN            19      /* between the two dots of a shot */
+#define INITIAL_PADDLE_WIDTH  28
+
+/* The playfield's edges. They live here rather than beside ball_after,
+ * which used to be the only thing that wanted them: play_prepare puts the
+ * paddle's left limit on WALL_LEFT.
+ *
+ * WALL_RIGHT and FLOOR are the first column and the first row **outside**
+ * the field - 200, which the original spells nowhere. Every x here is a
+ * left edge, so what a thing may be set to is 200 less its own width, and
+ * that one rule covers both of them: the ball turns at 196 and the paddle
+ * stops at 172, and each has its right edge resting on 199. morph_step
+ * keeps the paddle's true while it grows, taking off paddle_max whatever it
+ * adds to paddle_width.
+ *
+ * The ball and the paddle really do stop level with each other. The pixel
+ * that looks like a difference is in the data rather than the geometry:
+ * paddle_sets[].width is the paddle's last column, one less than its width.
+ *
+ * WALL_RIGHT and FLOOR are the same number and stay two names, because the
+ * ball turning round at the side and being lost at the bottom are not the
+ * same event. */
+#define WALL_LEFT              8
+#define WALL_TOP               4
+#define WALL_RIGHT           200
+#define FLOOR                200
+
+#define REPEAT_RESET  5
+
+#define SCREEN_HALF  8000
+
+#define PADDLE_ROWS          7
+
+#define PADDLE_Y           184
+
+#define PADDLE_TOP    (PADDLE_Y - (BALL_HEIGHT - 1))  /* 181 */
+#define PADDLE_BOTTOM (PADDLE_Y + PADDLE_ROWS - 1)    /* 190 */
+#define PADDLE_BYTES        11          /* five words and a byte: 44 pixels */
+#define PADDLE_IMAGE  (PADDLE_ROWS * PADDLE_BYTES)   /* 77 bytes */
+
+#define FONT_ROWS      12
+
+#define OP_RET  0xc3
+
+#define CYCLES_PER_LOOP 17
+
+#define HSC_LEN     180                 /* ten entries; the eleventh is not saved */
+
+#define CURTAIN_ROW       27            /* bytes: 108 pixels */
+
+#define CURTAIN_X        316
+#define CURTAIN_Y          7
+
+#define REVEAL_BAND  (11 * CGA_STRIDE)
+
+#define SCROLL_X        12              /* bytes 3 to 51 of the row */
+#define SCROLL_TOP     174              /* the block's first scan line */
+#define SCROLL_ROWS     25
+#define SCROLL_BYTES    49              /* 196 pixels */
+
+/* Which input routine the menu is set to, and which the game will use. */
+#define INPUT_KEYBOARD_FN  0x16d2
+#define INPUT_DEMO_FN      0x1785          /* demo_start installs this one */
+#define INPUT_MOUSE_FN     0x1654
+
+/* The level banner: " TABLEAU nn " with a dithered bar above and below. */
+#define BANNER_X    56
+#define BANNER_Y   151
+#define FONT_H      12                  /* the 8x12 font's height */
+
+#define LEVEL_COUNT     50
+
+#define BRICK_TOP        6              /* first scan line of the field */
+#define BRICK_COLS      12
+#define BRICK_ROWS      14
+#define BRICK_HEIGHT     8              /* scan lines */
+#define BRICK_BYTES      4              /* 16 pixels */
+
+#define SWEEP_X     96
+
+#define SOUND_BOUNCE   2
+
+#define SOUND_PADDLE     1
+
+/* ========================================================================
+ * Brick behaviour: the table at 0x3044, indexed by cell value.
+ *
+ * Value 0 and 13 have no handler, 4 and 12 are indestructible, 5 through 8 are
+ * a chain that degrades one step per hit, and 1, 2, 3 and 9 through 11 each do
+ * something of their own. They share a preamble - add to the score, ask for a
+ * sound, and reset the ball's bounce counter, so that a brick hit does not
+ * count towards the every-35-bounces slope shuffle.
+ * ===================================================================== */
+#define SOUND_BRICK      3
+
+/* The life markers, which extra_life draws and life_lost rubs out: four to a
+ * row from x 240 on scan line 169, and the row step stays inside one half of
+ * the interlace, so three rows of CGA_STRIDE is six scan lines. */
+#define LIVES_ROW   (3 * CGA_STRIDE)
+
+#define BACKDROP_BYTES     48
+
+/* ========================================================================
+ * The level's opening animation: a creature walks the paddle row carrying
+ * the ball on. 1ac2:1c4f drives it, 1ac2:1e23 steps it, 1ac2:1e50 draws one
+ * frame.
+ * ===================================================================== */
+#define WALKER_ROW    0x1cc0            /* the paddle row */
+
+#define PANEL_STRIDE      28
+
+#define PANEL_ROWS       94
+
+#define BAND_TOP   172
+#define BAND_ROWS   27
+
+#define HOLD_RESET   0x230
+#define SOUND_CATCH      7
+
+#define SHOT_SOUND 5
+
+#define NAME_WIDTH  24                /* characters, and words of bar */
+
+#define BANNER_LEN     14
+
+#define ARROW_MOUSE 0x0bfe
+#define ARROW_KEYS  0x088e
+
+/* ========================================================================
+ * The hall of fame: its table, its file, and the border that runs round it.
+ * ===================================================================== */
+#define HSC_COUNT     10
+
+#define BORDER_STEP_Y (4 * CGA_STRIDE)
+
+#define STASH_TOP    160                /* the bottom forty scan lines */
+#define STASH_ROWS    20                /* per plane */
+#define STASH_BYTES   50                /* 200 pixels */
+
+#define TALL_SPRITE_BYTES  (15 * 4)
+#define KBD_POLL_CYCLES    150          /* what one INT 16h AH=01 cost */
+
+#define INTRO_PADDLE_Y 160              /* the row it slides along */
+
+#define HSC_LINE   432                  /* between lines, DI already +0x30 */
+#define HSC_WIDTH  24                   /* characters, and words of bar */
+
+#define HSC_X       8
+#define HSC_TOP     6
+#define HSC_HIGH_TOP 8                  /* screen_high_scores' own bar */
+
+#define EOG_WIDTH     33
+#define EOG_BAND_LEN  495
+
+#define DEMO_CHASE_Y  130     /* the scan line it starts chasing from */
 #define CGA_SIZE  0x4000
 
 extern uint8_t g_vram[CGA_SIZE];
+
+/* The address of a pixel, the way the game computes it everywhere:
+ *
+ *     di = x >> 2                       four pixels to a byte
+ *     if (y & 1) di += 0x2000           odd scan lines live in the far half
+ *     di += (y >> 1) * 80               `shl ax,4` then `shl ax,2` twice more
+ */
+/* A pixel position to the byte that holds it. The answer is DI and is
+ * sixteen bits for that reason; x is sixteen bits for a different one.
+ *
+ * Most callers hand it a position out of a uint8_t field and a byte would
+ * carry those. plot_pixel is the exception and it decides the type: it is
+ * INT 10h AH=0Ch, whose column arrives in **CX**, a word, and its caller
+ * admits any x up to 319. No path that runs today gets near that - the
+ * menu's kernels launch from 104 and swing about 35 either way - so a byte
+ * would truncate nothing and every test here would pass. That is the reason
+ * to write the width down rather than measure it. */
+static inline uint16_t cga_at(uint16_t x, uint16_t y)
+{
+    uint16_t di = x >> 2;
+    if (y & 1)
+        di += CGA_PLANE;
+    return di + (y >> 1) * CGA_STRIDE;
+}
 
 /* Step a CGA offset on by one scan line, the way the game does. DI is a
  * 16-bit register and these are that register, so they are that wide -
@@ -1532,40 +1740,11 @@ extern uint32_t g_palette[4];
  * whole keyboard interface.
  */
 
-/* --------------------------------------------------------------- state ---
- *
- * Offsets of the game variables identified so far.  These are not C
- * declarations: they are indices into g_image, so that a transcribed routine
- * reads the same address the disassembly shows.
- */
-#define PADDLE_W          28
-#define PADDLE_ROW       186
-
-/* The ball pool: four entries of 0x1e bytes at 0x2ea1, walked by the play loop
- * at 1ac2:1873 and stepped by the Bresenham routine at 1ac2:27d7. */
-#define BALL_STRIDE   0x1e
+/* How many balls the pool holds. What was here with it - every field offset
+ * of a ball and of an entity node, as indices into g_image - is gone: ball_t
+ * and entity_t say the same layout as types, with ENSURE_BALL_AT and
+ * ENSURE_SIZE checking it at compile time instead of by eye. */
 #define BALL_COUNT       3             /* was 4, and never used - the pool is three */
-#define B_X           0x00             /* the LIVE position */
-#define B_Y           0x01
-#define B_DIR_X       0x14             /* non-zero negates that axis */
-#define B_DIR_Y       0x15
-#define B_DY          0x16             /* the slope is stored (dy, dx) */
-#define B_DX          0x17
-#define B_ANCHOR_X    0x18             /* where this straight segment began */
-#define B_ANCHOR_Y    0x19
-#define B_ACC_X       0x1a             /* Bresenham, counting from the anchor */
-#define B_ACC_Y       0x1b
-#define B_STATE       0x1c             /* 0 idle, 1-2 in play */
-#define B_PREV_X      0x02             /* where it was, so XOR can undo it */
-#define B_PREV_Y      0x03
-#define B_SPRITE      0x04             /* four words: what is on screen now */
-#define B_PREV_SPR    0x0c             /* four words: what to erase */
-
-/* The entity list the play loop walks: a chain from the head link at 0x3144,
- * each node carrying its handler at +0x00 and the next link at +0x0c, with
- * 0xffff terminating.  The node pool is at 0x3146, stride 0x0e. */
-#define ENTITY_POOL   0x3146
-#define ENTITY_STRIDE 0x0e
 
 /* --------------------------------------------------------- the backend ---
  *
@@ -1596,7 +1775,6 @@ int32_t  io_key_ready(void);               /* INT 16h AH=01 */
 uint16_t io_get_key(void);             /* INT 16h AH=00: scan<<8 | ascii */
 void io_flush_keys(void);
 void io_script_key_shift(uint32_t scan, uint32_t ms, int32_t shift);
-#define io_script_key(scan, ms) io_script_key_shift((scan), (ms), 0)
 int32_t  io_save_shot(const char *path);
 void io_set_deadline(uint32_t ms, const char *shot, const char *vram);
 void io_set_deadline_image(const char *path);
@@ -1611,7 +1789,6 @@ void io_set_rgbi(int32_t on);
 
 uint16_t io_cp437_utf8(char *out, uint16_t n, uint16_t cap, uint8_t c);
 void io_print_dos(const char *what, const uint8_t *dos, uint16_t n);
-
 
 /* ------------------------------------------------------- the game code ---
  *
@@ -1822,6 +1999,11 @@ entity_t *entity_alloc(void);      /* 1ac2:3232 */
 uint16_t draw_run(uint8_t c, uint16_t count, uint16_t di); /* 1ac2:10c5 */
 void draw_cursor(uint16_t di);    /* 1ac2:14a7 */
 void define_keys_prompt(uint16_t src, uint16_t dst);            /* 1ac2:1642 */
+/* The only pattern anything flashes: 0x54 then 0x15 in memory order, which
+ * as CGA pixel pairs is 1,1,1,0 then 0,1,1,1 - a dashed line in colour 1.
+ * XORing it a second time puts the screen back, so one value both draws the
+ * bar and rubs it out, and all three callers pass this. */
+#define FLASH_DASHES 0x1554
 void flash_bar(uint16_t pattern); /* 1ac2:3146 */
 void cell_set_three(ent_anim_t *a); /* 1ac2:3668 */
 void cells_restore(void);         /* 1ac2:36fb */
