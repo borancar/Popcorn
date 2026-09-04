@@ -383,9 +383,19 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
     # entry in the wrong half of the list, never a missed one.
     local_width = {}
     for raw in src.decode("utf8", "replace").split("\n"):
-        d = re.match(r"\s*(?:const\s+)?(u?int(?:8|16|32)_t)\s+(\w+)", raw)
-        if d:
-            local_width.setdefault(d.group(2), d.group(1))
+        # Parameters count as declarations: `ending_walk(..., uint16_t dx)`
+        # is where dx's width is written down, and matching only the start of
+        # the line found the return type instead and left dx to collide with
+        # a uint8_t of the same name elsewhere.
+        for d in re.finditer(r"\b(?:const\s+)?(u?int(?:8|16|32)_t)\s+(\w+)",
+                             raw):
+            seen = local_width.get(d.group(2), d.group(1))
+            # A leaf name declared at two widths is not something this can
+            # resolve without scoping, and guessing is worse than declining:
+            # `rows` is a uint8_t in one routine and a uint16_t in another,
+            # and taking the first turned a real mask into a false positive.
+            local_width[d.group(2)] = (d.group(1) if seen == d.group(1)
+                                       else "?")
     for f, t in all_widths.items():
         local_width.setdefault(f, t)
     for i, raw in enumerate(src.decode("utf8", "replace").split("\n"), 1):
@@ -402,12 +412,43 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
             # the left does that.
             tail = line[m.end():].strip()
             outermost = tail in (";", ")", "");
+            # A mask need not be the outermost operation to be the store's
+            # job twice - it only has to be that nothing between it and the
+            # store can bring the discarded bits back. `+ - * <<` and the
+            # bitwise operators are all congruence-preserving mod 2^n, so
+            # `target = 80 - ((bl << 3) & 0xff)` truncates the same without
+            # it. `>> / %` and a comparison are not, which is why the plain
+            # outermost test is kept as the other way in.
+            if lhs and not outermost and tail.rstrip(") ;") == "":
+                rhs = line[lhs.end():]
+                if not re.search(r">>|/|%|[<>=!]=|\?|,|\w\s*\(", rhs):
+                    outermost = True
             if lhs and outermost:
                 want = "uint8_t" if bits == "0xff" else "uint16_t"
                 declared = lhs.group(1) or local_width.get(lhs.group(2))
                 if declared == want:
                     kind = ("assigned into a %s, which does this already"
                             % want)
+            # And the case the two halves above both miss, because it is
+            # about neither of them: the *operand* is already that narrow, so
+            # the mask does nothing wherever it sits. An array subscript is
+            # how these turned up - `hole_picture[row & 0xff]` with row a
+            # uint8_t - and a subscript is not an assignment, a comparison or
+            # an argument. A right shift only ever loses bits, so `(x >> 2)`
+            # is as narrow as x.
+            op = re.search(r"(?:\(\s*(\w+)\s*>>\s*(\d+)\s*\)|(\w+))\s*$",
+                           before.rstrip())
+            if op:
+                w = local_width.get(op.group(1) or op.group(3))
+                have = {"uint8_t": 8, "int8_t": 8, "uint16_t": 16,
+                        "int16_t": 16, "uint32_t": 32, "int32_t": 32}.get(w)
+                if have is not None:
+                    # A right shift only loses bits, so the operand is that
+                    # much narrower than its type.
+                    have -= int(op.group(2) or 0)
+                    if have <= (8 if bits == "0xff" else 16):
+                        kind = ("on %d bits of a %s, which cannot reach it"
+                                % (max(have, 0), w))
             masks.setdefault("%s %s" % (bits, kind), set()).add(
                 "%s:%d %s" % (rel, i, line.strip()[:56]))
 
