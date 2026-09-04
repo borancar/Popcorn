@@ -3486,11 +3486,15 @@ void brick_9(hit_t *hit, ball_t *ball)
         hit->cell_ptr;
 
     /* A cell that is not this one. */
-    uint8_t cell, idx;
+    /* `idx` is a cell's index in the field, 0 to 167, and a byte. What it
+     * is compared against is not: cell_ptr is that index turned into one of
+     * the game's offsets, which is where the cells begin plus it. */
+    uint8_t idx;
+    uint16_t cell_ptr;
     do {
         idx = global.level.teleport[game_random(io_ticks(), n)];
-        cell = global_off(global.level.cells) + idx;
-    } while (cell == hit->cell_ptr);
+        cell_ptr = global_off(global.level.cells) + idx;
+    } while (cell_ptr == hit->cell_ptr);
 
     entity_t *timer = entity_alloc();
     timer->handler_fn = ENTITY_CELLS_TIMER_FN;
@@ -4240,8 +4244,8 @@ void entity_capsule_frames(ent_fall_t *f, uint16_t table_ptr)
         /* Level with the paddle: does it overlap? The comparison is done in
          * sixteen bits with an `adc ch,0`, so a paddle at the right-hand edge
          * does not wrap. */
-        uint8_t right = (f->x + 0x0e) & 0xffff;
-        uint8_t px = global.paddle_x;
+        uint16_t right = f->x + 0x0e;
+        uint16_t px = global.paddle_x;
         if (right >= px &&
             (right - 0x0f) <= (px + global.paddle_width)) {
             /* Caught. The node stays where it is and becomes a different
