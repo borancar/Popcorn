@@ -100,37 +100,12 @@ void ball_step(ball_t *b)
  * last column rather than the count, which is why paddle_x + paddle_width is
  * the paddle's right *edge* and not one past it. That is a fact about the
  * data, and the constant here is the width. */
-#define BALL_WIDTH             4
-#define BALL_HEIGHT            4
-#define CAPSULE_SIZE          16      /* a falling capsule's box */
-#define LASER_SPAN            19      /* between the two dots of a shot */
-#define INITIAL_PADDLE_WIDTH  28
-
-/* The playfield's edges. They live here rather than beside ball_after,
- * which used to be the only thing that wanted them: play_prepare puts the
- * paddle's left limit on WALL_LEFT.
- *
- * WALL_RIGHT and FLOOR are the first column and the first row **outside**
- * the field - 200, which the original spells nowhere. Every x here is a
- * left edge, so what a thing may be set to is 200 less its own width, and
- * that one rule covers both of them: the ball turns at 196 and the paddle
- * stops at 172, and each has its right edge resting on 199. morph_step
- * keeps the paddle's true while it grows, taking off paddle_max whatever it
- * adds to paddle_width.
- *
- * The ball and the paddle really do stop level with each other. The pixel
- * that looks like a difference is in the data rather than the geometry:
- * paddle_sets[].width is the paddle's last column, one less than its width.
- *
- * WALL_RIGHT and FLOOR are the same number and stay two names, because the
- * ball turning round at the side and being lost at the bottom are not the
- * same event. */
-#define WALL_LEFT              8
-#define WALL_TOP               4
-#define WALL_RIGHT           200
-#define FLOOR                200
-
-#define REPEAT_RESET  5
+/* The two indicator columns down the panel, both from the same scan line:
+ * the safety net's on the left and the M capsule's on the right. Each is
+ * filled when the bonus arrives and drained a cell a frame after that. */
+/* Where a capsule stops wandering and starts following the homing script:
+ * `cmp al,0x78` at 1ac2:3d3e, and the branch it takes ends with `inc al`
+ * at 1ac2:3d90 - so the script's own base row is one lower. */
 
 void input_keyboard(void)
 {
@@ -215,7 +190,6 @@ void input_mouse(uint16_t mouse_x, uint16_t buttons)
  * padding at the end of each half are neither saved nor restored, and the two
  * halves land adjacent in the buffer rather than 0x2000 apart, so a save is
  * 16,000 bytes and not a copy of the aperture. */
-#define SCREEN_HALF  8000
 
 void save_screen(void)
 {
@@ -245,6 +219,14 @@ void restore_screen(void)
  * bytes_per_image`.
  */
 
+/* The paddle's top row on screen. Everything about where the paddle sits is
+ * measured from here - it is seven rows tall, so it ends on PADDLE_BOTTOM,
+ * and the band the ball is caught in starts three above it, the same three
+ * that `paddle_x - 3` puts on the left. */
+/* The band the ball is caught in: from where a ball resting on the paddle
+ * has its y - three above, which is the ball's own height less one - down
+ * to the paddle's last row. */
+
 /* 1ac2:22de  paddle_row_offsets
  *
  * Seven CGA offsets, one per scan line of the paddle, from its x.
@@ -253,29 +235,14 @@ void restore_screen(void)
  *
  * `x >> 2` because four pixels share a byte; 0x1cc0 is the offset of the
  * paddle's first row - 7360 bytes into the even half, which is 92 rows of 80,
- * so scan line 184. The alternating `+0x2000` / `-0x1fb0` after it is the
- * interlace step, the same one cga_next_row() spells out.
+ * so scan line 184. That whole expression is cga_at(x, PADDLE_Y): 184 is even
+ * so there is no plane offset, and 92 * CGA_STRIDE is the 0x1cc0. The
+ * alternating `+0x2000` / `-0x1fb0` after it is the interlace step, the same
+ * one cga_next_row() spells out.
  */
-#define PADDLE_ROW_BASE 0x1cc0
-#define PADDLE_ROWS          7
-/* The paddle's top row on screen, which is PADDLE_ROW_BASE said as a y:
- * 0x1cc0 is 92 * CGA_STRIDE, and row n of the even plane is screen line
- * 2n. Everything about where the paddle sits is measured from here - it is
- * seven rows tall, so it ends on PADDLE_BOTTOM, and the band the ball is
- * caught in starts three above it, the same three that `paddle_x - 3` puts
- * on the left. */
-#define PADDLE_Y           184
-/* The band the ball is caught in: from where a ball resting on the paddle
- * has its y - three above, which is the ball's own height less one - down
- * to the paddle's last row. */
-#define PADDLE_TOP    (PADDLE_Y - (BALL_HEIGHT - 1))  /* 181 */
-#define PADDLE_BOTTOM (PADDLE_Y + PADDLE_ROWS - 1)    /* 190 */
-#define PADDLE_BYTES        11          /* five words and a byte: 44 pixels */
-#define PADDLE_IMAGE  (PADDLE_ROWS * PADDLE_BYTES)   /* 77 bytes */
-
 void paddle_row_offsets(uint8_t x, paddle_rows_t *rows)
 {
-    uint16_t off = (x >> 2) + PADDLE_ROW_BASE;
+    uint16_t off = cga_at(x, PADDLE_Y);
     for (uint16_t r = 0; r < PADDLE_ROWS; r++) {
         rows->at[r] = off;
         off = cga_next_row(off);
@@ -344,6 +311,23 @@ void draw_paddle(const uint8_t *sprite)
     blit_xor(global.paddle_pix[0], &global.paddle_rows[0]);     /* draw where it is */
 }
 
+/* The glyph table's own order: 0 space, 1 to 10 the digits, 11 the dash, 12
+ * to 37 the letters, 38 the colon and 39 the text-entry cursor. That is why
+ * a digit is `c - 47` and a letter `c - 53` - '0' lands on 1 and 'A' on 12. */
+
+static uint8_t glyph_of(char c)
+{
+    /* The cursor is 0xff, which is not a character and is negative in a
+     * signed char, so the comparisons are done on the byte. */
+    uint8_t u = c;
+    if (u == ':')  return 38;
+    if (u == 0xff) return 39;           /* the text-entry cursor */
+    if (u == '-')  return 11;
+    if (u >= '0' && u <= '9') return u - 47;
+    if (u >= 'A' && u <= 'Z') return u - 53;
+    return 0;                           /* space, and everything unmapped */
+}
+
 /* ------------------------------------------------------------------------
  * 1ac2:0c64  draw_char
  *
@@ -357,22 +341,6 @@ void draw_paddle(const uint8_t *sprite)
  * than blank. That is deliberate: it is how the red bars behind the headings
  * are painted.
  */
-#define FONT_ROWS      12
-#define FONT_GLYPH     24
-
-static uint8_t glyph_of(char c)
-{
-    /* The cursor is 0xff, which is not a character and is negative in a
-     * signed char, so the comparisons are done on the byte. */
-    uint8_t u = c;
-    if (u == ':')  return 0x26;
-    if (u == 0xff) return 0x27;         /* the text-entry cursor */
-    if (u == '-')  return 0x0b;
-    if (u >= '0' && u <= '9') return u - 0x2f;
-    if (u >= 'A' && u <= 'Z') return u - 0x35;
-    return 0;                           /* space, and everything unmapped */
-}
-
 void draw_char(char c, uint16_t di)
 {
     const uint8_t (*g)[2] = global.font[glyph_of(c)];
@@ -498,10 +466,6 @@ void sound_tick(void)
  * that first byte to a bare `ret`. So this is an 8086 opcode rather than a
  * count, which is why it is the one number in game_delay still written as
  * one - and it is tested in three places, which is why it has a name. */
-#define OP_RET  0xc3
-
-#define CYCLES_PER_LOOP 17
-#define CPU_HZ          8000000.0
 
 void game_delay(void)
 {
@@ -515,9 +479,9 @@ void game_delay(void)
  * POPSPEED.EXE does not write a file: it stores its value in the **offset
  * half of interrupt vector 0x68**, and the game reads it back with INT 21h
  * AH=35h. 1 means "as fast as possible" and patches the delay's first byte to
- * a `ret`; 0 means POPSPEED was never run, and the default is 0x6f. Either
+ * a `ret`; 0 means POPSPEED was never run, and the default is 111. Either
  * way the value is decremented and written into the `mov cx,N` immediate,
- * which is where the readme's "default 110" comes from.
+ * so 111 is where the readme's "default 110" comes from.
  *
  * Nothing sets that vector under the port, so `speed` comes from the command
  * line or defaults the way an unrun POPSPEED would.
@@ -530,7 +494,7 @@ void read_speed_setting(uint8_t speed)
         return;
     }
     if (speed == 0)
-        speed = 0x6f;
+        speed = 111;               /* the readme's 110, before the decrement */
     runtime.delay_count = speed - 1;
 }
 
@@ -575,8 +539,6 @@ void build_shifted_sprites(void)
  * global.hsc. A missing file is not an error: the table keeps whatever the
  * image shipped with, which is a full set of default entries.
  */
-#define HSC_LEN     180                 /* ten entries; the eleventh is not saved */
-
 void load_high_scores(const char *dir)
 {
     char path[512];
@@ -600,6 +562,10 @@ void load_high_scores(const char *dir)
  * They all read from the block the program reaches as segment 0xc46.
  * ===================================================================== */
 
+/* Where the bar starts: `mov di, 0x213f` at 1ac2:0793, which is the
+ * right-hand byte column - four pixels, 316 to 319 - on scan line 7. It
+ * sweeps left from there, 26 columns of four pixels. */
+
 /* 1ac2:078b  intro_curtain
  *
  * Two things, in one routine. The first sweeps a dithered bar across the
@@ -620,12 +586,10 @@ void load_high_scores(const char *dir)
  * lettering fade in rather than snap on. Only the first 0xbd bytes get it,
  * seven rows, which is exactly the leading edge.
  */
-#define CURTAIN_ROW       27            /* bytes: 108 pixels */
-
 void intro_curtain(void)
 {
     uint8_t  ah = 0, dl = 0xff;
-    uint16_t di0 = 0x213f;
+    uint16_t di0 = cga_at(CURTAIN_X, CURTAIN_Y);
 
     for (uint16_t bx = 26; bx > 0; bx--, di0--) {
         ah = 0;
@@ -639,7 +603,7 @@ void intro_curtain(void)
             uint16_t di = di0;
             for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                 g_vram[di & (CGA_SIZE - 1)] = al;
-            di = di0 - 0x1fb0;
+            di = cga_next_row(di0);
             for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                 g_vram[di & (CGA_SIZE - 1)] = al;
 
@@ -648,10 +612,10 @@ void intro_curtain(void)
                  * rotated with carry *clear*, so it empties as `ah` fills. */
                 dl = dl << 2;
                 al = 0x55 & dl;
-                di = 0x213f;
+                di = cga_at(CURTAIN_X, CURTAIN_Y);
                 for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                     g_vram[di & (CGA_SIZE - 1)] = al;
-                di = 0x213f - 0x1fb0;
+                di = cga_next_row(cga_at(CURTAIN_X, CURTAIN_Y));
                 for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                     g_vram[di & (CGA_SIZE - 1)] = al;
             }
@@ -750,10 +714,12 @@ void intro_logo(void)
      * Each pair draws the slice then rubs the bar out again, so what is left
      * on screen is the picture and not the bar. */
     uint8_t *top = &assets.logo[sizeof assets.logo - 2];      /* the last word */
-    logo_pass(top, 0x3f3f, 0x5b, 0, 1);
-    logo_pass(top, 0x3f3f, 0x5a, 1, 1);
-    logo_pass(assets.logo, 0x3119, 0x5b, 0, 0);
-    logo_pass(assets.logo, 0x1119, 0x5c, 1, 0);
+    /* Backwards from the bottom right corner, then forwards from the middle
+     * of the screen - the two halves the picture is built in. */
+    logo_pass(top, cga_at(316, 199), 91, 0, 1);
+    logo_pass(top, cga_at(316, 199), 90, 1, 1);
+    logo_pass(assets.logo, cga_at(228, 109), 91, 0, 0);
+    logo_pass(assets.logo, cga_at(228, 108), 92, 1, 0);
 }
 
 /* 1ac2:55e5  intro_reveal
@@ -762,16 +728,20 @@ void intro_logo(void)
  * phases; the second reveals the picture band by band, widening the slice
  * copied from one byte to 52 and waiting for retrace on each step.
  */
+/* One band down. The step stays inside one half of the interlace, so eleven
+ * rows of CGA_STRIDE is 22 scan lines - which is what separates the seven
+ * bands the picture is revealed in, each of them 21 lines tall. */
+
 void intro_reveal(void)
 {
-    uint16_t bx0 = 0x230;
+    uint16_t bx0 = cga_at(0, 14);       /* the wipe's top left */
     for (uint16_t dl = 52; dl > 0; dl--, bx0++) {
         uint8_t al = 0xc0;
         uint16_t di0 = bx0;
         for (uint16_t dh = 4; dh > 0; dh--) {
             al &= 0x55;
             uint16_t di = di0;
-            for (uint16_t cl = 7; cl > 0; cl--, di += 0x370)
+            for (uint16_t cl = 7; cl > 0; cl--, di += REVEAL_BAND)
                 g_vram[di & (CGA_SIZE - 1)] = al;
             for (uint16_t i = 0; i < 25; i++)
                 game_delay();
@@ -780,13 +750,13 @@ void intro_reveal(void)
         }
     }
 
-    uint16_t bp = 0xa0;
-    for (uint16_t band = 0; band < 7; band++, bp += 0x370) {
+    uint16_t bp = cga_at(0, 4);         /* the first band's top left */
+    for (uint16_t band = 0; band < 7; band++, bp += REVEAL_BAND) {
         for (uint16_t bx = 1; bx < 53; bx++) {
-            /* The slice is anchored 0x33 into the band and widens to the
-             * left, a byte a pass, which is why the original holds that far
-             * edge rather than the band's start. */
-            const uint8_t *si = &assets.reveal[band][0x33 - (bx - 1)];
+            /* The slice is anchored on the band row's last byte - 51 of the
+             * 52 - and widens to the left, a byte a pass, which is why the
+             * original holds that far edge rather than the band's start. */
+            const uint8_t *si = &assets.reveal[band][51 - (bx - 1)];
             uint16_t di = bp;
             io_wait_retrace();
             for (uint16_t dl = 21; dl > 0; dl--) {
@@ -804,25 +774,34 @@ void intro_reveal(void)
 /* 1ac2:4a7a  intro_scroll
  *
  * The character at the bottom right, scrolled up into place: 26 frames, each
- * moving a 0x31-byte by 0x19-row block up one scan line and feeding a fresh
- * row in at the bottom from 0xc46:0x488a.
+ * moving a 49-byte by 25-row block up one scan line and feeding a fresh row
+ * in at the bottom from 0xc46:0x488a.
  */
 void intro_scroll(void)
 {
+    /* `mov bl, 0x1a` - one pass per row of scroll_rows, which is declared
+     * with exactly 26 of them and pinned there by reveal starting 1274 bytes
+     * later. Not the block's height plus one: those two numbers agree by
+     * accident, and only one of them is the reason. */
     const uint8_t *feed = assets.scroll_rows[0];
-    for (uint16_t bl = 26; bl > 0; bl--) {
-        uint16_t di = 0x1b33;
+    for (uint16_t bl = sizeof assets.scroll_rows / sizeof *assets.scroll_rows;
+         bl > 0; bl--) {
+        uint16_t di = cga_at(SCROLL_X, SCROLL_TOP);
         io_wait_retrace();
-        for (uint16_t bh = 25; bh > 0; bh--) {
+        for (uint16_t bh = SCROLL_ROWS; bh > 0; bh--) {
             uint16_t src = cga_next_row(di);
-            for (uint16_t i = 0; i < 49; i++)
+            for (uint16_t i = 0; i < SCROLL_BYTES; i++)
                 g_vram[(di + i) & (CGA_SIZE - 1)] =
                     g_vram[(src + i) & (CGA_SIZE - 1)];
             di = src;
         }
-        for (uint16_t i = 0; i < 49; i++)
-            g_vram[(0x3ef3 + i) & (CGA_SIZE - 1)] = feed[i];
-        feed += 0x31;
+        /* The fresh row goes on the line the block just vacated at the
+         * bottom, which is why this is the top plus its own height. */
+        uint16_t last = cga_at(SCROLL_X, SCROLL_TOP + SCROLL_ROWS);
+        for (uint16_t i = 0; i < SCROLL_BYTES; i++)
+            g_vram[(last + i) & (CGA_SIZE - 1)] = feed[i];
+        feed += SCROLL_BYTES;
+        /* `mov cx, 0x19` - a delay count, 25 by coincidence too. */
         for (uint16_t i = 0; i < 25; i++)
             game_delay();
     }
@@ -908,12 +887,6 @@ size_t popcorn_load_image(void)
  * reads the result; there is no vector table here to write into, and
  * reproducing it would mean inventing one.
  * ===================================================================== */
-
-/* Which input routine the menu is set to, and which the game will use. */
-#define INPUT_KEYBOARD_FN  0x16d2
-#define INPUT_DEMO_FN      0x1785          /* demo_start installs this one */
-#define INPUT_MOUSE_FN     0x1654
-
 
 static void menu_redraw(void)
 {
@@ -1266,13 +1239,16 @@ int32_t play_loop(void)
     global.level_num_text[0] = (char)('0' + n / 10);
     global.level_num_text[1] = (char)('0' + n % 10);
 
-    uint16_t di = 0x177e;
+    /* A dithered bar, the twelve characters of level_text, and another bar:
+     * the font is twelve scan lines tall, which is why the second bar is at
+     * the text's own row plus twelve. */
+    uint16_t di = cga_at(BANNER_X, BANNER_Y - 1);
     for (uint16_t i = 0; i < 12; i++, di += 2) {
         g_vram[di & (CGA_SIZE - 1)] = 0xaa;
         g_vram[(di + 1) & (CGA_SIZE - 1)] = 0xaa;
     }
-    draw_text(global.level_text, 0xc, 0x377e);
-    di = 0x377e + 0x1e0;
+    draw_text(global.level_text, 12, cga_at(BANNER_X, BANNER_Y));
+    di = cga_at(BANNER_X, BANNER_Y + FONT_H);
     for (uint16_t i = 0; i < 12; i++, di += 2) {
         g_vram[di & (CGA_SIZE - 1)] = 0xaa;
         g_vram[(di + 1) & (CGA_SIZE - 1)] = 0xaa;
@@ -1280,12 +1256,13 @@ int32_t play_loop(void)
 
     level_draw();                       /* 1ac2:1c4f */
 
-    /* And wipe it off again - fourteen scan lines of nothing over the bar
-     * and the level name. The `sub di, 24` in the original only puts back
-     * what `rep stosw` advanced; taking it literally walks the wipe left a
-     * band a row and leaves the banner on screen under everything else. */
-    di = 0x177e;
-    for (uint16_t dl = 14; dl > 0; dl--) {
+    /* And wipe it off again, starting on the upper bar: the two bars and the
+     * twelve rows of text between them, which is where the fourteen comes
+     * from. The `sub di, 24` in the original only puts back what `rep stosw`
+     * advanced; taking it literally walks the wipe left a band a row and
+     * leaves the banner on screen under everything else. */
+    di = cga_at(BANNER_X, BANNER_Y - 1);
+    for (uint16_t dl = 1 + FONT_H + 1; dl > 0; dl--) {
         for (uint16_t i = 0; i < 24; i++)
             g_vram[(di + i) & (CGA_SIZE - 1)] = 0;
         di = cga_next_row(di);
@@ -1479,7 +1456,7 @@ frames:
             global.net_life--;
             if (global.net_life == 0) {
                 global.net_on = 0;
-                flash_bar(0x1554);
+                flash_bar(FLASH_DASHES);
             }
         }
         if (global.extra_on) {
@@ -1529,18 +1506,6 @@ frames:
     }
 }
 
-/* ========================================================================
- * 1ac2:02f5  play_session
- *
- * A whole game: pick the starting level, then loop over levels until the
- * lives run out. It has no exit of its own - the original leaves it the way
- * the mouse handler does at 1ac2:167e, `mov sp,[0x1405] / jmp 0x1d1`, which
- * throws away the stack and lands back in the menu. That is a longjmp, and it
- * is written as one here rather than pretended away, because the routines it
- * unwinds through really are abandoned mid-call.
- * ===================================================================== */
-#define LEVEL_COUNT     50
-
 jmp_buf g_back_to_menu;
 
 /* Where the end-level bonus lands. 1ac2:2da0 throws four words off the stack
@@ -1572,6 +1537,16 @@ int32_t g_resume_in_bonus;
  * not mean playing thirty-three levels to reach it. */
 uint8_t g_start_level = NO_START_LEVEL;
 
+/* ========================================================================
+ * 1ac2:02f5  play_session
+ *
+ * A whole game: pick the starting level, then loop over levels until the
+ * lives run out. It has no exit of its own - the original leaves it the way
+ * the mouse handler does at 1ac2:167e, `mov sp,[0x1405] / jmp 0x1d1`, which
+ * throws away the stack and lands back in the menu. That is a longjmp, and it
+ * is written as one here rather than pretended away, because the routines it
+ * unwinds through really are abandoned mid-call.
+ * ===================================================================== */
 void play_session(void)
 {
     if (g_resume_in_session) {
@@ -1663,30 +1638,11 @@ retry:
  * The playfield.
  * ===================================================================== */
 
-/* The address of a pixel, the way the game computes it everywhere:
- *
- *     di = x >> 2                       four pixels to a byte
- *     if (y & 1) di += 0x2000           odd scan lines live in the far half
- *     di += (y >> 1) * 80               `shl ax,4` then `shl ax,2` twice more
- */
-/* A pixel position to the byte that holds it. The answer is DI and is
- * sixteen bits for that reason; x is sixteen bits for a different one.
- *
- * Most callers hand it a position out of a uint8_t field and a byte would
- * carry those. plot_pixel is the exception and it decides the type: it is
- * INT 10h AH=0Ch, whose column arrives in **CX**, a word, and its caller
- * admits any x up to 319. No path that runs today gets near that - the
- * menu's kernels launch from 104 and swing about 35 either way - so a byte
- * would truncate nothing and every test here would pass. That is the reason
- * to write the width down rather than measure it. */
-static uint16_t cga_at(uint16_t x, uint16_t y)
-{
-    uint16_t di = x >> 2;
-    if (y & 1)
-        di += CGA_PLANE;
-    return di + (y >> 1) * CGA_STRIDE;
-}
-
+/* Returns the DI it leaves, which 1ac2:46dc depends on: the curtain lays its
+ * second cap at [di] without saving DI across this call, and 1ac2:2034 opens
+ * `xor di, di` - so the cap goes at the end of the brick row, not where the
+ * caller had DI. The `inc di / inc di` at 1ac2:46cc is dead for the same
+ * reason. */
 /* 1ac2:2034  draw_brick_row
  *
  * One scan line of the brick field. The playfield starts two bytes in - eight
@@ -1699,20 +1655,9 @@ static uint16_t cga_at(uint16_t x, uint16_t y)
  * their bitmaps in the block the program reaches as segment 0x14a1 rather than
  * in cell_bitmap.
  */
-#define BRICK_TOP        6              /* first scan line of the field */
-#define BRICK_LEFT       2              /* bytes, so eight pixels */
-#define BRICK_COLS      12
-#define BRICK_HEIGHT     8              /* scan lines */
-#define BRICK_BYTES      4              /* 16 pixels */
-
-/* Returns the DI it leaves, which 1ac2:46dc depends on: the curtain lays its
- * second cap at [di] without saving DI across this call, and 1ac2:2034 opens
- * `xor di, di` - so the cap goes at the end of the brick row, not where the
- * caller had DI. The `inc di / inc di` at 1ac2:46cc is dead for the same
- * reason. */
 uint16_t draw_brick_row(uint8_t y)
 {
-    uint16_t di = cga_at(0, y) + BRICK_LEFT;
+    uint16_t di = cga_at(WALL_LEFT, y);
     uint8_t row = y - BRICK_TOP;
     uint8_t sub = (row & 7) * 4;
     const uint8_t *cells = &global.level.cells[(row >> 3) * BRICK_COLS];
@@ -1752,6 +1697,12 @@ void draw_sprite_20x6(uint8_t x, uint8_t y, const uint8_t *src)
     }
 }
 
+static void intro_pause(int32_t n)
+{
+    for (uint16_t i = 0; i < n; i++)
+        game_delay();                   /* 1ac2:164c */
+}
+
 /* ========================================================================
  * 1ac2:1eb9  level_intro
  *
@@ -1778,14 +1729,6 @@ void draw_sprite_20x6(uint8_t x, uint8_t y, const uint8_t *src)
  * the wrong one at every frame before it - which is what put a TABLEAU banner
  * in the port that the emulator had already cleared.
  * ===================================================================== */
-#define SWEEP_X     96
-
-static void intro_pause(int32_t n)
-{
-    for (uint16_t i = 0; i < n; i++)
-        game_delay();                   /* 1ac2:164c */
-}
-
 void level_intro(void)
 {
     /* The panel scrolls up, a fresh row feeding in at the bottom. */
@@ -1954,8 +1897,6 @@ int32_t ball_redraw(ball_t *b)
  * [0x2e81] is the safety net - the extra floor a bonus can put up. With it
  * live the ball bounces off the bottom instead of being lost.
  */
-#define SOUND_BOUNCE   2
-
 void ball_after(ball_t *b)
 {
 
@@ -2014,28 +1955,6 @@ void ball_after(ball_t *b)
     global.ball_alive--;
 }
 
-/* ------------------------------------------------------------------------
- * 1ac2:2316  ball_paddle
- *
- * The paddle is 0xb5 to 0xbe deep and [0x2d3a] wide. A ball reaching it comes
- * off at an angle that depends on where it hit, which is what makes the game
- * playable rather than a coin toss: the outgoing slope is looked up in a table
- * by distance from the near end.
- *
- *   0x2e2c   eleven slopes, indexed by how far in from either end the ball
- *            struck the top - shallow at the ends, steep in the middle
- *   0x2e42   ten slopes for a hit on the side, indexed by depth
- *
- * Each entry is a word stored (dy, dx), matching the ball's own `+22`,
- * `+0x17` pair. The middle of the paddle has no table entry at all: a ball
- * landing there keeps the slope it arrived with and only reverses.
- *
- * A ball moving upwards is treated as having hit the top even when it is
- * level with the side, which is what stops one that has just come off from
- * immediately catching the side on the way out.
- */
-#define SOUND_PADDLE     1
-
 /* The common tail of every top-of-paddle bounce: reverse vertically, anchor
  * one pixel clear of the paddle, and restart the accumulators. */
 static void paddle_bounce_up(ball_t *b)
@@ -2063,6 +1982,26 @@ static void paddle_slope(ball_t *b, uint16_t slope)
     b->dx = (slope >> 8);
 }
 
+/* ------------------------------------------------------------------------
+ * 1ac2:2316  ball_paddle
+ *
+ * The paddle is 0xb5 to 0xbe deep and [0x2d3a] wide. A ball reaching it comes
+ * off at an angle that depends on where it hit, which is what makes the game
+ * playable rather than a coin toss: the outgoing slope is looked up in a table
+ * by distance from the near end.
+ *
+ *   0x2e2c   eleven slopes, indexed by how far in from either end the ball
+ *            struck the top - shallow at the ends, steep in the middle
+ *   0x2e42   ten slopes for a hit on the side, indexed by depth
+ *
+ * Each entry is a word stored (dy, dx), matching the ball's own `+22`,
+ * `+0x17` pair. The middle of the paddle has no table entry at all: a ball
+ * landing there keeps the slope it arrived with and only reverses.
+ *
+ * A ball moving upwards is treated as having hit the top even when it is
+ * level with the side, which is what stops one that has just come off from
+ * immediately catching the side on the way out.
+ */
 void ball_paddle(ball_t *b)
 {
     uint16_t y = b->y;
@@ -2299,17 +2238,6 @@ void ball_bricks(ball_t *b)
                       global_ptr(global.hits[i].cell_ptr), b);
     }
 }
-
-/* ========================================================================
- * Brick behaviour: the table at 0x3044, indexed by cell value.
- *
- * Value 0 and 13 have no handler, 4 and 12 are indestructible, 5 through 8 are
- * a chain that degrades one step per hit, and 1, 2, 3 and 9 through 11 each do
- * something of their own. They share a preamble - add to the score, ask for a
- * sound, and reset the ball's bounce counter, so that a brick hit does not
- * count towards the every-35-bounces slope shuffle.
- * ===================================================================== */
-#define SOUND_BRICK      3
 
 static void brick_score(uint16_t a, uint16_t b, uint16_t c)
 {
@@ -2570,7 +2498,7 @@ void score_add(void)
         global.score_text[i] = ('0' | ((carry ? adjusted : sum) & 0x0f));
     }
     /* Redraw the six digits into the panel. */
-    uint16_t di = 0x15d2;
+    uint16_t di = cga_at(264, 138);
     for (uint16_t i = 0; i < 6; i++, di += 2)
         draw_char((char)global.score_text[i], di);
 
@@ -2600,14 +2528,14 @@ void score_add(void)
 /* 1ac2:318b  extra_life
  *
  * One more life, up to twelve, and its marker drawn on the panel. The markers
- * are four to a row: `al & 0xfc` steps along and `(al & 3) * 0xf0` steps down.
+ * are four to a row: `al & 0xfc` steps along and `(al & 3)` steps down.
  */
 void extra_life(void)
 {
     if (global.lives == 12)
         return;
     uint8_t n = global.lives - 1;
-    uint16_t di = 0x3a7c + (n & 0xfc) + (n & 3) * 0xf0;
+    uint16_t di = cga_at(240, 169) + (n & 0xfc) + (n & 3) * LIVES_ROW;
     for (uint16_t r = 0; r < 5; r++) {
         for (uint16_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = global.life_sprite[r][b];
@@ -2631,12 +2559,10 @@ void extra_life(void)
  * the bricks land on it - which is why skipping it left the menu showing
  * through the playfield.
  */
-#define BACKDROP_BYTES     48
-
 void field_backdrop(uint8_t y)
 {
     io_log_random(0x1fc1);              /* tagged, for sidebyside's per-frame list */
-    uint16_t di = cga_at(0, y) + BRICK_LEFT;
+    uint16_t di = cga_at(WALL_LEFT, y);
     const uint8_t *src = global_ptr(global.backdrop_ptr[(global.backdrop_phase >> 3) & 7]);
     for (uint16_t r = 0; r < 8; r++) {
         for (uint16_t b = 0; b < BACKDROP_BYTES; b++)
@@ -2652,13 +2578,6 @@ void field_backdrop(uint8_t y)
         p = 0xff;
     global.backdrop_phase = p + 1;
 }
-
-/* ========================================================================
- * The level's opening animation: a creature walks the paddle row carrying
- * the ball on. 1ac2:1c4f drives it, 1ac2:1e23 steps it, 1ac2:1e50 draws one
- * frame.
- * ===================================================================== */
-#define WALKER_ROW    0x1cc0            /* the paddle row */
 
 /* 1ac2:1e50  walker_draw
  *
@@ -2732,8 +2651,6 @@ static void hatch_frame(const uint8_t *src, uint16_t x, uint16_t y)
  * 0x1cd9. Cosmetic, but it is also what puts the bottom band of the playfield
  * on screen - the backdrop sweep only reaches y=179.
  */
-#define LIVES_MARK  0x3a7c
-
 void level_draw(void)
 {
     /* The paddle's own hatch is the last of the eight field marks. */
@@ -2746,12 +2663,12 @@ void level_draw(void)
             game_delay();
     }
 
-    /* Rub out one life marker: the lives are four to a row, 0xf0 apart -
-     * the same layout extra_life draws them in, and the same trap. The
+    /* Rub out one life marker: the same layout extra_life draws them in,
+     * and the same trap. The
      * `sub di, 4` only puts back what `rep stosw` advanced, and the step
      * that follows is forwards. */
     uint8_t n = global.lives - 1;
-    uint16_t di = LIVES_MARK + (n & 0xfc) + (n & 3) * 0xf0;
+    uint16_t di = cga_at(240, 169) + (n & 0xfc) + (n & 3) * LIVES_ROW;
     for (uint16_t r = 0; r < 5; r++) {
         for (uint16_t b = 0; b < 4; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = 0;
@@ -2815,6 +2732,27 @@ void level_draw(void)
     }
 }
 
+/* `cmp bx, 0x5e` - the reveal runs for bx = 1..0x5d, ninety-three passes.
+ * Ninety-two leaves the whole panel one scan line lower than it belongs, and
+ * the only place that shows is the life markers: level_draw clears five rows
+ * at the absolute address 0x3a7c, the marker is sitting one row below it, and
+ * its bottom row of caps survives every clear. */
+
+static void panel_char(uint8_t c, uint8_t *dest)
+{
+    uint8_t g;
+    if (c == '-')                       g = 11;
+    else if (c <= ' ')                  g = 0;
+    else if (c <= '9')                  g = c - 47;
+    else if (c >= 'A')                  g = c - 53;
+    else                                g = 11;
+    const uint8_t (*src)[2] = global.font[g];
+    for (uint16_t r = 0; r < FONT_ROWS; r++, dest += PANEL_STRIDE) {
+        dest[0] = src[r][0];
+        dest[1] = src[r][1];
+    }
+}
+
 /* ========================================================================
  * 1ac2:0b0b  panel_draw
  *
@@ -2828,30 +2766,6 @@ void level_draw(void)
  * the CGA interlace between rows, and this writes to a flat buffer 28 bytes to
  * a row. The character-to-glyph mapping is the same one, minus the cursor.
  * ===================================================================== */
-#define PANEL_STRIDE      28
-#define PANEL_ON_SCREEN 0x3f24          /* bottom-right, and it grows upwards */
-/* `cmp bx, 0x5e` - the reveal runs for bx = 1..0x5d, ninety-three passes.
- * Ninety-two leaves the whole panel one scan line lower than it belongs, and
- * the only place that shows is the life markers: level_draw clears five rows
- * at the absolute address 0x3a7c, the marker is sitting one row below it, and
- * its bottom row of caps survives every clear. */
-#define PANEL_ROWS     0x5e
-
-static void panel_char(uint8_t c, uint8_t *dest)
-{
-    uint8_t g;
-    if (c == '-')                       g = 0x0b;
-    else if (c <= ' ')                  g = 0;
-    else if (c <= '9')                  g = c - 0x2f;
-    else if (c >= 'A')                  g = c - 0x35;
-    else                                g = 0x0b;
-    const uint8_t (*src)[2] = global.font[g];
-    for (uint16_t r = 0; r < FONT_ROWS; r++, dest += PANEL_STRIDE) {
-        dest[0] = src[r][0];
-        dest[1] = src[r][1];
-    }
-}
-
 void panel_draw(void)
 {
     uint8_t *dest = &global.panel[9][2];
@@ -2877,7 +2791,8 @@ void panel_draw(void)
 
     /* Reveal it. Each pass redraws one more row than the last, from the
      * bottom of the panel upwards, so it wipes on rather than appearing. */
-    uint16_t bottom = PANEL_ON_SCREEN;
+    /* Bottom right, and it grows upwards. */
+    uint16_t bottom = cga_at(208, 199);
     for (uint16_t rows = 1; rows != PANEL_ROWS; rows++) {
         uint16_t d = bottom;
         io_wait_retrace();
@@ -2973,16 +2888,15 @@ void define_keys_prompt(uint16_t src, uint16_t dst)
 
 /* 1ac2:3146  flash_bar
  *
- * XOR a pattern across 24 words at 0x3ef2 - the bar along the bottom of the
- * playfield. Called with the pattern in DX, so the same routine both draws it
- * and rubs it out.
+ * XOR a pattern across 24 words along the bottom of the playfield. Called
+ * with the pattern in DX, so the same routine both draws it and rubs it out.
  */
 void flash_bar(uint16_t pattern)
 {
-    uint16_t di = 0x3ef2;
+    uint16_t di = cga_at(WALL_LEFT, CGA_H - 1);
     for (uint16_t i = 0; i < 24; i++, di += 2) {
-        g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)pattern;
-        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= (uint8_t)(pattern >> 8);
+        g_vram[di & (CGA_SIZE - 1)] ^= pattern;
+        g_vram[(di + 1) & (CGA_SIZE - 1)] ^= (pattern >> 8);
     }
 }
 
@@ -3330,9 +3244,9 @@ int32_t bonus_move_down(ent_anim_t *b, uint8_t *px, uint8_t *py)
 {
     uint8_t y = *py, x = *px;
 
-    if (y >= 120) {                     /* 1ac2:3d80 */
+    if (y >= BONUS_HOMING_Y) {          /* 1ac2:3d80 */
         b->arg.move.mode = 4;            /* follow a script from here on */
-        b->script = 0x8320;
+        b->script_ptr = 0x8320;
         b->arg.move.steps = x;
         (*py)++;
         return 1;
@@ -3879,10 +3793,13 @@ settle:
  * writes upwards; scrolling down does the reverse, and both walk the interlace
  * rather than a linear buffer.
  */
+/* The band both routines move: 27 rows from 172, so its last row is 198. One
+ * starts at the top and walks down, the other at the bottom and walks up. */
+
 void scroll_up_band(void)
 {
-    uint16_t di = 0x1ae2;
-    for (uint16_t r = 27; r > 0; r--) {
+    uint16_t di = cga_at(WALL_LEFT, BAND_TOP);
+    for (uint16_t r = BAND_ROWS; r > 0; r--) {
         uint16_t si = cga_next_row(di);
         for (uint16_t b = 0; b < 48; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] =
@@ -3893,8 +3810,8 @@ void scroll_up_band(void)
 
 void scroll_down_band(void)
 {
-    uint16_t si = 0x1ef2;
-    for (uint16_t r = 27; r > 0; r--) {
+    uint16_t si = cga_at(WALL_LEFT, BAND_TOP + BAND_ROWS - 1);
+    for (uint16_t r = BAND_ROWS; r > 0; r--) {
         uint16_t di = cga_next_row(si);
         for (uint16_t b = 0; b < 48; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] =
@@ -3911,7 +3828,7 @@ void scroll_down_band(void)
  */
 void draw_paddle_raw(const uint8_t *src)
 {
-    uint16_t di = (global.paddle_x >> 2) + PADDLE_ROW_BASE;
+    uint16_t di = cga_at(global.paddle_x, PADDLE_Y);
     for (uint16_t r = 0; r < 16; r++) {
         for (uint16_t b = 0; b < 7; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = src[r * 7 + b];
@@ -4040,9 +3957,6 @@ void life_lost(void)
  * [0x2e56] is the offset along the paddle where it landed, so it stays at the
  * same point as the paddle moves rather than snapping to the middle.
  * ===================================================================== */
-#define HOLD_RESET   0x230
-#define SOUND_CATCH      7
-
 int32_t ball_on_paddle(ball_t *b)
 {
     if (global.paddle_morphing != 0)
@@ -4139,6 +4053,20 @@ int32_t score_before(const uint8_t *a, const uint8_t *b)
     return 0;
 }
 
+static void laser_dot_rows(uint16_t x, uint16_t y, int32_t moving)
+{
+    uint8_t mask = 0xc0 >> ((x & 3) * 2);
+    uint16_t di = pixel_xor(x, y);
+    di = cga_next_row(di);
+    g_vram[di & (CGA_SIZE - 1)] ^= mask;
+    if (moving) {
+        di = di + CGA_STRIDE;
+        g_vram[di & (CGA_SIZE - 1)] ^= mask;
+    }
+    di = cga_next_row(di);
+    g_vram[di & (CGA_SIZE - 1)] ^= mask;
+}
+
 /* ========================================================================
  * 1ac2:2ee3  laser_fire
  *
@@ -4153,22 +4081,6 @@ int32_t score_before(const uint8_t *a, const uint8_t *b)
  * di,0x50` in the middle steps a row *within* the half it is already in,
  * which is two scan lines rather than one. Transcribed as it is.
  * ===================================================================== */
-#define SHOT_SOUND 5
-
-static void laser_dot_rows(uint16_t x, uint16_t y, int32_t moving)
-{
-    uint8_t mask = 0xc0 >> ((x & 3) * 2);
-    uint16_t di = pixel_xor(x, y);
-    di = cga_next_row(di);
-    g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
-    if (moving) {
-        di = di + CGA_STRIDE;
-        g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
-    }
-    di = cga_next_row(di);
-    g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
-}
-
 void laser_fire(void)
 {
     if (global.paddle_morphing == 0 && global.laser_on != 2) {
@@ -4308,8 +4220,8 @@ void entity_capsule_frames(ent_fall_t *f, uint16_t table_ptr)
 void fill_column(uint16_t di, uint16_t value)
 {
     for (uint16_t i = 0; i < 25; i++) {
-        g_vram[di & (CGA_SIZE - 1)] = (uint8_t)value;
-        g_vram[(di + 1) & (CGA_SIZE - 1)] = (uint8_t)(value >> 8);
+        g_vram[di & (CGA_SIZE - 1)] = value;
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = (value >> 8);
         di = cga_next_row(di);
     }
 }
@@ -4320,14 +4232,14 @@ void bonus_points(void)
 {
     brick_score(0, 0x100, 0);
     if (global.net_on == 1) {
-        flash_bar(0x1554);
+        flash_bar(FLASH_DASHES);
         global.net_on = 0;
-        fill_column(0x1a77, 0);
+        fill_column(cga_at(PANEL_NET_X, PANEL_BAR_Y), 0);
     }
     if (global.extra_on != 1)
         return;
     global.extra_on = 0;
-    fill_column(0x1a8b, 0);
+    fill_column(cga_at(PANEL_M_X, PANEL_BAR_Y), 0);
 }
 
 /* 1ac2:2def  bonus 1 - the paddle catches the ball */
@@ -4368,12 +4280,12 @@ void bonus_net(void)
 {
     if (global.net_on != 1) {
         global.net_on = 1;
-        flash_bar(0x1554);
+        flash_bar(FLASH_DASHES);
     }
     global.net_life = 5000;
     global.net_timer = 200;
-    fill_column(0x1a77, 0xaaaa);
-    global.net_pos = (0x1a77);
+    fill_column(cga_at(PANEL_NET_X, PANEL_BAR_Y), 0xaaaa);
+    global.net_pos = cga_at(PANEL_NET_X, PANEL_BAR_Y);
 }
 
 /* 1ac2:315b  bonus 6 - every ball in play reverses vertically and re-anchors
@@ -4685,18 +4597,21 @@ void level_between(void)
         }
     }
 
+    /* Two scan lines of nothing along the top of the field. */
+    uint16_t first = cga_at(WALL_LEFT, WALL_TOP);
+    uint16_t second = cga_at(WALL_LEFT, WALL_TOP + 1);
     for (uint16_t i = 0; i < 24; i++) {
-        g_vram[(0xa2 + i * 2) & (CGA_SIZE - 1)] = 0;
-        g_vram[(0xa3 + i * 2) & (CGA_SIZE - 1)] = 0;
-        g_vram[(0x20a2 + i * 2) & (CGA_SIZE - 1)] = 0;
-        g_vram[(0x20a3 + i * 2) & (CGA_SIZE - 1)] = 0;
+        g_vram[(first + i * 2) & (CGA_SIZE - 1)] = 0;
+        g_vram[(first + 1 + i * 2) & (CGA_SIZE - 1)] = 0;
+        g_vram[(second + i * 2) & (CGA_SIZE - 1)] = 0;
+        g_vram[(second + 1 + i * 2) & (CGA_SIZE - 1)] = 0;
     }
 
-    uint16_t y = 6;
-    for (uint16_t row = 0; row < 14; row++, y += 8) {
-        uint16_t x = 8;
-        for (uint16_t col = 0; col < 12; col++, x += 0x10) {
-            uint8_t cell = global.level.cells[row * 12 + col];
+    uint16_t y = BRICK_TOP;
+    for (uint16_t row = 0; row < BRICK_ROWS; row++, y += BRICK_HEIGHT) {
+        uint16_t x = WALL_LEFT;
+        for (uint16_t col = 0; col < BRICK_COLS; col++, x += 16) {
+            uint8_t cell = global.level.cells[row * BRICK_COLS + col];
             if (cell == 0x0c) {
                 cell_hole_draw(x, y);
                 continue;
@@ -4716,8 +4631,10 @@ void level_between(void)
         }
     }
 
-    /* And the empty band under the bricks, 0x29 rows of 48 bytes. */
-    uint16_t bp = 0x1272;
+    /* And the empty band under the bricks: it starts where they end, which
+     * is BRICK_ROWS of BRICK_HEIGHT below the field's first scan line. 41
+     * rows of 48 bytes, both halves of the interlace each pass. */
+    uint16_t bp = cga_at(WALL_LEFT, BRICK_TOP + BRICK_ROWS * BRICK_HEIGHT);
     for (uint16_t r = 0; r < 41; r++, bp += CGA_STRIDE) {
         for (uint16_t i = 0; i < 48; i++) {
             g_vram[(bp + i) & (CGA_SIZE - 1)] = 0;
@@ -4843,6 +4760,28 @@ int32_t name_field(uint16_t di, uint8_t *abort)
     return 0;
 }
 
+static uint16_t name_bar(uint16_t di, uint16_t word)
+{
+    for (uint16_t i = 0; i < NAME_WIDTH; i++)
+        vram_setw(di + i * 2, word);
+    return cga_next_row(di);
+}
+
+/* One row of the engraved panel: a byte, a middle, and a byte. The middle is
+ * given as a byte so both the `rep stosw` rows and the `rep stosb` rows can
+ * use it - 0xffff is 0xff twice, 0x5555 is 0x55 twice. */
+static uint16_t panel_row(uint16_t di, uint8_t lead, uint8_t mid,
+                          uint8_t tail, int32_t has_tail)
+{
+    uint16_t d = di;
+    g_vram[d++ & (CGA_SIZE - 1)] = lead;
+    for (uint16_t i = 0; i < (has_tail ? 0x2e : 0x2f); i++)
+        g_vram[(d + i) & (CGA_SIZE - 1)] = mid;
+    if (has_tail)
+        g_vram[(d + 0x2e) & (CGA_SIZE - 1)] = tail;
+    return cga_next_row(di);
+}
+
 /* ========================================================================
  * 1ac2:10de  screen_player_names
  *
@@ -4861,37 +4800,13 @@ int32_t name_field(uint16_t di, uint8_t *abort)
  * fixed patterns at 0x280 below the box's top, light down the left and dark
  * along the bottom. The next box starts a scan line and 0x50 past those.
  * ===================================================================== */
-#define NAME_WIDTH  24                /* characters, and words of bar */
-
-static uint16_t name_bar(uint16_t di, uint16_t word)
-{
-    for (uint16_t i = 0; i < NAME_WIDTH; i++)
-        vram_setw(di + i * 2, word);
-    return cga_next_row(di);
-}
-
-/* One row of the engraved panel: a byte, a middle, and a byte. The middle is
- * given as a byte so both the `rep stosw` rows and the `rep stosb` rows can
- * use it - 0xffff is 0xff twice, 0x5555 is 0x55 twice. */
-static uint16_t panel_row(uint16_t di, uint8_t lead, uint8_t mid,
-                          uint8_t tail, int32_t has_tail)
-{
-    uint16_t d = di;
-    g_vram[d++ & (CGA_SIZE - 1)] = (uint8_t)lead;
-    for (uint16_t i = 0; i < (has_tail ? 0x2e : 0x2f); i++)
-        g_vram[(d + i) & (CGA_SIZE - 1)] = (uint8_t)mid;
-    if (has_tail)
-        g_vram[(d + 0x2e) & (CGA_SIZE - 1)] = (uint8_t)tail;
-    return cga_next_row(di);
-}
-
 uint8_t screen_player_names(void)
 {
     global.player_count = 0;
     play_frame();                       /* 1ac2:1212 - the surround */
     flush_keys();                   /* 1ac2:0106 */
 
-    uint16_t di = 0x142;
+    uint16_t di = cga_at(8, 8);
     for (;;) {
         uint16_t top = di;                      /* pushed at 1ac2:10f2 */
         uint16_t label = name_bar(top, 0xaaaa); /* pushed at 1ac2:110e */
@@ -4918,8 +4833,10 @@ uint8_t screen_player_names(void)
             return 0;
         }
 
-        /* The box just filled in becomes an engraved panel. */
-        uint16_t d = top + 0x280;
+        /* The box just filled in becomes an engraved panel. The step stays
+         * inside one half of the interlace, so eight rows of CGA_STRIDE is
+         * sixteen scan lines down from the box's top. */
+        uint16_t d = top + 8 * CGA_STRIDE;
         d = panel_row(d, 0x3f, 0xff, 0xfc, 1);
         d = panel_row(d, 0xf5, 0x55, 0,    0);
         d = panel_row(d, 0xd5, 0x15, 0,    0);
@@ -4946,8 +4863,8 @@ uint16_t frame_band(uint16_t di, uint16_t fill)
         g_vram[(di + i) & (CGA_SIZE - 1)] = global.frame_corner_left[phase][i];
     di += 3;
     for (uint16_t i = 0; i < 23; i++, di += 2) {
-        g_vram[di & (CGA_SIZE - 1)] = (uint8_t)fill;
-        g_vram[(di + 1) & (CGA_SIZE - 1)] = (uint8_t)(fill >> 8);
+        g_vram[di & (CGA_SIZE - 1)] = fill;
+        g_vram[(di + 1) & (CGA_SIZE - 1)] = (fill >> 8);
     }
     for (uint16_t i = 0; i < 3; i++)
         g_vram[(di + i) & (CGA_SIZE - 1)] = global.frame_corner_right[phase][i];
@@ -4968,7 +4885,7 @@ void play_frame(void)
 {
     runtime.frame_phase = 0;
 
-    uint16_t di = 0x1e50;
+    uint16_t di = cga_at(0, 194);
     static const uint16_t fills[6] = { 0xffff, 0x5555, 0x5454, 0x5555, 0, 0 };
     for (uint16_t i = 0; i < 6; i++) {
         frame_band(di, fills[i]);
@@ -4977,7 +4894,7 @@ void play_frame(void)
     }
 
     /* The walls. Each pass scrolls the column up six rows and caps it. */
-    uint16_t bp = 0x3e00;
+    uint16_t bp = cga_at(0, 193);
     for (uint16_t pass = 194; pass > 0; pass--) {
         io_wait_retrace();
         di = bp;
@@ -4998,13 +4915,13 @@ void play_frame(void)
 
         uint8_t cap = (runtime.frame_phase & 3) ? 0x50 : 0x10;
         g_vram[di++ & (CGA_SIZE - 1)] = 0x0d;
-        g_vram[di++ & (CGA_SIZE - 1)] = (uint8_t)cap;
+        g_vram[di++ & (CGA_SIZE - 1)] = cap;
         for (uint16_t i = 0; i < 24; i++, di += 2) {
             g_vram[di & (CGA_SIZE - 1)] = 0;
             g_vram[(di + 1) & (CGA_SIZE - 1)] = 0;
         }
         g_vram[di++ & (CGA_SIZE - 1)] = 0x0d;
-        g_vram[di & (CGA_SIZE - 1)] = (uint8_t)cap;
+        g_vram[di & (CGA_SIZE - 1)] = cap;
         runtime.frame_phase++;
 
         bp = cga_prev_row(bp);
@@ -5105,7 +5022,7 @@ void field_marks(void)
  */
 void panel_finish(void)
 {
-    uint16_t di = 0x1cc0;
+    uint16_t di = cga_at(0, 184);
     for (uint16_t pass = 0; pass < 6; pass++) {
         /* 1ac2:09d1, the **top** of the pass. After the drawing instead puts
          * this side a pass ahead - the same slip the ending sync had. */
@@ -5240,7 +5157,7 @@ uint16_t particle_random(uint16_t ax, uint16_t ticks, uint16_t limit)
 
 /* 1ac2:548a  particle_init
  *
- * Set one kernel going from (0x68, 0xa0) with a random speed and a random
+ * Set one kernel going from (104, 160) with a random speed and a random
  * angle. The angle is both where t starts and what x is measured from, and it
  * decides the sign of dir, so a kernel launched at a negative angle walks its
  * time upwards and one launched positive walks it down - which is what sends
@@ -5248,8 +5165,8 @@ uint16_t particle_random(uint16_t ax, uint16_t ticks, uint16_t limit)
  */
 uint16_t particle_init(particle_t *p, uint16_t ax_in)
 {
-    p->x0 = 0x68;
-    p->y0 = 0xa0;
+    p->x0 = 104;
+    p->y0 = 160;
     int16_t ax = particle_random(ax_in, io_ticks(), 6) + 8;
     p->speed = ax;
     ax = particle_random(ax, io_ticks(), 70) - 35;
@@ -5336,7 +5253,7 @@ void plot_pixel_xor(uint16_t x, uint16_t y, uint8_t colour)
         return;
     uint16_t di = cga_at(x, y);
     uint8_t shift = 6 - (x & 3) * 2;
-    g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)((colour & 3) << shift);
+    g_vram[di & (CGA_SIZE - 1)] ^= ((colour & 3) << shift);
 }
 
 /* 1ac2:5140  banner_shift
@@ -5350,12 +5267,10 @@ void plot_pixel_xor(uint16_t x, uint16_t y, uint8_t colour)
  * overwrites the flag - which is why the banner scrolls in blank rather than
  * repeating itself.
  */
-#define BANNER_ROW 0x38a9
-#define BANNER_LEN     14
-
 void banner_shift(void)
 {
-    uint16_t di = BANNER_ROW;
+    /* The **highest** byte of the run, because the shift walks down from it. */
+    uint16_t di = cga_at(292, 157);
     for (uint16_t row = 0; row < 6; row++) {
         for (uint16_t twice = 0; twice < 2; twice++) {
             uint8_t carry = 0;
@@ -5405,7 +5320,6 @@ void play_prepare(void)
  * reads a recorded script instead of a keyboard or a mouse, and cs:[0x1784] is
  * set to 0xff to say it is running. One player, under demo_name. */
 
-
 void demo_start(void)
 {
     global.input_active_fn = INPUT_DEMO_FN;
@@ -5419,16 +5333,6 @@ void demo_start(void)
     global.players[0].ents[0][0] = 0;
     global.player_count = 1;
 }
-
-/* ========================================================================
- * 1ac2:490d  menu_arrow
- *
- * The arrow that says whether the mouse or the keyboard is selected. It is
- * XOR-drawn on both rows every time, so calling it moves the arrow from
- * whichever row it is on to the other - there is no state to keep.
- * ===================================================================== */
-#define ARROW_MOUSE 0x0bfe
-#define ARROW_KEYS  0x088e
 
 /* 1ac2:492f  arrow_head - the nine rows of arrow_head_sprite */
 void arrow_head(uint16_t di)
@@ -5454,6 +5358,13 @@ void arrow_tail(uint16_t di)
         di = cga_next_row(di);
 }
 
+/* ========================================================================
+ * 1ac2:490d  menu_arrow
+ *
+ * The arrow that says whether the mouse or the keyboard is selected. It is
+ * XOR-drawn on both rows every time, so calling it moves the arrow from
+ * whichever row it is on to the other - there is no state to keep.
+ * ===================================================================== */
 void menu_arrow(void)
 {
     arrow_head(ARROW_MOUSE);
@@ -5521,8 +5432,8 @@ void restore_int09(void) { io_set_int09_installed(0); }
 /* 1ac2:41d4  play_teardown - blank the two indicator columns */
 void play_teardown(void)
 {
-    fill_column(0x1a77, 0);
-    fill_column(0x1a8b, 0);
+    fill_column(cga_at(PANEL_NET_X, PANEL_BAR_Y), 0);
+    fill_column(cga_at(PANEL_M_X, PANEL_BAR_Y), 0);
 }
 
 /* 1ac2:41e5  cell_special
@@ -5602,11 +5513,6 @@ void palette_cycle(void)
     io_cga_colour(global.cga_colour);
 }
 
-/* ========================================================================
- * The hall of fame: its table, its file, and the border that runs round it.
- * ===================================================================== */
-#define HSC_COUNT     10
-
 /* 1ac2:4d5d  hsc_bubble - one pass of the sort, from the bottom up.
  * `scasb` compares a name's six score digits against the entry above it and
  * swaps the whole nine-word record when the lower one is bigger. */
@@ -5683,17 +5589,20 @@ void border_erase(uint16_t di)
  *
  * Move one marker round the edge of the screen. `di / 0x50` splits the offset
  * into a row and a column, and the four cases are the four sides: column 0
- * going up, column 50 going down, row 0 going right and row 0x60 going
- * left. `0x140` is four scan lines, which is the vertical step.
+ * going up, column 50 going down, row 0 going right and row 96 going left.
+ *
+ * The vertical step is four rows of CGA_STRIDE. Row 96 is offset 7680, under
+ * CGA_PLANE, so every offset here is in the even half - which makes those
+ * four rows eight scan lines on the screen.
  */
 uint16_t border_step(uint16_t di)
 {
     uint8_t row = di / CGA_STRIDE, col = di % CGA_STRIDE;
     if (row == 0)
-        return (col == 50) ? di + 0x140 : di + 2;
+        return (col == 50) ? di + BORDER_STEP_Y : di + 2;
     if (row == 96)
-        return (col == 0) ? di - 0x140 : di - 2;
-    return (col == 50) ? di + 0x140 : di - 0x140;
+        return (col == 0) ? di - BORDER_STEP_Y : di - 2;
+    return (col == 50) ? di + BORDER_STEP_Y : di - BORDER_STEP_Y;
 }
 
 /* 1ac2:4f58  border_animate - fourteen markers, each erased, stepped and
@@ -5712,22 +5621,21 @@ void border_animate(void)
 /* 1ac2:5019  border_block, and 1ac2:5045  border_row
  *
  * The top and bottom edges: 26 columns of the eight-word sprite side by
- * side, and 0x17 rows of it stacked. Between them they lay the frame the
+ * side, and 23 rows of it stacked. Between them they lay the frame the
  * markers then run around.
  */
 void border_row(uint16_t di)
 {
-    /* 0x17 passes of eight words each, the pattern read from **cs:0x506d** -
-     * the code segment, the bytes immediately after this routine - and DI
-     * carried on down the interlace throughout rather than reset per pass.
-     * What was here before called border_draw 26 times, which is neither
-     * the count nor the operation. */
+    /* 23 passes of eight words each, the pattern read from border_spr - the
+     * code segment, the bytes immediately after this routine, which is what
+     * cs:0x506d names - and DI carried on down the interlace throughout
+     * rather than reset per pass. What was here before called border_draw 26
+     * times, which is neither the count nor the operation. */
     for (uint16_t n = 23; n > 0; n--) {
-        uint16_t si = 0x506d;
-        for (uint16_t r = 0; r < 8; r++, si += 2) {
-            uint16_t w = runtime_w(si);
-            g_vram[di & (CGA_SIZE - 1)] = (uint8_t)w;
-            g_vram[(di + 1) & (CGA_SIZE - 1)] = (uint8_t)(w >> 8);
+        for (uint16_t r = 0; r < 8; r++) {
+            uint16_t w = runtime.border_spr[r];
+            g_vram[di & (CGA_SIZE - 1)] = w;
+            g_vram[(di + 1) & (CGA_SIZE - 1)] = (w >> 8);
             di = cga_next_row(di);
         }
     }
@@ -5800,26 +5708,31 @@ void level_tally(void)
 /* 1ac2:4ba9  screen_stash
  *
  * Put the playing screen aside in screen_stash and paint the overlay
- * pause_overlay over it - 0x26 rows of 50 bytes. Used by the pause screen and
+ * pause_overlay over it - 38 rows of 50 bytes. Used by the pause screen and
  * by F10.
+ *
+ * The region is the bottom forty scan lines, 160 to 199, taken a plane at a
+ * time: twenty rows from 160 stepping CGA_STRIDE stay in the even half, then
+ * twenty from 161 do the odd. That is why the step is a stride and not a
+ * cga_next_row.
  */
 void screen_stash(void)
 {
     speaker_off();
     uint8_t *keep = global.scratch2.screen_stash;
-    uint16_t si = 0x1900;
+    uint16_t si = cga_at(0, STASH_TOP);
     for (uint16_t half = 0; half < 2; half++) {
-        for (uint16_t r = 0; r < 20; r++) {
-            for (uint16_t b = 0; b < 50; b++)
+        for (uint16_t r = 0; r < STASH_ROWS; r++) {
+            for (uint16_t b = 0; b < STASH_BYTES; b++)
                 keep[b] = g_vram[(si + b) & (CGA_SIZE - 1)];
-            keep += 50;
-            si += 50 + 0x1e;
+            keep += STASH_BYTES;
+            si += CGA_STRIDE;
         }
-        si = 0x3900;
+        si = cga_at(0, STASH_TOP + 1);
     }
-    uint16_t di = 0x1900;
+    uint16_t di = cga_at(0, STASH_TOP);
     for (uint16_t r = 0; r < 38; r++) {
-        for (uint16_t b = 0; b < 50; b++)
+        for (uint16_t b = 0; b < STASH_BYTES; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = global.pause_overlay[r][b];
         di = cga_next_row(di);
     }
@@ -5887,15 +5800,15 @@ void cell_hole_draw(uint8_t x, uint8_t y)
 void screen_unstash(void)
 {
     const uint8_t *keep = global.scratch2.screen_stash;
-    uint16_t di = 0x1900;
+    uint16_t di = cga_at(0, STASH_TOP);
     for (uint16_t half = 0; half < 2; half++) {
-        for (uint16_t r = 0; r < 20; r++) {
-            for (uint16_t b = 0; b < 50; b++)
+        for (uint16_t r = 0; r < STASH_ROWS; r++) {
+            for (uint16_t b = 0; b < STASH_BYTES; b++)
                 g_vram[(di + b) & (CGA_SIZE - 1)] = keep[b];
-            keep += 50;
-            di += 50 + 0x1e;
+            keep += STASH_BYTES;
+            di += CGA_STRIDE;
         }
-        di = 0x3900;
+        di = cga_at(0, STASH_TOP + 1);
     }
     speaker_on();
 }
@@ -5926,11 +5839,14 @@ void employee_enter(void)
 void border_setup(void)
 {
     /* The other way round from what this used to say: 1ac2:4f75 calls
-     * border_block at 0 and 0x1e00, and border_row at 0x140 and 0x172. */
-    border_block(0);
-    border_block(0x1e00);
-    border_row(0x140);
-    border_row(0x172);
+     * border_block at DI 0 and 0x1e00 and border_row at 0x140 and 0x172 -
+     * which as positions are the top and bottom bands, and the left and
+     * right uprights that run between them. The bottom band starting on 192
+     * is why screen_high_scores bars its panel only down to there. */
+    border_block(cga_at(0, 0));
+    border_block(cga_at(0, 192));
+    border_row(cga_at(0, 8));
+    border_row(cga_at(200, 8));
 
     uint16_t di = 0;
     for (uint16_t i = 0; i < 14; i++) {
@@ -5946,12 +5862,9 @@ void border_setup(void)
  * Two things the caller depends on and the port used to drop. `lodsw` carries
  * SI forward, so a second call draws the *next* sixty bytes - that is how the
  * ending flashes rather than standing still. And the routine ends by polling
- * the keyboard 0x4b0 times, returning carry if a key came: on an 8086 those
+ * the keyboard 1200 times, returning carry if a key came: on an 8086 those
  * BIOS calls are what paces the frame, and they are also the only way out of
  * the ending. */
-#define TALL_SPRITE_BYTES  (0x0f * 4)
-#define KBD_POLL_CYCLES    150          /* what one INT 16h AH=01 cost */
-
 int32_t tall_sprite(const uint8_t **si, uint16_t di)
 {
     const uint8_t *src = *si;
@@ -6006,13 +5919,14 @@ void field_marks_wide(uint16_t di, uint16_t rows)
 /* 1ac2:59f7  ending_particle_init
  *
  * particle_init again for the ending: the same record, launched from
- * (0x68, 0x98) instead of (0x68, 0xa0) and with a speed of `random(3) + 8`
- * rather than `random(6) + 8`, so the kernels there rise more slowly.
+ * (104, 152) instead of (104, 160) - eight scan lines higher - and with a
+ * speed of `random(3) + 8` rather than `random(6) + 8`, so the kernels there
+ * rise more slowly.
  */
 uint16_t ending_particle_init(particle_t *p, uint16_t ax_in)
 {
-    p->x0 = 0x68;
-    p->y0 = 0x98;
+    p->x0 = 104;
+    p->y0 = 152;
     int16_t ax = particle_random(ax_in, io_ticks(), 3) + 8;
     p->speed = ax;
     ax = particle_random(ax, io_ticks(), 70) - 35;
@@ -6204,8 +6118,8 @@ void ending_plot(uint16_t x, uint16_t y)
     uint16_t d = di;
     for (uint16_t i = 0; i < 4; i++) {
         uint16_t bits = global.particle_sprites[phase][i];
-        g_vram[d & (CGA_SIZE - 1)] ^= (uint8_t)bits;
-        g_vram[(d + 1) & (CGA_SIZE - 1)] ^= (uint8_t)(bits >> 8);
+        g_vram[d & (CGA_SIZE - 1)] ^= bits;
+        g_vram[(d + 1) & (CGA_SIZE - 1)] ^= (bits >> 8);
         /* Just cga_next_row. The original writes the four rows out twice,
          * once for an even start (+0x2000, -0x1fb0, +0x2000 at 1ac2:5b15)
          * and once for an odd one (-0x1fb0, +0x2000, -0x1fb0 at 1ac2:5b65),
@@ -6416,13 +6330,13 @@ void screen_all_levels_done(void)
  */
 void int09_handler(uint8_t scan)
 {
-    uint8_t make = scan <= 0x7f;
+    uint8_t make = !(scan & KEY_BREAK);
 
     if (scan == global.key_scan_l)
         global.last_dir = 0;
     if (scan == global.key_scan_r)
         global.last_dir = 1;
-    if (scan == 0xc3)                   /* F9 released */
+    if (scan == (KEY_F9 | KEY_BREAK))   /* released, not pressed */
         runtime.sound_on ^= 1;
     if (make)
         global.last_make = scan;
@@ -6431,7 +6345,7 @@ void int09_handler(uint8_t scan)
      * *backwards* - `[global.key_action + (2 - i)]` - because the two triples are
      * laid out in opposite orders. Unrolled, so that is a fact you can see
      * rather than one you have to work out. */
-    uint8_t code = scan & 0x7f;
+    uint8_t code = scan & ~KEY_BREAK;
     if (code == global.key_scan_l) { global.key_left = make; return; }
     if (code == global.key_scan_r) { global.key_right = make; return; }
     if (code == global.key_scan_a) { global.key_action = make; return; }
@@ -6458,19 +6372,19 @@ int32_t drive_writable(void) { return 1; }
  *
  * The paddle arriving at the end of the opening, in two phases.
  *
- * First it **emerges from the left wall**: eight passes at a fixed 0x1900,
+ * First it **emerges from the left wall**: eight passes at a fixed x 0,
  * each one byte wider than the last, with `bp` walking *back* through the
  * sprite so the part on screen is always the paddle's right-hand end. Eight
  * passes, not more - `bp` counts down from 0x490a and the loop ends when it
  * reaches 0x4902.
  *
- * Then it **travels right**: `bh` from 0 to 0x15 puts the whole eight bytes
- * at 0x1900 + bh, and each row writes a **zero byte first** - the `stosb`
+ * Then it **travels right**: `bh` from 0 to 21 puts the whole eight bytes
+ * at byte `bh` of the row, and each row writes a **zero byte first** - the `stosb`
  * before the `rep movsb` - which rubs out the column the paddle has just
  * left. That is why nothing else has to erase it.
  *
  * Each pass cycles all four pre-shifted phases, seven rows of eleven bytes
- * apiece, with a retrace wait and 0x19 delays between them.
+ * apiece, with a retrace wait and 25 delays between them.
  * ===================================================================== */
 void intro_paddle(void)
 {
@@ -6481,7 +6395,7 @@ void intro_paddle(void)
     for (uint16_t bh = 1; bh <= 8; bh++) {
         for (uint16_t phase = 0; phase < 4; phase++) {
             io_wait_retrace();
-            uint16_t di = 0x1900;
+            uint16_t di = cga_at(0, INTRO_PADDLE_Y);
             const uint8_t *s = &global.paddle_sprites[0][phase][8 - bh];
             for (uint16_t dl = 7; dl > 0; dl--) {
                 for (uint8_t b = 0; b < bh; b++)
@@ -6501,7 +6415,7 @@ void intro_paddle(void)
     for (uint16_t bh = 0; bh < 22; bh++) {
         for (uint16_t phase = 0; phase < 4; phase++) {
             io_wait_retrace();
-            uint16_t di = 0x1900 + bh;
+            uint16_t di = cga_at(0, INTRO_PADDLE_Y) + bh;
             const uint8_t *s = global.paddle_sprites[0][phase];
             for (uint16_t dl = 7; dl > 0; dl--) {
                 g_vram[di & (CGA_SIZE - 1)] = 0;
@@ -6604,6 +6518,18 @@ void set_crtc(const uint8_t *params)
         (void)params[i];
 }
 
+/* The panel's top left. Its own edge, which happens to be the playfield's
+ * too - a different reason for the same number, so it is written separately.
+ * The bar goes on HSC_TOP and the first line of text on the scan line under
+ * it. */
+
+static uint16_t hsc_bar(uint16_t di)
+{
+    for (uint16_t i = 0; i < HSC_WIDTH; i++)
+        vram_setw(di + i * 2, 0xaaaa);
+    return cga_next_row(di);
+}
+
 /* ========================================================================
  * 1ac2:4e1a  screen_high_scores
  *
@@ -6621,26 +6547,18 @@ void set_crtc(const uint8_t *params)
  * colour 2. Get the stepping wrong and the fill has nothing to stop against,
  * and the screen is a red rectangle with the table hidden under it.
  * ===================================================================== */
-#define HSC_LINE   432                  /* between lines, DI already +0x30 */
-#define HSC_WIDTH  24                   /* characters, and words of bar */
-
-static uint16_t hsc_bar(uint16_t di)
-{
-    for (uint16_t i = 0; i < HSC_WIDTH; i++)
-        vram_setw(di + i * 2, 0xaaaa);
-    return cga_next_row(di);
-}
-
 void screen_high_scores(void)
 {
     border_setup();
 
+    /* Its own top bar, with the text on the line under it - the same shape
+     * as the results panel, two scan lines lower down the screen. */
     for (uint16_t i = 0; i < HSC_WIDTH; i++)
-        vram_setw(0x142 + i * 2, 0xaaaa);
+        vram_setw(cga_at(HSC_X, HSC_HIGH_TOP) + i * 2, 0xaaaa);
 
     /* HIGH SCORE, a glyph at a time - the original really does have ten
      * separate `mov al` / `call 0xc64` pairs for it. */
-    uint16_t di = 0x2142;
+    uint16_t di = cga_at(HSC_X, HSC_HIGH_TOP + 1);
     di = draw_run(' ', 7, di);
     for (const char *p = "HIGH SCORE"; *p; p++, di = di + 2)
         draw_char(*p, di);
@@ -6648,7 +6566,7 @@ void screen_high_scores(void)
 
     di = di + HSC_LINE;              /* the rule */
     di = draw_run(' ', 5, di);
-    di = draw_run('-', 0x0e, di);
+    di = draw_run('-', 14, di);
     di = draw_run(' ', 5, di);
 
     di = di + HSC_LINE;              /* a blank line */
@@ -6669,10 +6587,12 @@ void screen_high_scores(void)
         di = hsc_bar(di);
     }
 
-    while (di != 0x1e02)
+    /* Bar the rest of the panel, stopping on y 192 - eight scan lines short
+     * of the bottom, which the border below keeps for itself. */
+    while (di != cga_at(HSC_X, 192))
         di = hsc_bar(di);
 
-    /* The border animates until a key, 0x181 delays a step, 0xff steps. */
+    /* The border animates until a key: 385 delays a step, 255 steps. */
     for (uint16_t dl = 255; dl > 0; dl--) {
         for (uint16_t n = 385; n > 0; n--) {
             if (io_key_ready()) {
@@ -6733,9 +6653,6 @@ void screen_define_keys(void)
  * the table at 0xa8bf, each a tall sprite drawn twice, blanked from 0xabab,
  * and drawn twice more. Any key stops it; if none came, ending_column runs.
  * ===================================================================== */
-#define EOG_WIDTH     33
-#define EOG_BAND_LEN  495
-
 void screen_end_of_game(void)
 {
     /* The screen into the image - not screen to screen, and DI does not go
@@ -6840,20 +6757,18 @@ void screen_end_of_game(void)
  * one more row of the brick field as [0x2f0c] counts down. */
 static void endgame_curtain(int32_t cells)
 {
-    uint16_t di = 0x1198;
-    vram_setw(di, 0xffff);
-    vram_setw(di + 2, 0xffff);
-    di += CGA_PLANE;
-    vram_setw(di, 0x5555);
-    vram_setw(di + 2, 0x5555);
-    di -= 0x1fb0;
-    vram_setw(di, 0x1515);
-    vram_setw(di + 2, 0x1515);
-    di += CGA_PLANE;
-    vram_setw(di, 0x5555);
-    vram_setw(di + 2, 0x5555);
+    /* Four scan lines of cap, two words wide, on 112 to 115. The original
+     * steps them with `+0x2000`, `-0x1fb0`, `+0x2000` written out - which is
+     * cga_next_row three times, because the first is in the even half. */
+    static const uint16_t cap[4] = { 0xffff, 0x5555, 0x1515, 0x5555 };
+    uint16_t di = cga_at(96, 112);
+    for (uint16_t r = 0; r < 4; r++) {
+        vram_setw(di, cap[r]);
+        vram_setw(di + 2, cap[r]);
+        di = cga_next_row(di);
+    }
 
-    uint16_t bp = 0x3130;
+    uint16_t bp = cga_at(0, 111);
     for (uint8_t ah = 112; ah > 0; ah--) {
         /* 1ac2:467f, the top of the pass. This sync spent a while in
          * level_intro's reveal loop instead - a different routine in a
@@ -6878,7 +6793,7 @@ static void endgame_curtain(int32_t cells)
         d = wrote;
         uint8_t cap = (ah & 3) ? 0x50 : 0x10;
         g_vram[d & (CGA_SIZE - 1)] = 0x0d;          /* 1ac2:46b9 */
-        g_vram[(d + 1) & (CGA_SIZE - 1)] = (uint8_t)cap;
+        g_vram[(d + 1) & (CGA_SIZE - 1)] = cap;
         /* 1ac2:46dc caps at whatever DI the call left, which is the end of
          * the brick row. Capping the caller's own DI + 2 instead put it at
          * the band's second byte and left the row's end uncapped. */
@@ -6897,7 +6812,7 @@ static void endgame_curtain(int32_t cells)
         if (cells)
             d = draw_brick_row(global.sweep_y[0]);   /* 1ac2:46d6 */
         g_vram[d & (CGA_SIZE - 1)] = 0x0d;
-        g_vram[(d + 1) & (CGA_SIZE - 1)] = (uint8_t)cap;
+        g_vram[(d + 1) & (CGA_SIZE - 1)] = cap;
 
         bp = cga_prev_row(bp);
         for (uint16_t i = 0; i < 15; i++)
@@ -6932,11 +6847,11 @@ int32_t ball_after_endgame(ball_t *b)
         b->anchor_y = y;
     }
 
-    if (y == 0x74) {
+    if (y == 116) {
         /* The lower chamber: through the gap it goes down and on, otherwise
          * it bounces - and the test was written the other way round. The asm
          * at 1ac2:45da is `cmp al,0x60 / jb bounce / cmp al,0x6c / jb skip`,
-         * so the bounce is for x **outside** 0x60..0x6b. Inverted, the ball
+         * so the bounce is for x **outside** 96..107. Inverted, the ball
          * bounced in the gap and fell through the wall, and then it was drawn
          * somewhere the original never put it. */
         if (x < 96 || x >= 108) {
@@ -6948,8 +6863,8 @@ int32_t ball_after_endgame(ball_t *b)
             b->anchor_y = y + 1;
             runtime.sound_request = SOUND_BOUNCE;
         }
-    } else if (y < 0x74) {
-        if (y == 0x3c) {
+    } else if (y < 116) {
+        if (y == 60) {
             /* The upper chamber: the level is over. */
             speaker_off();
             ball_draw(global.balls[0].sprite, global.balls[0].x, global.balls[0].y);
@@ -7038,13 +6953,11 @@ int32_t ball_after_endgame(ball_t *b)
  * own - input, step, collide through ball_after_endgame, four sound ticks -
  * until that returns "the level is over".
  * ===================================================================== */
-#define BANNER_ROW_VRAM 0x3130
-
 /* One row of the banner: 19 blank bytes, an edge, twelve translated cells,
  * an edge, and 19 blank again - then the whole screen scrolls up. */
 static void banner_row(const uint8_t *cells)
 {
-    uint16_t di = BANNER_ROW_VRAM;
+    uint16_t di = cga_at(0, 111);
     for (uint16_t i = 0; i < 19; i++)
         g_vram[di++ & (CGA_SIZE - 1)] = 0;
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
@@ -7062,7 +6975,7 @@ static void banner_row(const uint8_t *cells)
  * level row. */
 static void banner_blank(void)
 {
-    uint16_t di = BANNER_ROW_VRAM;
+    uint16_t di = cga_at(0, 111);
     for (uint16_t i = 0; i < 19; i++)
         g_vram[di++ & (CGA_SIZE - 1)] = 0;
     g_vram[di++ & (CGA_SIZE - 1)] = 0x14;
@@ -7114,9 +7027,9 @@ static int32_t bonus_end_level_run(void)
     global.paddle_width = global.paddle_sets[0].width;
     blit_xor(global.paddle_pix[0], &global.paddle_rows[0]);
 
-    /* The wall closing in: 0x70 passes of a 26-word band scrolled up six rows
+    /* The wall closing in: 112 passes of a 26-word band scrolled up six rows
      * with a fresh cap laid on each. */
-    uint16_t bp = 0x20a0;
+    uint16_t bp = cga_at(0, 5);
     global.paddle_morphing = 0xff;
     for (uint16_t dh = 112; dh > 0; dh--) {
         io_wait_retrace();
@@ -7155,22 +7068,31 @@ static int32_t bonus_end_level_run(void)
      * (1ac2:42e5 and 1ac2:42fa), then a blank one - the transcription had
      * only the second of the three. */
     for (uint16_t i = 0; i < 26; i++)
-        vram_setw(BANNER_ROW_VRAM + i * 2, global.results_rows[0][i]);
+        vram_setw(cga_at(0, 111) + i * 2, global.results_rows[0][i]);
     screen_scroll_up();
     for (uint16_t i = 0; i < 26; i++)
-        vram_setw(BANNER_ROW_VRAM + i * 2, global.results_rows[1][i]);
+        vram_setw(cga_at(0, 111) + i * 2, global.results_rows[1][i]);
     screen_scroll_up();
     banner_blank();
 
     /* Then the level's own cells, and each level row is **three** banner
      * rows: the cells twice - the `sub si, 0xc` at 1ac2:4380 undoes the first
      * row's lodsb so the second reads the same twelve - and a blank. And si
-     * walks **up** the level by 0x0c a time, not down: the loop's `pop si` at
-     * 1ac2:43e7 takes the value after the second row's lodsb. */
-    uint16_t si = global.level_src_ptr + 0xb8;
-    for (uint16_t n = 14; n > 0; n--, si = si + 12) {
-        banner_row(assets_ptr(si));
-        banner_row(assets_ptr(si));
+     * walks **up** the level by 12 a time, not down: the loop's `pop si` at
+     * 1ac2:43e7 takes the value after the second row's lodsb.
+     *
+     * `mov si,[0x13ca] / add si, 0xb8` at 1ac2:4337, and that 0xb8 is a whole
+     * record plus the cells' own offset - so it is the **next** record's
+     * cells, which is the level about to be played. This banner runs inside
+     * bonus_end_level_run, and the only place level_src_ptr advances is
+     * `level_done` in play_loop, which the longjmp does not reach until this
+     * has returned - so the wall closing in is a preview of what is next. */
+    const level_t *next =
+        (const level_t *)assets_ptr(global.level_src_ptr) + 1;
+    const uint8_t *row = next->cells;
+    for (uint16_t n = 14; n > 0; n--, row += BRICK_COLS) {
+        banner_row(row);
+        banner_row(row);
         banner_blank();
     }
 
@@ -7179,7 +7101,7 @@ static int32_t bonus_end_level_run(void)
      * the level's cells to the fresh ball and had none of what follows. */
     for (uint16_t r = 0; r < 7; r++) {
         for (uint16_t i = 0; i < 26; i++)
-            vram_setw(BANNER_ROW_VRAM + i * 2, global.results_rows[2 + r][i]);
+            vram_setw(cga_at(0, 111) + i * 2, global.results_rows[2 + r][i]);
         screen_scroll_up();
     }
 
@@ -7187,7 +7109,7 @@ static int32_t bonus_end_level_run(void)
      * blank either side. Every fourth row is marked 0xd1 rather than 0xd5,
      * which is what gives the walls their rungs. */
     for (uint16_t dl = 48; dl > 0; dl--) {
-        uint16_t di = BANNER_ROW_VRAM;
+        uint16_t di = cga_at(0, 111);
         for (uint16_t i = 0; i < 23; i++)
             g_vram[di++ & (CGA_SIZE - 1)] = 0;
         uint8_t mark = (dl & 3) ? 0xd5 : 0xd1;
@@ -7211,10 +7133,10 @@ static int32_t bonus_end_level_run(void)
         mask_r = mask_r >> 2;
         uint16_t di = 0x1198;
         for (uint16_t row = 4; row > 0; row--) {
-            g_vram[di & (CGA_SIZE - 1)] &= (uint8_t)(mask_l >> 8);
-            g_vram[(di + 1) & (CGA_SIZE - 1)] &= (uint8_t)mask_l;
-            g_vram[(di + 2) & (CGA_SIZE - 1)] &= (uint8_t)(mask_r >> 8);
-            g_vram[(di + 3) & (CGA_SIZE - 1)] &= (uint8_t)mask_r;
+            g_vram[di & (CGA_SIZE - 1)] &= (mask_l >> 8);
+            g_vram[(di + 1) & (CGA_SIZE - 1)] &= mask_l;
+            g_vram[(di + 2) & (CGA_SIZE - 1)] &= (mask_r >> 8);
+            g_vram[(di + 3) & (CGA_SIZE - 1)] &= mask_r;
             di = cga_next_row(di);
         }
         input_and_draw_paddle();
@@ -7435,11 +7357,11 @@ void screen_results(const char *dir)
      * The panel is drawn with `draw_run(' ', n)`: glyph 0 is not blank, it is
      * a solid block of colour 2, so a run of spaces *is* the red ground the
      * text sits on. HSC_LINE is the step from one text line to the next. */
-    for (uint16_t i = 0; i < 24; i++)              /* 1ac2:0f08 */
-        vram_setw(0xf2 + i * 2, 0xaaaa);
+    for (uint16_t i = 0; i < HSC_WIDTH; i++)       /* 1ac2:0f08 */
+        vram_setw(cga_at(HSC_X, HSC_TOP) + i * 2, 0xaaaa);
 
-    uint16_t d = 0x20f2;
-    d = draw_run(' ', 24, d);                     /* 1ac2:0f1a */
+    uint16_t d = cga_at(HSC_X, HSC_TOP + 1);
+    d = draw_run(' ', HSC_WIDTH, d);              /* 1ac2:0f1a */
 
     d = d + HSC_LINE;                    /* the heading */
     d = draw_run(' ', 7, d);
@@ -7473,8 +7395,11 @@ void screen_results(const char *dir)
         }
     }
 
-    /* 1ac2:1006 - the rest of the panel, down to the bottom bar at 0x1f42. */
-    while (d != 0x1f42) {
+    /* 1ac2:1006 - the rest of the panel, a row at a time until it steps off
+     * the screen. The screen's last line is 199, so cga_at(WALL_LEFT, CGA_H)
+     * is the row after it: a position no row has, which is what lets the
+     * original stop on an exact compare rather than a `jae`. */
+    while (d != cga_at(WALL_LEFT, CGA_H)) {
         for (uint16_t i = 0; i < 24; i++)
             vram_setw(d + i * 2, 0xaaaa);
         d = cga_next_row(d);
@@ -7547,47 +7472,51 @@ void anim_step(void)
  * one word per frame. The low byte is a signed horizontal delta - `shl al,1`
  * tests its sign and `rcr al,1 / neg al` recovers the magnitude - and the
  * capsule refuses a leftward step that would take it past its own position.
- * The high byte becomes the y, as `0x79 + ah`.
+ * The high byte becomes the y, added to BONUS_HOMING_Y + 1 - which is the
+ * row bonus_move_down's own `inc al` left the capsule on when it handed
+ * over, so the script starts from where the wandering stopped.
  *
- * The x is clamped to 8..0xb8, which are the same walls everything else uses.
+ * The x is clamped to WALL_LEFT..WALL_RIGHT - CAPSULE_SIZE, the same walls
+ * everything else uses.
  */
 int32_t bonus_script(ent_anim_t *b, uint8_t *px, uint8_t *py)
 {
-    uint16_t si = b->script;
-    b->script = si + 2;
-    uint16_t word = global_w(si);
-    uint8_t al = word, ah = word >> 8;
-    uint8_t cl = b->arg.move.steps;
+    uint16_t step_ptr = b->script_ptr;
+    b->script_ptr = step_ptr + 2;
+    const bonus_step_t *step = (const bonus_step_t *)global_ptr(step_ptr);
+    /* arg.move.steps is the x bonus_move_down saved when it handed over, and
+     * nothing writes it again while the script runs - so it is the anchor
+     * both halves are measured from. */
+    uint8_t anchor = b->arg.move.steps;
 
-    if (al & 0x80) {                    /* a leftward step */
-        uint8_t mag = -(int8_t)al;
-        if (cl < mag)
-            cl = WALL_LEFT;             /* it would go through the wall */
-        else
-            cl = cl + al;
-    } else {
-        cl = cl + al;
-    }
-    if (cl > WALL_RIGHT - CAPSULE_SIZE)
-        cl = WALL_RIGHT - CAPSULE_SIZE;
-    if (cl < WALL_LEFT)
-        cl = WALL_LEFT;
+    /* One add, at 1ac2:3c4e: the positive path jumps straight to it with
+     * `jae 0x3c4d` and the leftward path falls into it past the compare, so
+     * only a step that would cross the wall goes anywhere else. */
+    uint8_t x;
+    if (step->dx < 0 && anchor < (uint8_t)-step->dx)
+        x = WALL_LEFT;                  /* it would go through the wall */
+    else
+        x = anchor + step->dx;
+    if (x > WALL_RIGHT - CAPSULE_SIZE)
+        x = WALL_RIGHT - CAPSULE_SIZE;
+    if (x < WALL_LEFT)
+        x = WALL_LEFT;
 
-    *px = cl;
-    *py = 0x79 + ah;
+    *px = x;
+    *py = (BONUS_HOMING_Y + 1) + step->dy;   /* `mov al,0x79 / add al,ah` */
 
-    /* The script word's high byte comes back in AH, and entity_bonus tests
-     * `cmp ah, 0xff` to decide whether to commit the move at all - 0xff means
-     * "stay where you are". Always answering "moved" put the capsule at
-     * 0x79 + 0xff = 0x78, which is what diverged 21,332 frames into level 2:
-     * the port walked it to y 0x78 while the original left it alone. */
-    return ah != 0xff;
+    /* The step's dy comes back in AH, and entity_bonus tests `cmp ah, 0xff`
+     * to decide whether to commit the move at all - -1 means "stay where you
+     * are". Always answering "moved" put the capsule at 121 - 1 = 120, which
+     * is what diverged 21,332 frames into level 2: the port walked it to y
+     * 120 while the original left it alone. */
+    return step->dy != -1;
 }
 
 /* 1ac2:3200  bonus 10, the M capsule - the monsters stop coming
  *
  * It arms the timer at [0x2e7a] for ten thousand frames and lights a bar down
- * the panel at vram 0x1a8b, which `play_frame` drains one cell at a time -
+ * the panel at PANEL_M_X, which `play_frame` drains one cell at a time -
  * [0x2e87] walks it - so the player can see how long is left. While it runs,
  * `play_frame` takes the branch at 0x1c19 and does not open a hatch, so
  * nothing new comes out of the top. That is the whole effect - the game does
@@ -7598,8 +7527,15 @@ void bonus_stop_monsters(void)
     global.extra_on = 1;
     global.serve_timeout = 10000;
     global.extra_timer = 400;
-    fill_column(0x1a8b, 0xaaaa);
-    global.extra_pos = (0x1a8b);
+    fill_column(cga_at(PANEL_M_X, PANEL_BAR_Y), 0xaaaa);
+    global.extra_pos = cga_at(PANEL_M_X, PANEL_BAR_Y);
+}
+
+/* Both tails clamp the paddle to the right-hand limit before returning. */
+static void demo_clamp(void)
+{
+    if (global.paddle_x >= global.paddle_max)
+        global.paddle_x = global.paddle_max;
 }
 
 /* ========================================================================
@@ -7620,25 +7556,16 @@ void bonus_stop_monsters(void)
  * that is not part of the sequence throws the stack away and returns to the
  * menu.
  * ===================================================================== */
-#define DEMO_CHASE_Y  130     /* the scan line it starts chasing from */
-
-/* Both tails clamp the paddle to the right-hand limit before returning. */
-static void demo_clamp(void)
-{
-    if (global.paddle_x >= global.paddle_max)
-        global.paddle_x = global.paddle_max;
-}
-
 void input_demo(void)
 {
     if (io_key_ready()) {
         uint16_t key = io_get_key();
-        if ((key >> 8) == 0x44) {               /* F10 */
+        if ((key >> 8) == KEY_F10) {
             employee_enter();                   /* 1ac2:4ae0 */
-            while ((io_get_key() >> 8) == 0x44)
+            while ((io_get_key() >> 8) == KEY_F10)
                 ;
             screen_restore();                   /* 1ac2:4b4f */
-        } else if ((key >> 8) == 0x43) {        /* F9: sound */
+        } else if ((key >> 8) == KEY_F9) {      /* sound */
             runtime.sound_on ^= 1;
         } else if (!cheat_sequence((char)(key & 0xff))) {
             entities_clear();                   /* 1ac2:055e */
@@ -7748,7 +7675,7 @@ int32_t cheat_sequence(char key)
                 continue;
             }
             if (n < sizeof line)
-                line[n++] = (uint8_t)c;
+                line[n++] = c;
         }
         io_print_dos("message", line, n);
     }
