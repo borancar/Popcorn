@@ -2358,7 +2358,7 @@ static entity_t *brick_entity(hit_t *hit, uint16_t handler_fn,
 static void brick_degrade(hit_t *hit, uint8_t from, uint8_t to)
 {
     *global_ptr(hit->cell_ptr) = (uint8_t)to;
-    uint16_t x = hit->centre.x, y = hit->centre.y;
+    uint8_t x = hit->centre.x, y = hit->centre.y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[from]));   /* rub out */
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[to]));     /* and draw */
 }
@@ -2397,7 +2397,7 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
     global.level.bricks--;
     uint8_t *cell = global_ptr(hit->cell_ptr);
     *cell = 0;
-    uint16_t x = hit->centre.x, y = hit->centre.y;
+    uint8_t x = hit->centre.x, y = hit->centre.y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[is_two ? 2 : 1]));
 
     entity_t *e = entity_alloc();
@@ -2479,7 +2479,7 @@ void brick_8(hit_t *hit, ball_t *ball)
 {
     brick_common(ball, 4, 0, 0x100, 0);
     *global_ptr(hit->cell_ptr) = 0;
-    uint16_t x = hit->centre.x, y = hit->centre.y;
+    uint8_t x = hit->centre.x, y = hit->centre.y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[8]));
     xor_sprite_16x7(x, y, global.brick8_score[0]);
     /* four times round the animation - a **byte**, see ent_anim_t's arg */
@@ -3531,7 +3531,7 @@ void brick_10(hit_t *hit, ball_t *ball)
     brick_common(ball, SOUND_BRICK, 0, 0, 5);
     *global_ptr(hit->cell_ptr) = 0;
     global.level.bricks--;
-    uint16_t x = hit->centre.x, y = hit->centre.y;
+    uint8_t x = hit->centre.x, y = hit->centre.y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[10]));
     if (!ball)
         return;
@@ -5147,7 +5147,7 @@ void brick_11(hit_t *hit, ball_t *ball)
     runtime.sound_request = SOUND_BRICK;
     *global_ptr(hit->cell_ptr) = 0x0c;
     global.level.bricks--;
-    uint16_t x = hit->centre.x, y = hit->centre.y;
+    uint8_t x = hit->centre.x, y = hit->centre.y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[11]));
     brick_11_after(x, y);               /* 1ac2:4c4b */
 }
