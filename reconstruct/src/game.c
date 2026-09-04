@@ -70,8 +70,8 @@ void ball_step(ball_t *b)
      * ball at the left wall from running off into high coordinates. */
     int32_t sx = b->dir_x ? -(int32_t)off_x : (int32_t)off_x;
     int32_t sy = b->dir_y ? -(int32_t)off_y : (int32_t)off_y;
-    b->x = (uint8_t)(b->anchor_x + sx);
-    b->y = (uint8_t)(b->anchor_y + sy);
+    b->x = b->anchor_x + sx;
+    b->y = b->anchor_y + sy;
 }
 
 /* ------------------------------------------------------------------------
@@ -557,7 +557,7 @@ void build_shifted_sprites(void)
                     uint8_t carry = 0;
                     for (uint16_t b = 0; b < PADDLE_BYTES; b++) {
                         uint8_t v = r[b];
-                        r[b] = (uint8_t)((v >> 1) | (carry << 7));
+                        r[b] = ((v >> 1) | (carry << 7));
                         carry = v & 1;
                     }
                 }
@@ -1739,7 +1739,7 @@ uint16_t draw_brick_row(uint16_t y)
  * Six rows of five bytes at a pixel position - the popcorn kernels the level
  * intro sweeps down the screen.
  */
-void draw_sprite_20x6(uint16_t x, uint16_t y, const uint8_t *src)
+void draw_sprite_20x6(uint8_t x, uint8_t y, const uint8_t *src)
 {
     uint16_t di = cga_at(x, y);
     for (uint16_t r = 0; r < 6; r++) {
@@ -1882,7 +1882,7 @@ void level_intro(void)
  * typed pointer to them claims an alignment they do not have, and GCC is right
  * to warn about it. Bytes have no alignment to get wrong, and bytes are what
  * goes into video memory anyway. */
-void ball_draw(const void *rows, uint16_t x, uint16_t y)
+void ball_draw(const void *rows, uint8_t x, uint8_t y)
 {
     const uint8_t *p = rows;
     uint16_t di = cga_at(x, y);
@@ -1922,7 +1922,7 @@ int32_t ball_redraw(ball_t *b)
     if (shift) {
         for (uint16_t r = 0; r < 4; r++) {
             uint16_t w = b->sprite[r];
-            b->sprite[r] = (uint16_t)((w >> shift) | (w << (16 - shift)));
+            b->sprite[r] = ((w >> shift) | (w << (16 - shift)));
         }
     }
 
@@ -1974,9 +1974,9 @@ void ball_after(ball_t *b)
         /* Anchored one clear of whichever wall it struck: the left is
          * WALL_LEFT + 1, and the right is where a ball whose right edge
          * touches WALL_RIGHT sits, less one more. */
-        b->anchor_x = (uint8_t)(x <= WALL_LEFT ? WALL_LEFT + 1
+        b->anchor_x = (x <= WALL_LEFT ? WALL_LEFT + 1
                                               : WALL_RIGHT - BALL_WIDTH - 1);
-        b->anchor_y = (uint8_t)y;
+        b->anchor_y = y;
         b->bounces++;
     }
     if (y <= WALL_TOP) {
@@ -1985,8 +1985,8 @@ void ball_after(ball_t *b)
         b->bounces++;
         b->acc_x = 0;
         b->acc_y = 1;
-        b->anchor_x = (uint8_t)x;
-        b->anchor_y = (uint8_t)(y + 1);
+        b->anchor_x = x;
+        b->anchor_y = y + 1;
     }
 
     ball_bricks(b);                     /* 1ac2:254d */
@@ -2046,7 +2046,7 @@ static void paddle_bounce_up(ball_t *b)
         ah--;
     }
     b->anchor_x = b->x;
-    b->anchor_y = (uint8_t)ah;
+    b->anchor_y = ah;
     b->acc_x = b->acc_y = 1;
     b->bounces = 0;
     runtime.sound_request = SOUND_PADDLE;
@@ -2056,8 +2056,8 @@ static void paddle_bounce_up(ball_t *b)
  * low byte first - which is the order the two `mov` bytes come out in. */
 static void paddle_slope(ball_t *b, uint16_t slope)
 {
-    b->dy = (uint8_t)slope;
-    b->dx = (uint8_t)(slope >> 8);
+    b->dy = slope;
+    b->dx = (slope >> 8);
 }
 
 void ball_paddle(ball_t *b)
@@ -2081,11 +2081,11 @@ void ball_paddle(ball_t *b)
         }
         uint8_t depth = y - 0xb6;
         b->dir_y = (depth <= 5) ? 1 : 0;
-        b->dir_x = (uint8_t)from_left;
+        b->dir_x = from_left;
         b->anchor_x = from_left
             ? (uint8_t)(global.paddle_x - 4)
             : (uint8_t)(global.paddle_x + global.paddle_width + 1);
-        b->anchor_y = (uint8_t)y;
+        b->anchor_y = y;
         b->acc_x = b->acc_y = 1;
         b->bounces = 0;
         paddle_slope(b, global.slope_side[depth]);
@@ -2136,7 +2136,7 @@ void ball_paddle(ball_t *b)
  * A hit records the cell's address in the slot and the brick's centre after
  * it, and counts itself in [0x2e74].
  */
-void probe_cell_at(uint16_t x, uint16_t y, hit_t *hit)
+void probe_cell_at(uint8_t x, uint8_t y, hit_t *hit)
 {
     if (x > 191 || y > 196) {
         hit->cell_ptr = 0;
@@ -2153,10 +2153,10 @@ void probe_cell_at(uint16_t x, uint16_t y, hit_t *hit)
     /* The slot keeps the cell's *address*, not its index: the brick handlers
      * are handed it and write through it, and 1ac2:27b7 compares slots by it.
      * That 16-bit value is the game's own, so it stays an image offset. */
-    hit->cell_ptr = (uint16_t)global_off(cell);
+    hit->cell_ptr = global_off(cell);
     global.hit_count++;
-    hit->x = (uint8_t)((x & 0xf0) + 8);              /* the brick's */
-    hit->y = (uint8_t)((y & 0xf8) + 6);              /* centre */
+    hit->x = ((x & 0xf0) + 8);              /* the brick's */
+    hit->y = ((y & 0xf8) + 6);              /* centre */
 }
 
 /* 1ac2:27b7  drop_duplicate_hits
@@ -2182,10 +2182,10 @@ static void bounce_x(ball_t *b)
 {
     if (b->dir_x == 0) {
         b->dir_x = 1;
-        b->anchor_x = (uint8_t)(b->x - 1);
+        b->anchor_x = b->x - 1;
     } else {
         b->dir_x = 0;
-        b->anchor_x = (uint8_t)(b->x + 1);
+        b->anchor_x = b->x + 1;
     }
 }
 
@@ -2193,10 +2193,10 @@ static void bounce_y(ball_t *b)
 {
     if (b->dir_y == 0) {
         b->dir_y = 1;
-        b->anchor_y = (uint8_t)(b->y - 1);
+        b->anchor_y = b->y - 1;
     } else {
         b->dir_y = 0;
-        b->anchor_y = (uint8_t)(b->y + 1);
+        b->anchor_y = b->y + 1;
     }
 }
 
@@ -2219,9 +2219,9 @@ void ball_bricks(ball_t *b)
 
     uint8_t x = b->x - 8, y = b->y - 6;
     probe_cell_at(x, y, &global.hits[0]);
-    probe_cell_at((x + 3) & 0xff, y, &global.hits[1]);
-    probe_cell_at((x + 3) & 0xff, (y + 3) & 0xff, &global.hits[2]);
-    probe_cell_at(x, (y + 3) & 0xff, &global.hits[3]);
+    probe_cell_at(x + 3, y, &global.hits[1]);
+    probe_cell_at(x + 3, y + 3, &global.hits[2]);
+    probe_cell_at(x, y + 3, &global.hits[3]);
 
     uint8_t n = global.hit_count;
     if (n == 0)
@@ -2256,11 +2256,15 @@ void ball_bricks(ball_t *b)
         while (i < 4 && !global.hits[i].cell_ptr)
             i++;
         if (i < 4) {
-            uint8_t  d = global.hit_dirs[i];
-            b->dir_x = (uint8_t)(d & 0xff);
-            b->dir_y = (uint8_t)(d >> 8);
-            b->anchor_y = (uint8_t)(b->y + (b->dir_y ? -1 : 1));
-            b->anchor_x = (uint8_t)(b->x + (b->dir_x ? -1 : 1));
+            /* 1ac2:2599 loads the whole word into DX and takes DH for the
+             * vertical and DL for the horizontal, so this is that register:
+             * a uint8_t here makes `d >> 8` zero and the ball never reverses
+             * vertically on a two-brick hit. */
+            uint16_t d = global.hit_dirs[i];
+            b->dir_x = d & 0xff;
+            b->dir_y = d >> 8;
+            b->anchor_y = (b->y + (b->dir_y ? -1 : 1));
+            b->anchor_x = (b->x + (b->dir_x ? -1 : 1));
         }
     }
 
@@ -2334,8 +2338,8 @@ static entity_t *brick_entity(hit_t *hit, uint16_t handler_fn,
     s->x = hit->x;
     s->y = hit->y;
     s->frame_ptr = frames_ptr;
-    s->timer = (uint8_t)rate;
-    s->period = (uint8_t)rate;
+    s->timer = rate;
+    s->period = rate;
     return e;
 }
 
@@ -2394,9 +2398,9 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
     /* The original writes x and y with one word and `inc bh` to put it a row
      * lower; the fall arm has them as the two bytes they are. */
     uint16_t centre = hit->centre;
-    f->x = (uint8_t)centre;
-    f->y = (uint8_t)((centre >> 8) + 1);
-    f->kind = (uint8_t)bonus_kind();
+    f->x = centre;
+    f->y = ((centre >> 8) + 1);
+    f->kind = bonus_kind();
     f->tick = 0;
     f->frame = 0;
     f->cycle = 1;
@@ -2524,7 +2528,7 @@ void brick_hit(hit_t *hit, uint8_t *cell, ball_t *ball)
  * apart but only seven of them are drawn - the eighth is the gap between
  * rows - so this both draws a brick and, run again, rubs it out.
  */
-void xor_sprite_16x7(uint16_t x, uint16_t y, const uint8_t *src)
+void xor_sprite_16x7(uint8_t x, uint8_t y, const uint8_t *src)
 {
     uint16_t di = cga_at(x, y);
     for (uint16_t r = 0; r < 7; r++) {
@@ -2575,7 +2579,7 @@ void score_add(void)
     /* The original loads the score's top word and `xchg bl,bh` to put it the
      * way round the threshold is stored. Reading the two digits by name in
      * that order is the same thing without the swap. */
-    uint16_t top = (uint16_t)(global.score_text[0] << 8) | global.score_text[1];
+    uint16_t top = (global.score_text[0] << 8) | global.score_text[1];
     if (top >= thresh) {
         thresh += 2;
         if ((thresh & 0xff) > '9')
@@ -2638,7 +2642,7 @@ void field_backdrop(uint16_t y)
     uint8_t p = global.backdrop_phase;
     if ((p & 7) == 0 && (p >> 3) == 4)
         p = 0xff;
-    global.backdrop_phase = (p + 1);
+    global.backdrop_phase = p + 1;
 }
 
 /* ========================================================================
@@ -2668,7 +2672,7 @@ void walker_draw(uint16_t x)
             uint8_t carry = 0;
             for (uint16_t b = 0; b < 3; b++) {
                 uint8_t v = row[b];
-                row[b] = (uint8_t)((v >> 1) | (carry << 7));
+                row[b] = ((v >> 1) | (carry << 7));
                 carry = v & 1;
             }
         }
@@ -2725,7 +2729,7 @@ static void hatch_frame(const uint8_t *src, uint16_t x, uint16_t y)
 void level_draw(void)
 {
     /* The paddle's own hatch is the last of the eight field marks. */
-    uint8_t hx = global.field_marks[7].x, hy = (global.field_marks[7].y - 1);
+    uint8_t hx = global.field_marks[7].x, hy = global.field_marks[7].y - 1;
 
     global.paddle_x = 200;
     for (uint16_t f = 0; f < 5; f++) {
@@ -3054,7 +3058,7 @@ void cells_restore(void)
  * ===================================================================== */
 
 /* 1ac2:406a  xor_sprite_20x16 - sixteen rows of five bytes, XORed in */
-void xor_sprite_20x16(uint16_t x, uint16_t y, const uint8_t *src)
+void xor_sprite_20x16(uint8_t x, uint8_t y, const uint8_t *src)
 {
     uint16_t di = cga_at(x, y);
     for (uint16_t r = 0; r < 16; r++) {
@@ -3073,7 +3077,7 @@ void xor_sprite_20x16(uint16_t x, uint16_t y, const uint8_t *src)
  * loop here is the same operation.
  */
 
-void sprite_shift_draw(uint16_t x, uint16_t y, const uint8_t *src)
+void sprite_shift_draw(uint8_t x, uint8_t y, const uint8_t *src)
 {
     memcpy(global.sprite_work, src, sizeof global.sprite_work);
     for (uint8_t n = (x & 3) * 2; n > 0; n--) {
@@ -3082,7 +3086,7 @@ void sprite_shift_draw(uint16_t x, uint16_t y, const uint8_t *src)
             uint8_t carry = 0;
             for (uint16_t b = 0; b < 5; b++) {
                 uint8_t v = row[b];
-                row[b] = (uint8_t)((v >> 1) | (carry << 7));
+                row[b] = ((v >> 1) | (carry << 7));
                 carry = v & 1;
             }
         }
@@ -3094,7 +3098,7 @@ void sprite_shift_draw(uint16_t x, uint16_t y, const uint8_t *src)
  * one, advance. Shared by the handlers below, which differ only in which
  * drawing routine they use and what they do when the list ends. */
 static int32_t entity_anim(ent_anim_t *a,
-                           void (*draw)(uint16_t, uint16_t, const uint8_t *))
+                           void (*draw)(uint8_t, uint8_t, const uint8_t *))
 {
     if (--a->sprite.timer != 0)
         return 0;                       /* not time for the next frame yet */
@@ -3177,7 +3181,7 @@ void bonus_release(const ent_hatch_t *h)
         al = al - 8;
         b->arg.move.mode = 2;
     }
-    b->sprite.x = (uint8_t)al;
+    b->sprite.x = al;
     b->sprite.y = h->y;
     xor_sprite_20x16(b->sprite.x, b->sprite.y,
                      global_ptr(global_w(b->sprite.frame_ptr)));
@@ -3317,7 +3321,7 @@ int32_t bonus_move_down(ent_anim_t *b, uint16_t *px, uint16_t *py)
     if (y >= 120) {                     /* 1ac2:3d80 */
         b->arg.move.mode = 4;            /* follow a script from here on */
         b->script = 0x8320;
-        b->arg.move.steps = (uint8_t)x;
+        b->arg.move.steps = x;
         (*py)++;
         return 1;
     }
@@ -3367,7 +3371,7 @@ int32_t bonus_steer(ent_anim_t *b, uint16_t *px, uint16_t *py)
 }
 
 /* 1ac2:40f2  xor_sprite_16xn - like 0x3b64 but the caller says how many rows */
-void xor_sprite_16xn(uint16_t x, uint16_t y, const uint8_t *src, uint16_t rows)
+void xor_sprite_16xn(uint8_t x, uint8_t y, const uint8_t *src, uint16_t rows)
 {
     uint16_t di = cga_at(x, y);
     for (uint16_t r = 0; r < rows; r++) {
@@ -3505,8 +3509,8 @@ void brick_9(hit_t *hit, ball_t *ball)
     a->arg.ball_ptr = global_off(ball);        /* the slot holds its address */
     a->sprite.frame_ptr = global_off(&global.teleport_in_ptr[1]);
     a->sprite.timer = a->sprite.period = 50;
-    a->sprite.x = (uint8_t)((idx % 12) * 16 + 8);
-    a->sprite.y = (uint8_t)((idx / 12) * 8 + 6);
+    a->sprite.x = ((idx % 12) * 16 + 8);
+    a->sprite.y = ((idx / 12) * 8 + 6);
 }
 
 /* 1ac2:2c59  brick 10 - fifty points, and the ball goes into state 4 while an
@@ -3526,8 +3530,8 @@ void brick_10(hit_t *hit, ball_t *ball)
     ent_anim_t *a = &e->p.anim;
     a->arg.ball_ptr = global_off(ball);        /* likewise */
     a->sprite.frame_ptr = global_off(global.brick10_hold_ptr);
-    a->sprite.x = (uint8_t)x;
-    a->sprite.y = (uint8_t)y;
+    a->sprite.x = x;
+    a->sprite.y = y;
     a->sprite.timer = a->sprite.period = 105;
     sprite_shift_draw(x, y, global.brick10_hold[0][0]);
 
@@ -3632,7 +3636,7 @@ void entity_ball_hold(ent_anim_t *a)
  * right `(x & 3) * 2` bits to the pixel wanted. Returns the framebuffer offset
  * it used, because 1ac2:306b carries on from there down the next two rows.
  */
-uint16_t pixel_xor(uint16_t x, uint16_t y)
+uint16_t pixel_xor(uint8_t x, uint8_t y)
 {
     uint16_t di = cga_at(x, y);
     uint8_t mask = 0xc0 >> ((x & 3) * 2);
@@ -3646,7 +3650,7 @@ uint16_t pixel_xor(uint16_t x, uint16_t y)
  * each end of the paddle. Drawing it twice rubs it out, and it leaves
  * [0x2e7e] at 1 to say a shot is on its way.
  */
-void shot_xor(uint16_t x, uint16_t y)
+void shot_xor(uint8_t x, uint8_t y)
 {
     for (uint16_t side = 0; side < 2; side++) {
         uint16_t sx = side ? (x + 19) & 0xff : x;
@@ -3701,7 +3705,7 @@ void bonus_update(ent_sprite_t *s, uint16_t nx, uint16_t ny)
 
     if ((--s->timer & 0x0f) == 0) {
         s->timer--;
-        s->timer = (uint8_t)((s->timer & 0xf0) |
+        s->timer = ((s->timer & 0xf0) |
                                      (s->period & 0x0f));
         /* Erase where the node still says it is - the move so far has only
          * happened in registers - then commit the new position and draw
@@ -3710,8 +3714,8 @@ void bonus_update(ent_sprite_t *s, uint16_t nx, uint16_t ny)
          * properly. */
         sprite_shift_draw(s->x, s->y,
                           global_ptr(global_w(s->frame_ptr)));
-        s->x = (uint8_t)nx;
-        s->y = (uint8_t)ny;
+        s->x = nx;
+        s->y = ny;
         uint16_t x = nx, y = ny;
         if ((s->timer >> 4) == 0) {
             s->timer = s->period;
@@ -3734,7 +3738,7 @@ void bonus_update(ent_sprite_t *s, uint16_t nx, uint16_t ny)
             if (hit) {
                 global.hit_kind = 3;
                 sprite_shift_draw(s->x, s->y, global_ptr(global_w(s->frame_ptr)));
-                shot_xor(global.laser_x, (global.laser_y + 2) & 0xff);
+                shot_xor(global.laser_x, global.laser_y + 2);
                 global.laser_y = 179;
                 return;
             }
@@ -3929,7 +3933,7 @@ void draw_paddle_shifted(const uint8_t *sprite)
             uint8_t carry = 0;
             for (uint16_t b = 0; b < PADDLE_BYTES; b++) {
                 uint8_t v = row[b];
-                row[b] = (uint8_t)((v >> 1) | (carry << 7));
+                row[b] = ((v >> 1) | (carry << 7));
                 carry = v & 1;
             }
         }
@@ -4042,7 +4046,7 @@ int32_t ball_on_paddle(ball_t *b)
         b->y = PADDLE_TOP;
         b->state = 2;                 /* held */
         global.hold_timer -= global.speed_limit;
-        global.hold_offset = (b->x - global.paddle_x);
+        global.hold_offset = b->x - global.paddle_x;
         ball_redraw(b);
         runtime.sound_request = SOUND_CATCH;
         return 0;
@@ -4067,7 +4071,7 @@ int32_t ball_on_paddle(ball_t *b)
     }
 
     if (!release) {
-        b->x = (uint8_t)(global.paddle_x + global.hold_offset);
+        b->x = global.paddle_x + global.hold_offset;
         ball_redraw(b);
         return 0;
     }
@@ -4160,7 +4164,7 @@ void laser_fire(void)
         global.laser_x = x;
         uint16_t y = global.laser_y;
         laser_dot_rows(x, y, 0);
-        laser_dot_rows((x + 19) & 0xff, y, 0);
+        laser_dot_rows(x + 19, y, 0);
         global.laser_y = 177;
         global.laser_on = 2;
         return;
@@ -4170,7 +4174,7 @@ void laser_fire(void)
 
     uint16_t x = global.laser_x, y = global.laser_y;
     laser_dot_rows(x, y, 1);
-    laser_dot_rows((x + 19) & 0xff, y, 1);
+    laser_dot_rows(x + 19, y, 1);
     global.laser_y -= 2;
 
     if (y < 4) {                        /* off the top of the playfield */
@@ -4183,7 +4187,7 @@ void laser_fire(void)
     global.hit_count = 0;
     uint8_t py = x - 8, px = y - 6;
     probe_cell_at(py, px, &global.hits[0]);
-    probe_cell_at((py + 19) & 0xff, px, &global.hits[1]);
+    probe_cell_at(py + 19, px, &global.hits[1]);
     if (global.hit_count == 0)
         return;
 
@@ -4192,7 +4196,7 @@ void laser_fire(void)
             brick_hit(&global.hits[i],
                       global_ptr(global.hits[i].cell_ptr), (ball_t *)0);
     }
-    shot_xor(global.laser_x, (global.laser_y + 2) & 0xff);
+    shot_xor(global.laser_x, global.laser_y + 2);
     global.laser_y = 179;
 }
 
@@ -4365,7 +4369,7 @@ void bonus_reverse(void)
         ball_t *b = &global.balls[i];
         if (b->state == 0)
             continue;
-        b->dir_y = (uint8_t)(b->dir_y == 1 ? 0 : 1);
+        b->dir_y = (b->dir_y == 1 ? 0 : 1);
         b->anchor_x = b->x;
         b->anchor_y = b->y;
         b->acc_x = b->acc_y = 0;
@@ -4453,8 +4457,8 @@ void entity_multiball(void)
         b->x = b->prev_x = b->anchor_x = (uint8_t)x;
         b->y = b->prev_y = b->anchor_y = (uint8_t)y;
         dx = dx + 2;           /* each copy a little steeper */
-        b->dy = (uint8_t)dy;
-        b->dx = (uint8_t)dx;
+        b->dy = dy;
+        b->dx = dx;
         b->dir_x = src->dir_x;
         b->dir_y = src->dir_y;
         b->acc_x = b->acc_y = 1;
@@ -4466,7 +4470,7 @@ void entity_multiball(void)
         if (shift) {
             for (uint16_t r = 0; r < 4; r++) {
                 uint16_t w = b->sprite[r];
-                b->sprite[r] = (uint16_t)((w >> shift) | (w << (16 - shift)));
+                b->sprite[r] = ((w >> shift) | (w << (16 - shift)));
             }
         }
         ball_draw(si->sprite, b->x, b->y);
@@ -4523,7 +4527,7 @@ void entity_paddle_fx(ent_morph_t *m)
         if (m->to != 2) {
             /* Losing the laser: take any shot in flight off the screen. */
             if (global.laser_on == 2)
-                shot_xor(global.laser_x, (global.laser_y + 2) & 0xff);
+                shot_xor(global.laser_x, global.laser_y + 2);
             global.laser_on = 0;
         }
         if (m->to != 3) {
@@ -4656,7 +4660,7 @@ void level_between(void)
 {
     for (uint16_t i = 0; i < 4; i++) {
         mark_t *m = &global.field_marks[i];
-        uint8_t x = m->x, y = (m->y - 10);
+        uint8_t x = m->x, y = m->y - 10;
         m->taken = 0;
         uint16_t di = cga_at(x, y);
         for (uint16_t r = 0; r < 37; r++) {
@@ -5053,7 +5057,7 @@ void field_marks(void)
 {
     for (uint16_t i = 0; i < 8; i++) {
         mark_t *m = &global.field_marks[i];
-        uint8_t x = m->x, y = (m->y - 10);
+        uint8_t x = m->x, y = m->y - 10;
         m->taken = 0;
         uint16_t di = cga_at(x, y);
         for (uint16_t r = 0; r < 31; r++) {
@@ -5329,7 +5333,7 @@ void banner_shift(void)
             for (uint16_t b = 0; b < BANNER_LEN; b++) {
                 uint16_t a = (di - b) & (CGA_SIZE - 1);
                 uint8_t v = g_vram[a];
-                g_vram[a] = (uint8_t)((v << 1) | carry);
+                g_vram[a] = ((v << 1) | carry);
                 carry = (v >> 7) & 1;
             }
         }
@@ -5811,7 +5815,7 @@ void screen_restore(void)
  * 0xc46:0x28f0, indexed the same way cell_special indexes it but with the
  * column taken from `(x >> 2) - 2` rather than from the cell address.
  */
-void brick_11_after(uint16_t x, uint16_t y)
+void brick_11_after(uint8_t x, uint8_t y)
 {
     uint8_t row = y - 6;
     const uint8_t *src = &assets.hole_picture[row][((x >> 2) & 0xff) - 2];
@@ -5836,7 +5840,7 @@ void brick_11_after(uint16_t x, uint16_t y)
  * four bytes from 0xc46:0x28f0 at row * 0x30 + (x >> 2) - 2, stepping 0x30
  * bytes a row. level_between uses it for a cell of 0x0c.
  */
-void cell_hole_draw(uint16_t x, uint16_t y)
+void cell_hole_draw(uint8_t x, uint8_t y)
 {
     uint8_t row = y - 6;
     const uint8_t *src = &assets.hole_picture[row][((x >> 2) & 0xff) - 2];
@@ -6896,9 +6900,9 @@ int32_t ball_after_endgame(ball_t *b)
         /* Anchored one clear of whichever wall it struck: the left is
          * WALL_LEFT + 1, and the right is where a ball whose right edge
          * touches WALL_RIGHT sits, less one more. */
-        b->anchor_x = (uint8_t)(x <= WALL_LEFT ? WALL_LEFT + 1
+        b->anchor_x = (x <= WALL_LEFT ? WALL_LEFT + 1
                                               : WALL_RIGHT - BALL_WIDTH - 1);
-        b->anchor_y = (uint8_t)y;
+        b->anchor_y = y;
     }
 
     if (y == 0x74) {
@@ -6913,8 +6917,8 @@ int32_t ball_after_endgame(ball_t *b)
             b->bounces++;
             b->acc_x = 0;
             b->acc_y = 1;
-            b->anchor_x = (uint8_t)x;
-            b->anchor_y = (uint8_t)(y + 1);
+            b->anchor_x = x;
+            b->anchor_y = y + 1;
             runtime.sound_request = SOUND_BOUNCE;
         }
     } else if (y < 0x74) {
@@ -6959,8 +6963,8 @@ int32_t ball_after_endgame(ball_t *b)
             b->dir_x = (x <= 96) ? 0 : 1;
             b->acc_x = 1;
             b->acc_y = 0;
-            b->anchor_x = (uint8_t)(x <= 96 ? 97 : 107);
-            b->anchor_y = (uint8_t)y;
+            b->anchor_x = (x <= 96 ? 97 : 107);
+            b->anchor_y = y;
             runtime.sound_request = SOUND_BOUNCE;
         }
         return 0;
@@ -7523,7 +7527,7 @@ void anim_step(void)
 int32_t bonus_script(ent_anim_t *b, uint16_t *px, uint16_t *py)
 {
     uint16_t si = b->script;
-    b->script = (uint16_t)(si + 2);
+    b->script = si + 2;
     uint16_t word = global_w(si);
     uint8_t al = word, ah = word >> 8;
     uint8_t cl = b->arg.move.steps;
@@ -7737,7 +7741,7 @@ int32_t cheat_sequence(char key)
 /* 1ac2:3bac  draw_anim_cell - one animated brick's sprite, copied not XORed.
  * Eight rows of four bytes is the sprite's own shape, so it subscripts rather
  * than stepping an offset. */
-void draw_anim_cell(const anim_sprite_t *sprite, uint16_t x, uint16_t y)
+void draw_anim_cell(const anim_sprite_t *sprite, uint8_t x, uint8_t y)
 {
     uint16_t di = cga_at(x, y);
     for (uint16_t r = 0; r < 8; r++) {
@@ -7808,6 +7812,6 @@ void brick_animated(hit_t *hit, ball_t *ball)
     ent_brick_t *br = &e->p.brick;
     br->x = hit->x;          /* the centre, one word in the original */
     br->y = hit->y;
-    br->piece = (uint8_t)piece;
+    br->piece = piece;
     global.level.bricks--;
 }

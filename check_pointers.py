@@ -62,6 +62,13 @@ rules this checks are what keeps those honest:
      width is redundant; a mask on a **call argument** whose parameter is
      wider, or inside a **comparison**, is the wrap and stays.
 
+ 10. A cast to the type the target already has is the same mistake as a
+     redundant mask, and usually left over from when one of them was wider.
+     `b->anchor_x = (uint8_t)(b->x - 1)` where both are uint8_t says nothing
+     the assignment does not: C truncates on the store.  This looks the width
+     up rather than trusting the name, so a cast that really is narrowing -
+     into a field one size down - stays unreported.
+
 And one thing it reports without complaining about: `global_ptr(global_w(x))`, a
 pointer **to** a pointer.  The game keeps tables of frame addresses, so a
 cursor into one needs both steps and two indirections are right there - the
@@ -334,7 +341,7 @@ def ptr_fields(paths):
 
 
 def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
-          segments, all_fields, wide, wide_loops, masks, all_widths):
+          segments, all_fields, wide, wide_loops, masks, casts, all_widths):
     src = open(path, "rb").read()
     tree = Parser(C).parse(src)
     rel = os.path.relpath(path)
@@ -403,6 +410,19 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                             % want)
             masks.setdefault("%s %s" % (bits, kind), set()).add(
                 "%s:%d %s" % (rel, i, line.strip()[:56]))
+
+    # Rule 10: a cast to the width the target already has.
+    for i, raw in enumerate(src.decode("utf8", "replace").split("\n"), 1):
+        line = raw.split("/*")[0]
+        m = re.search(r"^\s*(?:(u?int(?:8|16|32)_t)\s+)?"
+                      r"([\w.\[\]>-]+)\s*=\s*\((u?int(?:8|16|32)_t)\)", line)
+        if not m:
+            continue
+        target = m.group(1) or local_width.get(
+            m.group(2).split(".")[-1].split(">")[-1].split("[")[0].lstrip("-"))
+        if target and target == m.group(3):
+            casts.setdefault(m.group(3), set()).add(
+                "%s:%d %s" % (rel, i, line.strip()[:58]))
 
     for n in walk(tree.root_node):
         if n.type == "call_expression":
@@ -795,11 +815,11 @@ def main():
     known_fn = fn_fields(a.files)
     fields = struct_fields(a.files)
     findings, candidates, segments = [], {}, {}
-    wide, wide_loops, masks = {}, [0], {}
+    wide, wide_loops, masks, casts = {}, [0], {}, {}
     all_widths = field_widths(a.files)
     for f in a.files:
         check(f, known, known_fn, findings, candidates, segments, fields,
-              wide, wide_loops, masks, all_widths)
+              wide, wide_loops, masks, casts, all_widths)
 
     # A stored offset read against more than one segment.  Informational: it
     # can be right - a field that legitimately retargets - but at most one
@@ -884,6 +904,11 @@ def main():
            "a byte or word register wrapping is real; the same truncation "
            "written where the type already does it is not - the two halves "
            "below say which is which", masks)
+
+    report("casts to the width the target already has",
+           "C truncates on the store, so the cast is that said twice - and "
+           "the width is looked up, so a cast that really narrows is not "
+           "here", casts)
 
     report("32-bit in the platform layer",
            "the port's own code rather than a transcribed register - "
