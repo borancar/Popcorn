@@ -52,6 +52,16 @@ rules this checks are what keeps those honest:
      WIDE_OK below; everything else is either a C loop counter, a flag, or a
      register that should be as wide as the register.
 
+  9. A mask is either the machine or the type, and only one of those is
+     worth writing.  `& 0xff` and `& 0xffff` model a byte or a word register
+     wrapping, which is real - the original adds 15 to a coordinate in AL and
+     lets it carry away.  But once the value lives in a uint8_t or a uint16_t,
+     the type does that, and the mask is the same truncation said twice.  Said
+     twice is one of them being wrong later, so this reports every one and
+     leaves the judgement: a mask on an **assignment** into a variable of that
+     width is redundant; a mask on a **call argument** whose parameter is
+     wider, or inside a **comparison**, is the wrap and stays.
+
 And one thing it reports without complaining about: `global_ptr(global_w(x))`, a
 pointer **to** a pointer.  The game keeps tables of frame addresses, so a
 cursor into one needs both steps and two indirections are right there - the
@@ -263,6 +273,17 @@ def qualified_name(node, src):
     return None
 
 
+def field_widths(paths):
+    """Every field's width, so a mask can be judged against what it lands in."""
+    out = {}
+    for path in paths:
+        text_ = open(path, "rb").read().decode("utf8", "replace")
+        for m in re.finditer(r"\b(u?int(?:8|16|32)_t)\s+(\w+)\s*(?:\[[^;]*\])?;",
+                             text_):
+            out.setdefault(m.group(2), m.group(1))
+    return out
+
+
 def struct_fields(paths):
     """Every struct field name, so a candidate can be told from a local."""
     names = set()
@@ -313,7 +334,7 @@ def ptr_fields(paths):
 
 
 def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
-          segments, all_fields, wide, wide_loops):
+          segments, all_fields, wide, wide_loops, masks, all_widths):
     src = open(path, "rb").read()
     tree = Parser(C).parse(src)
     rel = os.path.relpath(path)
@@ -348,6 +369,40 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                 "declaration": "local"}[n.type]
         wide.setdefault(who, set()).add(
             "%s:%d %s %s" % (rel, n.start_point[0] + 1, text(t, src), kind))
+
+    # Rule 9: every 0xff and 0xffff mask, split by whether the type it lands
+    # in already does the truncation. The widths come from the declarations
+    # this file and the header make, leaf name only - a collision costs an
+    # entry in the wrong half of the list, never a missed one.
+    local_width = {}
+    for raw in src.decode("utf8", "replace").split("\n"):
+        d = re.match(r"\s*(?:const\s+)?(u?int(?:8|16|32)_t)\s+(\w+)", raw)
+        if d:
+            local_width.setdefault(d.group(2), d.group(1))
+    for f, t in all_widths.items():
+        local_width.setdefault(f, t)
+    for i, raw in enumerate(src.decode("utf8", "replace").split("\n"), 1):
+        line = raw.split("/*")[0]
+        for m in re.finditer(r"&\s*(0xff|0xffff)\b", line):
+            bits = m.group(1)
+            before = line[:m.start()]
+            lhs = re.match(r"\s*(?:const\s+)?(?:(u?int(?:8|16|32)_t)\s+)?"
+                           r"([\w.\[\]>-]+)\s*(?:=|[-+|&^]=)", before)
+            kind = "in a comparison or an argument - the wrap, and it stays"
+            # Only the *outermost* operation is the type's job. A mask on an
+            # inner term is splitting a word - `(ticks & 0xff) + (ticks >> 8)`
+            # takes the low half before adding the high one - and no width on
+            # the left does that.
+            tail = line[m.end():].strip()
+            outermost = tail in (";", ")", "");
+            if lhs and outermost:
+                want = "uint8_t" if bits == "0xff" else "uint16_t"
+                declared = lhs.group(1) or local_width.get(lhs.group(2))
+                if declared == want:
+                    kind = ("assigned into a %s, which does this already"
+                            % want)
+            masks.setdefault("%s %s" % (bits, kind), set()).add(
+                "%s:%d %s" % (rel, i, line.strip()[:56]))
 
     for n in walk(tree.root_node):
         if n.type == "call_expression":
@@ -740,10 +795,11 @@ def main():
     known_fn = fn_fields(a.files)
     fields = struct_fields(a.files)
     findings, candidates, segments = [], {}, {}
-    wide, wide_loops = {}, [0]
+    wide, wide_loops, masks = {}, [0], {}
+    all_widths = field_widths(a.files)
     for f in a.files:
         check(f, known, known_fn, findings, candidates, segments, fields,
-              wide, wide_loops)
+              wide, wide_loops, masks, all_widths)
 
     # A stored offset read against more than one segment.  Informational: it
     # can be right - a field that legitimately retargets - but at most one
@@ -824,6 +880,11 @@ def main():
            "an 8086 does 32-bit arithmetic in DX:AX and nowhere else, so "
            "each of these is a claim to check - %d `for` counters are C "
            "scaffolding and not listed" % wide_loops[0], transcribed)
+    report("masks",
+           "a byte or word register wrapping is real; the same truncation "
+           "written where the type already does it is not - the two halves "
+           "below say which is which", masks)
+
     report("32-bit in the platform layer",
            "the port's own code rather than a transcribed register - "
            "milliseconds, cycles and a palette are as wide as the host "
