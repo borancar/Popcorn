@@ -618,7 +618,7 @@ void load_high_scores(const char *dir)
  * lettering fade in rather than snap on. Only the first 0xbd bytes get it,
  * seven rows, which is exactly the leading edge.
  */
-#define CURTAIN_ROW      0x1b           /* 27 bytes: 108 pixels */
+#define CURTAIN_ROW       27            /* bytes: 108 pixels */
 
 void intro_curtain(void)
 {
@@ -658,8 +658,8 @@ void intro_curtain(void)
     for (uint16_t i = 0; i < 50; i++)
         game_delay();
 
-    for (uint16_t rows = 1; rows != 106; rows++) {
-        uint16_t n = CURTAIN_ROW * (rows & 0xff);
+    for (uint8_t rows = 1; rows != 106; rows++) {
+        uint16_t n = CURTAIN_ROW * rows;
         memcpy(global.scratch2.curtain_work, global.curtain_image[105 - rows], n);
 
         for (uint16_t i = 0; i < n && i < 0xbd; i++) {
