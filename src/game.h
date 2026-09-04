@@ -436,24 +436,48 @@ typedef struct __attribute__((packed)) {
 } hsc_entry_t;
 ENSURE_SIZE(hsc_entry_t, 0x12);
 
+/* Which way a hit sends the ball. The original loads the pair as one word -
+ * 1ac2:2599 is `mov dx,[di]`, and then DL is the horizontal and DH the
+ * vertical - so it is two bytes here, and neither half can be lost. */
+typedef struct __attribute__((packed)) {
+    uint8_t x;                      /* 0x00 non-zero reverses horizontally */
+    uint8_t y;                      /* 0x01 and this one vertically */
+} hit_dir_t;
+ENSURE_SIZE(hit_dir_t, 2);
+
+/* One note of a tune, which the original reads as a word and uses as two
+ * bytes. `pitch` is the **high byte of the PIT divisor** - the port sends
+ * `(pitch << 8) | 1`, which is the `out 0x42,1 / out 0x42,al` pair - so the
+ * frequency is 1193182 / ((pitch << 8) | 1). A note with both bytes zero
+ * ends the tune. */
+typedef struct __attribute__((packed)) {
+    uint8_t pitch;                  /* 0x00 the divisor's high byte */
+    uint8_t hold;                   /* 0x01 ticks to hold it for */
+} note_t;
+ENSURE_SIZE(note_t, 2);
+
+/* A position the original keeps in one word: BL across and BH down, stored
+ * and loaded whole. It is two bytes here so that a read cannot take the word
+ * for the x, and a write cannot put a word where the low byte goes. */
+typedef struct __attribute__((packed)) {
+    uint8_t x;                      /* 0x00 */
+    uint8_t y;                      /* 0x01 */
+} point_t;
+ENSURE_SIZE(point_t, 2);
+
 /* One corner's probe of the brick field. probe_cell_at fills four of these,
  * one per corner of the ball, and ball_bricks reads them to decide which way
  * it leaves and which bricks were struck. */
 typedef struct __attribute__((packed)) {
     uint16_t cell_ptr;      /* 0x00 the cell's image address, 0 for no brick */
-    union {                 /* 0x02 the brick's centre. Written as two bytes
-                             * and compared as one word at 1ac2:27b7, which is
-                             * what makes "the same brick" a single compare */
-        struct { uint8_t x, y; };
-        uint16_t centre;
-    };
+    point_t centre;         /* 0x02 the brick's centre */
 } hit_t;
 ENSURE_SIZE(hit_t, 4);
 
 
 /* Scan codes, as the menu and the name entry test them. The high byte of what
  * INT 16h returns is the scan code and the low byte the character, which is
- * why the menu switches on `key >> 8` and the name field on `key & 0xff`. */
+ * why the menu switches on the high byte and the name field takes the low. */
 #define KEY_ESC          0x01
 #define KEY_F1           0x3b
 #define KEY_F2           0x3c
@@ -646,7 +670,7 @@ typedef struct __attribute__((packed)) {
     uint16_t net_pos;                   /* 0x2e85 where it is drawn */
     uint16_t extra_pos;                 /* 0x2e87 */
     hit_t    hits[4];                   /* 0x2e89 the ball's four corners, in the order probe_cell_at fills them: top-left, top-right, bottom-right, bottom-left */
-    uint16_t hit_dirs[4];               /* 0x2e99 the four directions a brick hit can send the ball, indexed by which slot matched */
+    hit_dir_t hit_dirs[4];              /* 0x2e99 the four ways a brick hit can send the ball, indexed by which slot matched: (0,0), (1,0), (1,1), (0,1) */
     ball_t   balls[3];                  /* 0x2ea1 the ball pool. **Three**, not four: 0x2ea1 + 3*0x1e ends exactly where backdrop_phase begins, and every loop over it is i < 3. BALL_COUNT said 4 and was never used */
     uint8_t  backdrop_phase;            /* 0x2efb the level intro's reveal, counted by kernel zero's timer */
     sweep_t  sweep[4];                  /* 0x2efc the four sweeping kernels - sixteen bytes, exactly the room between backdrop_phase and their y positions */
@@ -1202,7 +1226,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  blob_target;               /* 0x2823 the blob the ending is walking towards, written into the script itself */
     uint8_t  _assets_b[1];
     uint8_t  walk_script[120];          /* 0x2825 one byte a step for the ending's walk: 0x18 passes of five, and a zero step is skipped. It ends exactly where blob_script begins */
-    uint8_t  blob_script[60];           /* 0x289d the blobs' packed positions, zero-terminated, ending exactly at ending_mark */
+    point_t  blob_script[30];           /* 0x289d where each blob goes, ended by a (0, 0), and ending exactly at ending_mark. 60 bytes either way */
     uint8_t  ending_mark[8][2];         /* 0x28d9 eight rows of one word, XORed at a packed position. **In this segment**, not at a plain image offset - reading it as one takes the sprite from 49KB below */
     uint8_t  _assets_c[7];
     uint8_t  hole_picture[112][48];     /* 0x28f0 what shows through a hole brick 11 leaves: 12 cells of four bytes a row, 112 rows. On level 50, which is a solid wall of brick 11, it is the whole picture */
@@ -1600,7 +1624,7 @@ void input_keyboard(void);                              /* 1ac2:1712 */
 void input_mouse(uint16_t mouse_x, uint16_t buttons);   /* 1ac2:169f */
 void save_screen(void);                                 /* 1ac2:5099 */
 void restore_screen(void);                              /* 1ac2:50bc */
-void paddle_row_offsets(uint16_t x, paddle_rows_t *rows); /* 1ac2:22de */
+void paddle_row_offsets(uint8_t x, paddle_rows_t *rows); /* 1ac2:22de */
 void blit_xor(const uint8_t *pixels, const paddle_rows_t *rows); /* 1ac2:2281 */
 void draw_paddle(const uint8_t *sprite);                /* 1ac2:221a */
 void draw_char(char c, uint16_t di);              /* 1ac2:0c64 */
@@ -1670,7 +1694,7 @@ void flush_keys(void);            /* 1ac2:0106 */
 void install_int09(void);         /* 1ac2:03b0 */
 void restore_int09(void);         /* 1ac2:03d1 */
 void input_and_draw_paddle(void); /* 1ac2:48af */
-void cheat_match(uint8_t c);/* 1ac2:5171 */
+void cheat_match(char c);   /* 1ac2:5171 */
 void io_cga_mode(uint32_t v);
 void io_cga_colour(uint32_t v);
 void employee_enter(void);        /* 1ac2:4ae0 */
@@ -1697,8 +1721,8 @@ void panel_reveal(void);          /* 1ac2:0911 */
 void field_marks(void);           /* 1ac2:0598 */
 void field_marks_wide(uint16_t di, uint16_t rows);  /* 1ac2:0a1d */
 uint16_t ending_particle_init(particle_t *p, uint16_t ax_in); /* 1ac2:59f7 */
-void ending_blob(uint16_t pos);   /* 1ac2:5c36 */
-uint16_t ending_blobs(void);          /* 1ac2:5b80 */
+void ending_blob(uint8_t x, uint8_t y);  /* 1ac2:5c36 */
+point_t  ending_blobs(void);          /* 1ac2:5b80 */
 void ending_column(void);         /* 1ac2:5317 */
 
 /* A word into the framebuffer, wrapping like the 16-bit offset it is. */
@@ -1722,8 +1746,8 @@ extern int32_t g_in_bonus;              /* the end-of-level bonus is running */
 int32_t  play_loop(void);             /* 1ac2:1873 - transcribed */
 uint16_t draw_text(const char *src, uint16_t count, uint16_t di); /* 1ac2:10d1 */
 void level_draw(void);            /* 1ac2:1c4f */
-void walker_draw(uint16_t x);     /* 1ac2:1e50 */
-void walker_step(uint16_t x);     /* 1ac2:1e23 */
+void walker_draw(uint8_t x);     /* 1ac2:1e50 */
+void walker_step(uint8_t x);     /* 1ac2:1e23 */
 void ball_draw(const void *rows, uint8_t x, uint8_t y);    /* 1ac2:2881 */
 int32_t  ball_redraw(ball_t *b);  /* 1ac2:2827 */
 int32_t  ball_on_paddle(ball_t *b); /* 1ac2:2e1e */
@@ -1733,7 +1757,7 @@ void ball_after(ball_t *b);   /* 1ac2:247f */
 int32_t  ball_after_endgame(ball_t *b);  /* 1ac2:45a1 */
 void ball_bricks(ball_t *b);  /* 1ac2:254d */
 void brick_hit(hit_t *hit, uint8_t *cell, ball_t *ball);
-void xor_sprite_16xn(uint8_t x, uint8_t y, const uint8_t *src, uint16_t rows); /* 1ac2:40f2 */
+void xor_sprite_16xn(uint8_t x, uint8_t y, const uint8_t *src, uint8_t rows); /* 1ac2:40f2 */
 void brick_1(hit_t *hit, ball_t *ball);     /* 1ac2:28cb */
 void brick_2(hit_t *hit, ball_t *ball);     /* 1ac2:2985 */
 void brick_3(hit_t *hit, ball_t *ball);     /* 1ac2:2a3f */
@@ -1785,8 +1809,8 @@ void morph_step(ent_morph_t *m);       /* 1ac2:34d7 */
 void entity_popup(ent_fall_t *f);   /* 1ac2:3561 */
 void entity_capsule_frames(ent_fall_t *f, uint16_t table_ptr);
 void entity_ball_hold(ent_anim_t *a); /* 1ac2:37e0 */
-void ball_place(ball_t *ball, uint16_t x, uint16_t y);
-void bonus_update(ent_sprite_t *s, uint16_t nx, uint16_t ny); /* 1ac2:3df1 */
+void ball_place(ball_t *ball, uint8_t x, uint8_t y);
+void bonus_update(ent_sprite_t *s, uint8_t nx, uint8_t ny); /* 1ac2:3df1 */
 uint16_t pixel_xor(uint8_t x, uint8_t y);        /* 1ac2:30dd */
 void shot_xor(uint8_t x, uint8_t y);             /* 1ac2:306b */
 void bonus_hits_ball(const ent_sprite_t *s, const ball_t *ball);  /* 1ac2:3f20 */
@@ -1809,12 +1833,12 @@ void entity_sparkle(ent_anim_t *a); /* 1ac2:3aee */
 void entity_crumble(ent_anim_t *a); /* 1ac2:3b2a */
 void entity_hatch(ent_hatch_t *h);   /* 1ac2:390d */
 void bonus_release(const ent_hatch_t *h);  /* 1ac2:39a1 */
-int32_t  bonus_move_right(ent_anim_t *b, uint16_t *px, uint16_t *py); /* 1ac2:3c66 */
-int32_t  bonus_move_left(ent_anim_t *b, uint16_t *px, uint16_t *py);  /* 1ac2:3cf3 */
-int32_t  bonus_move_up(ent_anim_t *b, uint16_t *px, uint16_t *py);    /* 1ac2:3caf */
-int32_t  bonus_move_down(ent_anim_t *b, uint16_t *px, uint16_t *py);  /* 1ac2:3d3c */
-int32_t  bonus_steer(ent_anim_t *b, uint16_t *px, uint16_t *py);  /* 1ac2:3bf7 */
-int32_t  bonus_script(ent_anim_t *b, uint16_t *px, uint16_t *py); /* 1ac2:3c35 */
+int32_t  bonus_move_right(ent_anim_t *b, uint8_t *px, uint8_t *py); /* 1ac2:3c66 */
+int32_t  bonus_move_left(ent_anim_t *b, uint8_t *px, uint8_t *py);  /* 1ac2:3cf3 */
+int32_t  bonus_move_up(ent_anim_t *b, uint8_t *px, uint8_t *py);    /* 1ac2:3caf */
+int32_t  bonus_move_down(ent_anim_t *b, uint8_t *px, uint8_t *py);  /* 1ac2:3d3c */
+int32_t  bonus_steer(ent_anim_t *b, uint8_t *px, uint8_t *py);  /* 1ac2:3bf7 */
+int32_t  bonus_script(ent_anim_t *b, uint8_t *px, uint8_t *py); /* 1ac2:3c35 */
 void anim_step(void);       /* 1ac2:1a6f */
 void drop_duplicate_hits(void);   /* 1ac2:27b7 */
 hsc_entry_t *hsc_bubble(const hsc_entry_t *a, hsc_entry_t *b); /* 1ac2:4d5d */
@@ -1838,10 +1862,10 @@ void play_session(void);          /* 1ac2:02f5 */
 void panel_draw(void);            /* 1ac2:0b0b */
 void level_colours(void);         /* 1ac2:044b */
 void level_intro(void);           /* 1ac2:1eb9 */
-uint16_t draw_brick_row(uint16_t y);  /* 1ac2:2034 */
+uint16_t draw_brick_row(uint8_t y);  /* 1ac2:2034 */
 void draw_sprite_20x6(uint8_t x, uint8_t y, const uint8_t *src); /* 1ac2:20b9 */
 void cell_special(uint8_t row, uint8_t col, uint16_t di); /* 1ac2:41e5 */
-void field_backdrop(uint16_t y);  /* 1ac2:1fc1 */
+void field_backdrop(uint8_t y);  /* 1ac2:1fc1 */
 void life_lost(void);             /* 1ac2:0735 */
 void entities_clear(void);        /* 1ac2:055e */
 void level_between(void);         /* 1ac2:05f8 */
@@ -1854,7 +1878,7 @@ void screen_results(const char *dir);   /* 1ac2:0ea3 */
 void screen_end_of_game(void);
 void screen_level_done(void);     /* 1ac2:0521 */
 void screen_all_levels_done(void);/* 1ac2:5940 */
-uint16_t ending_walk(uint8_t bl, uint8_t bh, uint16_t dx); /* 1ac2:5bb5 */
+point_t  ending_walk(uint8_t bl, uint8_t bh, point_t p);  /* 1ac2:5bb5 */
 
 int32_t verify_main(const char *in_path, const char *out_path);
 

@@ -71,7 +71,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         ball_step(ball_ptr(r[R_SI]));
         return 1;
     case 0x22de:                        /* paddle_row_offsets(bl, di) */
-        paddle_row_offsets(r[R_BX] & 0xff, (paddle_rows_t *)(g_image + r[R_DI]));
+        paddle_row_offsets(r[R_BX], (paddle_rows_t *)(g_image + r[R_DI]));
         return 1;
     case 0x2281:                        /* blit_xor(si = pixels, di = rows) */
         blit_xor(g_image + r[R_SI], (const paddle_rows_t *)(g_image + r[R_DI]));
@@ -107,7 +107,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x406a: xor_sprite_20x16(r[R_CX] & 0xff, r[R_AX] & 0xff, global_ptr(r[R_SI]));
                  return 1;
     case 0x40f2: xor_sprite_16xn(r[R_BX] & 0xff, r[R_AX] & 0xff, global_ptr(r[R_SI]),
-                                 r[R_CX] & 0xff); return 1;
+                                 r[R_CX]); return 1;
     case 0x40c0:
         if (getenv("POPCORN_DEBUG_RNG"))
             fprintf(stderr, "rng: ticks=%u stir0=%04x state=%04x dl=%02x\n",
@@ -166,7 +166,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x390d: entity_hatch(&entity_ptr(r[R_BX])->p.hatch); return 1;
     case 0x39a1: bonus_release(&entity_ptr(r[R_BX])->p.hatch); return 1;
     case 0x39fa: entity_bonus(&entity_ptr(r[R_BX])->p.anim); return 1;
-    case 0x3df1: bonus_update(&entity_ptr(r[R_BX])->p.anim.sprite, r[R_CX] & 0xff, r[R_AX] & 0xff);
+    case 0x3df1: bonus_update(&entity_ptr(r[R_BX])->p.anim.sprite, r[R_CX], r[R_AX]);
                  return 1;
     case 0x365e: entity_soften(&entity_ptr(r[R_BX])->p.anim); return 1;
     case 0x366f: entity_repeat(&entity_ptr(r[R_BX])->p.anim); return 1;
@@ -215,7 +215,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x0cc5: play_prepare(); return 1;
     case 0x1509: demo_start(); return 1;
     case 0x2034:                        /* draw_brick_row(al = screen row) */
-        draw_brick_row(r[R_AX] & 0xff);
+        draw_brick_row(r[R_AX]);
         return 1;
     case 0x20b9:                        /* draw_sprite_20x6(bl, al, si) */
         draw_sprite_20x6(r[R_BX] & 0xff, r[R_AX] & 0xff, global_ptr(r[R_SI]));
@@ -236,10 +236,10 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         xor_sprite_16x7(r[R_CX] & 0xff, r[R_AX] & 0xff, global_ptr(r[R_SI]));
         return 1;
     case 0x1fc1:                        /* field_backdrop(al = y) */
-        field_backdrop(r[R_AX] & 0xff);
+        field_backdrop(r[R_AX]);
         return 1;
     case 0x1e50:                        /* walker_draw(cl = x) */
-        walker_draw(r[R_CX] & 0xff);
+        walker_draw(r[R_CX]);
         return 1;
     case 0x0c64:                        /* draw_char(al, di) */
         draw_char((char)(r[R_AX] & 0xff), r[R_DI]);
@@ -345,9 +345,12 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x5a56:
         ending_particles_tick();
         return 1;
-    case 0x5b80:
-        g_result = ending_blobs();
+    case 0x5b80: {
+        /* The original leaves the last position in DX. */
+        point_t p = ending_blobs();
+        g_result = (p.y << 8) | p.x;
         return 1;
+    }
     case 0x03d1:
         install_int09();
         return 1;
@@ -396,7 +399,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
          * capsule at the origin, take a different branch, and draw
          * twice from the PRNG where the original drew nothing. The
          * failure that reported was the harness's, not the port's. */
-        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint8_t x = r[R_CX], y = r[R_AX];
         g_result = bonus_steer(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
@@ -406,7 +409,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
          * capsule at the origin, take a different branch, and draw
          * twice from the PRNG where the original drew nothing. The
          * failure that reported was the harness's, not the port's. */
-        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint8_t x = r[R_CX], y = r[R_AX];
         g_result = bonus_script(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
@@ -419,22 +422,22 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
      * file. What is compared is the decision, which is the part with the cell
      * arithmetic in it; the step itself is one `inc` behind that decision. */
     case 0x3c66: {                      /* bonus_move_right(bx, cl, al) */
-        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint8_t x = r[R_CX], y = r[R_AX];
         g_result = bonus_move_right(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     case 0x3caf: {                      /* bonus_move_up */
-        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint8_t x = r[R_CX], y = r[R_AX];
         g_result = bonus_move_up(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     case 0x3cf3: {                      /* bonus_move_left */
-        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint8_t x = r[R_CX], y = r[R_AX];
         g_result = bonus_move_left(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
     case 0x3d3c: {                      /* bonus_move_down */
-        uint16_t x = r[R_CX] & 0xff, y = r[R_AX] & 0xff;
+        uint8_t x = r[R_CX], y = r[R_AX];
         g_result = bonus_move_down(&entity_ptr(r[R_BX])->p.anim, &x, &y);
         return 1;
     }
@@ -472,18 +475,20 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
     case 0x5add:                        /* ending_plot(cx, dx) */
         ending_plot(r[R_CX], r[R_DX]);
         return 1;
-    case 0x5bb5:                        /* ending_walk(bl, bh, dx) */
-        g_result = ending_walk(r[R_BX] & 0xff, (r[R_BX] >> 8) & 0xff,
-                               r[R_DX]);
+    case 0x5bb5: {                      /* ending_walk(bl, bh, dx) */
+        point_t p = { r[R_DX], r[R_DX] >> 8 };
+        point_t out = ending_walk(r[R_BX], r[R_BX] >> 8, p);
+        g_result = (out.y << 8) | out.x;
         return 1;
+    }
     case 0x5c36:                        /* ending_blob(ax) */
-        ending_blob(r[R_AX]);
+        ending_blob(r[R_AX] & 0xff, r[R_AX] >> 8);
         return 1;
     case 0x1c4f:                        /* level_draw */
         level_draw();
         return 1;
     case 0x1e23:                        /* walker_step(cl = x) */
-        walker_step(r[R_CX] & 0xff);
+        walker_step(r[R_CX]);
         return 1;
     case 0x1785:                        /* input_demo */
         input_demo();
