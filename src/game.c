@@ -637,7 +637,7 @@ void intro_curtain(void)
             uint16_t di = di0;
             for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                 g_vram[di & (CGA_SIZE - 1)] = al;
-            di = (di0 - 0x1fb0) & 0xffff;
+            di = di0 - 0x1fb0;
             for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                 g_vram[di & (CGA_SIZE - 1)] = al;
 
@@ -649,7 +649,7 @@ void intro_curtain(void)
                 di = 0x213f;
                 for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                     g_vram[di & (CGA_SIZE - 1)] = al;
-                di = (0x213f - 0x1fb0) & 0xffff;
+                di = 0x213f - 0x1fb0;
                 for (uint16_t cx = 49; cx > 0; cx--, di += CGA_STRIDE)
                     g_vram[di & (CGA_SIZE - 1)] = al;
             }
@@ -665,14 +665,13 @@ void intro_curtain(void)
         for (uint16_t i = 0; i < n && i < 0xbd; i++) {
             uint8_t al = global.scratch2.curtain_work[i], out = 0;
             for (uint16_t k = 0; k < 4; k++) {
-                uint8_t hi = (al >> 7) & 1;
-                al = (al << 1) & 0xff;
-                uint8_t lo = (al >> 7) & 1;
-                al = (al << 1) & 0xff;
-                out = hi ? (((out << 1) | 1) << 1 | lo) & 0xff
-                         : (out << 2) & 0xff;
+                uint8_t hi = al >> 7;
+                al <<= 1;
+                uint8_t lo = al >> 7;
+                al <<= 1;
+                out = hi ? ((out << 1) | 1) << 1 | lo : out << 2;
             }
-            global.scratch2.curtain_work[i] = (uint8_t)out;
+            global.scratch2.curtain_work[i] = out;
         }
 
         const uint8_t *row = global.scratch2.curtain_work;
@@ -774,8 +773,8 @@ void intro_reveal(void)
                 g_vram[di & (CGA_SIZE - 1)] = al;
             for (uint16_t i = 0; i < 25; i++)
                 game_delay();
-            al = ((al >> 1) | 0x80) & 0xff;     /* stc; rcr al,1 */
-            al = ((al >> 1) | 0x80) & 0xff;
+            al = (al >> 1) | 0x80;              /* stc; rcr al,1 */
+            al = (al >> 1) | 0x80;
         }
     }
 
@@ -2076,7 +2075,7 @@ void ball_paddle(ball_t *b)
         int32_t from_left = 1;
         if (bx != left) {
             uint8_t off = bx - left;
-            if (off != ((global.paddle_width + 3) & 0xff))
+            if (off != global.paddle_width + 3)
                 return;
             from_left = 0;
         }
@@ -2913,7 +2912,7 @@ void level_colours(void)
  * exactly where the last left off. */
 uint16_t draw_run(uint8_t c, uint16_t count, uint16_t di)
 {
-    for (uint16_t i = 0; i < count; i++, di = (di + 2) & 0xffff)
+    for (uint16_t i = 0; i < count; i++, di = di + 2)
         draw_char(c, di);
     return di;
 }
@@ -2924,7 +2923,7 @@ uint16_t draw_run(uint8_t c, uint16_t count, uint16_t di)
  * around every run of spaces between its columns. */
 uint16_t draw_text(const char *src, uint16_t count, uint16_t di)
 {
-    for (uint16_t i = 0; i < count; i++, di = (di + 2) & 0xffff)
+    for (uint16_t i = 0; i < count; i++, di = di + 2)
         draw_char(src[i], di);
     return di;
 }
@@ -3175,7 +3174,7 @@ void bonus_release(const ent_hatch_t *h)
 
     uint8_t al = h->x;
     if (al) {
-        al = (al - 8) & 0xff;
+        al = al - 8;
         b->arg.move.mode = 2;
     }
     b->sprite.x = (uint8_t)al;
@@ -3616,7 +3615,7 @@ void entity_ball_hold(ent_anim_t *a)
     uint8_t ry = a->sprite.y;      /* 1ac2:3897 reloads it */
     if (global.hit_kind != 1) {
         brick_score(0, 0, 0x0303);
-        ry = (ry + 4) & 0xff;
+        ry = ry + 4;
     }
     ball_place(ball_ptr(a->arg.ball_ptr), (a->sprite.x + 8) & 0xff, (ry + 12) & 0xff);
     if (global.hit_kind != 3)
@@ -4036,7 +4035,7 @@ int32_t ball_on_paddle(ball_t *b)
         uint8_t left = global.paddle_x - 3;
         uint8_t off = b->x - left;
         if (y < PADDLE_TOP || y > PADDLE_BOTTOM || b->x < left ||
-            off > ((global.paddle_width + 3) & 0xff)) {
+            off > global.paddle_width + 3) {
             global.hold_timer = (HOLD_RESET);
             return 1;
         }
@@ -4057,7 +4056,7 @@ int32_t ball_on_paddle(ball_t *b)
         global.hold_timer--;
         if (global.hold_timer == 0) {
             release = 1;
-        } else if (((global.speed_limit - 1) & 0xff) == global.speed_step) {
+        } else if (global.speed_limit - 1 == global.speed_step) {
             /* On the frame the ball would have moved, the timer runs down
              * twice, so a held ball is let go after the same amount of play
              * however fast the level has become. */
@@ -4144,7 +4143,7 @@ static void laser_dot_rows(uint16_t x, uint16_t y, int32_t moving)
     di = cga_next_row(di);
     g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
     if (moving) {
-        di = (di + CGA_STRIDE) & 0xffff;
+        di = di + CGA_STRIDE;
         g_vram[di & (CGA_SIZE - 1)] ^= (uint8_t)mask;
     }
     di = cga_next_row(di);
@@ -4453,7 +4452,7 @@ void entity_multiball(void)
         ball_t *b = si;
         b->x = b->prev_x = b->anchor_x = (uint8_t)x;
         b->y = b->prev_y = b->anchor_y = (uint8_t)y;
-        dx = (dx + 2) & 0xff;           /* each copy a little steeper */
+        dx = dx + 2;           /* each copy a little steeper */
         b->dy = (uint8_t)dy;
         b->dx = (uint8_t)dx;
         b->dir_x = src->dir_x;
@@ -4834,7 +4833,7 @@ int32_t name_field(uint16_t di, uint8_t *abort)
 static uint16_t name_bar(uint16_t di, uint16_t word)
 {
     for (uint16_t i = 0; i < NAME_WIDTH; i++)
-        vram_setw((di + i * 2) & 0xffff, word);
+        vram_setw(di + i * 2, word);
     return cga_next_row(di);
 }
 
@@ -4865,10 +4864,10 @@ uint8_t screen_player_names(void)
         uint16_t label = name_bar(top, 0xaaaa); /* pushed at 1ac2:110e */
 
         draw_text(global.name_prompt, NAME_WIDTH, label);
-        name_bar((label + 0x1e0) & 0xffff, 0xaaaa);
+        name_bar(label + 0x1e0, 0xaaaa);
 
         uint8_t abort = 0;
-        int32_t done = name_field((label + 22) & 0xffff, &abort);
+        int32_t done = name_field(label + 22, &abort);
         if (done) {
             /* Rub the box out and start: fourteen rows of nothing. */
             uint16_t d = top;
@@ -4887,13 +4886,13 @@ uint8_t screen_player_names(void)
         }
 
         /* The box just filled in becomes an engraved panel. */
-        uint16_t d = (top + 0x280) & 0xffff;
+        uint16_t d = top + 0x280;
         d = panel_row(d, 0x3f, 0xff, 0xfc, 1);
         d = panel_row(d, 0xf5, 0x55, 0,    0);
         d = panel_row(d, 0xd5, 0x15, 0,    0);
         d = panel_row(d, 0x15, 0x55, 0x54, 1);
         global.player_digit++;
-        di = (d + CGA_STRIDE) & 0xffff;
+        di = d + CGA_STRIDE;
     }
 }
 
@@ -5080,11 +5079,11 @@ void panel_finish(void)
         io_frame_sync_extra(SYNC_CURTAIN);
         uint16_t d = di;
         field_marks_wide(d, pass);
-        d = (d - 0x7d0) & 0xffff;
+        d = d - 0x7d0;
         field_marks_wide(d, pass);
-        d = (d - 0x820) & 0xffff;
+        d = d - 0x820;
         field_marks_wide(d, pass);
-        d = (d - 0x780) & 0xffff;
+        d = d - 0x780;
         field_marks_wide(d, pass);
         di = di > CGA_PLANE ? di - CGA_PLANE : di + (CGA_PLANE - CGA_STRIDE);
         for (uint16_t i = 0; i < 327; i++)
@@ -5164,7 +5163,7 @@ void menu_banner_tick(void)
         global.banner_state = 0x80;
         global.banner_ptr += 1;             /* one character along */
         uint8_t c = *global_ptr(global.banner_ptr);
-        c = ((c ^ 0xaa) - 0x20) & 0xff;
+        c = (c ^ 0xaa) - 0x20;
         memcpy(global.scratch1.banner_cell, global.banner_font[c], 6);
     }
     banner_shift();                     /* 1ac2:5140 */
@@ -6246,7 +6245,7 @@ uint16_t ending_walk(uint8_t bl, uint8_t bh, uint16_t dx)
     uint8_t target = 80 - ((bl << 3) & 0xff);
     assets.blob_target = target;
     while (((dx >> 8) & 0xff) != target) {
-        uint16_t next = (dx - 0x400) & 0xffff;   /* `sub ah,4` */
+        uint16_t next = dx - 0x400;   /* `sub ah,4` */
         for (uint16_t i = 0; i < 15; i++)
             game_delay();
         io_wait_retrace();
@@ -6258,7 +6257,7 @@ uint16_t ending_walk(uint8_t bl, uint8_t bh, uint16_t dx)
     target = (((bh << 3) + 8) & 0xff);
     assets.blob_target = target;
     while ((dx & 0xff) != target) {
-        uint16_t next = (dx - 4) & 0xffff;       /* `sub al,4` */
+        uint16_t next = dx - 4;       /* `sub al,4` */
         for (uint16_t i = 0; i < 15; i++)
             game_delay();
         io_wait_retrace();
@@ -6471,7 +6470,7 @@ void intro_paddle(void)
     for (uint16_t bh = 0; bh < 22; bh++) {
         for (uint16_t phase = 0; phase < 4; phase++) {
             io_wait_retrace();
-            uint16_t di = (0x1900 + bh) & 0xffff;
+            uint16_t di = 0x1900 + bh;
             const uint8_t *s = global.paddle_sprites[0][phase];
             for (uint16_t dl = 7; dl > 0; dl--) {
                 g_vram[di & (CGA_SIZE - 1)] = 0;
@@ -6597,7 +6596,7 @@ void set_crtc(const uint8_t *params)
 static uint16_t hsc_bar(uint16_t di)
 {
     for (uint16_t i = 0; i < HSC_WIDTH; i++)
-        vram_setw((di + i * 2) & 0xffff, 0xaaaa);
+        vram_setw(di + i * 2, 0xaaaa);
     return cga_next_row(di);
 }
 
@@ -6612,19 +6611,19 @@ void screen_high_scores(void)
      * separate `mov al` / `call 0xc64` pairs for it. */
     uint16_t di = 0x2142;
     di = draw_run(' ', 7, di);
-    for (const char *p = "HIGH SCORE"; *p; p++, di = (di + 2) & 0xffff)
+    for (const char *p = "HIGH SCORE"; *p; p++, di = di + 2)
         draw_char(*p, di);
     di = draw_run(' ', 7, di);
 
-    di = (di + HSC_LINE) & 0xffff;              /* the rule */
+    di = di + HSC_LINE;              /* the rule */
     di = draw_run(' ', 5, di);
     di = draw_run('-', 0x0e, di);
     di = draw_run(' ', 5, di);
 
-    di = (di + HSC_LINE) & 0xffff;              /* a blank line */
+    di = di + HSC_LINE;              /* a blank line */
     di = draw_run(' ', HSC_WIDTH, di);
 
-    di = (di + HSC_LINE) & 0xffff;
+    di = di + HSC_LINE;
 
     for (uint16_t row = 0; row < HSC_COUNT; row++) {
         const hsc_entry_t *e = &global.hsc[row];
@@ -6634,7 +6633,7 @@ void screen_high_scores(void)
         di = draw_text((const char *)e->score, 6, di);
         di = draw_run(' ', 2, di);
 
-        di = (di + HSC_LINE) & 0xffff;
+        di = di + HSC_LINE;
         di = hsc_bar(di);                       /* two scan lines between */
         di = hsc_bar(di);
     }
@@ -6744,7 +6743,7 @@ void screen_end_of_game(void)
 
         /* One band on screen from the saved copy, then the merged block. */
         di = global.eog_screen_at;
-        const uint8_t *from = global_ptr((global.eog_build_ptr - EOG_WIDTH) & 0xffff);
+        const uint8_t *from = global_ptr(global.eog_build_ptr - EOG_WIDTH);
         for (uint16_t b = 0; b < EOG_WIDTH; b++)
             g_vram[(di + b) & (CGA_SIZE - 1)] = from[b];
         di = cga_next_row(di);
@@ -6780,7 +6779,7 @@ void screen_end_of_game(void)
      * frame rather than the same one again. */
     int32_t keyed = 0;
     for (uint16_t g = 0; g < 7 && !keyed; g++) {
-        uint16_t at = (0x34f0 + global.eog_groups[g].at) & 0xffff;
+        uint16_t at = 0x34f0 + global.eog_groups[g].at;
         const uint8_t *sprite = global_ptr(global.eog_groups[g].sprite_ptr);
 
         if (tall_sprite(&sprite, at)) { keyed = 1; break; }
@@ -7137,8 +7136,8 @@ static int32_t bonus_end_level_run(void)
      * row's lodsb so the second reads the same twelve - and a blank. And si
      * walks **up** the level by 0x0c a time, not down: the loop's `pop si` at
      * 1ac2:43e7 takes the value after the second row's lodsb. */
-    uint16_t si = (global.level_src_ptr + 0xb8) & 0xffff;
-    for (uint16_t n = 14; n > 0; n--, si = (si + 12) & 0xffff) {
+    uint16_t si = global.level_src_ptr + 0xb8;
+    for (uint16_t n = 14; n > 0; n--, si = si + 12) {
         banner_row(assets_ptr(si));
         banner_row(assets_ptr(si));
         banner_blank();
@@ -7177,8 +7176,8 @@ static int32_t bonus_end_level_run(void)
      * loaded little-endian and the mask is written the other way round. */
     uint16_t mask_l = 0xffff, mask_r = 0xffff;
     for (uint16_t pass = 8; pass > 0; pass--) {
-        mask_l = (mask_l << 2) & 0xffff;
-        mask_r = (mask_r >> 2) & 0xffff;
+        mask_l = mask_l << 2;
+        mask_r = mask_r >> 2;
         uint16_t di = 0x1198;
         for (uint16_t row = 4; row > 0; row--) {
             g_vram[di & (CGA_SIZE - 1)] &= (uint8_t)(mask_l >> 8);
@@ -7411,21 +7410,21 @@ void screen_results(const char *dir)
     uint16_t d = 0x20f2;
     d = draw_run(' ', 24, d);                     /* 1ac2:0f1a */
 
-    d = (d + HSC_LINE) & 0xffff;                    /* the heading */
+    d = d + HSC_LINE;                    /* the heading */
     d = draw_run(' ', 7, d);
-    for (const char *p2 = "CLASSEMENT"; *p2; p2++, d = (d + 2) & 0xffff)
+    for (const char *p2 = "CLASSEMENT"; *p2; p2++, d = d + 2)
         draw_char(*p2, d);
     d = draw_run(' ', 7, d);                        /* 1ac2:0f6e */
 
-    d = (d + HSC_LINE) & 0xffff;                    /* 1ac2:0f79, the rule */
+    d = d + HSC_LINE;                    /* 1ac2:0f79, the rule */
     d = draw_run(' ', 5, d);
     d = draw_run('-', 0x0e, d);
     d = draw_run(' ', 5, d);
 
-    d = (d + HSC_LINE) & 0xffff;                    /* 1ac2:0f92, a blank */
+    d = d + HSC_LINE;                    /* 1ac2:0f92, a blank */
     d = draw_run(' ', 24, d);
 
-    d = (d + HSC_LINE) & 0xffff;                    /* 1ac2:0f99 */
+    d = d + HSC_LINE;                    /* 1ac2:0f99 */
 
     for (uint16_t k = 0; k < global.player_count; k++) {  /* 1ac2:0fa4 */
         const hsc_entry_t *rec = &global.scratch2.hsc_scratch[k];
@@ -7435,18 +7434,18 @@ void screen_results(const char *dir)
         d = draw_text((const char *)rec->score, 6, d);
         d = draw_run(' ', 2, d);
         /* 1ac2:0fca - two scan lines of bar between the rows. */
-        d = (d + HSC_LINE) & 0xffff;
+        d = d + HSC_LINE;
         for (uint16_t r = 0; r < 2; r++) {
             for (uint16_t i = 0; i < 24; i++)
-                vram_setw((d + i * 2) & 0xffff, 0xaaaa);
+                vram_setw(d + i * 2, 0xaaaa);
             d = cga_next_row(d);
         }
     }
 
     /* 1ac2:1006 - the rest of the panel, down to the bottom bar at 0x1f42. */
-    while ((d & 0xffff) != 0x1f42) {
+    while (d != 0x1f42) {
         for (uint16_t i = 0; i < 24; i++)
-            vram_setw((d + i * 2) & 0xffff, 0xaaaa);
+            vram_setw(d + i * 2, 0xaaaa);
         d = cga_next_row(d);
     }
 
@@ -7534,9 +7533,9 @@ int32_t bonus_script(ent_anim_t *b, uint16_t *px, uint16_t *py)
         if (cl < mag)
             cl = 8;                     /* it would go through the wall */
         else
-            cl = (cl + al) & 0xff;
+            cl = cl + al;
     } else {
-        cl = (cl + al) & 0xff;
+        cl = cl + al;
     }
     if (cl > 0xb8)
         cl = 0xb8;
@@ -7544,7 +7543,7 @@ int32_t bonus_script(ent_anim_t *b, uint16_t *px, uint16_t *py)
         cl = 8;
 
     *px = cl;
-    *py = (0x79 + ah) & 0xff;
+    *py = 0x79 + ah;
 
     /* The script word's high byte comes back in AH, and entity_bonus tests
      * `cmp ah, 0xff` to decide whether to commit the move at all - 0xff means
