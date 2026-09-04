@@ -381,6 +381,25 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
     # in already does the truncation. The widths come from the declarations
     # this file and the header make, leaf name only - a collision costs an
     # entry in the wrong half of the list, never a missed one.
+    deref_width = {}
+    for raw in (open("reconstruct/src/game.h", "rb").read()
+                .decode("utf8", "replace").split("\n")):
+        d = re.match(r"\s*(?:static\s+inline\s+)?(u?int(?:8|16|32)_t)\s*\*"
+                     r"\s*(\w+)\s*\(", raw)
+        if d:
+            deref_width[d.group(2)] = d.group(1)
+
+    # A pointer local carries the width of what a store through it lands in:
+    # `uint8_t *name` makes `*name = ...` a byte store. The declaration regex
+    # below wants `type name` and cannot see the `*`, which is why the first
+    # widening of rule 10 still missed `*name++ = (uint8_t)c`.
+    for raw in src.decode("utf8", "replace").split("\n"):
+        for d in re.finditer(r"\b(?:const\s+)?(u?int(?:8|16|32)_t)\s*\*"
+                             r"\s*(\w+)", raw):
+            seen = deref_width.get(d.group(2), d.group(1))
+            deref_width[d.group(2)] = (d.group(1) if seen == d.group(1)
+                                       else "?")
+
     local_width = {}
     for raw in src.decode("utf8", "replace").split("\n"):
         # Parameters count as declarations: `ending_walk(..., uint16_t dx)`
@@ -455,6 +474,23 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
     # Rule 10: a cast to the width the target already has.
     for i, raw in enumerate(src.decode("utf8", "replace").split("\n"), 1):
         line = raw.split("/*")[0]
+        # A store **through a pointer** is a target too, and the first version
+        # of this could not see one: its left-hand side allowed a name, a
+        # field and a subscript but neither a `*` nor a call, so
+        # `*global_ptr(cell_ptr) = (uint8_t)to` went unreported. The pointer's
+        # own declaration carries the width.
+        m = re.search(r"^\s*\*\s*(?:\+\+)?(\w+)\s*(?:\+\+|--)?\s*="
+                      r"\s*\((u?int(?:8|16|32)_t)\)", line)
+        if m and deref_width.get(m.group(1)) == m.group(2):
+            casts.setdefault(m.group(2), set()).add(
+                "%s:%d %s" % (rel, i, line.strip()[:58]))
+            continue
+        m = re.search(r"^\s*\*\s*(\w+)\s*\([^()]*\)\s*="
+                      r"\s*\((u?int(?:8|16|32)_t)\)", line)
+        if m and deref_width.get(m.group(1)) == m.group(2):
+            casts.setdefault(m.group(2), set()).add(
+                "%s:%d %s" % (rel, i, line.strip()[:58]))
+            continue
         m = re.search(r"^\s*(?:(u?int(?:8|16|32)_t)\s+)?"
                       r"([\w.\[\]>-]+)\s*=\s*\((u?int(?:8|16|32)_t)\)", line)
         if not m:

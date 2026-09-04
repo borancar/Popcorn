@@ -2357,7 +2357,7 @@ static entity_t *brick_entity(hit_t *hit, uint16_t handler_fn,
  * every other brick is drawn from. */
 static void brick_degrade(hit_t *hit, uint8_t from, uint8_t to)
 {
-    *global_ptr(hit->cell_ptr) = (uint8_t)to;
+    *global_ptr(hit->cell_ptr) = to;
     uint8_t x = hit->centre.x, y = hit->centre.y;
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[from]));   /* rub out */
     xor_sprite_16x7(x, y, global_ptr(global.cell_bitmap.plain_ptr[to]));     /* and draw */
@@ -4806,7 +4806,7 @@ int32_t name_field(uint16_t di, uint8_t *abort)
                   (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z'));
         if (!ok || len == 12)
             continue;
-        *name++ = (uint8_t)c;
+        *name++ = c;
         len++;
         draw_char((char)c, di);
         draw_cursor(di);
@@ -5326,7 +5326,7 @@ void plot_pixel(uint16_t x, uint16_t y, uint8_t colour)
     uint16_t di = cga_at(x, y);
     uint8_t shift = 6 - (x & 3) * 2;
     uint8_t *p = &g_vram[di & (CGA_SIZE - 1)];
-    *p = (uint8_t)((*p & ~(3u << shift)) | ((colour & 3) << shift));
+    *p = (*p & ~(3u << shift)) | ((colour & 3) << shift);
 }
 
 /* The same with bit 7 of AL set: XOR rather than replace. */
@@ -6769,7 +6769,7 @@ void screen_end_of_game(void)
                 if ((old & mask) == 0)
                     out += add & mask;
             }
-            *dst = (uint8_t)out;
+            *dst = out;
         }
 
         /* One band on screen from the saved copy, then the merged block. */
