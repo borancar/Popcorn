@@ -25,6 +25,38 @@ stopped at 62.4%; walking the list while the game played found eight of them
 (`0x3273`, `0x3386`, `0x3561`, `0x3717`, `0x390d`, `0x39fa`, `0x3aee`,
 `0x3b2a`) and took it to 76.9%.
 
+### The free list is in the file, not built at startup
+
+`entity_alloc` at `0x3232` pops `[0x3138]` and never tests it, and no routine
+anywhere ever builds that list: the code segment contains no store of an
+immediate into `0x3138`, and the constant `0x3146` does not appear in it at
+all. The chain is **linker output** - the 41 nodes are already strung together
+in the shipped image, and the program's first allocation walks a list assembled
+before it ran.
+
+Read straight off the image:
+
+| | |
+| --- | --- |
+| `[0x3138]` | `0x3146` - the free list's first node |
+| `[0x3144]` | `0xffff` - the active list, empty |
+| the pool | `0x3146`, `0x3154`, ... `0x3376`, each `+0x0c` naming the next, the last `0xffff` |
+| length | 41 nodes of `0x0e`, stride uniform, ending at `0x3384` where `bonus_cap` begins |
+| payload | the twelve bytes before each link are zero throughout |
+
+So the pool's size is a fact about the file rather than a limit the code
+states, and the "how many entities can be alive at once" question has no
+answer in the code: `entity_alloc` popping an empty list would take `0xffff`
+as a node and write through it. Nothing stops it - the game just never asks
+for a 42nd.
+
+The port maps this as `global.entities[41]` at `0x3146`, with the head node
+before it at `0x3138`, so the links come out of `g_image` exactly as the
+original found them - see `reconstruct/src/game.h`. Note the list's order is
+not preserved across a life: `entities_clear` and `life_lost` push nodes back
+in the order they walked them, so the free list is only in address order until
+the first level ends.
+
 The node layout, as far as `0x39fa` (a ball's handler) reads it:
 
 | offset | what |

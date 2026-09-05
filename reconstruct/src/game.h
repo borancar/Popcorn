@@ -735,7 +735,17 @@ typedef struct __attribute__((packed)) {
                                          * second pass */
         };                              /* 0x3144 is entity_head.next_ptr */
     };
-    entity_t entities[41];              /* 0x3146 the node pool - 574 bytes is 41 of them exactly, ending where bonus_cap begins. The chain is walked by image offset, so this is what those offsets point into rather than something the walk uses */
+    /* 0x3146 the node pool - 574 bytes is 41 of them exactly, ending where
+     * bonus_cap begins. The chain is walked by image offset, so this is what
+     * those offsets point into rather than something the walk uses.
+     *
+     * **The free list arrives pre-linked in the file.** Nothing builds it:
+     * the code segment holds no store of an immediate into 0x3138 and does
+     * not contain the constant 0x3146 anywhere, so entity_alloc's first pop
+     * walks links the linker wrote. They come out of g_image with the rest
+     * of the image, which is why there is no init routine here either. See
+     * docs/entities.md. */
+    entity_t entities[41];
     uint8_t  bonus_cap;                 /* 0x3384 */
     uint16_t capsule_frames_ptr[11];        /* 0x3385 a falling capsule's frame table by kind */
     uint16_t popup_frames_ptr[11];          /* 0x339b and a score popup's. Twenty-two each, ending exactly at bonus_odds - which is what says both are eleven */
