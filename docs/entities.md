@@ -97,6 +97,52 @@ Two traps, each of which cost a debugging round:
   as `x_offset / y_offset = [+0x17] / [+0x16]`. Reading it the other way round
   makes a predicted landing point wrong by the square of the slope.
 
+## What each arm actually writes
+
+The node's ten payload bytes are read six different ways, and which bytes each
+arm leaves alone was arrived at by reading handlers - which can only say what
+the handlers that were read do. `pad_writes.py --entities` says what the
+running program does: a write hook over the pool, keyed by the handler the node
+carried at the moment of the write. Sixteen runs - the menu routes, a played
+game, and snapshots - eight of them on levels that carry animated bricks,
+six of which the bot managed to hit:
+
+| handler | arm | payload bytes written |
+| --- | --- | --- |
+| `entity_capsule` `0x3273` | fall | `+2`..`+7`, and `+0xa` - see below |
+| `entity_popup` `0x3561` | fall | `+2`..`+7`, and `+0xa` |
+| `entity_paddle_fx` `0x3386` | morph | `+2`..`+6` |
+| `entity_soften` `0x365e` | anim | `+2`..`+9` |
+| `entity_repeat` `0x366f` | anim | `+2`, `+4`..`+9` - **never `+3`** |
+| `entity_plain` `0x3696` | anim | `+2`..`+9` |
+| `entity_ball_arrive` `0x36a1` | anim | `+2`..`+9` |
+| `entity_cells_timer` `0x36f6` | cells | `+4`, `+5` only |
+| `entity_multiball` `0x3717` | anim | nothing - it spawns and unlinks |
+| `entity_ball_hold` `0x37e0` | anim | `+2`..`+9` |
+| `entity_hatch` `0x390d` | hatch | all ten |
+| `entity_bonus` `0x39fa` | anim | all ten |
+| `entity_anim_brick` `0x3abf` | brick | `+2`, `+3`, `+4` only |
+| `entity_sparkle` `0x3aee` | anim | `+6`..`+9` |
+| `entity_crumble` `0x3b2a` | anim | `+2`..`+9` |
+
+Every `_r` in `game.h` holds: `ent_brick_t`'s seven, `ent_cells_t`'s six and
+its `_p` pair, `ent_morph_t`'s `_p` and its last byte. So does
+`entity_repeat` never touching `+3`, which is the byte the counter's high half
+would be and is why reading that pair as a word never reaches zero.
+
+**The one apparent exception is a handover, not a stray write.** A capsule
+caught by the paddle becomes the paddle morph in place, and `1ac2:32f1`
+(popup's copy is `1ac2:35df`) fills the *morph* arm - `from`, `to`, `bonus` at
+`+0xa`, `pending`, `step` - and only then writes `0x3386` over the handler
+word. The write at `+0xa` therefore lands while the node still says capsule,
+and is attributed to it. `ent_fall_t::_r` is untouched by anything that is
+actually a falling capsule. The port does the same, through `p.morph`.
+
+The head node at `0x3138` is in the same measurement, and writes reach only
+`+0`/`+1` (`entity_free_ptr`), `+2` (`entity_remove`), `+0xa`/`+0xb`
+(`entity_prev_ptr`) and `+0xc`/`+0xd` (the chain). The seven bytes between -
+`_pad_head`, `0x313b`-`0x3141` - are never written by anything.
+
 ## A slip in the original, at `1ac2:267d`
 
 `ball_bricks` decides how a ball leaves a brick from which of its four corners

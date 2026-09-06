@@ -48,6 +48,7 @@ convention every note and every reconstructed routine here uses.
 | `0x13a0` | PSP command tail, copied there at startup |
 | `0x1405` | saved `SP` for the return-to-menu longjmp |
 | `0x1428` | level filename being built (`<tail>.PPC`) |
+| `0x141b` | the drive the program was started from, from INT 21h AH=19h. `load_high_scores` and `save_high_scores` hand it to `1ac2:4dea`, which resets the drive and reads sector 0 through INT 25h to see whether there is a disk in it before opening `popcorn.hsc` |
 | `0x13e9` | which player-name box is being edited, ASCII `'1'`.. |
 | `0x2d41` | saved BIOS INT 09h vector (offset, then segment at `0x2d43`) |
 | `0x2d45` | current screen handler pointer |
