@@ -2315,8 +2315,12 @@ static void brick_1_or_2(hit_t *hit, ball_t *ball, int32_t is_two)
 
     if (global.bonus_cap >= 3 || game_random(io_ticks(), 3) != 0) {
         /* crumble, and it keeps the cell it is standing on */
-        brick_entity(hit, ENTITY_CRUMBLE_FN, is_two ? 0x6508 : 0x65fe, 7)
-            ->p.anim.arg.cell_ptr = hit->cell_ptr;
+        /* crumble[0] is cell 2's and crumble[1] is cell 1's - each script
+         * opens with that cell's own bitmap - and both are entered at `[1]`,
+         * because entity_crumble erases the entry before the cursor. */
+        brick_entity(hit, ENTITY_CRUMBLE_FN,
+                     global_off(&global.crumble[is_two ? 0 : 1].script_ptr[1]),
+                     7)->p.anim.arg.cell_ptr = hit->cell_ptr;
         *global_ptr(hit->cell_ptr) = 0;
         global.level.bricks--;
         return;
@@ -2367,8 +2371,9 @@ void brick_3(hit_t *hit, ball_t *ball)
     runtime.sound_request = 4;
     if (ball)
         ball->bounces++;
-    brick_entity(hit, ENTITY_SOFTEN_FN, 0x66f4, 8)->p.anim.arg.cell_ptr =
-        hit->cell_ptr;
+    brick_entity(hit, ENTITY_SOFTEN_FN,
+                 global_off(&global.crumble[2].script_ptr[1]), 8)
+        ->p.anim.arg.cell_ptr = hit->cell_ptr;
     *global_ptr(hit->cell_ptr) = 4;
 }
 
@@ -2412,7 +2417,7 @@ void brick_8(hit_t *hit, ball_t *ball)
     xor_sprite_16x7(x, y, global.brick8_score[0]);
     /* four times round the animation - a **byte**, see ent_anim_t's arg */
     brick_entity(hit, ENTITY_REPEAT_FN,
-                 global_off(global.brick8_roll_ptr), 7)->p.anim.arg.count = 4;
+                 global_off(&global.brick8_roll_ptr[1]), 7)->p.anim.arg.count = 4;
     global.level.bricks--;
 }
 
@@ -2629,7 +2634,7 @@ void walker_step(uint8_t x)
     walker_draw(x);
     global.walker_anim_ptr += 2;
     if (global_w(global.walker_anim_ptr) == END_PTR)
-        global.walker_anim_ptr = global_off(global.walker_frame_ptr);
+        global.walker_anim_ptr = global_off(&global.walker_frame_ptr[1]);
 }
 
 /* One strip of the hatch the creature comes out of: 19 rows of one word at a
@@ -2679,7 +2684,7 @@ void level_draw(void)
      * cursor to erase with, so the walk has to start with one behind
      * it - and the `+= 2` below puts the cursor on 3 before the first
      * step, which is where the sequence the screen shows begins. */
-    global.walker_anim_ptr = global_off(&global.walker_frame_ptr[2]);
+    global.walker_anim_ptr = global_off(&global.walker_frame_ptr[3]);
     global.paddle_x = 198;
     walker_draw(0xc8);
     global.walker_anim_ptr += 2;
@@ -3246,7 +3251,7 @@ int32_t bonus_move_down(ent_anim_t *b, uint8_t *px, uint8_t *py)
 
     if (y >= BONUS_HOMING_Y) {          /* 1ac2:3d80 */
         b->arg.move.mode = 4;            /* follow a script from here on */
-        b->script_ptr = 0x8320;
+        b->script_ptr = global_off(global.bonus_path);
         b->arg.move.steps = x;
         (*py)++;
         return 1;
@@ -3332,7 +3337,7 @@ void entity_repeat(ent_anim_t *a)
         return;
     if (--a->arg.count != 0) {   /* a **byte**: 1ac2:3679 */
         global.entity_remove = 0;
-        a->sprite.frame_ptr = global_off(global.brick8_roll_ptr);  /* round again */
+        a->sprite.frame_ptr = global_off(&global.brick8_roll_ptr[1]);  /* round again */
         return;
     }
     xor_sprite_16x7(a->sprite.x, a->sprite.y, global.brick8_score[0]);
@@ -4506,7 +4511,7 @@ void entity_paddle_fx(ent_morph_t *m)
     uint16_t table_ptr;
     uint8_t kind;
     if (m->pending != 0) {
-        table_ptr = global_off(global.paddle_shrink);
+        table_ptr = global_off(global.paddle_shrink_ptr);
         global.paddle_step = 0;
         kind = m->from;
         if (kind == 1)
@@ -4517,7 +4522,7 @@ void entity_paddle_fx(ent_morph_t *m)
         }
         m->pending = 0;
     }
-    table_ptr = global_off(global.paddle_grow);
+    table_ptr = global_off(global.paddle_grow_ptr);
     global.paddle_step = 0;
     kind = m->to;
     if (kind == 1)
@@ -5708,7 +5713,7 @@ void level_tally(void)
 /* 1ac2:4ba9  screen_stash
  *
  * Put the playing screen aside in screen_stash and paint the overlay
- * pause_overlay over it - 38 rows of 50 bytes. Used by the pause screen and
+ * pause_overlay over it - 38 of its 40 rows of 50 bytes. Used by the pause screen and
  * by F10.
  *
  * The region is the bottom forty scan lines, 160 to 199, taken a plane at a
@@ -5817,8 +5822,14 @@ void screen_unstash(void)
  *
  * F10, the "touche spéciale pour employés". It puts the whole screen aside,
  * switches the CGA to **text mode** by writing 9 to the mode register, and
- * prints the message at 0x2298 as character/attribute pairs: 0x5b switches to
- * inverse video, 0x9c switches back, and 0x24 pads eight blanks.
+ * prints assets.boss_screen as character/attribute pairs: 0x5b switches to
+ * inverse video, 0x9c switches back, and 0x24 pads eight blanks. 1ac2:4b1d
+ * starts at 0xc46:0x2298, sixteen bytes before the field, because the screen
+ * overlaps banner_xlat's tail - see game.h.
+ *
+ * What it paints is a French Microsoft **Multiplan** sheet: six products'
+ * monthly prices and quantities across Janvier to Mai, a Totaux row, the
+ * cursor at L11C3, and a status line reading "74% Libre    Multiplan: TEMP".
  *
  * The port has no text renderer, so what it does here is the mode change and
  * the stash - the message itself is not drawn. It is the one screen in the
@@ -5828,7 +5839,7 @@ void screen_unstash(void)
 void employee_enter(void)
 {
     /* **Not transcribed, on purpose.** F10 is the boss key: it puts the
-     * screen aside, switches to text mode and paints a fake DOS prompt so the
+     * screen aside, switches to text mode and paints a spreadsheet so the
      * game can be hidden from whoever walks past. The routine at 1ac2:4ae0 is
      * understood - this is a decision about what the port is for, not
      * something still to be read. */
@@ -6065,7 +6076,7 @@ void screen_game_over(void)
 
     uint8_t kind = global.paddle_kind;
     if (kind) {
-        uint16_t si = global.paddle_grow[kind];
+        uint16_t si = global.paddle_grow_ptr[kind];
         for (uint16_t f = 0; f < 6; f++, si += 2) {
             io_wait_retrace();
             draw_paddle_shifted(global_ptr(global_w(si)));
@@ -6266,7 +6277,7 @@ void screen_all_levels_done(void)
         if (!io_pump())
             return;
     }
-    /* 1ac2:59bb - the blobs walk, and it is a **script**, not a grid.
+    /* 1ac2:59bb - the blobs walk, and what they walk is **the word BRAVO**.
      *
      * `mov si, 0x2825` sits *before* the outer loop, so si walks continuously
      * across all 24 passes rather than restarting; each pass is `mov bl, 5`
@@ -6274,16 +6285,20 @@ void screen_all_levels_done(void)
      * **skips** when it is zero (1ac2:59c5). The port had five times the steps
      * it should, ran every one of them, and never read the script at all.
      *
+     * Read as a stream it is a script; read as the 24 by 5 it is indexed by
+     * it is a bitmap, and ending_walk is what turns (bh, bl) into a position
+     * on the lattice. See bravo_cells in game.h, which draws it.
+     *
      * The `push si` either side of ending_blobs is not decoration: 1ac2:5b80
      * opens `mov si, 0x289d` and walks off with it.
      *
      * The script is at 0xc46:0x2825 - this whole screen runs with DS there,
      * which is what 0x2823, 0x289d and 0x28d9 are reached through as well. */
-    const uint8_t *walk = assets.walk_script;
+    const uint8_t *cell = assets.bravo_cells[0];
     for (uint16_t bh = 0; bh != 24; bh++) {
         io_frame_sync_extra(SYNC_ENDING);       /* 1ac2:59c0, the pass */
         for (uint8_t bl = 5; bl > 0; bl--) {
-            if (!*walk++)                       /* 1ac2:59c2, lodsb */
+            if (!*cell++)                       /* 1ac2:59c2, lodsb */
                 continue;
             point_t blobs = ending_blobs();     /* 1ac2:59c9 */
             ending_walk(bl, bh, blobs);         /* 1ac2:59ce */
@@ -6497,8 +6512,8 @@ int32_t level_load_file(const char *dir)
  *
  * This was called set_palette_registers and described as an EGA palette write
  * that did nothing. It is neither. It reprograms the display: the two callers
- * are the boss key, which puts the CRTC into 80-column text to draw its fake
- * DOS prompt, and its exit, which puts it back to 320x200. The values are
+ * are the boss key, which puts the CRTC into 80-column text to draw its
+ * Multiplan sheet, and its exit, which puts it back to 320x200. The values are
  * IBM's own for those modes, and R1 - 80 against 40 displayed characters -
  * is what tells the two tables apart at a glance.
  *
@@ -7740,7 +7755,8 @@ void brick_animated(hit_t *hit, ball_t *ball)
 
     /* Remember what this piece turned into, indexed by the **new** cell value:
      * 1ac2:2d25 takes DH, which is was + 8, not DL. Only cells 16 to 21 reach
-     * here - brick_handler names 0x2ccd for those six and nothing else - so
+     * here - brick_handler_fn names BRICK_ANIMATED_FN for those six and nothing
+     * else - so
      * the new value is 24 to 29 and `- 24` is purely the split between
      * cell_bitmap's two halves, not arithmetic the original does.
      *

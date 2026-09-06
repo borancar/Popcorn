@@ -23,13 +23,13 @@
 
 #include "game.h"
 
-/* ------------------------------------------------------------- the state */
-#define PADDLE_X        0x2e54          /* left edge, pixels */
-#define PADDLE_MIN      0x2d3e
-#define PADDLE_MAX      0x2d3f
-#define PADDLE_WIDTH    0x2d3a          /* live; the morphs change it */
-#define PADDLE_KIND     0x2d39
-#define BOT_PADDLE_W    27              /* fallback only: 0x2d0d+2 */
+/* ------------------------------------------------------------- the state
+ *
+ * Everything the bot reads is a **field**, not an address. It used to be
+ * `#define PADDLE_X 0x2e54` and `g_image[off]`, which was true of one layout
+ * and silently false of any other - popcorn-nopad moves every one of these
+ * and the bot steered by whatever had landed there. A field follows. */
+#define BOT_PADDLE_W    27              /* fallback only: paddle_sets[0].width */
 /* Where the bot aims, which is **not** game.h's PADDLE_Y of 184: that one is
  * the paddle's top row, and this is two lower - the line the bot wants the
  * ball to arrive on. Two numbers, two meanings, so two names. */
@@ -46,21 +46,13 @@
  * slope - the paddle sits somewhere plausible and catches the ball only when
  * the geometry happens to agree, which looks exactly like randomness. */
 
-#define ENTITY_HEAD     0x3144
-#define E_NEXT          0x0c
-#define H_CAPSULE       0x3273          /* entity_capsule */
-#define H_PARACHUTE     0x37e0          /* entity_ball_hold */
-#define C_X             0x02
-#define C_Y             0x03
-#define C_KIND          0x04
-#define P_X             0x04
-#define P_Y             0x05
+#define H_CAPSULE       ENTITY_CAPSULE_FN
+#define H_PARACHUTE     ENTITY_BALL_HOLD_FN
 #define PARACHUTE_BOTTOM 0xb8           /* where it lets go */
 #define PARACHUTE_HALF  8
 #define CAPSULE_W       0x0e
 #define CATCH_Y         0xb6            /* the first row the paddle can take it */
 
-#define LEVEL_CELLS     0x2f18          /* 0x2f10 + 8, past the header */
 #define BRICK_COLS      12
 #define BRICK_ROWS      14
 #define BRICK_LEFT_PX   8
@@ -68,7 +60,6 @@
 #define CELL_H          8
 #define FIELD_TOP       6
 
-#define SLOPE_TOP       0x2e2c          /* the paddle-end slope table */
 #define SLOPE_N         11
 #define LASER_PADDLE    2
 #define LASER_CAPSULE   3
@@ -123,9 +114,6 @@ static int32_t capsule_want(uint8_t kind)
     }
 }
 
-static uint8_t rd(uint32_t off)        { return g_image[off]; }
-static uint32_t rw(uint32_t off)       { return global_w(off); }
-
 /* ------------------------------------------------------------ the reading */
 struct ball { int32_t x, y, dy_up, dx_neg, dx, dy; };
 
@@ -150,21 +138,22 @@ static int32_t live_balls(struct ball *out)
 /* Every live node running this handler. Entities are not in a table - they are
  * a chain whose handler word says what each one is - so this is the same walk
  * the play loop does. */
-static int32_t entities(uint32_t handler, uint32_t *out, int32_t max)
+static int32_t entities(uint16_t handler, uint16_t *out, int32_t max)
 {
     int32_t n = 0;
-    uint32_t bx = rw(ENTITY_HEAD);
-    for (int32_t guard = 0; guard < 64 && bx != 0xffff; guard++) {
-        if (rw(bx) == handler && n < max)
+    uint16_t bx = global.entity_head.next_ptr;
+    for (int32_t guard = 0; guard < 64 && bx != END_PTR; guard++) {
+        const entity_t *e = entity_ptr(bx);
+        if (e->handler_fn == handler && n < max)
             out[n++] = bx;
-        bx = rw(bx + E_NEXT);
+        bx = e->next_ptr;
     }
     return n;
 }
 
 static int32_t paddle_width(void)
 {
-    uint8_t w = rd(PADDLE_WIDTH);
+    uint8_t w = global.paddle_width;
     return w ? w : BOT_PADDLE_W;
 }
 
@@ -233,11 +222,11 @@ static int32_t aim_target(int32_t *tx, int32_t *ty)
     for (int32_t r = BRICK_ROWS - 1; r >= 0; r--) {
         int32_t best = -1, bx = 0, by = 0;
         for (int32_t c = 0; c < BRICK_COLS; c++) {
-            uint8_t v = rd(LEVEL_CELLS + (uint32_t)(r * BRICK_COLS + c));
+            uint8_t v = global.level.cells[r * BRICK_COLS + c];
             if (!v || indestructible(v))
                 continue;
             if (r + 1 < BRICK_ROWS
-                && rd(LEVEL_CELLS + (uint32_t)((r + 1) * BRICK_COLS + c)))
+                && global.level.cells[(r + 1) * BRICK_COLS + c])
                 continue;
             int32_t x = BRICK_LEFT_PX + c * CELL_W + CELL_W / 2;
             int32_t y = FIELD_TOP + r * CELL_H + CELL_H / 2;
@@ -262,11 +251,11 @@ static int32_t aim_target(int32_t *tx, int32_t *ty)
 static int32_t aim_at_margin(int32_t bx, int32_t tx, int32_t ty,
                              int32_t margin, int32_t *miss_out)
 {
-    int32_t lo = rd(PADDLE_MIN), hi = rd(PADDLE_MAX);
+    int32_t lo = global.paddle_min, hi = global.paddle_max;
     int32_t span = (paddle_width() + PADDLE_LIP) & 0xff;
     int32_t best = -1, best_px = -1;
     for (int32_t off = margin; off < SLOPE_N; off++) {
-        uint32_t w = rw(SLOPE_TOP + (uint32_t)off * 2);
+        uint16_t w = global.slope_top[off];
         int32_t dy = (int32_t)(w & 0xff), dx = (int32_t)(w >> 8);
         if (!dy)
             continue;
@@ -308,7 +297,7 @@ static int32_t laser_columns(int32_t *out)
     int32_t n = 0;
     for (int32_t c = 0; c < BRICK_COLS; c++) {
         for (int32_t r = BRICK_ROWS - 1; r >= 0; r--) {
-            uint8_t v = rd(LEVEL_CELLS + (uint32_t)(r * BRICK_COLS + c));
+            uint8_t v = global.level.cells[r * BRICK_COLS + c];
             if (!v)
                 continue;
             if (!indestructible(v))
@@ -354,8 +343,8 @@ void autoplay_step(void)
 {
     if (!g_image)
         return;
-    int32_t lo = rd(PADDLE_MIN), hi = rd(PADDLE_MAX);
-    int32_t px = rd(PADDLE_X);
+    int32_t lo = global.paddle_min, hi = global.paddle_max;
+    int32_t px = global.paddle_x;
     int32_t width = paddle_width();
 
     /* Everything the paddle has to be under, soonest first. A ball under a
@@ -373,10 +362,11 @@ void autoplay_step(void)
         if (!count || f < spare) { spare = f; aim = at; }
         count++;
     }
-    uint32_t nodes[16];
+    uint16_t nodes[16];
     int32_t np = entities(H_PARACHUTE, nodes, 16);
     for (int32_t i = 0; i < np; i++) {
-        int32_t cy = rd(nodes[i] + P_Y), cx = rd(nodes[i] + P_X);
+        const ent_sprite_t *s = &entity_ptr(nodes[i])->p.anim.sprite;
+        int32_t cy = s->y, cx = s->x;
         int32_t f = PARACHUTE_BOTTOM - cy;
         if (f < 0)
             f = 0;
@@ -413,7 +403,7 @@ void autoplay_step(void)
     int32_t grabbing = 0;
     int32_t margin = count == 1 ? LAST_BALL_FRAMES : SAFETY_FRAMES;
     if (!g_in_bonus && spare > margin) {
-        int32_t laser = rd(PADDLE_KIND) == LASER_PADDLE;
+        int32_t laser = global.paddle_kind == LASER_PADDLE;
         int32_t cols[BRICK_COLS];
         int32_t ncols = laser ? laser_columns(cols) : 0;
 
@@ -428,16 +418,17 @@ void autoplay_step(void)
         int32_t nc = entities(H_CAPSULE, nodes, 16);
         int32_t best = 0, best_x = 0, best_y = -1;
         for (int32_t i = 0; i < nc; i++) {
-            uint8_t kind = rd(nodes[i] + C_KIND);
+            const ent_fall_t *f = &entity_ptr(nodes[i])->p.fall;
+            uint8_t kind = f->kind;
             int32_t want = capsule_want(kind);
-            int32_t cy = rd(nodes[i] + C_Y);
+            int32_t cy = f->y;
             if (want <= 0 || cy >= CATCH_Y)
                 continue;
             if (laser && ncols && kind != LASER_CAPSULE)
                 continue;
             /* Best first, and among equals the one that lands soonest. */
             if (want > best || (want == best && cy > best_y)) {
-                best = want; best_x = rd(nodes[i] + C_X); best_y = cy;
+                best = want; best_x = f->x; best_y = cy;
             }
         }
         if (best) {

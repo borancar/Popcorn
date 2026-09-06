@@ -70,6 +70,15 @@ ENSURE_BALL_AT(state, 0x1c);    ENSURE_BALL_AT(bounces, 0x1d);
 #define ENSURE_SIZE(type, n) \
     typedef char ensure_size_##type[sizeof(type) == (n) ? 1 : -1]
 
+/* A byte a record carries and nothing reads is called `reserved`, not `_`.
+ * The underscore means "nobody has looked at these bytes yet", and that is a
+ * different claim: a record's spare byte has been looked at, and the answer
+ * is that its **width** is what the byte is for. level_anim_t is four wide
+ * because of one such byte, and animations.level[] is a table indexed by
+ * level number - so dropping it moves every entry. popcorn-nopad drops what
+ * starts with an underscore and keeps what does not, which is why the
+ * distinction is load-bearing rather than cosmetic. */
+
 ENSURE_SIZE(ball_t, 0x1e);
 
 /* One frame of a falling capsule or popup: the sprite to draw and how many
@@ -271,7 +280,7 @@ typedef struct __attribute__((packed)) {
             uint8_t  frame; /* 0x06 the frame being drawn */
             uint8_t  cycle; /* 0x07 the next one, copied into frame each step;
                              * kind 2 cycles it 0..0x0f */
-            uint8_t  _r[4];
+            uint8_t  reserved[4];   /* 0x08 */
 } ent_fall_t;
 
 typedef struct __attribute__((packed)) {
@@ -283,15 +292,15 @@ typedef struct __attribute__((packed)) {
 } ent_hatch_t;
 
 typedef struct __attribute__((packed)) {
-            uint8_t  _p[2];
+            uint8_t  reserved[2];   /* 0x02 */
             uint16_t left;  /* 0x04 at zero, cells_restore puts the field back */
-            uint8_t  _r[6];
+            uint8_t  reserved2[6];  /* 0x06 */
 } ent_cells_t;
 
 typedef struct __attribute__((packed)) {
             uint8_t  x, y;  /* 0x02 0x03 */
             uint8_t  piece; /* 0x04 which of the six */
-            uint8_t  _r[7];
+            uint8_t  reserved[7];   /* 0x05 */
 } ent_brick_t;
 
 typedef struct __attribute__((packed)) {
@@ -300,9 +309,9 @@ typedef struct __attribute__((packed)) {
             uint16_t sprites_ptr;/* 0x04 the sprite list being walked */
             uint8_t  from;   /* 0x06 the kind it started as */
             uint8_t  to;     /* 0x07 the kind it is becoming */
-            uint8_t  _p[2];
+            uint8_t  reserved[2];   /* 0x08 */
             uint8_t  bonus;  /* 0x0a the capsule kind to apply when it lands */
-            uint8_t  _r;
+            uint8_t  reserved2;     /* 0x0b */
 } ent_morph_t;
 
 /* The handlers a node dispatches to. The game keeps the routine's own
@@ -324,6 +333,38 @@ typedef struct __attribute__((packed)) {
 #define ENTITY_ANIM_BRICK_FN     0x3abf
 #define ENTITY_SPARKLE_FN        0x3aee
 #define ENTITY_CRUMBLE_FN        0x3b2a
+
+/* The routine each cell value dispatches to, and the routine each capsule
+ * runs. Both tables are in the data - brick_handler_fn at 0x3044 and
+ * bonus_handler_fn at 0x33bc - and the port transcribed both dispatches as
+ * switches, so nothing here reads them. They are named anyway: a table of
+ * routine addresses that says `0x2ccd` six times is a table nobody can read,
+ * and `BRICK_ANIMATED_FN` six times is the same table saying which six cell
+ * values are the moving picture. */
+#define BRICK_1_FN               0x28cb
+#define BRICK_2_FN               0x2985
+#define BRICK_3_FN               0x2a3f
+#define BRICK_5_FN               0x2a73
+#define BRICK_6_FN               0x2ab4
+#define BRICK_7_FN               0x2af5
+#define BRICK_8_FN               0x2b36
+#define BRICK_9_FN               0x2b9d
+#define BRICK_10_FN              0x2c59
+#define BRICK_ANIMATED_FN        0x2ccd
+#define BRICK_11_FN              0x2d68
+#define BRICK_SOLID_FN           0x3221   /* 4 and 12, and 24 to 29 - a hit brick_animated piece */
+
+#define BONUS_END_LEVEL_FN       0x2da0
+#define BONUS_POINTS_FN          0x2daa
+#define BONUS_CATCH_FN           0x2def
+#define BONUS_LASER_FN           0x2e03
+#define BONUS_MULTIBALL_FN       0x2e16
+#define BONUS_NET_FN             0x3119
+#define BONUS_REVERSE_FN         0x315b
+#define BONUS_EXTRA_LIFE_FN      0x318b
+#define BONUS_SLOWER_BALL_FN     0x31e8
+#define BONUS_STOP_MONSTERS_FN   0x3200
+#define BONUS_WIDER_PADDLE_FN    0x3231
 
 typedef struct __attribute__((packed)) {
     uint16_t handler_fn;    /* 0x00 the routine entity_call dispatches to, as the address the game holds. Rewritten in place to change what the node is */
@@ -402,7 +443,12 @@ ENSURE_SIZE(mark_t, 4);
 /* One of the ending's seven groups: where on screen it goes and which tall
  * sprite it starts from. */
 typedef struct __attribute__((packed)) {
-    uint16_t at;                    /* 0x00 added to 0x34f0 */
+    uint16_t at;                    /* 0x00 a byte **column**: added to
+                                     * 0x34f0, which is video row 135, and
+                                     * every one of the seven lands on that
+                                     * same row - 8, 12, 16, 20, then a wider
+                                     * gap, then 29, 33, 37. So it is a
+                                     * position and reads as one */
     uint16_t sprite_ptr;            /* 0x02 tall_sprite carries this forward */
 } eog_group_t;
 ENSURE_SIZE(eog_group_t, 4);
@@ -416,12 +462,62 @@ typedef struct __attribute__((packed)) {
 } bonus_kind_t;
 ENSURE_SIZE(bonus_kind_t, 4);
 
+/* One capsule's tumble: the order, then the pictures. bonus_release copies
+ * bonus_kinds[k].frame_ptr into the entity's cursor and draws step 0 itself;
+ * bonus_update walks from there, and on END_PTR it reads **the word after
+ * it** and jumps there - 1ac2:3df1's `s->frame_ptr = global_w(s->frame_ptr +
+ * 2)`. That word is the list's own first step in all eight, which is what
+ * makes a falling capsule tumble for as long as it falls.
+ *
+ * The same three-part shape as ANIM_SCRIPT, and the sprites are 20x16 -
+ * sixteen rows of five - because sprite_shift_draw is what draws them.
+ *
+ * The eight are different lengths, so they are eight members rather than an
+ * array: kind 1 alone is 65 steps over seven pictures. */
+#define BONUS_ANIM(steps, frames) struct __attribute__((packed)) { \
+        uint16_t step_ptr[steps];       /* one sprite offset a step */ \
+        uint16_t ends;                  /* END_PTR */                  \
+        uint16_t resume_ptr;            /* and back to its own first */\
+        uint8_t  sprite[frames][16][5];                                \
+    }
+
+/* One paddle morph: the twelve-frame list paddle_grow_ptr and
+ * paddle_shrink_ptr walk,
+ * and the five pictures it walks through. `paddle_shrink_ptr[k]` is the
+ * block's own address and `paddle_grow_ptr[k]` is six words into it - the same frames
+ * read the other way round, from the plain paddle out to kind k and back.
+ *
+ * Read off the image: the three blocks are 409 bytes apart, the first at
+ * 0x5b83 and the last ending exactly where _pad_22 does, and the sprites are
+ * 0x4d bytes each - the same as one phase of a paddle in paddle_sprites,
+ * which is what they morph between. */
+typedef struct __attribute__((packed)) {
+    uint16_t frames_ptr[12];        /* 0x00 the list, out and back */
+    uint8_t  sprite[5][0x4d];       /* 0x18 the five in between */
+} paddle_morph_t;
+ENSURE_SIZE(paddle_morph_t, 409);
+
+/* One brick's crumble: the script entity_crumble walks, then its pictures.
+ *
+ * The same shape as the teleport's lists - it opens with the cell's own
+ * bitmap, plays eight frames, puts a bitmap back and ends at END_PTR, and
+ * the code enters at [1] because entity_anim erases the entry *before* the
+ * cursor. Three of these tile the tail of what was _pad_26, and brick 8's
+ * roll is a fourth of the same kind, laid out separately because its frames
+ * are longer. */
+typedef struct __attribute__((packed)) {
+    uint16_t script_ptr[11];        /* 0x00 bitmap, eight frames, bitmap, END_PTR */
+    uint8_t  frame[8][7][4];        /* 0x16 16 pixels by 7, eight of them */
+} crumble_t;
+ENSURE_SIZE(crumble_t, 246);
+
 /* One of the four paddle kinds: where its four pixel phases start, and how
  * wide it is. The table at 0x2d0d is four of these, indexed by paddle_kind. */
 typedef struct __attribute__((packed)) {
     uint16_t sprites_ptr;           /* 0x00 into paddle_sprites */
     uint8_t  width;                 /* 0x02 pixels */
-    uint8_t  _r;
+    uint8_t  reserved;              /* 0x03 unread, and load-bearing for the
+                                     * same reason as level_anim_t's */
 } paddle_set_t;
 ENSURE_SIZE(paddle_set_t, 4);
 
@@ -442,7 +538,8 @@ typedef struct __attribute__((packed)) {
 } hit_dir_t;
 ENSURE_SIZE(hit_dir_t, 2);
 
-/* One frame of a capsule's homing script - the 200 entries at 0x8320. The
+/* One frame of a capsule's homing script - bonus_path, 360 entries at
+ * 0x8320. The
  * original reads it with `lodsw` and splits AL from AH, and the two halves
  * are a **displacement from where the script took over**, not a step: the
  * anchor in arg.move.steps is never written again while it runs, so entry n
@@ -582,25 +679,30 @@ typedef struct __attribute__((packed)) {
      * The digit in it is not decoration: it is the player number, and
      * screen_player_names indexes players[] with it. One byte doing both
      * jobs, so the union says so rather than two names for 0x13e9 saying
-     * nothing. */
+     * nothing. The text either side of it is **named**, not padding: it was
+     * `_np0` and `_np1` until popcorn-nopad dropped them and the player
+     * number landed on the prompt's first two characters. */
     union {
         char    name_prompt[24];
         struct __attribute__((packed)) {
-            uint8_t _np0[8];
-            uint8_t player_digit;       /* 0x13e9 '1' to '9' - players[player_digit - '1'] */
-            uint8_t _np1[15];
+            uint8_t name_prompt_head[8];    /* 0x13e1 " JOUEUR " */
+            uint8_t player_digit;           /* 0x13e9 '1' to '9' - players[player_digit - '1'] */
+            uint8_t name_prompt_tail[15];   /* 0x13ea ": ------------ " */
         };
     };
     uint8_t  demo_name[12];             /* 0x13f9 "  COMPUTER  ", the name the demo plays under */
     uint16_t menu_sp;                   /* 0x1405 the stack pointer the menu was entered with. `mov sp,[0x1405] / jmp 0x1d1` is how the original leaves a game; the port longjmps instead, so nothing here reads this - it is what the address is */
     /* 0x1407 " TABLEAU 00 ", drawn whole by the level intro, with its two
-     * digits written in place. The same arrangement as the prompt above. */
+     * digits written in place. The same arrangement as the prompt above, and
+     * the same lesson: the halves either side carry names because dropping
+     * them moves level_num_text to offset 0, and the intro then reads
+     * "01ABLEAU 00" - which is what popcorn-nopad drew. */
     union {
         char    level_text[12];
         struct __attribute__((packed)) {
-            uint8_t _lt0[9];
+            uint8_t level_text_head[9]; /* 0x1407 " TABLEAU " */
             char     level_num_text[2]; /* 0x1410 the tens, then the units */
-            uint8_t _lt1;
+            uint8_t level_text_tail;    /* 0x1412 the trailing space */
         };
     };
     uint16_t particle_count;            /* 0x1413 the menu's fountain */
@@ -642,11 +744,29 @@ typedef struct __attribute__((packed)) {
         uint8_t eog_band[495];          /* screen_end_of_game's band, merged with the picture and put back */
         hsc_entry_t hsc_scratch[9];     /* screen_results insertion-sorts the players' records here, and hsc_sort feeds them into hsc from it */
     } scratch2;
-    uint8_t  _pad_21[170];
+    /* 0x2a8f four strings, and they tile the block exactly: 52, 64, 23 and
+     * 31. The first two are `$`-terminated for INT 21h AH=09h and are what
+     * the level loader prints when a .PPC is missing or is not one; the last
+     * two are NUL-terminated and are the prompts screen_define_keys writes,
+     * loaded at 1ac2:15cb and 1ac2:15d4. They are in CP850, which is why
+     * "D\202finition" rather than "Définition". Nothing in the port reads any
+     * of them - the two screens they belong to are the two it does not have -
+     * and they are named because a block of text is not padding. */
+    char     msg_no_level_file[52];     /* 0x2a8f */
+    char     msg_not_level_file[64];    /* 0x2ac3 */
+    char     prompt_define_keys[23];    /* 0x2b03 */
+    char     prompt_press_key[31];      /* 0x2b1a */
     uint16_t results_rows[9][26];       /* 0x2b39 the results screen's fixed rows, 26 words each - 0x34 apart, which is what the code that walks them from 0x2ba1 counts in. Nine of them end exactly at paddle_sets */
     paddle_set_t paddle_sets[4];        /* 0x2d0d the four paddle kinds, indexed by paddle_kind. Their `sprites` are 0x4903, 0x4a37, 0x4b6b and 0x4c9f - paddle_sprites[0] through [3], 0x134 apart, which is what says the bank is four sets of four phases */
-    uint16_t paddle_grow[4];            /* 0x2d1d the sprite list a kind grows through, by kind. Entry 0 is zero: the plain paddle has nothing to animate */
-    uint16_t paddle_shrink[4];          /* 0x2d25 and the list it shrinks through */
+    /* 0x2d1d and 0x2d25 the sprite list a kind morphs through, by kind. Entry
+     * 0 is zero in both: the plain paddle has nothing to animate. These hold
+     * the game's own offsets - paddle_shrink_ptr[k] is paddle_morph[k-1]'s
+     * own address and paddle_grow_ptr[k] is six words into it, the same
+     * twelve frames read from either end - so they carry the suffix and
+     * data.c writes them as the block they name. Without it they came out as
+     * 0x5b83 and 0x5b8f, which were true only of the layout that shipped. */
+    uint16_t paddle_grow_ptr[4];        /* 0x2d1d */
+    uint16_t paddle_shrink_ptr[4];      /* 0x2d25 */
     uint8_t  paddle_next[11];           /* 0x2d2d the paddle kind a capsule gives, by capsule kind. Only the first four are non-zero; the rest are the capsules that do something other than change the paddle */
     uint8_t  paddle_step;               /* 0x2d38 how much the width changes per morph frame */
     uint8_t  paddle_kind;               /* 0x2d39 which of the four sprite sets is current */
@@ -707,11 +827,26 @@ typedef struct __attribute__((packed)) {
     sweep_t  sweep[4];                  /* 0x2efc the four sweeping kernels - sixteen bytes, exactly the room between backdrop_phase and their y positions */
     uint8_t  sweep_y[4];                /* 0x2f0c the four popcorn kernels sweeping the field during the level intro; kernel zero paces the reveal */
     level_t  level;                     /* 0x2f10 the level being played, copied out of the table at 0xc46:0x000c */
-    uint8_t  _pad_13[132];
+    /* 0x2fc0 **the collision probe's guard, and not padding at all.**
+     *
+     * probe_cell_at takes any x up to 191 and any y up to 196 and indexes
+     * `cells[(y >> 3) * 12 + (x >> 4)]`. At the limit that is `cells[299]` -
+     * 132 past the 168 a level holds - so the probe reads off the end of the
+     * board by design, and what stops it finding a brick down there is that
+     * these 132 bytes are zero. cell_at at 1ac2:41e5 does the same
+     * arithmetic. 168 + 132 is 300, which is that maximum index plus one:
+     * the region is exactly the overrun and not a byte more.
+     *
+     * Found by taking it out. popcorn-nopad slid brick_handler_fn up against
+     * the cells, and the routine addresses in it read as cell values 0x8b,
+     * 0x28, 0x85, 0x29 - so eleven rows of phantom bricks appeared below the
+     * field and the ball bounced off them. A region that is read is a field,
+     * whatever its contents look like. */
+    uint8_t  cell_guard[132];           /* 0x2fc0 */
     /* Three tables indexed by cell value, thirty entries each, laid end to
      * end: 0x3044 + 60 is 0x3080, 0x3080 + 60 is 0x30bc, and 0x30bc + 120 is
      * anim_count. The asserts below are what says so. */
-    uint16_t brick_handler[30];         /* 0x3044 the routine ball_bricks dispatches to. The port transcribed the dispatch as a switch and so never reads this, but it is what sets where the next table starts */
+    uint16_t brick_handler_fn[30];      /* 0x3044 the routine ball_bricks dispatches to, by cell value. The port transcribed the dispatch as a switch and so never reads this, but it is what sets where the next table starts - and it is the only place that says cells 16 to 21 are all one routine and 24 to 29 all another */
     cell_bitmap_t cell_bitmap;          /* 0x3080 a cell value to the bitmap that draws it - thirty words, and the last six mean something different from the first twenty-four */
     uint16_t cell_score[30][2];         /* 0x30bc what a cell is worth to level_tally, a four-byte figure it feeds to score_add as two words */
     uint8_t  anim_count;                /* 0x3134 the animated bricks */
@@ -767,14 +902,19 @@ typedef struct __attribute__((packed)) {
     uint16_t capsule_frames_ptr[11];        /* 0x3385 a falling capsule's frame table by kind */
     uint16_t popup_frames_ptr[11];          /* 0x339b and a score popup's. Twenty-two each, ending exactly at bonus_odds - which is what says both are eleven */
     uint8_t  bonus_odds[11];            /* 0x33b1 cumulative weights, ending at 0xff: bonus_kind walks them against random(0xff) and takes the index */
-    uint16_t bonus_handlers[11];        /* 0x33bc what each kind does, in the same order - 0x2daa points, 0x2def catch, 0x3231 wider, 0x2e03 laser, 0x2e16 multiball, 0x3119 net, 0x315b reverse, 0x318b extra life, 0x2da0, 0x31e8 slower, 0x3200 stop monsters */
+    uint16_t bonus_handler_fn[11];      /* 0x33bc what each capsule kind does, in bonus_odds' order. The names are in data.c now rather than in this comment, which is the point of writing them as constants */
     uint16_t rng_state;                 /* 0x33d2 */
     uint8_t  hit_kind;                  /* 0x33d4 */
     uint8_t  bonus_pending;             /* 0x33d5 deliveries under way: bonus_spawn counts one up when it opens a hatch and entity_bonus counts it down when the capsule is gone either way, so it spans the whole journey. The play loop refuses to spawn at 3, which is what caps them */
     uint8_t  bonus_live;                /* 0x33d6 capsules on screen; the play loop's pause shortens as it rises */
     mark_t   field_marks[8];            /* 0x33d7 and the last of the eight is the paddle's own hatch: what level_draw called hatch_x and hatch_y are field_marks[7].x and .y, the same two bytes */
     uint8_t  sprite_work[16][5];        /* 0x33f7 sprite_shift_draw's buffer: a 20x16 sprite copied in and shifted right a pixel at a time, in rows of five so nothing crosses a row boundary */
-    uint8_t  _pad_25[8];
+    /* 0x3447 what a falling capsule does this frame, by `arg.move.mode`:
+     * right, down, left, up, in that order. 1ac2:3c0b is
+     * `shl bx,1 / add bx,0x3447 / call word ptr [bx]` - a table, not a
+     * switch. The port transcribed bonus_steer as a switch and so never
+     * reads this, which is why it stayed padding. */
+    uint16_t bonus_move_fn[4];          /* 0x3447 */
     player_t players[9];                /* 0x344f nine of them - screen_player_names stops at nine, and a tenth record would run into player_count at 0x3f08 */
     hsc_entry_t hsc[11];                /* 0x3e42 the high-score table. **Eleven**, not ten: only ten are written to popcorn.hsc, and the eleventh is the slot hsc_sort starts its cursor at and hsc_bubble compares the incoming record against. Eleven of 0x12 is 198, exactly the room there is before player_count */
     uint8_t  player_count;              /* 0x3f08 how many were entered */
@@ -800,13 +940,81 @@ typedef struct __attribute__((packed)) {
      * played game and fifteen late-game snapshots, and **nothing in any of
      * them is ever written**. Whatever is still unnamed in this image is
      * read-only data. */
-    uint8_t  _pad_22[4731];
+    /* 0x4dd3 What capsule_frames_ptr and popup_frames_ptr point into. All
+     * twenty-two lists are sixteen fall_frame_t entries, and following them
+     * says how the pictures are shared:
+     *
+     *   frames 0-2    the thing arriving. One set for the eleven capsules,
+     *                 another for the eleven popups
+     *   frames 3-11   the kind's own letter, tumbling. Stored **once** and
+     *                 pointed at twice - capsule[k] and popup[k] name the
+     *                 same seven pictures, so a capsule and the popup it
+     *                 scores are the same letter
+     *   frames 12-15  the thing leaving, a dither XORed over it: 0xaa for a
+     *                 capsule, 0x55 for a popup. Shared the same way
+     *
+     * So there are eleven letter sets and two arrive/leave sets. Kind 0's
+     * run is 360 bytes where the other ten are 228 because the **capsules'**
+     * shared frames were laid down inside it - appear, kind 0's own letter,
+     * vanish, contiguously - so that run is three different things and is
+     * spelled here as three fields rather than as one block called kind 0's.
+     * The other ten hold their letter and nothing else and point back at
+     * these for the rest. The popups' shared frames sit in a block of their
+     * own, which is why their ten remaining tables pack together with no
+     * pictures between them.
+     *
+     * That every list opens with the same three frames is what lets
+     * brick_1_or_2 write the address down: 1ac2:2a31 is `mov si, 0x4e13`,
+     * which is capsule_bank0.appear, and 1ac2:2977 is `mov si, 0x5863`,
+     * which is popup_appear. */
+    fall_frame_t capsule_table0[16];    /* 0x4dd3 kind 0's list */
+    uint8_t  capsule_appear[52];        /* 0x4e13 frames 0-2, all eleven capsules */
+    uint8_t  capsule_letter0[164];      /* 0x4e47 kind 0's letter, frames 3-11 */
+    uint8_t  capsule_vanish[80];        /* 0x4eeb frames 12-15, all eleven capsules */
+    /* 0x4f3b kinds **1 to 10**, 228 apiece: kind 0's is the four fields above,
+     * because the shared frames were laid down inside its run. So this is
+     * capsule_bank[k - 1] for kind k, which is the layout's off-by-one and
+     * not a choice made here. */
+    struct __attribute__((packed)) {
+        fall_frame_t table[16];
+        uint8_t      letter[164];       /* this kind's, and nothing else */
+    } capsule_bank[10];
+    fall_frame_t popup_table0[16];      /* 0x5823 */
+    uint8_t  popup_appear[52];          /* 0x5863 frames 0-2, all eleven popups */
+    uint8_t  popup_vanish[52];          /* 0x5897 frames 12-14: 3, 4 and 6 rows */
+    /* 0x58cb 16 by 7, and no entry of any of the twenty-two lists names it.
+     * It is the popup's last vanish frame with a solid rule along the bottom
+     * - six rows of 0x555554 then 0xfffffc - and it sits exactly where a
+     * packed layout would have put that frame. The one the table does name is
+     * the next twenty-eight bytes and is the same picture without the rule.
+     * An abandoned first go at it, left where it was written. */
+    uint8_t  popup_vanish_ruled[28];
+    uint8_t  popup_vanish_last[28];     /* 0x58e7 frame 15, the one in use */
+    fall_frame_t popup_table[10][16];   /* 0x5903 */
+    paddle_morph_t paddle_morph[3];     /* 0x5b83, ending exactly at hatch_script_ptr */
     uint16_t hatch_script_ptr[21];      /* 0x604e how a hatch opens: twenty frame offsets then END_PTR. Entries 0 to 9 open it, 10 to 18 shut it again by playing the same frames backwards, and the last is mark_sprite - the hatch closed is the mark that was always there */
     uint8_t  mark_sprite[37][2];        /* 0x6078 the mark drawn at each field position, one word a row. field_marks takes 0x1f rows of it and level_between 0x25 - the same picture, cut short. It is also the hatch's **shut** frame, which is why hatch_frame starts after it rather than at it */
     uint8_t  hatch_frame[10][37][2];    /* 0x60c2 the hatch opening, ten frames of the same 37 rows. hatch_frame[9] is fully open, and entity_hatch releases the capsule on it */
-    uint8_t  _pad_26[1092];
-    uint16_t brick8_roll_ptr[25];       /* 0x67ea brick 8's score rolling up: twenty-four frames then END_PTR. The **last** of them is brick8_score itself, so the roll settles on the number it was counting to */
-    uint8_t  brick8_score[7][4];        /* 0x681c the 100 it lands on, 16 pixels by 7. brick_8 XORs it on when the brick goes and the animation's final step XORs it off again, so it is underneath the roll the whole way */
+    uint8_t  brick_bitmap[11][8][4];    /* 0x63a6 what cell_bitmap.plain_ptr points at, eleven cells of 16 pixels by 8. The brick routines also load them directly - 1ac2:29f3, 1ac2:2939, 1ac2:2aa3 and the rest are `mov si, 0x63a6` and its neighbours, 32 apart */
+    crumble_t crumble[3];               /* 0x6506 the crumbles for cells 2, 1 and 3, ending exactly at brick8_roll_ptr's first entry */
+    /* 0x67e8 brick 8's score rolling up. **Twenty-six** entries, not
+     * twenty-five: brick_8 at 1ac2:2b87 starts the cursor at 0x67ea, which is
+     * `[1]`, and entity_anim erases the entry *before* the cursor - so
+     * `[0]` is read on the first step and is part of the list. It holds
+     * brick8_score, and so does `[24]`: the roll is drawn over the number the
+     * whole way and settles on it. The teleport's lists are declared this way
+     * already, which is what made the two bytes at 0x67e8 look like padding
+     * rather than an entry. */
+    uint16_t brick8_roll_ptr[26];       /* 0x67e8 */
+    /* 0x681c the 100, 16 pixels by 7 - and it is **not** underneath the roll,
+     * which is what naming brick8_roll_ptr[0] settled. brick_8 XORs it on
+     * when the brick goes; each of the four passes erases entry [0], which is
+     * this, on its first step and draws entry [24], which is this again, on
+     * its last; and when arg.count runs out 1ac2:3689 XORs it off for good.
+     * So the number and the spinning frames alternate - the 100 shows, spins
+     * away, lands, and does it three more times. entity_crumble erasing
+     * `cur - 2` is what makes the first step rub it out. */
+    uint8_t  brick8_score[7][4];        /* 0x681c */
     uint8_t  brick8_roll[23][7][4];     /* 0x6838 the twenty-three spinning frames, drawn over the score. Only brick 8 uses any of this */
     /* Brick 9 is the teleport, and these are the two halves of what it does:
      * the ball vanishes where it struck and arrives at another teleport cell.
@@ -824,52 +1032,100 @@ typedef struct __attribute__((packed)) {
     uint8_t  teleport_frame[6][7][4];   /* 0x6ae0 six of 16x7, ending exactly where brick10_hold_ptr begins */
     uint16_t brick10_hold_ptr[10];      /* 0x6b88 the hand closing on the ball: eight frames, END_PTR, then the word after it pointing back here - the same shape as hatch_script_ptr and the animations' own scripts */
     uint8_t  brick10_hold[5][16][5];    /* 0x6b9c five frames of 20 by 16, which is what sprite_shift_draw takes. The list plays 0 1 2 1 0 then 3 4 3, so the hand closes and opens twice over five pictures */
-    uint8_t  _pad_26c[10];
+    uint8_t  sweep_sprite[5][2];        /* 0x6d2c the popcorn kernel that sweeps the field during a level intro - what all four sweep[].sprite_ptr point at, and the whole of what was padding here */
     uint8_t  intro_feed[19][5];         /* 0x6d36 the five-byte rows level_intro feeds in under the panel, one a pass - nineteen of them, ending exactly at backdrop_table */
     uint16_t backdrop_ptr[5];         /* 0x6d95 the level intro's backdrop by phase. **Five**, not eight: the entries are 0x6d9f, 0x6f1f, 0x709f, 0x721f and 0x739f - 0x180 apart, which is one frame - and the three words after them are pixels. backdrop_phase wraps at 0x27, so `phase >> 3` is 0 to 4 and the `& 7` beside it can never reach the rest */
     uint8_t  backdrop[5][384];          /* 0x6d9f what those five point at: 8 rows of 48, the full 192-pixel width. level_intro's first loop feeds backdrop[0] in 48 bytes at a time, which is the same frame read a row a pass */
-    uint8_t  _pad_28[2];
-    /* 0x7521 the creature's walk cycle: eight frames then END_PTR, which
-     * walker_step wraps on. The eighth entry is 0x7533, the byte just past
-     * this list - so the last frame's pixels begin where the offsets end,
-     * which is the corroboration that there are exactly nine words here. */
-    uint16_t walker_frame_ptr[9];
-    uint8_t  _pad_28b[168];
+    /* 0x751f the creature's walk cycle: **ten** words, and walker_step enters
+     * at `[1]`. It erases the entry before the cursor - 1ac2:1e23 is
+     * `sub [0x1468],2 / draw / add [0x1468],2 / draw` - and the cursor starts
+     * at 0x7521, so `[0]` is read on the first step and is part of the list.
+     * The same arrangement as brick8_roll_ptr and the teleport's lists.
+     *
+     * `[0]` and `[8]` both hold walker_frame[0], so the cycle opens and
+     * closes on the same picture, and END_PTR is `[9]`. The list ends at
+     * 0x7533, which is where walker_frame's pixels begin - the corroboration
+     * that there are exactly ten words here. */
+    uint16_t walker_frame_ptr[10];      /* 0x751f */
+    uint8_t  walker_frame[8][7][3];     /* 0x7533 the eight walk_ptr names, 7 rows of 3 - the shape walker_work holds one of. Tiles the block exactly */
     uint16_t walker_drop_ptr[6];            /* 0x75db the six frames the creature plays once it has walked in, 7 rows of 7 at a fixed spot */
-    uint8_t  _pad_29[294];
+    uint8_t  walker_drop[6][7][7];      /* 0x75e7 the six walker_drop_ptr names, 7 rows of 7. Tiles the block exactly */
     uint16_t hatch_open_ptr[5];             /* 0x770d the hatch opening */
     uint16_t hatch_shut_ptr[5];             /* 0x7717 and closing, one frame every fourth step of the walk out */
-    uint8_t  _pad_30[228];
+    uint8_t  walk_hatch_frame[6][19][2];/* 0x7721 the hatch the creature walks out of, six frames of 19 rows. hatch_shut_ptr names frames 0 to 4 and hatch_open_ptr 1 to 5, so the two lists are the same six pictures read from either end. Tiles the block exactly */
     uint8_t  curtain_image[105][27];    /* 0x7805 the POPCORN logo the intro curtain brings down: 105 rows of 27 bytes, 108 pixels wide. intro_curtain reads it **backwards** - on frame `rows` it takes the last `rows` rows and draws them from the top, so the picture comes down like a curtain. That is why the address in the original is 0x8318, which is the end of this and not the start */
-    uint8_t  _pad_23b[728];
+    uint8_t  _path_lead[8];             /* 0x8318 four zero steps before the entry point, and curtain_image's exclusive end */
+    /* 0x8320 **the falling capsule's homing path** - the script bonus_step_t
+     * describes, and the address 1ac2:3d86 writes into a capsule's cursor
+     * (`mov word ptr [di+0xa], 0x8320`) the moment bonus_move_down sees it
+     * pass BONUS_HOMING_Y. bonus_script walks it two bytes a frame from
+     * `[0]` and never looks back, so the capsule's last stretch is not
+     * steered at all - it is played.
+     *
+     * Both halves are **signed displacements**, not steps: dx from the x the
+     * handover saved in arg.move.steps, dy from BONUS_HOMING_Y + 1, and the
+     * anchor is never written again while it runs. So entry n is an absolute
+     * position along a fixed figure. dx runs -38 to +35 and dy 0 to 63, and
+     * consecutive entries differ by one pixel in one of eight directions and
+     * nothing else, which makes it a drawn curve: the capsule sways down a
+     * 74 by 64 loop centred on where it crossed the line. A dy of -1 is a row
+     * above the handover, which a falling capsule can never want, so it means
+     * hold - see bonus_step_t.
+     *
+     * This was `unknown_anim` here for one sitting, on the strength of a scan
+     * that looked for `mov si, imm` and displacement operands and so could
+     * not see an immediate stored into memory. Nothing pointed at it in the
+     * *data*; the pointer is written by the code. */
+    bonus_step_t bonus_path[360];       /* 0x8320 */
     uint8_t  panel[93][28];             /* 0x85f0 the score panel, built here and revealed a row at a time. 93 rows is what panel_reveal's last pass reads, and it stops four bytes short of the font */
     uint8_t  _pad_31[4];
     uint8_t  font[40][12][2];           /* 0x9020 the score panel's 8x12 font, two bits a pixel: forty glyphs of twelve rows of one word. Glyph 0, what a space maps to, is **not blank** - it is a solid block of colour 2, which is how the headings get their red ground */
-    uint8_t  pause_overlay[38][50];     /* 0x93e0 what screen_stash paints over the stashed playfield. It starts exactly where the font ends */
-    uint8_t  _pad_23[2042];
+    /* 0x93e0 what screen_stash paints over the stashed playfield. **Forty**
+     * rows, not thirty-eight: 40 x 50 is 2,000 bytes, which is exactly what
+     * the stash beside it holds (STASH_ROWS x STASH_BYTES, twice), and it
+     * ends exactly where game_over_frames_ptr begins. screen_stash paints
+     * only the first 38 of them, so the last two are authored and never
+     * drawn - which is why they looked like padding. */
+    uint8_t  pause_overlay[40][50];     /* 0x93e0 */
+    uint16_t game_over_frames_ptr[19];  /* 0x9bb0 what screen_game_over walks, loaded at 1ac2:04eb and ended by a **zero** rather than END_PTR: eighteen frames, the last of them game_over_paddle itself */
+    uint8_t  game_over_frame[17][112];  /* 0x9bd6 the seventeen it names before that, 112 bytes each, ending exactly at game_over_paddle */
     uint8_t  game_over_paddle[78];      /* 0xa346 the paddle screen_game_over starts from, the same 0x4d + 1 bytes a kind's phase holds */
     uint8_t  _pad_27[44];
     uint8_t  banner_font[129][6];       /* 0xa3c0 the menu banner's own font, and a different one: eight columns by six rows at one bit a pixel, one byte a row, scrolled a bit at a time. 129 glyphs is what banner_text indexes - its highest is 128, and the last byte of that glyph is the last non-zero byte before the ending's picture */
     uint8_t  _pad_24[10];
     uint8_t  eog_overlay[495];          /* 0xa6d0 what screen_end_of_game merges into each band of the saved screen - the same 495 bytes every pass, since the source restarts and only the destination walks */
     eog_group_t eog_groups[7];          /* 0xa8bf ending exactly where the overlay does */
-    uint8_t  _pad_33[720];
+    uint8_t  eog_group_sprite[6][120];  /* 0xa8db what eog_groups[].sprite_ptr point at - six of two tall_sprite frames each, tiling the block exactly and ending where eog_blank begins */
     uint8_t  eog_blank[3][60];          /* 0xabab what the ending draws over a group to blank it: three tall_sprite frames, because it is called three times and each carries SI forward sixty bytes. One byte short of bonus_kinds */
     uint8_t  _pad_34[1];
     bonus_kind_t bonus_kinds[8];        /* 0xac60 the eight capsules, and bonus_release picks one with random(8). Thirty-two bytes ending at 0xac80, which is kind 0's own sprite - the table abuts the data it points into */
-    uint8_t  _pad_35[2850];
+    /* 0xac80 the eight capsules a hatch releases, in bonus_kinds' order -
+     * five of them here, then the sparkle, then the last three. The block is
+     * one run from here to SEG_ASSETS and the sparkle sits inside it; that
+     * the sparkle was the first thing named in it is why global_t used to
+     * stop at 0xbb7c with the last three capsules outside it altogether. */
+    BONUS_ANIM(10, 6)  bonus_anim0;     /* 0xac80 */
+    BONUS_ANIM(65, 7)  bonus_anim1;     /* 0xae78 */
+    BONUS_ANIM(4, 4)   bonus_anim2;     /* 0xb12e */
+    BONUS_ANIM(8, 8)   bonus_anim3;     /* 0xb27a */
+    BONUS_ANIM(8, 8)   bonus_anim4;     /* 0xb50e */
     /* The sparkle a collected capsule leaves, and the same twelve pictures the
      * ending's columns play. Two walkers, two conventions: entity_sparkle
      * enters at `[1]`, because entity_anim erases the entry *before* the
      * cursor and `[0]` is what it rubs out first; ending_column reads from
      * `[0]` and draws every one of them.
      *
-     * These are the first bytes named beyond bonus_kinds, which is why
-     * global_t stops here rather than at 0xac80 - the 2,850 before them are
-     * still nobody's. */
+     * It sits **between** capsule kinds 4 and 5, in the middle of their run,
+     * and is the same shape minus the resume word - twelve frames then
+     * END_PTR, with nothing after it to go back to. */
     uint16_t sparkle_ptr[13];           /* 0xb7a2 twelve frames, then END_PTR */
     uint8_t  sparkle[12][16][5];        /* 0xb7bc twelve of 20x16, which is what sprite_shift_draw takes. ending_column copies four of the five bytes a row and fifteen of the sixteen rows */
+    BONUS_ANIM(8, 8)   bonus_anim5;     /* 0xbb7c */
+    BONUS_ANIM(15, 10) bonus_anim6;     /* 0xbe10 */
+    BONUS_ANIM(26, 9)  bonus_anim7;     /* 0xc152 */
+    uint8_t  _global_end[6];            /* 0xc45a zero, and the last of the segment: global_t now runs to SEG_ASSETS with nothing between them */
 } global_t;
+ENSURE_SIZE(global_t, 0xc460);      /* SEG_ASSETS, which is defined below */
 
 /* The same bytes as g_image, which stays the buffer everything else - memcpy,
  * the snapshot loader, the verifier, exepack - works through. */
@@ -921,10 +1177,14 @@ ENSURE_GLOBAL_AT(speed_limit, 0x1486);
 ENSURE_GLOBAL_AT(frame_delay, 0x1487);
 ENSURE_GLOBAL_AT(frame_delay_set, 0x1489);
 ENSURE_GLOBAL_AT(speed_timer, 0x148b);
+ENSURE_GLOBAL_AT(msg_no_level_file, 0x2a8f);
+ENSURE_GLOBAL_AT(msg_not_level_file, 0x2ac3);
+ENSURE_GLOBAL_AT(prompt_define_keys, 0x2b03);
+ENSURE_GLOBAL_AT(prompt_press_key, 0x2b1a);
 ENSURE_GLOBAL_AT(results_rows, 0x2b39);
 ENSURE_GLOBAL_AT(paddle_sets, 0x2d0d);
-ENSURE_GLOBAL_AT(paddle_grow, 0x2d1d);
-ENSURE_GLOBAL_AT(paddle_shrink, 0x2d25);
+ENSURE_GLOBAL_AT(paddle_grow_ptr, 0x2d1d);
+ENSURE_GLOBAL_AT(paddle_shrink_ptr, 0x2d25);
 ENSURE_GLOBAL_AT(paddle_next, 0x2d2d);
 ENSURE_GLOBAL_AT(paddle_step, 0x2d38);
 ENSURE_GLOBAL_AT(paddle_kind, 0x2d39);
@@ -960,7 +1220,7 @@ ENSURE_GLOBAL_AT(hold_offset, 0x2e56);
 ENSURE_GLOBAL_AT(ball_alive, 0x2e73);
 ENSURE_GLOBAL_AT(hit_count, 0x2e74);
 ENSURE_GLOBAL_AT(hits, 0x2e89);
-ENSURE_GLOBAL_AT(brick_handler, 0x3044);
+ENSURE_GLOBAL_AT(brick_handler_fn, 0x3044);
 ENSURE_GLOBAL_AT(cell_bitmap, 0x3080);
 ENSURE_GLOBAL_AT_IN(cell_bitmap_animated, cell_bitmap.animated_ptr, 0x30b0);
 ENSURE_GLOBAL_AT(cell_score, 0x30bc);
@@ -984,6 +1244,7 @@ ENSURE_GLOBAL_AT(backdrop_phase, 0x2efb);
 ENSURE_GLOBAL_AT(sweep, 0x2efc);
 ENSURE_GLOBAL_AT(sweep_y, 0x2f0c);
 ENSURE_GLOBAL_AT(level, 0x2f10);
+ENSURE_GLOBAL_AT(cell_guard, 0x2fc0);
 ENSURE_GLOBAL_AT(anim_count, 0x3134);
 ENSURE_GLOBAL_AT(anim_rate, 0x3135);
 ENSURE_GLOBAL_AT(anim_ptr, 0x3136);
@@ -996,13 +1257,14 @@ ENSURE_GLOBAL_AT(bonus_cap, 0x3384);
 ENSURE_GLOBAL_AT(capsule_frames_ptr, 0x3385);
 ENSURE_GLOBAL_AT(popup_frames_ptr, 0x339b);
 ENSURE_GLOBAL_AT(bonus_odds, 0x33b1);
-ENSURE_GLOBAL_AT(bonus_handlers, 0x33bc);
+ENSURE_GLOBAL_AT(bonus_handler_fn, 0x33bc);
 ENSURE_GLOBAL_AT(rng_state, 0x33d2);
 ENSURE_GLOBAL_AT(hit_kind, 0x33d4);
 ENSURE_GLOBAL_AT(bonus_pending, 0x33d5);
 ENSURE_GLOBAL_AT(bonus_live, 0x33d6);
 ENSURE_GLOBAL_AT(field_marks, 0x33d7);
 ENSURE_GLOBAL_AT(sprite_work, 0x33f7);
+ENSURE_GLOBAL_AT(bonus_move_fn, 0x3447);
 ENSURE_GLOBAL_AT(players, 0x344f);
 ENSURE_GLOBAL_AT(hsc, 0x3e42);
 ENSURE_GLOBAL_AT(player_count, 0x3f08);
@@ -1018,10 +1280,24 @@ ENSURE_GLOBAL_AT(frame_corner_left, 0x48d2);
 ENSURE_GLOBAL_AT(life_sprite, 0x48e7);
 ENSURE_GLOBAL_AT(ball_start_sprite, 0x48fb);
 ENSURE_GLOBAL_AT(paddle_sprites, 0x4903);
+ENSURE_GLOBAL_AT(capsule_table0, 0x4dd3);
+ENSURE_GLOBAL_AT(capsule_appear, 0x4e13);
+ENSURE_GLOBAL_AT(capsule_letter0, 0x4e47);
+ENSURE_GLOBAL_AT(capsule_vanish, 0x4eeb);
+ENSURE_GLOBAL_AT(capsule_bank, 0x4f3b);
+ENSURE_GLOBAL_AT(popup_table0, 0x5823);
+ENSURE_GLOBAL_AT(popup_appear, 0x5863);
+ENSURE_GLOBAL_AT(popup_vanish, 0x5897);
+ENSURE_GLOBAL_AT(popup_vanish_ruled, 0x58cb);
+ENSURE_GLOBAL_AT(popup_vanish_last, 0x58e7);
+ENSURE_GLOBAL_AT(popup_table, 0x5903);
+ENSURE_GLOBAL_AT(paddle_morph, 0x5b83);
 ENSURE_GLOBAL_AT(hatch_script_ptr, 0x604e);
 ENSURE_GLOBAL_AT(mark_sprite, 0x6078);
 ENSURE_GLOBAL_AT(hatch_frame, 0x60c2);
-ENSURE_GLOBAL_AT(brick8_roll_ptr, 0x67ea);
+ENSURE_GLOBAL_AT(brick_bitmap, 0x63a6);
+ENSURE_GLOBAL_AT(crumble, 0x6506);
+ENSURE_GLOBAL_AT(brick8_roll_ptr, 0x67e8);
 ENSURE_GLOBAL_AT(brick8_score, 0x681c);
 ENSURE_GLOBAL_AT(brick8_roll, 0x6838);
 ENSURE_GLOBAL_AT(teleport_out_ptr, 0x6abc);
@@ -1029,25 +1305,42 @@ ENSURE_GLOBAL_AT(teleport_in_ptr, 0x6ace);
 ENSURE_GLOBAL_AT(teleport_frame, 0x6ae0);
 ENSURE_GLOBAL_AT(brick10_hold_ptr, 0x6b88);
 ENSURE_GLOBAL_AT(brick10_hold, 0x6b9c);
+ENSURE_GLOBAL_AT(sweep_sprite, 0x6d2c);
 ENSURE_GLOBAL_AT(intro_feed, 0x6d36);
 ENSURE_GLOBAL_AT(backdrop_ptr, 0x6d95);
 ENSURE_GLOBAL_AT(backdrop, 0x6d9f);
-ENSURE_GLOBAL_AT(walker_frame_ptr, 0x7521);
+ENSURE_GLOBAL_AT(walker_frame_ptr, 0x751f);
+ENSURE_GLOBAL_AT(walker_frame, 0x7533);
 ENSURE_GLOBAL_AT(walker_drop_ptr, 0x75db);
+ENSURE_GLOBAL_AT(walker_drop, 0x75e7);
 ENSURE_GLOBAL_AT(hatch_open_ptr, 0x770d);
 ENSURE_GLOBAL_AT(hatch_shut_ptr, 0x7717);
+ENSURE_GLOBAL_AT(walk_hatch_frame, 0x7721);
 ENSURE_GLOBAL_AT(curtain_image, 0x7805);
+ENSURE_GLOBAL_AT(_path_lead, 0x8318);
+ENSURE_GLOBAL_AT(bonus_path, 0x8320);
 ENSURE_GLOBAL_AT(panel, 0x85f0);
 ENSURE_GLOBAL_AT(font, 0x9020);
 ENSURE_GLOBAL_AT(pause_overlay, 0x93e0);
+ENSURE_GLOBAL_AT(game_over_frames_ptr, 0x9bb0);
+ENSURE_GLOBAL_AT(game_over_frame, 0x9bd6);
 ENSURE_GLOBAL_AT(game_over_paddle, 0xa346);
 ENSURE_GLOBAL_AT(banner_font, 0xa3c0);
 ENSURE_GLOBAL_AT(eog_overlay, 0xa6d0);
 ENSURE_GLOBAL_AT(eog_groups, 0xa8bf);
+ENSURE_GLOBAL_AT(eog_group_sprite, 0xa8db);
 ENSURE_GLOBAL_AT(eog_blank, 0xabab);
 ENSURE_GLOBAL_AT(bonus_kinds, 0xac60);
+ENSURE_GLOBAL_AT(bonus_anim0, 0xac80);
+ENSURE_GLOBAL_AT(bonus_anim1, 0xae78);
+ENSURE_GLOBAL_AT(bonus_anim2, 0xb12e);
+ENSURE_GLOBAL_AT(bonus_anim3, 0xb27a);
+ENSURE_GLOBAL_AT(bonus_anim4, 0xb50e);
 ENSURE_GLOBAL_AT(sparkle_ptr, 0xb7a2);
 ENSURE_GLOBAL_AT(sparkle, 0xb7bc);
+ENSURE_GLOBAL_AT(bonus_anim5, 0xbb7c);
+ENSURE_GLOBAL_AT(bonus_anim6, 0xbe10);
+ENSURE_GLOBAL_AT(bonus_anim7, 0xc152);
 /* @generated-asserts end */
 
 /* The two facts the chain rests on, checked rather than described: the head
@@ -1269,6 +1562,14 @@ uint8_t *exepack_load(const char *path, size_t *out_len);
 #define SCROLL_BYTES    49              /* 196 pixels */
 
 /* Which input routine the menu is set to, and which the game will use. */
+/* The four a falling capsule steers by, in `arg.move.mode` order. The table
+ * is bonus_move_fn at 0x3447; bonus_steer is transcribed as a switch, so
+ * these name what the data holds rather than what the C dispatches on. */
+#define BONUS_MOVE_RIGHT_FN 0x3c66
+#define BONUS_MOVE_DOWN_FN  0x3d3c
+#define BONUS_MOVE_LEFT_FN  0x3cf3
+#define BONUS_MOVE_UP_FN    0x3caf
+
 #define INPUT_KEYBOARD_FN  0x16d2
 #define INPUT_DEMO_FN      0x1785          /* demo_start installs this one */
 #define INPUT_MOUSE_FN     0x1654
@@ -1465,10 +1766,45 @@ typedef struct __attribute__((packed)) {
     uint8_t  ppc_signature[6];          /* 0x0006 where the file's own lands */
     level_t  levels[50];                /* 0x000c 50 * 0xb0, ending at 0x226c */
     uint8_t  banner_xlat[30][2];        /* 0x226c a cell value to the character the results banner shows for it. Words, but only the low byte is ever read */
-    uint8_t  _assets_a[1403];
+    /* 0x22a8 the boss key's screen: a French Microsoft **Multiplan** sheet.
+     * Six products' monthly prices and quantities across Janvier to Mai, a
+     * Totaux row, the cursor at L11C3, Multiplan's own command bar - "Alpha
+     * Blanc Calcul\202 D\202truit Edite Format Guide Ins\212re ..." - and a
+     * status line reading "74% Libre    Multiplan: TEMP". Not a DOS prompt,
+     * which is what this was described as until the bytes were read: a
+     * spreadsheet is what you want on the screen when the boss walks past.
+     *
+     * It is text, not pixels, with three control bytes: 0x5b turns inverse
+     * video on, 0x9c turns it off, and 0x24 pads eight blanks - see
+     * employee_enter, which draws it as character/attribute pairs.
+     *
+     * **The screen starts sixteen bytes before this field.** 1ac2:4b1d is
+     * `mov si, 0x2298`, which is banner_xlat's last eight entries - cell
+     * values 22 to 29, which banner_row can index but no shipped level
+     * contains. The two structures overlap, and banner_xlat stays whole
+     * because banner_row subscripts it by a raw cell value. */
+    uint8_t  boss_screen[1403];
     uint8_t  blob_target;               /* 0x2823 the blob the ending is walking towards, written into the script itself */
     uint8_t  _assets_b[1];
-    uint8_t  walk_script[120];          /* 0x2825 one byte a step for the ending's walk: 0x18 passes of five, and a zero step is skipped. It ends exactly where blob_script begins */
+    /* 0x2825 **the word BRAVO**, as a picture. Twenty-four columns of five,
+     * one byte a cell, read as a stream by the loop at 1ac2:59bb - `bh` counts the columns 0
+     * to 23 and `bl` the rows 5 down to 1, and ending_walk turns that pair
+     * into a position: x = bh * 8 + 8, y = 80 - bl * 8. So the bytes are a
+     * lattice 8 pixels apart across x 8..192 and y 40..72, a zero cell is
+     * skipped, and the blob is walked to every set one and left there.
+     *
+     * Fifty-seven of the hundred and twenty are set, and they say:
+     *
+     *     ###..###...##..#..#..##.
+     *     #..#.#..#.#..#.#..#.#..#
+     *     ###..###..####.#.#..#..#
+     *     #..#.#..#.#..#.#.#..#..#
+     *     ###..#..#.#..#.##....##.
+     *
+     * It was called walk_script, which named the loop that reads it rather
+     * than the thing it is. It ends exactly where blob_script begins - and
+     * that one **is** a script, a path the blob is run along. */
+    uint8_t  bravo_cells[24][5];        /* 0x2825 */
     point_t  blob_script[30];           /* 0x289d where each blob goes, ended by a (0, 0), and ending exactly at ending_mark. 60 bytes either way */
     uint8_t  ending_mark[8][2];         /* 0x28d9 eight rows of one word, XORed at a packed position. **In this segment**, not at a plain image offset - reading it as one takes the sprite from 49KB below */
     uint8_t  _assets_c[7];
@@ -1525,12 +1861,13 @@ static inline uint8_t *assets_ptr(uint16_t off)
 ENSURE_ASSETS_AT(ppc_signature, 0x0006);
 ENSURE_ASSETS_AT(levels, 0x000c);
 ENSURE_ASSETS_AT(banner_xlat, 0x226c);
+ENSURE_ASSETS_AT(boss_screen, 0x22a8);
 ENSURE_ASSETS_AT(blob_target, 0x2823);
 ENSURE_ASSETS_AT(ending_mark, 0x28d9);
 ENSURE_ASSETS_AT(hole_picture, 0x28f0);
 ENSURE_ASSETS_AT(scroll_rows, 0x488a);
 ENSURE_ASSETS_AT(reveal, 0x4d84);
-ENSURE_ASSETS_AT(walk_script, 0x2825);
+ENSURE_ASSETS_AT(bravo_cells, 0x2825);
 ENSURE_ASSETS_AT(blob_script, 0x289d);
 ENSURE_ASSETS_AT(logo, 0x6b60);
 ENSURE_ASSETS_AT(screen_save, 0x3df0);
@@ -1544,7 +1881,14 @@ ENSURE_ASSETS_AT(ending_band, 0x7c70);
 typedef struct __attribute__((packed)) {
     uint16_t script_ptr;            /* 0x00 where this level's script starts - an offset into this segment, and the word there is the first group */
     uint8_t  rate;                  /* 0x02 frames between steps */
-    uint8_t  _r;
+    uint8_t  reserved;              /* 0x03 nothing reads it, and the record
+                                     * is four bytes wide because of it -
+                                     * level[] is a table, so this byte is
+                                     * its stride. Dropping it in
+                                     * popcorn-nopad gave every level the
+                                     * wrong script and drew an animated
+                                     * brick out of whatever was three bytes
+                                     * along. */
 } level_anim_t;
 ENSURE_SIZE(level_anim_t, 4);
 
@@ -1600,17 +1944,18 @@ ENSURE_SIZE(anim_sprite_t, 32);
 typedef anim_sprite_t anim_group_t[6];
 ENSURE_SIZE(anim_group_t, 192);
 
-/* One animation: the order, and then the pictures. `entry` holds offsets
- * into this segment, one a step, and the two words after them close it: a
- * END_PTR where an entry would be, and where anim_step resumes - which
- * for all six is their own first entry.
+/* One animation: the order, and then the pictures. `entry_ptr` holds offsets
+ * into this segment, one a step - the game's own pointers, which is what the
+ * suffix says and what makes data.c write them as the groups they name - and
+ * the two words after them close it: an END_PTR where an entry would be, and
+ * where anim_step resumes, which for all six is their own first entry.
  * The groups follow immediately and only this animation's entries point into
  * them.
  *
  * A list can be longer than its group count - entries repeat when an
  * animation holds or reverses - which is why the counts differ. */
 #define ANIM_SCRIPT(entries, groups) struct __attribute__((packed)) { \
-        uint16_t     entry[entries];   /* one group offset a step */   \
+        uint16_t     entry_ptr[entries];/* one group offset a step */  \
         uint16_t     ends;             /* END_PTR */              \
         uint16_t     resume_ptr;       /* and where to carry on from */ \
         anim_group_t group[groups];                                    \
@@ -1683,7 +2028,12 @@ static inline uint16_t animations_off(const void *p)
  * game_delay, and the game patches it to 0xc3 to turn the delay into a bare
  * `ret`. A variable there is a variable stored in an opcode. */
 typedef struct __attribute__((packed)) {
-    uint8_t  _code0[0x84];
+    /* cs:0x0000 the seven tunes, and they are the whole of what sits before
+     * the first variable. sound_tunes_ptr names them at 0, 10, 20, 30, 70,
+     * 96 and 120, and the last runs to 132 - which is sound_on, so the block
+     * is exactly the tunes. sound_tick walks one of them through sound_ptr,
+     * which is why that cursor is a code-segment offset. */
+    uint8_t  tunes[0x84];               /* cs:0x0000 */
     uint8_t  sound_on;                  /* cs:0x0084 F9 toggles this */
     uint8_t  _code1[111];
     uint8_t  sound_request;             /* cs:0x00f4 an id to start, 0 = nothing */
@@ -1706,7 +2056,7 @@ typedef struct __attribute__((packed)) {
      * They live in the **code** segment - 1ac2:4b88 is `mov al, cs:[si]` -
      * which is why the port read the wrong bytes entirely while it called
      * them a palette and reached them with global_ptr. */
-    uint8_t  crtc_text80[12];           /* cs:0x4b91 80 columns of text: 80 displayed, 25 rows of 8 scan lines. employee_enter's, for the fake DOS prompt */
+    uint8_t  crtc_text80[12];           /* cs:0x4b91 80 columns of text: 80 displayed, 25 rows of 8 scan lines. employee_enter's, for the Multiplan screen it draws */
     uint8_t  crtc_graphics[12];         /* cs:0x4b9d 320x200: 40 displayed, 100 rows of 1 scan line, which is the interlace. screen_restore's, putting it back */
     uint8_t  _code5b[1220];
     uint16_t border_spr[8];             /* cs:0x506d the menu border's sprites */
@@ -1746,6 +2096,7 @@ static inline uint16_t runtime_off(const void *p)
 
 #define ENSURE_CODE_AT(field, off) \
     typedef char ensure_code_at_##field[offsetof(runtime_t, field) == (off) ? 1 : -1]
+ENSURE_CODE_AT(tunes, 0x0000);
 ENSURE_CODE_AT(sound_on, 0x0084);
 ENSURE_CODE_AT(sound_request, 0x00f4);
 ENSURE_CODE_AT(sound_timer, 0x00f5);
@@ -1763,6 +2114,39 @@ ENSURE_CODE_AT(cheat_last, 0x56a4);
 ENSURE_CODE_AT(cheat_keys, 0x56a5);
 ENSURE_CODE_AT(cheat_text, 0x56b5);
 ENSURE_CODE_AT(frame_phase, 0x5c6d);
+
+/* ========================================================================
+ * The whole image, as one structure.
+ *
+ * The four overlays above each say what one segment is. This says how they
+ * sit together: one type for the whole load image, so that what lies between
+ * them has to be accounted for rather than stepped over.
+ *
+ * The four tile the image with three gaps and a tail between them, and every
+ * one of those is bytes nothing has been shown to read - so they are byte
+ * arrays here rather than fields waiting for a name. The sizes are what is
+ * left over, and ENSURE_SIZE below is what says the arithmetic is right: get
+ * one wrong and the build stops instead of the image quietly shifting.
+ * ===================================================================== */
+typedef struct __attribute__((packed)) {
+    /* `global`, `assets`, `animations` and `runtime` are the macros that
+     * reach these through g_image, so the members carry the segment's name
+     * rather than the overlay's. */
+    global_t     seg_global;            /* 0x00000, and it reaches SEG_ASSETS */
+    assets_t     seg_assets;            /* 0x0c460 */
+    uint8_t      _gap_assets[2];        /* 0x14a0e */
+    animations_t seg_animations;        /* 0x14a10 */
+    uint8_t      _gap_animations[0x206];/* 0x1aa1a */
+    runtime_t    seg_runtime;           /* 0x1ac20 */
+    uint8_t      _tail[0x22];           /* 0x2088e */
+} image_t;
+ENSURE_SIZE(image_t, IMAGE_LEN);
+#define ENSURE_IMAGE_AT(field, off) \
+    typedef char ensure_image_at_##field[offsetof(image_t, field) == (off) ? 1 : -1]
+ENSURE_IMAGE_AT(seg_global, 0x00000);
+ENSURE_IMAGE_AT(seg_assets, SEG_ASSETS);
+ENSURE_IMAGE_AT(seg_animations, SEG_ANIMATIONS);
+ENSURE_IMAGE_AT(seg_runtime, SEG_RUNTIME);
 
 /* The four colours mode 05h displays on an RGB monitor: the colour-burst-kill
  * bit selects background / cyan / red / white regardless of the palette bit. */
