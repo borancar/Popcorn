@@ -283,10 +283,12 @@ dispatch because comparing a no-op against the original reports a decision as
 a difference.
 
 - **F10, `employee_enter` at `1ac2:4ae0`.** The boss key: it stashes the
-  screen, switches to text mode and paints a fake DOS prompt so the game can
-  be hidden from whoever walks past. The port's F10 does nothing, and its
-  caller skips `screen_restore` too - with nothing stashed there is nothing to
-  put back.
+  screen, switches to text mode and paints a French **Multiplan** spreadsheet
+  - six products' monthly prices and quantities, a Totaux row, Multiplan's own
+  command bar - so the game can be hidden from whoever walks past. The sheet
+  is `assets.boss_screen`, and it was described here as a fake DOS prompt
+  until the bytes were read. The port's F10 does nothing, and its caller skips
+  `screen_restore` too - with nothing stashed there is nothing to put back.
 - **F5, `screen_define_keys` at `1ac2:1581`**, with `read_new_key` (`0x1614`)
   and the prompt writer at `0x1642`. Redefining left, right and the key that
   launches the ball off the paddle, on a 40x25 text screen. The port keeps the
