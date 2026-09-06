@@ -557,7 +557,15 @@ typedef struct __attribute__((packed)) {
         uint8_t banner_cell[6];         /* 0x0000 the character the banner is scrolling in: six rows of one byte, fetched and decoded by menu_banner_tick, read a bit at a time as the window walks */
         uint8_t eog_saved[4950];        /* 0x0000 the end-of-game screen copied into the image, 0x96 rows of 0x21 - the picture is merged into it a band at a time and put back */
     } scratch1;
-    uint8_t  _pad_00[106];
+    uint8_t  _pad_00[74];
+    /* 0x13a0 the PSP command tail, `rep movsb`d in from PSP:0x80 at
+     * 1ac2:0120 - 0x20 bytes, count first, then the space DOS leaves, then
+     * the text. 1ac2:0149 reads it from 0x13a2 to build level_file. Reading
+     * the tail is the machine's job and is not transcribed: game_main takes
+     * the name from its `levels` argument, so nothing here writes this and
+     * nothing reads it. It is named because it is the only part of _pad_00
+     * the original ever touches. */
+    uint8_t  cmd_tail[32];
     uint16_t eog_screen_at;             /* 0x13c0 where the end-of-game screen is being drawn - a **video memory** offset: 1ac2:525d loads it into DI with ES at 0xb800 */
     uint16_t eog_build_ptr;              /* 0x13c2 where it is being read from - an **image** offset into eog_saved: 1ac2:5261 loads it into SI with DS at 0. The two cursors sit side by side and are different kinds of address */
     uint8_t  banner_state;              /* 0x13c4 the menu's scrolling text */
@@ -604,7 +612,12 @@ typedef struct __attribute__((packed)) {
         uint8_t  score_add[6];
         uint16_t score_add_pair[3];
     };
-    uint8_t  _pad_05[1];
+    /* 0x141b the drive the program was started from, from INT 21h AH=19h at
+     * 1ac2:0131. load_high_scores and save_high_scores hand it to 1ac2:4dea,
+     * which resets the drive and reads sector 0 through INT 25h to find out
+     * whether there is a readable disk in it before opening hsc_file. The
+     * port opens the file and takes the failure, so nothing reads this. */
+    uint8_t  default_drive;
     char     hsc_file[12];              /* 0x141c "popcorn.hsc", the name the table is saved under */
     char     level_file[64];            /* 0x1428 the .PPC to load, built from the command tail. 64 is what there is: walker_anim follows it */
     uint16_t walker_anim_ptr;               /* 0x1468 a pointer into the walking figure's frame list, stepped by two */
@@ -643,7 +656,11 @@ typedef struct __attribute__((packed)) {
     uint8_t  paddle_min;                /* 0x2d3e 8, which is WALL_LEFT: the paddle stops where the ball does. Nothing moves it. Was also PADDLE_LOW */
     uint8_t  paddle_max;                /* 0x2d3f WALL_RIGHT - INITIAL_PADDLE_WIDTH, and it moves as the paddle grows: morph_step adds a width delta to paddle_width and subtracts the same from this (1ac2:34f0 and 1ac2:34f6), so the paddle's right edge rests on the last column whatever width it is. Note paddle_width is the paddle's last column rather than its width - 27 for a paddle 28 across - so the sum is WALL_RIGHT - 1. Was also PADDLE_HIGH */
     uint8_t  repeat_count;              /* 0x2d40 frames until the held key moves the paddle again */
-    uint8_t  _pad_08[4];
+    /* 0x2d41 the BIOS INT 09h vector, saved by install_int09 (1ac2:03b7 and
+     * 1ac2:03bb) so restore_int09 can put it back. The port's pair are the
+     * platform layer's io_set_int09_installed, which has nothing to save. */
+    uint16_t int09_saved_off;           /* 0x2d41 */
+    uint16_t int09_saved_seg;           /* 0x2d43 */
     uint16_t input_active_fn;           /* 0x2d45 the input routine in use, as the address the game calls through: 0x1654 mouse, 0x16d2 keyboard, 0x1785 demo. `_fn` because it is a **routine**, not data - a pointer the game calls rather than reads */
     uint16_t input_selected_fn;         /* 0x2d47 what the menu has chosen, copied to input_active_fn at F1 */
     uint8_t  last_make;                 /* 0x2d49 the last make code the INT 09h handler saw; 1 is Esc, which pauses */
@@ -778,7 +795,11 @@ typedef struct __attribute__((packed)) {
      * from, the paddle-morph frames at 0xa346, the banner's character cells
      * at 0xa3c0, the ending's picture at 0xa6d0 and the capsule kinds at
      * 0xac60 are all in here, named where they are used and nowhere else.
-     * That is the next seam. */
+     * That is the next seam - and a cheap one, because `pad_writes.py` has
+     * put a write hook on every `_pad_*` here across the menu routes, a
+     * played game and fifteen late-game snapshots, and **nothing in any of
+     * them is ever written**. Whatever is still unnamed in this image is
+     * read-only data. */
     uint8_t  _pad_22[4731];
     uint16_t hatch_script_ptr[21];      /* 0x604e how a hatch opens: twenty frame offsets then END_PTR. Entries 0 to 9 open it, 10 to 18 shut it again by playing the same frames backwards, and the last is mark_sprite - the hatch closed is the mark that was always there */
     uint8_t  mark_sprite[37][2];        /* 0x6078 the mark drawn at each field position, one word a row. field_marks takes 0x1f rows of it and level_between 0x25 - the same picture, cut short. It is also the hatch's **shut** frame, which is why hatch_frame starts after it rather than at it */
@@ -866,6 +887,7 @@ typedef struct __attribute__((packed)) {
 
 /* @generated-asserts begin - genvars.py rewrites between these markers */
 ENSURE_GLOBAL_AT(scratch1, 0x0000);
+ENSURE_GLOBAL_AT(cmd_tail, 0x13a0);
 ENSURE_GLOBAL_AT(eog_screen_at, 0x13c0);
 ENSURE_GLOBAL_AT(eog_build_ptr, 0x13c2);
 ENSURE_GLOBAL_AT(banner_state, 0x13c4);
@@ -890,6 +912,7 @@ ENSURE_GLOBAL_AT(particle_seed, 0x1acd);
 ENSURE_GLOBAL_AT(particle_sprites, 0x1acf);
 ENSURE_GLOBAL_AT(score_add, 0x1415);
 ENSURE_GLOBAL_AT(walker_work, 0x146a);
+ENSURE_GLOBAL_AT(default_drive, 0x141b);
 ENSURE_GLOBAL_AT(hsc_file, 0x141c);
 ENSURE_GLOBAL_AT(level_file, 0x1428);
 ENSURE_GLOBAL_AT(walker_anim_ptr, 0x1468);
@@ -912,6 +935,8 @@ ENSURE_GLOBAL_AT(morph_owner, 0x2d3c);
 ENSURE_GLOBAL_AT(paddle_min, 0x2d3e);
 ENSURE_GLOBAL_AT(paddle_max, 0x2d3f);
 ENSURE_GLOBAL_AT(repeat_count, 0x2d40);
+ENSURE_GLOBAL_AT(int09_saved_off, 0x2d41);
+ENSURE_GLOBAL_AT(int09_saved_seg, 0x2d43);
 ENSURE_GLOBAL_AT(input_active_fn, 0x2d45);
 ENSURE_GLOBAL_AT(input_selected_fn, 0x2d47);
 ENSURE_GLOBAL_AT(last_make, 0x2d49);
