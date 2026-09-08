@@ -9,7 +9,9 @@ reading code, which can only say what the routines that were read do.
 This says what the running program does. It puts a Unicorn write hook on each
 padding range, plays, and reports which of them were ever written to, by whom.
 A clean region is a claim that has been tested; a written one is a variable
-nobody has named yet.
+nobody has named yet - and with `--reads`, a read one is **data** nobody has
+named yet, which is the half a write hook cannot see: a sprite or a frame
+table is never written, so it reports clean for ever.
 
 The ranges are not typed in. They come from `game.h` itself - a generated C
 program prints `offsetof` and `sizeof` for every `_pad_*` field - so the tool
@@ -18,6 +20,14 @@ cannot drift from the header it is checking.
     uv run pad_writes.py --route play --seconds 120
     uv run pad_writes.py --resume snapshots/L08.snap --bot --seconds 70
     uv run pad_writes.py --entities --route play --seconds 120
+    uv run pad_writes.py --reads --resume snapshots/lastball.snap --bot
+
+`--reads` asks the other question. A padding region nothing writes is still a
+region something may **read**, and a read is the half that shows: the port
+computes its addresses from the fields, so a field it has not named is bytes
+the no-padding build no longer has under the pointer that reaches them. This
+hooks reads instead of writes, and what it reports is the routine that read
+an unnamed byte - which is the thing to name.
 
 `--entities` watches the node pool instead, keyed by the node's **handler at
 the moment of the write**, so each of the six arms can be checked separately.
@@ -93,6 +103,9 @@ def main():
                          "walking the menu")
     ap.add_argument("--bot", action="store_true",
                     help="drive the paddle, which --route play does anyway")
+    ap.add_argument("--reads", action="store_true",
+                    help="hook reads rather than writes: what does the game "
+                         "read out of the bytes the header calls padding")
     ap.add_argument("--entities", action="store_true",
                     help="watch the entity pool instead of the padding, keyed "
                          "by the node's handler at the moment of the write")
@@ -132,12 +145,12 @@ def main():
             ent[(node == POOL, handler, off)].add(writer_ip(uc))
         return True
 
+    what = unicorn.UC_HOOK_MEM_READ if args.reads else unicorn.UC_HOOK_MEM_WRITE
     if args.entities:
-        m.uc.hook_add(unicorn.UC_HOOK_MEM_WRITE, ent_cb, None,
-                      ds + POOL, ds + POOL_END - 1)
+        m.uc.hook_add(what, ent_cb, None, ds + POOL, ds + POOL_END - 1)
     else:
         for n, off, size in pads:
-            m.uc.hook_add(unicorn.UC_HOOK_MEM_WRITE, pad_cb(n), None,
+            m.uc.hook_add(what, pad_cb(n), None,
                           ds + off, ds + off + size - 1)
 
     pending = collections.OrderedDict()
@@ -194,7 +207,7 @@ def main():
         names = handler_names()
         print("\n  the head node at 0x3138, whose payload is _pad_head:")
         offs = sorted({o for (head, _, o) in ent if head})
-        print("    written: " + " ".join(f"{o:#04x}" for o in offs))
+        print("    touched: " + " ".join(f"{o:#04x}" for o in offs))
         print("\n  the pool, by the handler the node carried:")
         for h in sorted({h for (head, h, _) in ent if not head}):
             offs = sorted(o for (head, hh, o) in ent if not head and hh == h)
@@ -203,16 +216,17 @@ def main():
                   + (" ".join(f"{o:#04x}" for o in payload) or "(payload untouched)"))
         return
 
+    verb = "READ" if args.reads else "WRITTEN"
     for n, off, size in pads:
         h = hits[n]
         if not h:
             print(f"  {n:10s} {off:#06x} + {size:<5d} clean")
             continue
         ks = sorted(h)
-        writers = sorted({w for v in h.values() for w in v})
-        print(f"  {n:10s} {off:#06x} + {size:<5d} WRITTEN "
+        who = sorted({w for v in h.values() for w in v})
+        print(f"  {n:10s} {off:#06x} + {size:<5d} {verb} "
               f"{ks[0]:#06x}..{ks[-1]:#06x} ({len(ks)} bytes) by "
-              + " ".join(f"1ac2:{w:04x}" for w in writers))
+              + " ".join(f"1ac2:{w:04x}" for w in who))
 
 
 if __name__ == "__main__":

@@ -62,6 +62,21 @@ rules this checks are what keeps those honest:
      width is redundant; a mask on a **call argument** whose parameter is
      wider, or inside a **comparison**, is the wrap and stays.
 
+ 11. **A hexadecimal constant is a claim** - that this number is an address
+     or a bit pattern rather than a quantity, which is CLAUDE.md's rule for
+     which base a number reads in.  Rule 5 catches the ones handed straight
+     to an accessor; this catches the rest, and the ones that matter are
+     **video-memory addresses**: `uint16_t di = 0x1cd9` is a position, and
+     the C that says so is `cga_at(x, y)`.
+
+     It sorts them by the **role** the constant plays, not by how big it is,
+     because in a CGA routine the position and the pixel pattern are two
+     arguments of the same call and both are four hex digits.  A constant is
+     a position if it reaches a video offset - `vram_setw`'s first argument,
+     a `g_vram[...]` subscript, `cga_next_row` - either directly or through a
+     local it is assigned to first.  Everything else in that call is a fill
+     pattern and hex is right for it.
+
  10. A cast to the type the target already has is the same mistake as a
      redundant mask, and usually left over from when one of them was wider.
      `b->anchor_x = (uint8_t)(b->x - 1)` where both are uint8_t says nothing
@@ -154,6 +169,25 @@ WIDE_OK = {
 
 # The argument that is an offset.  global_setw(off, value) writes the second.
 OFFSET_ARG = {f: 0 for f in ACCESSORS}
+
+# Rule 11.  Which argument of a video routine is the **position**; every
+# other argument of the same call is the pattern being written, and hex is
+# what a pattern should be.  `cga_at` is the answer rather than a question,
+# so a constant inside one of those is already named.
+# The index is read off each signature rather than assumed: tall_sprite
+# takes the sprite first and the position second.
+VIDEO_POS_ARG = {
+    "vram_setw": 0, "vram_w": 0,
+    "fill_column": 0, "pillar_pair": 0, "name_bar": 0, "panel_row": 0,
+    "cga_next_row": 0, "cga_prev_row": 0,
+    "cga_next_row_n": 0, "cga_prev_row_n": 0,
+    "tall_sprite": 1,
+}
+# Indexing this is a position by construction.
+VIDEO_ARRAYS = {"g_vram"}
+# Hex that is a bit pattern by definition, whatever it reaches: the PRNG's
+# multiplier and the tags sidebyside matches frames on.
+HEX_IS_RIGHT = {"io_log_random", "game_random_seed"}
 
 
 def text(node, src):
@@ -341,7 +375,8 @@ def ptr_fields(paths):
 
 
 def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
-          segments, all_fields, wide, wide_loops, masks, casts, all_widths):
+          segments, all_fields, wide, wide_loops, masks, casts, all_widths,
+          hex_unclassified, hex_ok, hex_small):
     src = open(path, "rb").read()
     tree = Parser(C).parse(src)
     rel = os.path.relpath(path)
@@ -376,6 +411,203 @@ def check(path, known_ptr_fields, known_fn_fields, findings, candidates,
                 "declaration": "local"}[n.type]
         wide.setdefault(who, set()).add(
             "%s:%d %s %s" % (rel, n.start_point[0] + 1, text(t, src), kind))
+
+    # Rule 11: every hex constant, sorted by the role it plays.  A position
+    # that reached video memory as a number is the finding; a fill pattern in
+    # the same call is not, and neither is a mask that happens to sit in the
+    # same expression as one.
+    BITWISE = {"&", "|", "^", "<<", ">>"}
+
+    def same(a, b):
+        """tree-sitter returns a new Node object on every access, so `is`
+        never holds. Two nodes are the same node when they span the same
+        bytes and have the same type."""
+        return a is not None and b is not None \
+            and (a.start_byte, a.end_byte, a.type) == (b.start_byte,
+                                                       b.end_byte, b.type)
+
+    def in_a_mask(lit):
+        """An operand of a bitwise operator is a mask or a shift, not an
+        address - `cga_at(240, 169) + (n & 0xfc)` is a position plus one."""
+        n = lit
+        while n.parent is not None and n.parent.type == "parenthesized_expression":
+            n = n.parent
+        p = n.parent
+        return p is not None and p.type == "binary_expression" \
+            and text(p.child_by_field_name("operator"), src) in BITWISE
+
+    def call_role(lit):
+        """('position'|'pattern'|None, callee, position-expression).
+
+        The third is the whole expression the position is computed from, so
+        the caller can ask what else is in it - which is what separates a
+        base from a displacement, and it is not about where the constant sits
+        in the sum.  `g_vram[(0x3ef2 + i) & ...]` adds a **loop counter** to a
+        base, so the constant is the base and cga_at names it; `g_vram[(d +
+        0x2e) & ...]` adds a constant to a variable that is carrying the
+        position, so the constant is a step along the row.
+        """
+        n = lit
+        while n is not None:
+            if n.type == "subscript_expression":
+                base = n.child_by_field_name("argument")
+                idx = n.child_by_field_name("index")
+                if base is not None and text(base, src) in VIDEO_ARRAYS \
+                        and idx is not None \
+                        and idx.start_byte <= lit.start_byte < idx.end_byte:
+                    return "position", text(base, src), idx
+            if n.type == "call_expression":
+                fn = n.child_by_field_name("function")
+                args = n.child_by_field_name("arguments")
+                if fn is None or args is None:
+                    return None, None, None
+                name = text(fn, src)
+                if name in HEX_IS_RIGHT:
+                    return "pattern", name, None
+                if name not in VIDEO_POS_ARG:
+                    # Some other routine's argument. Whatever it means, it is
+                    # that routine's business and not a position here.
+                    return None, None, None
+                real = [c for c in args.children
+                        if c.is_named and c.type != "comment"]
+                for i, arg in enumerate(real):
+                    if arg.start_byte <= lit.start_byte < arg.end_byte:
+                        return ("position" if i == VIDEO_POS_ARG[name]
+                                else "pattern"), name, arg
+                return None, None, None
+            n = n.parent
+        return None, None, None
+
+    def simple_store(lit):
+        """(variable stored into, whether the constant was the whole value).
+
+        `uint16_t di = 0x1cd9` gives (di, True); `uint16_t at = 0x34f0 +
+        group.at` gives (at, False), because the constant is one term of the
+        sum.  Walking up through `+` and `-` is what reaches the second, and
+        stopping at anything else is what keeps a mask or another routine's
+        argument out.
+        """
+        n, whole = lit, True
+        while n.parent is not None:
+            p = n.parent
+            if p.type == "parenthesized_expression":
+                n = p
+                continue
+            if p.type == "binary_expression" \
+                    and text(p.child_by_field_name("operator"), src) in ("+", "-"):
+                n, whole = p, False
+                continue
+            if p.type == "init_declarator" \
+                    and same(p.child_by_field_name("value"), n):
+                return root_name(p.child_by_field_name("declarator"), src), whole
+            if p.type == "assignment_expression" \
+                    and same(p.child_by_field_name("right"), n):
+                return root_name(p.child_by_field_name("left"), src), whole
+            return None, whole
+        return None, whole
+
+    for fn_node in walk(tree.root_node):
+        if fn_node.type != "function_definition":
+            continue
+        # Which locals of this function reach video memory as a position, so
+        # a constant stored straight into one is a position too.
+        positional = set()
+        copies = []                     # (into, from) for `a = b` and `a = b`
+        # A `for` counter is C scaffolding: adding one to a base does not
+        # make the base a step, which is the whole distinction below. Nor
+        # does a named constant - `& (CGA_SIZE - 1)` is the aperture
+        # wrapping, and every constant here is upper case by convention.
+        counters = set()
+        for n in walk(fn_node):
+            if n.type != "for_statement":
+                continue
+            init = n.child_by_field_name("initializer")
+            for sub_n in walk(init) if init is not None else ():
+                if sub_n.type == "init_declarator":
+                    counters.add(root_name(
+                        sub_n.child_by_field_name("declarator"), src))
+        for n in walk(fn_node):
+            if n.type == "identifier":
+                role, _, _ = call_role(n)
+                if role == "position":
+                    positional.add(text(n, src))
+                continue
+            # A plain copy carries the role with it: `uint16_t d = di;` makes
+            # d a position exactly when di is one. Only identifier to
+            # identifier, so no expression can smuggle a mask in here.
+            if n.type == "init_declarator":
+                v, d = n.child_by_field_name("value"), \
+                    n.child_by_field_name("declarator")
+                if v is not None and v.type == "identifier" and d is not None:
+                    copies.append((root_name(d, src), text(v, src)))
+            elif n.type == "assignment_expression":
+                r, l = n.child_by_field_name("right"), \
+                    n.child_by_field_name("left")
+                if r is not None and r.type == "identifier" and l is not None:
+                    copies.append((root_name(l, src), text(r, src)))
+        # A copy runs both ways for this purpose: whichever end reaches video
+        # memory, the other end held the same number.
+        changed = True
+        while changed:
+            changed = False
+            for into, frm in copies:
+                for a, b in ((into, frm), (frm, into)):
+                    if a in positional and b is not None and b not in positional:
+                        positional.add(b)
+                        changed = True
+
+        for lit in walk(fn_node):
+            if lit.type != "number_literal":
+                continue
+            t = text(lit, src)
+            if not re.fullmatch(r"0[xX][0-9a-fA-F]+", t):
+                continue
+            value = int(t, 16)
+            if in_a_mask(lit):
+                hex_ok[0] += 1
+                continue
+            role, callee, posexpr = call_role(lit)
+            partial = False
+            if role is None:
+                who, whole = simple_store(lit)
+                if who is not None and who in positional:
+                    role, callee, posexpr = "position", who, None
+                    partial = not whole
+            # A base unless something else in the same expression is already
+            # a position, in which case this is a step from it.
+            def carries_position(n):
+                who = text(n, src)
+                return not (who in counters or who.isupper())
+
+            is_base = True
+            if posexpr is not None:
+                is_base = not any(
+                    carries_position(n)
+                    for n in walk(posexpr)
+                    if n.type == "identifier" and not same(n, lit))
+            if role == "position" and partial:
+                # One term of a sum that becomes a position. Which term is
+                # the base is not something this can settle - the other may
+                # be a column out of a table - so it says so and stops.
+                add("address-as-a-number", lit,
+                    "%s is part of a position built in %s - cga_at(x, y) "
+                    "names the base of it" % (t, callee))
+            elif role == "position":
+                add("address-as-a-number", lit,
+                    "%s is a position - it reaches video memory through %s. %s"
+                    % (t, callee,
+                       "cga_at(x, y) is what names one"
+                       if is_base else
+                       "a displacement along a row, so a named constant "
+                       "rather than cga_at"))
+            elif role == "pattern":
+                hex_ok[0] += 1
+            elif value > 0xff:
+                hex_unclassified.setdefault(t, set()).add(
+                    "%s:%d %s" % (rel, lit.start_point[0] + 1,
+                                  enclosing_fn(lit, src) or "?"))
+            else:
+                hex_small[0] += 1
 
     # Rule 9: every 0xff and 0xffff mask, split by whether the type it lands
     # in already does the truncation. The widths come from the declarations
@@ -903,10 +1135,12 @@ def main():
     fields = struct_fields(a.files)
     findings, candidates, segments = [], {}, {}
     wide, wide_loops, masks, casts = {}, [0], {}, {}
+    hex_unclassified, hex_ok, hex_small = {}, [0], [0]
     all_widths = field_widths(a.files)
     for f in a.files:
         check(f, known, known_fn, findings, candidates, segments, fields,
-              wide, wide_loops, masks, casts, all_widths)
+              wide, wide_loops, masks, casts, all_widths,
+              hex_unclassified, hex_ok, hex_small)
 
     # A stored offset read against more than one segment.  Informational: it
     # can be right - a field that legitimately retargets - but at most one
@@ -937,6 +1171,7 @@ def main():
                  "cast-of-a-pointer", "pointer-from-unnamed",
                  "pointer-widened", "compound-offset",
                  "store-without-global_off",
+                 "address-as-a-number",
                  "pointer-advanced", "pointer-from-data",
                  "pointer-to-pointer"]
         # Reported, not complained about: each of these has a shape that is
@@ -996,6 +1231,13 @@ def main():
            "C truncates on the store, so the cast is that said twice - and "
            "the width is looked up, so a cast that really narrows is not "
            "here", casts)
+
+    report("hex constants that are neither a position nor a pattern",
+           "rule 11's remainder: over 0xff and reaching nothing this can "
+           "name, so each is a number to read - %d are fill patterns or "
+           "seeds where hex is right, and %d are 0xff or under, which is a "
+           "mask or a byte value" % (hex_ok[0], hex_small[0]),
+           hex_unclassified)
 
     report("32-bit in the platform layer",
            "the port's own code rather than a transcribed register - "
