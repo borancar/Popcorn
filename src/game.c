@@ -4440,10 +4440,11 @@ static void morph_finish(ent_morph_t *m)
 
 void entity_paddle_fx(ent_morph_t *m)
 {
-    /* The morph is the node's, not the arm's: morph_owner is what stops a
-     * second capsule from fighting the first, and what it holds is the
-     * original's BX. */
-    const uint16_t self = global_off(entity_of(m));
+    /* The morph is the node's, not the arm's: morph_owner_ptr is what stops
+     * a second capsule from fighting the first, and what it holds is the
+     * original's BX - one of the game's own pointers, which is what the
+     * suffix says on the field and on this local both. */
+    const uint16_t self_ptr = global_off(entity_of(m));
 
     if (global.paddle_morphing == 0) {
         /* Nothing is morphing. If the paddle is already the kind this capsule
@@ -4454,7 +4455,7 @@ void entity_paddle_fx(ent_morph_t *m)
         }
         m->from = global.paddle_kind;
         global.paddle_morphing = 0xff;
-        global.morph_owner = self;
+        global.morph_owner_ptr = self_ptr;
 
         if (m->to != 2) {
             /* Losing the laser: take any shot in flight off the screen. */
@@ -4482,7 +4483,7 @@ void entity_paddle_fx(ent_morph_t *m)
                 ball_redraw(ball);
             }
         }
-    } else if (global.morph_owner != self) {
+    } else if (global.morph_owner_ptr != self_ptr) {
         return;                         /* somebody else's morph */
     }
 
@@ -6093,9 +6094,13 @@ void screen_game_over(void)
         blit_xor(global.paddle_pix[0], &global.paddle_rows[0]);
     }
 
-    for (uint16_t si = 0x9bb0; global_w(si); si += 2) {
+    /* 1ac2:04eb loads SI with 0x9bb0 and walks it two at a time. The base is
+     * a constant, so this is the table itself: eighteen frames and the zero
+     * that stops the walk - not END_PTR, which is why the test is against
+     * zero. See game_over_frames_ptr. */
+    for (uint16_t f = 0; global.game_over_frames_ptr[f] != 0; f++) {
         io_wait_retrace();
-        draw_paddle_raw(global_ptr(global_w(si)));
+        draw_paddle_raw(global_ptr(global.game_over_frames_ptr[f]));
         for (uint16_t i = 0; i < 150; i++)
             game_delay();
         io_present();

@@ -772,7 +772,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  paddle_kind;               /* 0x2d39 which of the four sprite sets is current */
     uint8_t  paddle_width;              /* 0x2d3a in pixels */
     uint8_t  paddle_morphing;           /* 0x2d3b a grow or shrink is running. Was two names for one byte: PADDLE_SUPPRESS, because the play loop stops drawing the paddle itself, and PADDLE_FORCE_DRAW, because draw_paddle_shifted redraws even when x has not moved */
-    uint16_t morph_owner;               /* 0x2d3c the entity running it, so a second capsule does not fight the first */
+    uint16_t morph_owner_ptr;           /* 0x2d3c the entity running it, as the game's own 16-bit pointer, so a second capsule does not fight the first */
     uint8_t  paddle_min;                /* 0x2d3e 8, which is WALL_LEFT: the paddle stops where the ball does. Nothing moves it. Was also PADDLE_LOW */
     uint8_t  paddle_max;                /* 0x2d3f WALL_RIGHT - INITIAL_PADDLE_WIDTH, and it moves as the paddle grows: morph_step adds a width delta to paddle_width and subtracts the same from this (1ac2:34f0 and 1ac2:34f6), so the paddle's right edge rests on the last column whatever width it is. Note paddle_width is the paddle's last column rather than its width - 27 for a paddle 28 across - so the sum is WALL_RIGHT - 1. Was also PADDLE_HIGH */
     uint8_t  repeat_count;              /* 0x2d40 frames until the held key moves the paddle again */
@@ -1191,7 +1191,7 @@ ENSURE_GLOBAL_AT(paddle_kind, 0x2d39);
 ENSURE_GLOBAL_AT(paddle_width, 0x2d3a);
 ENSURE_GLOBAL_AT(paddle_morphing, 0x2d3b);
 ENSURE_GLOBAL_AT(scratch2, 0x1aef);
-ENSURE_GLOBAL_AT(morph_owner, 0x2d3c);
+ENSURE_GLOBAL_AT(morph_owner_ptr, 0x2d3c);
 ENSURE_GLOBAL_AT(paddle_min, 0x2d3e);
 ENSURE_GLOBAL_AT(paddle_max, 0x2d3f);
 ENSURE_GLOBAL_AT(repeat_count, 0x2d40);
