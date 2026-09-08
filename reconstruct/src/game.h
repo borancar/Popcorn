@@ -808,7 +808,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  hit_count;                 /* 0x2e74 */
     uint8_t  caught;                    /* 0x2e75 the C capsule: the ball sticks to the paddle */
     uint16_t hold_timer;                /* 0x2e76 how much holding is left before it is released anyway */
-    uint8_t  game_over;                 /* 0x2e78 */
+    uint8_t  paddle_lost;               /* 0x2e78 the play loop ran out of balls, as against clearing the level: set beside the `stc` at 1ac2:1a9e and 1ac2:1b2e when [0x2e73] says none are left, cleared as each ball starts at 1ac2:19ae. This is what play_session tests to decide whether to run screen_paddle_lost, and it is 1 with lives still in hand - it was called game_over on the strength of next_player, which **reuses the byte**: 1ac2:0d2e clears it and 1ac2:0d3a sets it when the lives reach zero, four instructions before reading it back at 1ac2:0d72. That second meaning lives and dies inside next_player */
     uint8_t  extra_on;                  /* 0x2e79 the extra-ball hatch is open */
     uint16_t serve_timeout;             /* 0x2e7a */
     uint16_t extra_timer;               /* 0x2e7c */
@@ -1083,14 +1083,13 @@ typedef struct __attribute__((packed)) {
     /* 0x93e0 what screen_stash paints over the stashed playfield. **Forty**
      * rows, not thirty-eight: 40 x 50 is 2,000 bytes, which is exactly what
      * the stash beside it holds (STASH_ROWS x STASH_BYTES, twice), and it
-     * ends exactly where game_over_frames_ptr begins. screen_stash paints
+     * ends exactly where paddle_dissolve_frames_ptr begins. screen_stash paints
      * only the first 38 of them, so the last two are authored and never
      * drawn - which is why they looked like padding. */
     uint8_t  pause_overlay[40][50];     /* 0x93e0 */
-    uint16_t game_over_frames_ptr[19];  /* 0x9bb0 what screen_game_over walks, loaded at 1ac2:04eb and ended by a **zero** rather than END_PTR: eighteen frames, the last of them game_over_paddle itself */
-    uint8_t  game_over_frame[17][112];  /* 0x9bd6 the seventeen it names before that, 112 bytes each, ending exactly at game_over_paddle */
-    uint8_t  game_over_paddle[78];      /* 0xa346 the paddle screen_game_over starts from, the same 0x4d + 1 bytes a kind's phase holds */
-    uint8_t  _pad_27[44];
+    uint16_t paddle_dissolve_frames_ptr[19];/* 0x9bb0 what screen_paddle_lost walks, loaded at 1ac2:04eb: the eighteen frames and then a **zero**, not END_PTR, which is why the walk tests against zero */
+    uint8_t  paddle_dissolve_frame[18][16][7];/* 0x9bd6 the paddle coming apart, **16 rows of 7** each - 28 pixels by 16 scan lines, which is what draw_paddle_raw draws: the paddle across the top seven rows and the nine below it the room its pieces fall into. **Eighteen**, and the last is all zeros - the pass that wipes the debris, and also what screen_paddle_lost's opening `mov cx, 0x27` (1ac2:0479) copies 39 words of into paddle_pix to blank the paddle. It was two fields, the last one 78 bytes, until a read hook caught draw_paddle_raw taking all 112 of it out of what _pad_27 claimed were not variables */
+    uint8_t  _pad_27[10];
     uint8_t  banner_font[129][6];       /* 0xa3c0 the menu banner's own font, and a different one: eight columns by six rows at one bit a pixel, one byte a row, scrolled a bit at a time. 129 glyphs is what banner_text indexes - its highest is 128, and the last byte of that glyph is the last non-zero byte before the ending's picture */
     uint8_t  _pad_24[10];
     uint8_t  eog_overlay[495];          /* 0xa6d0 what screen_end_of_game merges into each band of the saved screen - the same 495 bytes every pass, since the source restarts and only the destination walks */
@@ -1226,7 +1225,7 @@ ENSURE_GLOBAL_AT_IN(cell_bitmap_animated, cell_bitmap.animated_ptr, 0x30b0);
 ENSURE_GLOBAL_AT(cell_score, 0x30bc);
 ENSURE_GLOBAL_AT(caught, 0x2e75);
 ENSURE_GLOBAL_AT(hold_timer, 0x2e76);
-ENSURE_GLOBAL_AT(game_over, 0x2e78);
+ENSURE_GLOBAL_AT(paddle_lost, 0x2e78);
 ENSURE_GLOBAL_AT(extra_on, 0x2e79);
 ENSURE_GLOBAL_AT(serve_timeout, 0x2e7a);
 ENSURE_GLOBAL_AT(extra_timer, 0x2e7c);
@@ -1322,9 +1321,8 @@ ENSURE_GLOBAL_AT(bonus_path, 0x8320);
 ENSURE_GLOBAL_AT(panel, 0x85f0);
 ENSURE_GLOBAL_AT(font, 0x9020);
 ENSURE_GLOBAL_AT(pause_overlay, 0x93e0);
-ENSURE_GLOBAL_AT(game_over_frames_ptr, 0x9bb0);
-ENSURE_GLOBAL_AT(game_over_frame, 0x9bd6);
-ENSURE_GLOBAL_AT(game_over_paddle, 0xa346);
+ENSURE_GLOBAL_AT(paddle_dissolve_frames_ptr, 0x9bb0);
+ENSURE_GLOBAL_AT(paddle_dissolve_frame, 0x9bd6);
 ENSURE_GLOBAL_AT(banner_font, 0xa3c0);
 ENSURE_GLOBAL_AT(eog_overlay, 0xa6d0);
 ENSURE_GLOBAL_AT(eog_groups, 0xa8bf);
@@ -2469,7 +2467,7 @@ void field_backdrop(uint8_t y);  /* 1ac2:1fc1 */
 void life_lost(void);             /* 1ac2:0735 */
 void entities_clear(void);        /* 1ac2:055e */
 void level_between(void);         /* 1ac2:05f8 */
-void screen_game_over(void);      /* 1ac2:0473 */
+void screen_paddle_lost(void);      /* 1ac2:0473 */
 void ending_plot(uint16_t x, uint16_t y);     /* 1ac2:5add */
 void ending_particles_init(uint16_t ax); /* 1ac2:5a43 */
 void ending_particles_tick(void); /* 1ac2:5a56 */

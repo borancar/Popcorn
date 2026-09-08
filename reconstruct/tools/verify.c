@@ -355,7 +355,7 @@ static int32_t dispatch(uint32_t routine, const uint16_t *r)
         install_int09();
         return 1;
     case 0x0473:
-        screen_game_over();
+        screen_paddle_lost();
         return 1;
     case 0x0521:
         screen_level_done();
