@@ -1308,7 +1308,7 @@ int32_t play_loop(void)
     global.bonus_pending = global.bonus_live = global.bonus_cap = 0;
     global.paddle_morphing = 0;
     global.net_on = global.caught = 0;
-    global.game_over = global.extra_on = global.laser_on = 0;
+    global.paddle_lost = global.extra_on = global.laser_on = 0;
 
     /* The serve: ball 0 on the paddle, the other two idle. */
     ball_t *b = &global.balls[0];
@@ -1361,7 +1361,7 @@ frames:
         if (global.ball_alive == 0) {
             io_log_random(0x9000);      /* tagged for sidebyside */
             play_teardown();
-            global.game_over = 1;
+            global.paddle_lost = 1;
             return 1;                   /* the original's `stc` */
         }
         if (global.level.bricks == 0) {
@@ -1398,7 +1398,7 @@ frames:
                 if (!ball_redraw(ball)) {
                     io_log_random(0x9002);
                     play_teardown();
-                    global.game_over = 1;
+                    global.paddle_lost = 1;
                     return 1;
                 }
                 if (global.level.bricks == 0) {
@@ -1614,10 +1614,10 @@ retry:
                 life_lost();                    /* 1ac2:0735 */
                 if (global.cheat_done != 1)
                     global.lives--;
-                if (global.game_over == 1)
+                if (global.paddle_lost == 1)
                     break;
             }
-            screen_game_over();                 /* 1ac2:0473 */
+            screen_paddle_lost();                 /* 1ac2:0473 */
             if (next_player(g_dir))             /* 1ac2:0d2e */
                 goto retry;                     /* 0d7a: jmp 0x34f, no intro */
         }
@@ -6056,16 +6056,22 @@ void ending_column(void)
 }
 
 /* ========================================================================
- * 1ac2:0473  screen_game_over
+ * 1ac2:0473  screen_paddle_lost
  *
  * The paddle comes apart. First the band it sits in is wiped, then - if the
  * paddle is not the plain one - it is shrunk back through its six frames, and
  * then the sequence at 0x9bb0 plays over it, one frame per retrace. When the
  * last life is gone it hands over to 0x51b6, the end-of-game screen.
  * ===================================================================== */
-void screen_game_over(void)
+void screen_paddle_lost(void)
 {
-    memcpy(global.paddle_pix[0], global.game_over_paddle, sizeof global.game_over_paddle);
+    /* 1ac2:0479 is `mov cx, 0x27` and a `rep movsw`: 39 words. The frame is
+     * all zeros, so what this does is **blank** paddle_pix - and the two
+     * shapes never have to agree, which is as well, because 78 bytes is
+     * neither a whole number of the frame's 7-byte rows nor of the paddle's
+     * 11-byte ones. Not `sizeof` the frame, which is 112. */
+    memcpy(global.paddle_pix[0], global.paddle_dissolve_frame[17],
+           PADDLE_IMAGE + 1);
 
     /* 1ac2:0483 opens `mov di, 0x1cc2`, and that is a **position**: the left
      * wall on the paddle's own scan line. Eight rows of 24 words is 184 to
@@ -6097,10 +6103,10 @@ void screen_game_over(void)
     /* 1ac2:04eb loads SI with 0x9bb0 and walks it two at a time. The base is
      * a constant, so this is the table itself: eighteen frames and the zero
      * that stops the walk - not END_PTR, which is why the test is against
-     * zero. See game_over_frames_ptr. */
-    for (uint16_t f = 0; global.game_over_frames_ptr[f] != 0; f++) {
+     * zero. See paddle_dissolve_frames_ptr. */
+    for (uint16_t f = 0; global.paddle_dissolve_frames_ptr[f] != 0; f++) {
         io_wait_retrace();
-        draw_paddle_raw(global_ptr(global.game_over_frames_ptr[f]));
+        draw_paddle_raw(global_ptr(global.paddle_dissolve_frames_ptr[f]));
         for (uint16_t i = 0; i < 150; i++)
             game_delay();
         io_present();
@@ -7235,9 +7241,9 @@ static int32_t bonus_end_level_run(void)
  * is the longjmp below. */
 int32_t next_player(const char *dir)
 {
-    global.game_over = 0;
+    global.paddle_lost = 0;
     if (global.lives == 0) {
-        global.game_over = 1;
+        global.paddle_lost = 1;
         if (--global.live_count == 0) {
             /* Everybody is out: keep this player's final score and finish. */
             memcpy(global.players[global.cur_player].score, global.score_text,
@@ -7245,7 +7251,7 @@ int32_t next_player(const char *dir)
             screen_results(dir);        /* 1ac2:0d68 jmp 0xea3 */
             longjmp(g_back_to_menu, 1); /* and its ret leaves play_session */
         }
-    } else if (global.live_count == 1 && global.game_over != 1) {
+    } else if (global.live_count == 1 && global.paddle_lost != 1) {
         return 1;                       /* 1ac2:0d79 - carry on, no intro */
     }
 
