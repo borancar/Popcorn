@@ -1616,7 +1616,6 @@ uint8_t *exepack_load(const char *path, size_t *out_len);
  * the ball on. 1ac2:1c4f drives it, 1ac2:1e23 steps it, 1ac2:1e50 draws one
  * frame.
  * ===================================================================== */
-#define WALKER_ROW    0x1cc0            /* the paddle row */
 
 #define PANEL_STRIDE      28
 
