@@ -1740,7 +1740,7 @@ void level_intro(void)
         io_frame_sync_extra(SYNC_INTRO);
         scroll_up_band();               /* 1ac2:2109 */
         for (uint16_t i = 0; i < 24 * 2; i++)
-            g_vram[(0x3ef2 + i) & (CGA_SIZE - 1)] = feed[i];
+            g_vram[(cga_at(WALL_LEFT, 199) + i) & (CGA_SIZE - 1)] = feed[i];
         feed += 24 * 2;
         io_delay_cycles(2000 * CYCLES_PER_LOOP);
         io_present();
@@ -1752,7 +1752,7 @@ void level_intro(void)
         io_frame_sync_extra(SYNC_INTRO);        /* 1ac2:1ee0 */
         scroll_up_band();
         for (uint16_t i = 0; i < 5; i++)
-            g_vram[(0x3f08 + i) & (CGA_SIZE - 1)] = feed[i];
+            g_vram[(cga_at(96, 199) + i) & (CGA_SIZE - 1)] = feed[i];
         feed += 5;
         io_delay_cycles(2300 * CYCLES_PER_LOOP);
         io_present();
@@ -2610,7 +2610,7 @@ void walker_draw(uint8_t x)
         }
     }
 
-    uint16_t di = (x >> 2) + WALKER_ROW;
+    uint16_t di = cga_at(x, PADDLE_Y);
     for (uint16_t r = 0; r < 7; r++) {
         g_vram[di & (CGA_SIZE - 1)] ^= global.walker_work[r][0];
         g_vram[(di + 1) & (CGA_SIZE - 1)] ^= global.walker_work[r][1];
@@ -2723,7 +2723,7 @@ void level_draw(void)
 
     for (uint16_t f = 0; f < 6; f++) {
         const uint8_t *src = global_ptr(global.walker_drop_ptr[f]);
-        uint16_t d = 0x1cd9;
+        uint16_t d = cga_at(100, PADDLE_Y);
         for (uint16_t r = 0; r < 7; r++) {
             for (uint16_t b = 0; b < 7; b++)
                 g_vram[(d + b) & (CGA_SIZE - 1)] = src[r * 7 + b];
@@ -4984,13 +4984,13 @@ void panel_reveal(void)
      * loop, and `rep movsb` carries it forward - so these are the two 21-byte
      * tables read straight through, three bytes per row, not one row drawn
      * seven times. frame_band takes a single row out of the same two. */
-    di = 0;
+    di = cga_at(0, 0);
     for (uint16_t r = 0; r < 7; r++) {
         for (uint16_t i = 0; i < 3; i++)
             g_vram[(di + i) & (CGA_SIZE - 1)] = global.frame_corner_left[r][i];
         di = cga_next_row(di);
     }
-    di = 0x31;
+    di = cga_at(196, 0);
     for (uint16_t r = 0; r < 7; r++) {
         for (uint16_t i = 0; i < 3; i++)
             g_vram[(di + i) & (CGA_SIZE - 1)] = global.frame_corner_right[r][i];
@@ -5123,7 +5123,7 @@ void menu_banner_tick(void)
     }
     banner_shift();                     /* 1ac2:5140 */
 
-    uint16_t di = 0x38a9;
+    uint16_t di = cga_at(292, 157);
     for (uint16_t i = 0; i < 6; i++) {
         if (global.scratch1.banner_cell[i] & global.banner_state)
             g_vram[di & (CGA_SIZE - 1)] ^= 3;
@@ -6017,7 +6017,7 @@ point_t ending_blobs(void)
  */
 void ending_column(void)
 {
-    uint16_t di = 0x34f8;
+    uint16_t di = cga_at(32, 135);
     for (uint16_t dh = 8; dh > 0; dh--) {
         /* **bx is reloaded here**, at 1ac2:531c, inside the outer loop - so
          * every one of the eight columns plays the whole list at 0xb7a2 from
@@ -6057,7 +6057,7 @@ void ending_column(void)
 /* ========================================================================
  * 1ac2:0473  screen_game_over
  *
- * The paddle comes apart. First the row under it is wiped, then - if the
+ * The paddle comes apart. First the band it sits in is wiped, then - if the
  * paddle is not the plain one - it is shrunk back through its six frames, and
  * then the sequence at 0x9bb0 plays over it, one frame per retrace. When the
  * last life is gone it hands over to 0x51b6, the end-of-game screen.
@@ -6066,7 +6066,11 @@ void screen_game_over(void)
 {
     memcpy(global.paddle_pix[0], global.game_over_paddle, sizeof global.game_over_paddle);
 
-    uint16_t di = 0x1cc2;
+    /* 1ac2:0483 opens `mov di, 0x1cc2`, and that is a **position**: the left
+     * wall on the paddle's own scan line. Eight rows of 24 words is 184 to
+     * 191 by pixels 8 to 199 - the paddle's seven rows and one under them,
+     * across the full width of the playfield. */
+    uint16_t di = cga_at(WALL_LEFT, PADDLE_Y);
     for (uint16_t r = 0; r < 8; r++) {
         for (uint16_t i = 0; i < 24; i++)
             vram_setw(di + i * 2, 0);
@@ -6247,7 +6251,7 @@ void screen_all_levels_done(void)
     memset(global.level.cells, 0, sizeof global.level.cells);
     level_intro();
 
-    uint16_t bp = 0x3ef2;
+    uint16_t bp = cga_at(WALL_LEFT, 199);
     for (uint16_t bh = 1; bh != 0x5c; bh++) {
         /* 1ac2:596c, the **top** of the pass - before the band is drawn, not
          * after. Without a sync here this screen has none at all: a lockstep
@@ -6742,7 +6746,7 @@ void screen_end_of_game(void)
      * frame rather than the same one again. */
     int32_t keyed = 0;
     for (uint16_t g = 0; g < 7 && !keyed; g++) {
-        uint16_t at = 0x34f0 + global.eog_groups[g].at;
+        uint16_t at = cga_at(0, 135) + global.eog_groups[g].at;
         const uint8_t *sprite = global_ptr(global.eog_groups[g].sprite_ptr);
 
         if (tall_sprite(&sprite, at)) { keyed = 1; break; }
@@ -7146,7 +7150,7 @@ static int32_t bonus_end_level_run(void)
     for (uint16_t pass = 8; pass > 0; pass--) {
         mask_l = mask_l << 2;
         mask_r = mask_r >> 2;
-        uint16_t di = 0x1198;
+        uint16_t di = cga_at(96, 112);
         for (uint16_t row = 4; row > 0; row--) {
             g_vram[di & (CGA_SIZE - 1)] &= (mask_l >> 8);
             g_vram[(di + 1) & (CGA_SIZE - 1)] &= mask_l;
