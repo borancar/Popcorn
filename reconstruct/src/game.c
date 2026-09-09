@@ -1439,7 +1439,15 @@ frames:
         global.entity_prev_ptr = global_off(&global.entity_head);
         uint16_t node_ptr = global.entity_head.next_ptr;
         while (node_ptr != END_PTR) {
-            entity_call(entity_ptr(node_ptr));
+            /* The `+` capsule, come back up from bonus_effect through the
+             * four frames 1ac2:2da0 throws off the stack. This is where the
+             * original's stack has got to when it jumps into the bonus, so
+             * this is where the bonus is run - and the walk stops here, the
+             * node still linked, for entities_clear to take with the rest
+             * when the level ends. 1 if the level is done, 2 if a life went
+             * with it: see ball_after_endgame's two endings. */
+            if (entity_call(entity_ptr(node_ptr)) == BONUS_END_LEVEL)
+                return bonus_end_level() == 2;
             if (global.entity_remove == 0) {
                 global.entity_prev_ptr = node_ptr;
                 node_ptr = entity_ptr(node_ptr)->next_ptr;
@@ -1507,15 +1515,6 @@ frames:
 }
 
 jmp_buf g_back_to_menu;
-
-/* Where the end-level bonus lands. 1ac2:2da0 throws four words off the stack
- * before jumping into the
- * end-level bonus: the frames of bonus_effect, morph_finish, entity_paddle_fx
- * and the entity walk that reached them. The bonus never returns to any of
- * those - its own `ret`, after the ending has run, lands back in play_session
- * as if play_loop had returned. Returning normally instead, which is what the
- * port did, left the play loop running the level the bonus had just finished. */
-jmp_buf g_bonus_done;
 
 /* Set with g_resume_at_frame_top when the lockstep harness resumes from a
  * snapshot: everything above the retry loop has happened already in the state
@@ -1593,20 +1592,19 @@ void play_session(void)
             level_intro();                      /* 1ac2:1eb9 */
 retry:
             for (;;) {
-                /* The bonus lands here rather than unwinding through the
-                 * entity walk - see g_bonus_done - and it arrives as a level
-                 * **completed**, carry clear. Watching [0x2f10] settles it:
-                 * the emulator advances the level without the brick count
-                 * ever reaching zero, which only the `jae 0x376` at 1ac2:0357
-                 * does. Arriving as a lost life instead cost a life and
-                 * replayed the level. */
-                int32_t jumped = setjmp(g_bonus_done);
+                /* The bonus arrives as a level **completed**, carry
+                 * clear. Watching [0x2f10] settles it: the emulator advances
+                 * the level without the brick count ever reaching zero, which
+                 * only the `jae 0x376` at 1ac2:0357 does. Arriving as a lost
+                 * life instead cost a life and replayed the level. It used to
+                 * get here by longjmp; now the entity walk returns it, which
+                 * is the same four frames unwound one at a time. */
                 int32_t lost;
-                if (!jumped && g_resume_in_bonus) {
+                if (g_resume_in_bonus) {
                     g_resume_in_bonus = 0;
                     lost = bonus_end_level_body() == 2;
                 } else {
-                    lost = jumped ? (jumped == 2) : play_loop();
+                    lost = play_loop();
                 }
                 speaker_off();
                 if (!lost)
@@ -3482,11 +3480,14 @@ void brick_10(hit_t *hit, ball_t *ball)
  * cannot reach the others. The four that rewrite `handler` to become a
  * different kind of entity, or that pass the node to a helper, take the node
  * instead; they are the ones that legitimately need more than their arm. */
-void entity_call(entity_t *e)
+/* Non-zero only from the paddle morph, and only for the end-level capsule:
+ * it is bonus_end_level's answer coming back up through the frames the
+ * original discarded. Every other handler leaves it 0. */
+int32_t entity_call(entity_t *e)
 {
     switch (e->handler_fn) {
     case ENTITY_CAPSULE_FN: entity_capsule(&e->p.fall); break;
-    case ENTITY_PADDLE_FX_FN: entity_paddle_fx(&e->p.morph); break;
+    case ENTITY_PADDLE_FX_FN: return entity_paddle_fx(&e->p.morph);
     case ENTITY_POPUP_FN: entity_popup(&e->p.fall); break;
     case ENTITY_SOFTEN_FN: entity_soften(&e->p.anim); break;
     case ENTITY_REPEAT_FN: entity_repeat(&e->p.anim); break;
@@ -3502,6 +3503,7 @@ void entity_call(entity_t *e)
     case ENTITY_CRUMBLE_FN: entity_crumble(&e->p.anim); break;
     default:     entity_unknown(e); break;
     }
+    return 0;
 }
 
 /* ------------------------------------------------------------------------
@@ -4326,28 +4328,33 @@ void bonus_slower_ball(void)
 /* The dispatch at 1ac2:337d. Kind 8 ends the level and is not here: it throws
  * four words off the stack and jumps into 0x4210, which no C call can do, so
  * it is handled where the morph animation calls this. */
-void bonus_effect(uint8_t kind)
+int32_t bonus_effect(uint8_t kind)
 {
     switch (kind) {
-    case 0: bonus_points(); break;
-    case 1: bonus_catch(); break;
-    case 2: bonus_wider_paddle(); break;
-    case 3: bonus_laser(); break;
-    case 4: bonus_multiball(); break;
-    case 5: bonus_net(); break;
-    case 6: bonus_reverse(); break;
-    case 7: extra_life(); break;
-    case 8:
-        /* 1 if the level is done, 2 if a life went with it - see
-         * ball_after_endgame's two endings. */
-        longjmp(g_bonus_done, bonus_end_level());
-    case 9: bonus_slower_ball(); break;
-    case 10: bonus_stop_monsters(); break;
+    case BONUS_POINTS:         bonus_points(); break;
+    case BONUS_CATCH:          bonus_catch(); break;
+    case BONUS_WIDER_PADDLE:   bonus_wider_paddle(); break;
+    case BONUS_LASER:          bonus_laser(); break;
+    case BONUS_MULTIBALL:      bonus_multiball(); break;
+    case BONUS_NET:            bonus_net(); break;
+    case BONUS_REVERSE:        bonus_reverse(); break;
+    case BONUS_EXTRA_LIFE:     extra_life(); break;
+    case BONUS_END_LEVEL:
+        /* The level is over - and that is all this says. 1ac2:2da0 throws
+         * four words off the stack **before** jumping into the bonus, so the
+         * screen runs with these frames already gone; running it here and
+         * unwinding afterwards would be the same two things in the wrong
+         * order. The kind goes back up instead and the entity walk, which is
+         * where the original's stack has got to by then, makes the call. */
+        return kind;
+    case BONUS_SLOWER_BALL:    bonus_slower_ball(); break;
+    case BONUS_STOP_MONSTERS:  bonus_stop_monsters(); break;
     /* The table has a twelfth word, 0x2e55, but it points into the middle of
      * ball_on_paddle and no capsule reaches it: the kind comes from [bx+4],
      * which also indexes the eleven-byte paddle table at 0x2d2d. */
     default: break;
     }
+    return 0;
 }
 
 /* ========================================================================
@@ -4432,13 +4439,19 @@ void entity_multiball(void)
  * width; 0x2d25 is the shrink animation and 0x2d1d the grow. Using 0x2d0d for
  * the grow draws a full-size paddle at every frame of it. */
 
-static void morph_finish(ent_morph_t *m)
+/* Non-zero is the capsule kind saying the level is over, on its way up to
+ * the entity walk through the frames the original discarded - so anything
+ * after the call has to be skipped, and this is the only one that had any. */
+static int32_t morph_finish(ent_morph_t *m)
 {
-    bonus_effect(m->bonus);
+    int32_t kind = bonus_effect(m->bonus);
+    if (kind)
+        return kind;
     global.entity_remove = 1;
+    return 0;
 }
 
-void entity_paddle_fx(ent_morph_t *m)
+int32_t entity_paddle_fx(ent_morph_t *m)
 {
     /* The morph is the node's, not the arm's: morph_owner_ptr is what stops
      * a second capsule from fighting the first, and what it holds is the
@@ -4450,8 +4463,7 @@ void entity_paddle_fx(ent_morph_t *m)
         /* Nothing is morphing. If the paddle is already the kind this capsule
          * gives, there is nothing to animate - just apply the effect. */
         if (global.paddle_kind == m->to) {
-            morph_finish(m);
-            return;
+            return morph_finish(m);
         }
         m->from = global.paddle_kind;
         global.paddle_morphing = 0xff;
@@ -4484,26 +4496,25 @@ void entity_paddle_fx(ent_morph_t *m)
             }
         }
     } else if (global.morph_owner_ptr != self_ptr) {
-        return;                         /* somebody else's morph */
+        return 0;                         /* somebody else's morph */
     }
 
     if (--global.paddle_morphing % 35 != 0) {
         /* Between animation steps: redraw the current frame if the paddle has
          * moved, so it still follows the player. */
         if (global.paddle_x == global.paddle_prev_x)
-            return;
+            return 0;
         if (m->step == 6) {
             draw_paddle(global_ptr(global.paddle_sets[global.paddle_kind].sprites_ptr));
-            return;
+            return 0;
         }
         uint16_t si = m->sprites_ptr + m->step * 2;
         draw_paddle_shifted(global_ptr(global_w(si)));
-        return;
+        return 0;
     }
 
     if (m->step != 6) {
-        morph_step(m);
-        return;
+        return morph_step(m);
     }
 
     /* A frame boundary with step == 6: pick the sprite list for this stage.
@@ -4518,8 +4529,7 @@ void entity_paddle_fx(ent_morph_t *m)
         if (kind == 1)
             global.paddle_step = 0xfe;    /* -2: this one shrinks */
         if (kind != 0) {
-            morph_begin(m, table_ptr, kind);
-            return;
+            return morph_begin(m, table_ptr, kind);
         }
         m->pending = 0;
     }
@@ -4529,28 +4539,27 @@ void entity_paddle_fx(ent_morph_t *m)
     if (kind == 1)
         global.paddle_step = 2;
     if (kind != 0) {
-        morph_begin(m, table_ptr, kind);
-        return;
+        return morph_begin(m, table_ptr, kind);
     }
     /* Both ends are the plain paddle: nothing to animate. */
     global.paddle_kind = 0;
     global.paddle_width = 0x1b;
     global.paddle_morphing = 0;
-    morph_finish(m);
+    return morph_finish(m);
 }
 
 /* 1ac2:34c5  morph_begin - start a stage: remember its sprite list and run
  * the first frame. */
-void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint8_t kind)
+int32_t morph_begin(ent_morph_t *m, uint16_t table_ptr, uint8_t kind)
 {
     m->sprites_ptr = global_table_w(table_ptr, kind);
     m->step = 6;
     global.paddle_morphing = 0xff;
-    morph_step(m);
+    return morph_step(m);
 }
 
 /* 1ac2:34d7  morph_step - one frame of the shrink or grow */
-void morph_step(ent_morph_t *m)
+int32_t morph_step(ent_morph_t *m)
 {
     m->step--;
     uint16_t si = m->sprites_ptr + m->step * 2;
@@ -4560,19 +4569,19 @@ void morph_step(ent_morph_t *m)
     global.paddle_max -= global.paddle_step;
 
     if (m->step != 0)
-        return;
+        return 0;
     m->step = 6;
     if (m->pending == 1) {      /* done shrinking; grow next */
         m->pending = 0;
         global.paddle_kind = 0;
-        return;
+        return 0;
     }
     /* Done growing: install the new paddle and apply the effect. */
     uint8_t kind = m->to;
     global.paddle_kind = kind;
     global.paddle_width = global.paddle_sets[kind].width;
     global.paddle_morphing = 0;
-    morph_finish(m);
+    return morph_finish(m);
 }
 
 /* ========================================================================
@@ -7020,7 +7029,17 @@ static void banner_blank(void)
 /* 1ac2:2da0 is the entry the bonus effect calls: play_teardown, four words
  * thrown off the stack, then a jump into 1ac2:4210. Splitting them matters
  * for verification - the harness enters at 0x4210, and a version that also
- * tears the play loop down is not the same routine. */
+ * tears the play loop down is not the same routine.
+ *
+ * Seven bytes, and the whole of it is here. The four `pop ax` are the port's
+ * return chain instead - bonus_effect hands its kind back through
+ * morph_finish, entity_paddle_fx and entity_call, and the entity walk calls
+ * this. One difference that is worth writing down rather than leaving to be
+ * noticed: the original runs play_teardown **before** the pops, so it happens
+ * with those frames still on the stack, and only the body runs after them.
+ * Here both are on this side of the unwind. Nothing observes it - teardown is
+ * two fill_columns over the net and monster indicators, it reads no stack, and
+ * nothing between the two points touches those columns. */
 int32_t bonus_end_level(void)
 {
     play_teardown();                    /* 1ac2:2da0 */
@@ -7089,6 +7108,7 @@ static int32_t bonus_end_level_run(void)
         /* 1ac2:42cc: the band's top walks **down** a row a pass - cga_next_row,
          * not cga_prev_row. That is the wall closing in. */
         bp = cga_next_row(bp);
+        io_frame_sync_extra(SYNC_BONUS);        /* 1ac2:42de, once a pass */
         io_present();
         if (!io_pump())
             return 1;

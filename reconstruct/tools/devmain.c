@@ -53,6 +53,7 @@
  *   --lockstep STATE     the frame protocol sidebyside.py and autoplay.py
  *                        drive, resuming from a captured state
  *   --lockstep-sync-scroll / -endgame / -results / -curtain / -ending
+ *                          / -intro / -bonus
  *                          / -intro
  *                        extra sync points, for the screens that are drawn
  *                        outside the play loop and are otherwise compared by
@@ -176,6 +177,8 @@ int32_t main(int32_t argc, char **argv)
             extra_sync |= SYNC_ENDING;
         else if (!strcmp(argv[i], "--lockstep-sync-intro"))
             extra_sync |= SYNC_INTRO;
+        else if (!strcmp(argv[i], "--lockstep-sync-bonus"))
+            extra_sync |= SYNC_BONUS;
         else if (!strcmp(argv[i], "--verify") && i + 2 < argc)
             return verify_main(argv[i + 1], argv[i + 2]);
         else if (!strcmp(argv[i], "--dump-image") && i + 1 < argc)
@@ -224,7 +227,8 @@ int32_t main(int32_t argc, char **argv)
                     "[--lockstep-sync-results]\n"
                     "               [--lockstep-sync-curtain] "
                     "[--lockstep-sync-ending]\n"
-                    "               [--lockstep-sync-intro]\n"
+                    "               [--lockstep-sync-intro] "
+                    "[--lockstep-sync-bonus]\n"
                     "\n"
                     "To play, use popcorn.\n",
                     argv[0], argv[0], argv[0], argv[0], argv[0],

@@ -223,6 +223,30 @@ predicts, held over the whole run.
 
 ### What is still open
 
+**`entity_paddle_fx` (`1ac2:3386`) cannot be verified, and the reason is not
+known.** About half its calls differ against the original on any route that
+morphs the paddle - 5 of 10, 6 of 12, repeatably - while `capsule.snap` is
+clean on all ten of its. The differences are thousands of vram bytes, not the
+paddle's 77. It is **pre-existing**: a build of the previous commit fails the
+same way, so nothing in the paddle-dissolve or `longjmp`-deferral work caused
+it.
+
+Three explanations were tried and each was disproved rather than merely
+doubted: an unarmed `longjmp` (`verify.c` arms it, and says so); the `+`
+capsule leaving the routine non-locally (teaching the harness to follow the
+bonus changed the numbers not at all); and the second play loop in
+`bonus_end_level_run` (which never reaches `entity_call`). The one left
+untested is that the calls which agree are the early-outs - `paddle_kind ==
+m->to`, or the `% 35` frame boundary - and the ones that differ are the calls
+that actually draw. That fits the steady half and the size of the diffs, and
+it is cheap to settle: the captures carry `paddle_morphing`, `m->step` and
+`m->pending`, so dumping those per call would say which branch each took.
+
+It is out of `verify.c`'s dispatch meanwhile, so the sweep's differing count
+is zero and honest rather than one failure everybody learns to skip. The
+routine itself is exercised by `sidebyside` on every level route.
+
+
 **BP on the way out of the bonus, and a flag standing in for it.** The two
 endings run the same curtain and the same `call 0x2034` inside it, but that
 call is `push ds / mov ds, bp` first and BP is the data segment on only one

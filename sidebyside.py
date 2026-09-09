@@ -69,11 +69,17 @@ RESULTS_WAIT = 0x1037                   # --sync-results, once a wait pass
 # and none on the other and reported the two as standing in different places -
 # at every single one. --sync-curtain looked like the whole curtain differing
 # and was really the driver not knowing the word for it.
-SYNC_KIND = {SCROLL_UP: 1, BALL_ENDGAME: 2, RESULTS_WAIT: 4}
+# The end-of-level bonus is a second play loop - the ball and one block, its
+# own paddle handling, and it never touches the entity list - so FRAME_END
+# never fires while it runs. 1ac2:42de is its wall-closing pass, the `dec dh`
+# both branches of the interlace step above it converge on.
+BONUS_WALL = 0x42DE                     # --sync-bonus, once a wall pass
+
+SYNC_KIND = {SCROLL_UP: 1, BALL_ENDGAME: 2, RESULTS_WAIT: 4, BONUS_WALL: 64}
 SYNC_KIND.update({o: 8 for o in CURTAIN})
 SYNC_KIND.update({o: 16 for o in ENDING})
 SYNC_KIND.update({o: 32 for o in INTRO})
-SYNC_NAME = {1: "scroll", 2: "endgame", 4: "results",
+SYNC_NAME = {1: "scroll", 2: "endgame", 4: "results", 64: "bonus",
              8: "curtain", 16: "ending", 32: "intro"}
 #  - and NOT 0x1a62, its top: the serve wait jumps there too, at 0x1a58,
 #    whenever the action button is held, so the top is hit more than once
@@ -196,6 +202,12 @@ def main():
                          "once per step of the end-level bonus's own ball "
                          "loop - the only part of that screen the scroll sync "
                          "does not reach")
+    ap.add_argument("--sync-bonus", action="store_true",
+                    help="add a sync point to the end-of-level bonus, which "
+                         "is a second play loop and so reaches the frame "
+                         "close not at all - with this and the frame close "
+                         "both on, the bonus and the transitions into and "
+                         "out of it are compared")
     ap.add_argument("--sync-scroll", action="store_true",
                     help="also compare at every screen_scroll_up, so a screen "
                          "with a loop of its own - the end-level bonus, the "
@@ -458,7 +470,8 @@ def main():
                            or (args.sync_results and off == RESULTS_WAIT)
                            or (args.sync_curtain and off in CURTAIN)
                            or (args.sync_ending and off in ENDING)
-                           or (args.sync_intro and off in INTRO)):
+                           or (args.sync_intro and off in INTRO)
+                           or (args.sync_bonus and off == BONUS_WALL)):
             # emu_stop() leaves IP *at* this instruction, so the next
             # emu_start runs it again and the hook fires a second time with
             # no work done in between. Counting those as frames compares the
@@ -590,7 +603,9 @@ def main():
                             + (["--lockstep-sync-curtain"]
                                if args.sync_curtain else [])
                             + (["--lockstep-sync-ending"]
-                               if args.sync_ending else []),
+                               if args.sync_ending else [])
+                            + (["--lockstep-sync-bonus"]
+                               if args.sync_bonus else []),
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             bufsize=0)
 
@@ -869,7 +884,8 @@ def main():
         # safeguard while being unable to fail. The tag says which sync point
         # each side stopped at, and that can disagree.
         if any((args.sync_scroll, args.sync_endgame, args.sync_results,
-                args.sync_curtain, args.sync_ending, args.sync_intro)):
+                args.sync_curtain, args.sync_ending, args.sync_intro,
+                args.sync_bonus)):
             def where(tags):
                 k = [t & 0xff for t in tags if t & 0xff00 == 0x9100]
                 return SYNC_NAME.get(k[0], "?") if k else "a frame close"

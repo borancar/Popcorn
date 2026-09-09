@@ -354,6 +354,28 @@ typedef struct __attribute__((packed)) {
 #define BRICK_11_FN              0x2d68
 #define BRICK_SOLID_FN           0x3221   /* 4 and 12, and 24 to 29 - a hit brick_animated piece */
 
+/* The capsule kinds: an index into bonus_odds, bonus_handler_fn,
+ * capsule_frames_ptr, popup_frames_ptr and paddle_next, all five of which
+ * are in this order and eleven long. The letter is the one the capsule
+ * carries, read off frame 7 of its own animation - the frame where it is
+ * fully open - rather than guessed from what the effect does.
+ *
+ * BONUS_END_LEVEL is the one whose effect is not over when its handler
+ * returns: its kind travels back up to the entity walk, and the walk runs
+ * the bonus, because 1ac2:2da0 throws four frames away before starting it. */
+#define BONUS_POINTS             0      /* B - a hundred points */
+#define BONUS_CATCH              1      /* C - the ball sticks to the paddle */
+#define BONUS_WIDER_PADDLE       2      /* E - elargir */
+#define BONUS_LASER              3      /* L */
+#define BONUS_MULTIBALL          4      /* 1 - and then there are three */
+#define BONUS_NET                5      /* F - filet */
+#define BONUS_REVERSE            6      /* O - every ball turns around */
+#define BONUS_EXTRA_LIFE         7      /* V - vie */
+#define BONUS_END_LEVEL          8      /* + - the level is over */
+#define BONUS_SLOWER_BALL        9      /* S */
+#define BONUS_STOP_MONSTERS      10     /* M - monstres */
+#define BONUS_KINDS              11
+
 #define BONUS_END_LEVEL_FN       0x2da0
 #define BONUS_POINTS_FN          0x2daa
 #define BONUS_CATCH_FN           0x2def
@@ -2235,6 +2257,13 @@ void io_set_grab(int32_t on);
 #define SYNC_CURTAIN  8                 /* the ending animation, once a pass */
 #define SYNC_ENDING  16                 /* after level 49, once a pass */
 #define SYNC_INTRO   32                 /* the level intro, once a pass */
+/* The end-of-level bonus is a **second play loop** - it has the ball and one
+ * block, drives the paddle itself, and never touches the entity list - so
+ * io_frame_sync in play_loop cannot see it. This is its wall-closing pass,
+ * 1ac2:42de's `dec dh`, which both branches of the interlace step converge
+ * on. With this and the frame close on together the bonus is compared, and
+ * so are the transitions into and out of it. */
+#define SYNC_BONUS   64                 /* the bonus's wall, once a pass */
 #endif
 void io_frame_sync_extra(int32_t which);
 void io_lockstep_extra_sync(int32_t mask);
@@ -2385,7 +2414,7 @@ void bonus_slower_ball(void);     /* 1ac2:31e8 */
 void bonus_stop_monsters(void);   /* 1ac2:3200 */
 int32_t bonus_end_level(void);    /* 1ac2:2da0 */
 int32_t bonus_end_level_body(void); /* 1ac2:4210 */
-void bonus_effect(uint8_t kind);
+int32_t bonus_effect(uint8_t kind);
 void scroll_up_band(void);        /* 1ac2:2109 */
 void scroll_down_band(void);      /* 1ac2:2148 */
 void draw_paddle_raw(const uint8_t *src);/* 1ac2:22a9 */
@@ -2394,11 +2423,11 @@ void ball_paddle(ball_t *b);  /* 1ac2:2316 */
 void laser_fire(void);            /* 1ac2:2ee3 */
 void probe_cell_at(uint8_t x, uint8_t y, hit_t *hit);    /* 1ac2:2755 */
 void play_teardown(void);         /* 1ac2:41d4 */
-void entity_call(entity_t *e);  /* the call at 1ac2:1b5e */
+int32_t entity_call(entity_t *e);  /* the call at 1ac2:1b5e */
 void entity_capsule(ent_fall_t *f); /* 1ac2:3273 */
-void entity_paddle_fx(ent_morph_t *m); /* 1ac2:3386 */
-void morph_begin(ent_morph_t *m, uint16_t table_ptr, uint8_t kind); /* 1ac2:34c5 */
-void morph_step(ent_morph_t *m);       /* 1ac2:34d7 */
+int32_t entity_paddle_fx(ent_morph_t *m); /* 1ac2:3386 */
+int32_t morph_begin(ent_morph_t *m, uint16_t table_ptr, uint8_t kind); /* 1ac2:34c5 */
+int32_t morph_step(ent_morph_t *m);       /* 1ac2:34d7 */
 void entity_popup(ent_fall_t *f);   /* 1ac2:3561 */
 void entity_capsule_frames(ent_fall_t *f, uint16_t table_ptr);
 void entity_ball_hold(ent_anim_t *a); /* 1ac2:37e0 */
@@ -2455,7 +2484,6 @@ uint32_t io_mouse_x(void);
 uint32_t io_mouse_buttons(void);
 
 extern jmp_buf g_back_to_menu;
-extern jmp_buf g_bonus_done;
 void play_session(void);          /* 1ac2:02f5 */
 void panel_draw(void);            /* 1ac2:0b0b */
 void level_colours(void);         /* 1ac2:044b */
