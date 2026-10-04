@@ -49,7 +49,8 @@ run had ever executed.
 uv sync
 
 uv run unpack_popcorn.py         # recover the plain EXE
-uv run validate.py               # prove the recovery
+uv run validate.py               # prove the recovery, and the port's own data
+uv run gen_data.py               # rewrite reconstruct/src/data.c from game.h
 uv run emulation.py --scale 3    # play it
 uv run analyze.py                # map the code segment
 uv run tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
@@ -82,6 +83,7 @@ uv run tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `compare_screen.py` | diffs the port's `0xb8000` against the emulator's, byte for byte |
 | `check_animations.py` | the animated bricks, which `sidebyside.py` structurally cannot check: a differential says "identical" just as happily when **neither** side animates. Nine levels carry a 2x3 block - one 32x24 picture cut into six brick cells - and a cell is static until it is hit, so "the block is playing" is a fact about the *cells*, not the screen. Runs the emulator with the bot a frame at a time and watches globals: all six in 24..29 held for 100 frames, or `level.bricks` reaching zero with them running. Stops on a game over and on `1ac2:4210`, and rigs `+` to zero width so no level is skipped out from under it. `--seeds` varies the bot, which is the only thing that varies - the emulator is deterministic, so an unchanged rerun stalls in exactly the same place |
 | `check_pointers.py` | the game keeps **16-bit pointers in its own data** - the chain's links, a cell parked in a slot, an animation cursor - and they go in through `global_off` and come out through `global_ptr`/`global_w`. This parses `game.c` with a C grammar and checks that: a field the game uses as a pointer is named `*_ptr`, a store into one goes through `global_off`, a read goes through a `_ptr` accessor, and what an accessor is handed is **simple**. That last rule is the one with teeth: `global_w(table + index * 2)` is pointer arithmetic without a pointer type, and the C that means it is `global_w(table[index])` with `table` typed. It also lists the fields already feeding an accessor without the suffix, which is the rename written down. Regex cannot do this - telling an argument from the expression inside it is the whole job |
+| `gen_data.py` | writes `reconstruct/src/data.c`. The **shape** comes from a real compile of `game.h` - the layout is read out of its DWARF, so every field, dimension, union arm and anonymous member is the one the C actually has, and a field added or a padding size changed moves the output without anything here being told. The **values** come from the load image. A `*_ptr` comes out as the field it points at, which is also a map of what is still unnamed: `capsule_frames_ptr` resolves to `GOFF(_pad_22[360])`, and that is the frame table's address saying which 46K nobody has named yet. `--check` regenerates and diffs without writing |
 | `pad_writes.py` | every `_pad_*` in `global_t` is a claim - *these bytes are not variables* - and so is every `_r` inside an entity arm. This tests them: a Unicorn write hook on each range, a route or a snapshot played under it, and a report of which regions were ever written and by whom. The ranges come out of `game.h` itself, through a generated `offsetof` program, so the tool cannot drift from the header it checks. `--entities` watches the node pool instead, keyed by the node's handler **at the moment of the write** - read that one carefully, because a handler that hands its node to another kind fills the new arm before rewriting the handler word, so those writes are booked to the outgoing handler. It found the three DOS-machine variables the header had left nameless: the command tail, the default drive, and the saved INT 09h vector |
 | `sidebyside.py --sync-*` | `io_frame_sync` lives in the **play loop**, so everything outside it - the level intros, the results screen, the hall of fame - is compared by nothing at all. `--sync-scroll`, `--sync-endgame` and `--sync-results` add a sync point to one of those screens. Two real bugs lived on the results screen for months because no run could see it |
 | `autoplay.py` | walks the menu and then plays: keeps the paddle under the ball, collects the capsules worth having, and catches a parachuted ball. Drives the **mouse**, because the game's mouse input is absolute and lands on the next frame. `--port` drives the **C port** instead, through the same lockstep protocol `sidebyside.py` uses, so the deliverable can be watched playing itself |
@@ -90,7 +92,8 @@ uv run tools_dis.py 0x1ad33 0x80 --seg 0x1ac2
 | `reconstruct/src/main.c` | **`popcorn`**: the game, with the command line the original has and one flag - `popcorn`, `popcorn POPTAB`, and `--rgbi`. That command line is part of what the port is, so nothing else is allowed to accumulate in it. `--rgbi` is the single exception, and earned it by being about what the game *looks like* rather than about checking it: the default is the light cyan / magenta / white an EGA or VGA makes of mode 05h, which is what the authors saw, and `--rgbi` is the cyan / red / white a real CGA forces. A player should not have to set an environment variable to choose between them |
 | `reconstruct/tools/devmain.c` | **`popcorn-dev`**: the same game with the flags that exist to *check* it - `--lockstep`, `--verify`, `--shot`, `--keys`, `--cmdline`, `--dump-image`. Every tool here runs this one |
 | `reconstruct/tools/autoplay.c` | the bot, in C: `popcorn-dev --autoplay`. The same decisions `autoplay.py` makes, without the Python process, the emulator beside it and the pipe. It plays through `io_pin_mouse`, the door lockstep already uses, and reads the image without writing to it. It takes the paddle only - getting into a game is still F1 |
-| `reconstruct/src/exepack.c` | the EXEPACK decoder in C, byte-identical to the Python one. The port reads the player's own `POPCORN.EXE` at startup |
+| `reconstruct/src/data.c` | **the game's data, written down** - 133,296 bytes as one initializer for `image_t`, generated by `gen_data.py`. The port ships this and needs nothing on disk to run. The `_ptr` fields are the point: a stored offset is written as `GOFF(backdrop[2])` or `GOFF(entities[7])`, computed from the layout rather than repeated from the file, so an address cannot disagree with the field it names. Never edited by hand - `gen_data.py --check` is what says it is current |
+| `reconstruct/src/exepack.c` | the EXEPACK decoder in C, byte-identical to the Python one. Nothing in the game calls it any more; it is what **checks** `data.c`, through `popcorn-dev --dump-exe`, and `validate.py` requires the two images and the emulator's to agree byte for byte |
 | `reconstruct/src/game.h` | types, the three segment overlays, and the backend interface. The program keeps variables in three segments and there is a struct for each: **`gv`** (`game_vars`) is the data at image 0, **`cv`** (`code_vars`) is the code segment at `0x1ac20` - the `cs:[...]` bytes the assembly stored inside its own instructions - and **`c46`** (`seg_c46_t`) is the level and ending block at `0xc460`. Every field's offset is held by an `ENSURE_` assertion, so a wrong padding size fails the build instead of moving a field |
 | `reconstruct/src/game.c` | the transcribed routines — all 181 of them — each carrying the `1ac2:xxxx` offset it was read from. Four more are here as no-ops with a comment saying why, and are counted as neither done nor outstanding |
 | `reconstruct/src/sdl_io.c` | the platform layer: window, presentation, keyboard, mouse, and the retrace and delay hooks the game paces itself on |
@@ -250,6 +253,21 @@ reads it and a fresh clone of the split repository plays.
 `popcorn/` stays ignored: it is the working copy the Python tools read, and
 two copies of the same bytes in one repository is one too many.
 `POPCORN_GAME_DIR` moves it elsewhere for those tools.
+
+**The port no longer reads any of it to run.** `reconstruct/src/data.c` holds
+the image, so a clone builds and plays with nothing else present. The
+executable stays because it is the *provenance*: `gen_data.py` regenerates
+`data.c` from it, and `validate.py` will not pass unless the emulator's image,
+`exepack.c`'s and `data.c`'s are the same 133,296 bytes. That check is the
+whole reason a generated data file is safe to have - regenerate it after any
+change to `game.h`'s layout, and run `validate.py`.
+
+**Any edit to `game.h` also means `uv run gen_nopad.py --unpacked`.** The
+Amiga build compiles against `reconstruct/amiga/game_unpacked.h`, which is
+`game.h` without `packed` so a 68000 never reads a word from an odd address.
+It is committed because the split repository has no Python, and it carries
+`game.h`'s hash, so `Makefile.amiga` stops on a stale copy rather than
+building from it.
 
 `popcorn.hsc` is ignored wherever it appears - the game writes it, so it is a
 save file rather than part of the game. `popcorn.unpacked.exe` is ignored too:

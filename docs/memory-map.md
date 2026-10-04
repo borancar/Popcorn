@@ -28,6 +28,11 @@ Loading at segment 0x2000 instead of the 0x110 DOS would pick keeps the segment
 non-negative and sidesteps it. The image is normalised back to segment 0 before
 being written out.
 
+The port does not do this at run time any more: `reconstruct/src/data.c` is
+the recovered image written down as one C initializer, generated from
+`game.h`. `unpack_popcorn.py` and `exepack.c` are what it is generated from
+and checked against - `validate.py` requires all three images to agree.
+
 ## Layout of the unpacked image
 
 Linear offsets into `popcorn.unpacked.exe`'s load image, which is the address

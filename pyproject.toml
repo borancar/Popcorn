@@ -11,19 +11,18 @@ dependencies = [
     # reproducible. Moving the pin is a deliberate act; re-run verify_routes.sh
     # afterwards.
     "dos-emulator @ git+https://github.com/borancar/dos_emulator@83cd99d",
-
     # Disassembly: tools_dis.py, analyze.py, cycles.py.
     "capstone",
     # Also used directly here - the tools drive the machine, not only run it.
     "unicorn",
     "pygame-ce",
     "numpy",
-
     # check_pointers.py parses game.c with a real C grammar. A regex over
     # `img_w(` cannot tell an argument from the expression inside it, and
     # telling those apart is the whole job.
     "tree-sitter",
     "tree-sitter-c",
+    "pyelftools>=0.32",
 ]
 
 # Scripts in a directory, not a package: there is nothing here to install.

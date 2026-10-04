@@ -375,9 +375,9 @@ uint8_t game_random(uint16_t ticks, uint8_t limit)
     /* Ten words out of the **entity pool**, from entity 2's variant on:
      * 0x3164 is entities[2] plus two, so what gets folded in is whatever the
      * entities happen to be holding this frame. */
-    const uint8_t *stir = (const uint8_t *)&global.entities[2].p;
+    const uint16_t *stir = (const uint16_t *)&global.entities[2].p;
     for (uint16_t i = 0; i < 10; i++)
-        ticks += stir[i * 2] + (stir[i * 2 + 1] << 8);
+        ticks += stir[i];
     ticks += global.rng_state;
     global.rng_state += 0x5ec5;
 
@@ -849,16 +849,33 @@ const char *find_exe(void)
     return (const char *)0;
 }
 
+/* The image the game starts from: a copy of data.c's, because the program
+ * writes into its own data - the level it is playing is copied into it, the
+ * entity chain is relinked in it, the high scores are read into it - and the
+ * next run has to start from the same bytes as this one. */
 size_t popcorn_load_image(void)
+{
+    g_image = malloc(IMAGE_LEN);
+    if (!g_image) {
+        fprintf(stderr, "popcorn: out of memory\n");
+        return 0;
+    }
+    memcpy(g_image, &popcorn_image_data, IMAGE_LEN);
+    return IMAGE_LEN;
+}
+
+/* The other way in, and the reason exepack.c is still here: recover the image
+ * from a real POPCORN.EXE. Nothing in the game calls this - `popcorn-dev
+ * --dump-exe` does, so that validate.py can hold the decoder and the built-in
+ * data up against the same reference and check that all three agree. */
+size_t popcorn_load_exe(void)
 {
     const char *path = find_exe();
     if (!path) {
         fprintf(stderr,
                 "popcorn: cannot find POPCORN.EXE.\n"
-                "         Copy your own next to this binary, or set "
-                "POPCORN_EXE to its path.\n"
-                "         It ships beside this binary; a copy has been "
-                "moved or deleted.\n");
+                "         Set POPCORN_EXE to its path, or run from a "
+                "directory with a copy in it.\n");
         return 0;
     }
     size_t len = 0;
@@ -5159,9 +5176,9 @@ uint16_t particle_random(uint16_t ax, uint16_t ticks, uint16_t limit)
     /* `lodsw` from the base of the block, particle_count times - so it reads
      * the first n words rather than one field of each record, and where a
      * word falls inside a record is not something it knows or cares about. */
-    const uint8_t *p = (const uint8_t *)global.particles;
+    const uint16_t *p = (const uint16_t *)global.particles;
     for (uint16_t i = 0; i < n; i++)
-        ax += p[i * 2] + (p[i * 2 + 1] << 8);
+        ax += p[i];
     ax += ticks;
     ax += global.particle_seed;
     if (!limit)

@@ -42,10 +42,13 @@
  *   --run-ms N           stop after N milliseconds of wall clock
  *   --shot FILE          write the screen there when the deadline is reached
  *   --dump-vram FILE     likewise, the raw 0xb8000 aperture
- *   --dump-image FILE    write the unpacked load image and exit, which is how
- *                        exepack.c is checked against unpack_popcorn.py - or,
- *                        with --run-ms, write it when the run ends, to see
- *                        what a session changed
+ *   --dump-image FILE    write the load image the game starts from - data.c's
+ *                        - and exit; or, with --run-ms, write it when the run
+ *                        ends, to see what a session changed
+ *   --dump-exe FILE      write the image recovered from a real POPCORN.EXE
+ *                        instead, which is how exepack.c is checked against
+ *                        unpack_popcorn.py and how validate.py holds the
+ *                        built-in data up against the file it came from
  *
  * Driven by something else:
  *
@@ -152,6 +155,7 @@ static int32_t resume_snapshot(const char *path)
 int32_t main(int32_t argc, char **argv)
 {
     const char *dump = NULL;
+    int32_t from_exe = 0;    /* --dump-exe: the EXEPACK path, not data.c's */
     int32_t scale = 3;
     int32_t rgbi = 0;
     uint32_t run_ms = 0;
@@ -183,6 +187,10 @@ int32_t main(int32_t argc, char **argv)
             return verify_main(argv[i + 1], argv[i + 2]);
         else if (!strcmp(argv[i], "--dump-image") && i + 1 < argc)
             dump = argv[++i];
+        else if (!strcmp(argv[i], "--dump-exe") && i + 1 < argc) {
+            dump = argv[++i];
+            from_exe = 1;
+        }
         else if (!strcmp(argv[i], "--rgbi"))
             rgbi = 1;
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc)
@@ -219,7 +227,8 @@ int32_t main(int32_t argc, char **argv)
                     "--keys and --level do not apply)\n"
                     "       %s [--scale N] [--play-hz N]\n"
                     "       %s [--run-ms N] [--shot FILE] [--dump-vram FILE]\n"
-                    "       %s [--dump-image FILE] [--keys SCAN@MS,...]\n"
+                    "       %s [--dump-image FILE] [--dump-exe FILE]\n"
+                    "       %s [--keys SCAN@MS,...]\n"
                     "       %s [--rgbi]  (a real CGA's mode 05h colours)\n"
                     "       %s --verify STATE-IN RESULT-OUT\n"
                     "       %s --lockstep STATE [--lockstep-sync-scroll]\n"
@@ -232,7 +241,7 @@ int32_t main(int32_t argc, char **argv)
                     "\n"
                     "To play, use popcorn.\n",
                     argv[0], argv[0], argv[0], argv[0], argv[0],
-                    argv[0], argv[0], argv[0]);
+                    argv[0], argv[0], argv[0], argv[0]);
             return 2;
         }
     }
@@ -258,13 +267,14 @@ int32_t main(int32_t argc, char **argv)
         return r;
     }
 
-    size_t len = popcorn_load_image();
+    size_t len = from_exe ? popcorn_load_exe() : popcorn_load_image();
     if (!len)
         return 1;
 
     /* With --run-ms, the image is wanted *after* the run - "did typing this
      * set that byte" is not a question the load image can answer. Without it,
-     * dump and exit, which is how exepack.c is checked. */
+     * dump and exit, which is how the two ways of getting one are checked
+     * against each other. */
     if (dump && !run_ms) {
         FILE *f = fopen(dump, "wb");
         if (!f) {
