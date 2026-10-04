@@ -13,3 +13,5 @@
 *.o
 popcorn
 popcorn-dev
+popcorn-poison
+popcorn-nopad

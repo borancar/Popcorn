@@ -1,0 +1,40 @@
+Short:        P96 Development Files
+Author:       jens@icomp.de (Jens Schönfeld)
+Uploader:     thomas.richter@alumni.tu-berlin.de (Thomas Richter)
+Type:         dev/misc
+Version:      3.6.0
+Architecture: generic
+
+This archive contains the development files for P96, the Amiga RTG
+software stack. The archive is intended for end-user application
+programs calling into P96 and its sublibraries. While the Amiga
+graphics.library is patched to be able to support rendering on RTG
+screens, the P96 support libraries contain additional features that
+may be necessary for advanced features, such as rendering directly
+into the video RAM of RTG cards, requesting mode IDs of RTG screens,
+or creating overlay windows (aka "PIP" "Picture in Picture") for video
+playback.
+
+The Examples directory contains example sources for how to interface
+to P96 directly.
+
+Include contains the include files for C and AmigaE compilers, and
+library offsets and headers for Amiga assemblers. Depending on the C
+compiler, you need Include/clib for the function prototypes, and
+Include/pragmas or Include/inline for the function pragmas for
+directly interfacing to P96 without depending on assembler stubs.
+
+Function prototypes for other languages are found in the Include/fd
+directory in the form of an "fd" file. Function prototypes can be
+created by the the FD2Pragma tool found on Aminet.
+
+Latest information on P96 and latest development files can
+be found in the iComp P96 wiki:
+https://wiki.icomp.de/wiki/P96
+
+This archive is freely distributable under CC-BY conditions, that
+is, it can be copied provided you attribute its source correctly.
+
+To find out more about Creative Commons Licenses and CC-BY in
+particular, visit https://creativecommons.org/licenses/by/4.0/
+

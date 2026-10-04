@@ -61,12 +61,20 @@ Public domain, then, with the one condition they attached: **not for
 commercial use without their prior agreement.** That condition travels with
 the files, and it is theirs rather than this repository's to waive.
 
-So `popcorn.exe` is here, and the port needs it — every sprite, font, level
-table and string the game has lives in the first 0x1ac20 bytes of that
-executable, which the port unpacks at startup and reads its data from. Nothing
-of the game is embedded in the C; it is read at run time from the file beside
-it. The two shipped level sets are here too, and `POPGEN.EXE`, which made
-them, and `POPSPEED.EXE`, which sets the game speed:
+Every sprite, font, level table and string the game has lives in the first
+0x1ac20 bytes of `popcorn.exe`, and the port used to unpack that file at
+startup to read them. It no longer has to: `src/data.c` is the same image
+written down as one C initializer — generated from `src/game.h`, so the fields
+are the ones the header declares and the game's own pointers are computed from
+the layout rather than copied out as numbers. The port ships its own data and
+needs nothing on disk to run.
+
+`popcorn.exe` is still here, and `src/exepack.c` still decodes it, because
+that is what says `src/data.c` is right: `popcorn-dev --dump-exe` recovers the
+image from the executable, `popcorn-dev --dump-image` writes out the one the
+port ships, and `validate.py` requires all 133,296 bytes of both to match the
+reference the emulator produces. The two shipped level sets are here too, and
+`POPGEN.EXE`, which made them, and `POPSPEED.EXE`, which sets the game speed:
 
 ```sh
 make && ./popcorn          # the fifty levels built into the executable
@@ -74,14 +82,42 @@ make && ./popcorn          # the fifty levels built into the executable
 ./popcorn LTF              # LTF.PPC
 ```
 
-`POPCORN_EXE` points at a copy kept somewhere else. Everything the game reads
-and writes — the executable, the `.ppc` sets, and `popcorn.hsc` — is relative
-to the current directory, as it was under DOS. `popcorn.hsc` is not in here:
-the game writes it, so it is a save file rather than part of the game, and one
-player's scores are nobody else's starting point.
+`POPCORN_EXE` points at a copy kept somewhere else, which is only of interest
+to `--dump-exe`. Everything the game reads and writes — the `.ppc` sets and
+`popcorn.hsc` — is relative to the current directory, as it was under DOS.
+`popcorn.hsc` is not in here: the game writes it, so it is a save file rather
+than part of the game, and one player's scores are nobody else's starting
+point.
 
 Needs SDL3 and a C99 compiler. `make` prints what to install if it cannot find
 SDL3.
+
+**An AmigaOS 3.2 build** of the same game cross-compiles with
+`Makefile.amiga` and lands in `amiga/popcorn`:
+
+```sh
+make -f Makefile.amiga           # 68000, runs on any 3.2 machine with RTG
+make -f Makefile.amiga CPU=020   # or 040: builds for faster processors
+```
+
+It needs bebbo's `m68k-amigaos-gcc` toolchain and nothing else on the
+build host: the Picasso96 headers it compiles against are vendored under
+`amiga/vendor/Picasso96Develop`.  On the target it asks
+`Picasso96API.library` for a 320x200 CLUT screen and opens it itself, so
+a machine with P96 installed is the whole requirement — Kickstart 45.57
+and Workbench 45.3 cover it.  Input, the 326 Hz clock and the PC speaker
+are Intuition IDCMP, `timer.device` and `audio.device`.
+`amiga/amiga_io.c` is the entire platform layer, implementing the same
+backend interface `src/sdl_io.c` does.
+
+It builds against `amiga/game_unpacked.h`, which is `game.h`
+without `packed`. A 68000 raises an address error on a word read from an
+odd address, and most of the shipped image's words sit at odd offsets.
+Unpacked, the compiler pads every word onto an even address, and `data.c`'s
+pointers follow the fields because they are computed from them. Every
+segment still fits in 16 bits. The header is generated from `game.h` and
+carries its hash, so the build stops rather than compile against a stale
+copy.
 
 ## What this is
 
@@ -162,8 +198,14 @@ nothing else, because that command line is part of what the port is.
 | `src/main.c` | `popcorn` — the game, and its one optional argument |
 | `src/game.c` | the transcription: every routine, each with its `1ac2:xxxx` |
 | `src/game.h` | types, the named image offsets, the backend interface |
-| `src/exepack.c` | the EXEPACK decoder that recovers the data at startup |
+| `src/data.c` | the game's data, written down — generated from `game.h` |
+| `src/exepack.c` | the EXEPACK decoder, which is what checks `data.c` |
 | `src/sdl_io.c` | window, presentation, keyboard, mouse, retrace, delay |
+| `amiga/amiga_io.c` | the same backend on AmigaOS: P96 screen, IDCMP, timer.device, audio.device |
+| `amiga/harness_stubs.c` | the checking harness, absent from this build, as no-ops |
+| `amiga/game_unpacked.h` | `game.h` without `packed`, for the 68000 — generated, never edited |
+| `amiga/seg_bases.c` | where each segment starts in the unpacked image |
+| `Makefile.amiga` | the cross build for AmigaOS 3.2 + Picasso96 |
 | `src/stubs.c` | what is not transcribed. One safety net is left in it |
 | `tools/devmain.c` | `popcorn-dev` — the same game with the harness flags |
 | `tools/autoplay.c` | the bot, for `popcorn-dev --autoplay` |
@@ -185,6 +227,11 @@ Two works, and they are not the same one.
 in the public domain in `popcorn.doc`, with the condition that it not be put
 to commercial use without their prior agreement. Redistributing it here rests
 on that declaration and carries that condition with it.
+
+**`src/data.c` is on the game's side of that line**, not this one. It is a C
+file, and it was generated rather than written, but what is in it is the
+authors' data and nothing else — the same bytes as `popcorn.exe`, in a form a
+compiler can read. Changing the container does not change whose work it is.
 
 **The reconstruction** — the C, the Makefile, this README — is a separate work
 written from the disassembly. Ask before assuming a licence for it.
