@@ -52,6 +52,8 @@ static int32_t quit_requested;
 static uint64_t next_present_ns;
 static uint64_t next_retrace_ns;
 static uint32_t tone_divisor;
+static int32_t overlay_on;
+static void draw_overlay(void);
 
 /* The BIOS keyboard buffer the menus read through INT 16h. Sixteen entries,
  * as the real one had, each `scan << 8 | ascii`. */
@@ -67,6 +69,12 @@ static double delay_owed_ns;
 
 #define FRAME_NS (SDL_NS_PER_SECOND / 60)
 
+#ifdef __APPLE__
+#define RELEASE_CHORD "Ctrl+Option"
+#else
+#define RELEASE_CHORD "Ctrl+Alt"
+#endif
+
 int32_t io_init(int32_t scale)
 {
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
@@ -80,7 +88,9 @@ int32_t io_init(int32_t scale)
      * second answer to the same question, and disagreed with the registers as
      * soon as POPCORN_RGBI was set.  Compute it from them once, here. */
     cga_palette_update();
-    if (!SDL_CreateWindowAndRenderer("Popcorn", CGA_W * scale, CGA_H * scale,
+    if (!SDL_CreateWindowAndRenderer("Popcorn (press " RELEASE_CHORD
+                                     " for the overlay menu)",
+                                     CGA_W * scale, CGA_H * scale,
                                      0, &win, &ren)) {
         fprintf(stderr, "popcorn: SDL_CreateWindowAndRenderer: %s\n",
                 SDL_GetError());
@@ -100,8 +110,9 @@ int32_t io_init(int32_t scale)
      * routine at 1ac2:1654 is `paddle = clamp(mouse x / 2)` - so the pointer
      * leaving the window means the paddle stops at the edge while the player
      * is still moving. Confining it to the window is what makes that input
-     * usable at all. Ctrl+Alt lets go, the way a DOS box does; clicking back
-     * in takes it again.
+     * usable at all. Ctrl+Alt lets go, the way a DOS box does, and holds the
+     * game under a card of the keys until a click takes the pointer back -
+     * see overlay_run.
      */
     io_set_grab(1);
 
@@ -155,7 +166,58 @@ static void present_now(void)
     SDL_UnlockTexture(tex);
     SDL_RenderClear(ren);
     SDL_RenderTexture(ren, tex, NULL, NULL);
+    if (overlay_on)
+        draw_overlay();
     SDL_RenderPresent(ren);
+}
+
+/* The card drawn over the frozen game. Lines starting with '#' are headings.
+ * SDL's debug font is 8x8 and this is drawn in the 320x200 logical space, so
+ * a line holds 40 characters at most and the box below holds 33. */
+static const char *const overlay_lines[] = {
+    "#             PAUSED",
+    "",
+    "#MENU",
+    " F1  Play        F6  High scores",
+    " F2  Demo        F8  Palette",
+    " F3  Mouse       F9  Sound",
+    " F4  Keyboard    Esc Quit",
+    "",
+    "#IN PLAY",
+    " J / K   Paddle left / right",
+    " Space   Launch (keyboard)",
+    " Click   Launch (mouse)",
+    " Esc     Pause",
+    "",
+    "# Click or " RELEASE_CHORD " to resume",
+};
+
+static void draw_overlay(void)
+{
+    const int32_t n = (int32_t)(sizeof overlay_lines / sizeof *overlay_lines);
+    const float line_h = 10, pad = 8;
+    SDL_FRect box = { 20, 0, CGA_W - 40, n * line_h + 2 * pad - 2 };
+    box.y = (CGA_H - box.h) / 2;
+
+    SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(ren, 0, 0, 0, 0x90);
+    SDL_RenderFillRect(ren, NULL);
+    SDL_SetRenderDrawColor(ren, 0, 0, 0, 0xe0);
+    SDL_RenderFillRect(ren, &box);
+    SDL_SetRenderDrawColor(ren, 0x55, 0xff, 0xff, 0xff);
+    SDL_RenderRect(ren, &box);
+
+    for (int32_t i = 0; i < n; i++) {
+        const char *s = overlay_lines[i];
+        if (*s == '#') {
+            s++;
+            SDL_SetRenderDrawColor(ren, 0x55, 0xff, 0xff, 0xff);
+        } else {
+            SDL_SetRenderDrawColor(ren, 0xff, 0xff, 0xff, 0xff);
+        }
+        SDL_RenderDebugText(ren, box.x + pad, box.y + pad + i * line_h, s);
+    }
+    SDL_SetRenderDrawColor(ren, 0, 0, 0, 0xff);
 }
 
 /* Put the framebuffer on the screen, at most sixty times a second.
@@ -694,6 +756,83 @@ void io_set_int09_installed(int32_t on)
         io_flush_keys();        /* what the BIOS buffer held is unreachable */
 }
 
+static void track_pointer(const SDL_MouseMotionEvent *m)
+{
+    float lx, ly;
+    SDL_RenderCoordinatesFromWindow(ren, m->x, m->y, &lx, &ly);
+    mouse_x = lx * 2.0f;         /* the game's screen is 640 wide */
+    mouse_y = ly;
+}
+
+static int32_t is_release_chord(const SDL_KeyboardEvent *k)
+{
+    return (k->mod & SDL_KMOD_CTRL) && (k->mod & SDL_KMOD_ALT);
+}
+
+/* The pointer let go, the sound paused and the key card drawn over the game,
+ * until a click in the window, Esc or the chord again.
+ *
+ * Runs inside io_pump, so the game is held wherever it called from and its
+ * clocks see one long stall, which they already give up rather than repay.
+ *
+ * Nothing pressed here reaches the game, but releases do, so a paddle key
+ * held when the card opened is not still held when it closes. F9's release is
+ * kept back: that is the edge int09_handler toggles the sound on.
+ *
+ * The click that closes it is taken on the button's release, so the game
+ * does not read it as a launch. */
+static void overlay_run(void)
+{
+    int32_t pressed = 0;
+
+    io_set_grab(0);
+    if (audio)
+        SDL_PauseAudioStreamDevice(audio);
+    overlay_on = 1;
+    while (overlay_on) {
+        present_now();
+        SDL_Event ev;
+        if (!SDL_WaitEventTimeout(&ev, 100))
+            continue;
+        do {
+            switch (ev.type) {
+            case SDL_EVENT_QUIT:
+                quit_requested = 1;
+                io_shutdown();
+                exit(0);
+            case SDL_EVENT_MOUSE_MOTION:
+                track_pointer(&ev.motion);
+                break;
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                pressed = 1;
+                break;
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+                if (pressed)
+                    overlay_on = 0;
+                break;
+            case SDL_EVENT_KEY_DOWN:
+                if (ev.key.repeat)
+                    break;
+                if (ev.key.scancode == SDL_SCANCODE_ESCAPE
+                        || is_release_chord(&ev.key))
+                    overlay_on = 0;
+                break;
+            case SDL_EVENT_KEY_UP: {
+                int32_t sc = scancode_of(ev.key.scancode);
+                if (sc && sc != KEY_F9)
+                    int09_handler((uint8_t)(sc | KEY_BREAK));
+                break;
+            }
+            default:
+                break;
+            }
+        } while (overlay_on && SDL_PollEvent(&ev));
+    }
+    if (audio)
+        SDL_ResumeAudioStreamDevice(audio);
+    io_set_grab(1);
+}
+
 int32_t io_pump(void)
 {
     if (io_lockstep())
@@ -710,14 +849,9 @@ int32_t io_pump(void)
             quit_requested = 1;
             io_shutdown();
             exit(0);
-        case SDL_EVENT_MOUSE_MOTION: {
-            float lx, ly;
-            SDL_RenderCoordinatesFromWindow(ren, ev.motion.x, ev.motion.y,
-                                            &lx, &ly);
-            mouse_x = lx * 2.0f;         /* the game's screen is 640 wide */
-            mouse_y = ly;
+        case SDL_EVENT_MOUSE_MOTION:
+            track_pointer(&ev.motion);
             break;
-        }
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
             /* Clicking in the window takes the pointer back. The click still
              * goes through to the game as the action button, which is what a
@@ -730,9 +864,8 @@ int32_t io_pump(void)
             int32_t down = ev.type == SDL_EVENT_KEY_DOWN;
             /* Ctrl+Alt lets the pointer go, and is not passed on: it is the
              * one chord the game has no use for. */
-            if (down && (ev.key.mod & SDL_KMOD_CTRL)
-                     && (ev.key.mod & SDL_KMOD_ALT)) {
-                io_set_grab(0);
+            if (down && !ev.key.repeat && is_release_chord(&ev.key)) {
+                overlay_run();
                 break;
             }
             int32_t sc = scancode_of(ev.key.scancode);
