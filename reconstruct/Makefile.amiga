@@ -11,14 +11,11 @@
 # and scripts as one initializer.  At runtime it needs Picasso96 installed
 # (Picasso96API.library) and opens a 320x200 RTG screen itself.
 #
-# It builds against amiga/game_unpacked.h: game.h without `packed`, so every
-# word is on an even address.  A 68000 raises an address error on a word
-# read from an odd one, and the shipped image has most of its words at odd
-# offsets.  data.c's pointers are computed from the fields, so they follow
-# the new layout; amiga/seg_bases.c works out where each segment now
-# starts.  The header is generated - `uv run gen_nopad.py --unpacked` on
-# develop - and committed, since this makefile has to work in the split
-# repository, which has no Python tools.
+# It builds game.h's other layout - no MATCH_MEMORY_LAYOUT - so the structs
+# are unpacked and the padding is gone, and every word is on an even address.
+# A 68000 raises an address error on a word read from an odd one, and the
+# shipped image has most of its words at odd offsets.  data.c's pointers are
+# computed from the fields, so they follow the new layout.
 
 CROSS   ?= /opt/amiga/bin/m68k-amigaos-
 CC       = $(CROSS)gcc
@@ -26,33 +23,23 @@ CC       = $(CROSS)gcc
 CPU     ?= 000
 CPUFLAGS = $(if $(filter 000,$(CPU)),-m68000,$(if $(filter 020,$(CPU)),-m68020,-m68040))
 
-LAYOUT_H = amiga/game_unpacked.h
-# The header carries the hash of the game.h it was made from. Through
-# -include, game.h itself expands to nothing, so without this an edit to it
-# would be built from the old copy and nothing would say so.
-GAME_H_SUM := $(shell sha256sum src/game.h | cut -c1-16)
-LAYOUT_SUM := $(shell sed -n 's/.*from src\/game\.h sha256 \([0-9a-f]*\).*/\1/p' $(LAYOUT_H))
-ifneq ($(GAME_H_SUM),$(LAYOUT_SUM))
-$(error $(LAYOUT_H) is stale against src/game.h: on develop, run `uv run gen_nopad.py --unpacked`)
-endif
-
 P96INC  := amiga/vendor/Picasso96Develop/Include
 
 CFLAGS  ?= -O2 -std=c99 -Wall -Wextra -Wno-unused-parameter
 CFLAGS  += -mcrt=nix20 $(CPUFLAGS) -fno-stack-protector
 CFLAGS  += -Wno-cast-function-type
-CFLAGS  += -include $(LAYOUT_H) -Isrc -I$(P96INC)
+CFLAGS  += -Isrc -I$(P96INC)
 
 GAME = $(addprefix amiga/obj/,main.o game.o data.o exepack.o stubs.o \
-                              amiga_io.o harness_stubs.o seg_bases.o)
+                              amiga_io.o harness_stubs.o)
 
 amiga/popcorn: $(GAME)
 	$(CC) $(CFLAGS) -o $@ $(GAME)
 
-amiga/obj/%.o: src/%.c src/game.h $(LAYOUT_H) | amiga/obj
+amiga/obj/%.o: src/%.c src/game.h | amiga/obj
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-amiga/obj/%.o: amiga/%.c src/game.h $(LAYOUT_H) | amiga/obj
+amiga/obj/%.o: amiga/%.c src/game.h | amiga/obj
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 amiga/obj:

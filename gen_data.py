@@ -29,6 +29,14 @@ against the one recovered from POPCORN.EXE.
 
     uv run gen_data.py                  # -> reconstruct/src/data.c
     uv run gen_data.py --check          # regenerate and diff, changing nothing
+
+One file serves both of game.h's layouts. The shape is read from the
+matching one, MATCH_MEMORY_LAYOUT; the padding - PAD(n), a `_pad_<line>`
+field only that layout has - is zero, so nothing here ever writes it, and
+padding found holding anything is refused, since data.c cannot name a field
+whose name is a line number. The pointers are offsetof expressions and follow
+whichever layout compiles them, which is why a pointer into padding is
+refused too: the unmatched build would have no field to compute it from.
 """
 import argparse
 import os
@@ -161,7 +169,8 @@ def load_types(header=None):
         o = os.path.join(d, "probe.o")
         open(c, "w").write('#include "game.h"\nimage_t probe;\n'
                            "uint8_t *g_image;\n")
-        subprocess.run(["gcc", "-std=c99", "-g3", "-c", "-I", inc, "-I", SRC,
+        subprocess.run(["gcc", "-std=c99", "-g3", "-DMATCH_MEMORY_LAYOUT",
+                        "-c", "-I", inc, "-I", SRC,
                         "-o", o, c], check=True)
         with open(o, "rb") as f:
             elf = ELFFile(f)
@@ -332,18 +341,16 @@ class Emitter:
                 self.poison(typ.elem, off + i * typ.elem.size, value)
         elif typ.kind in ("struct", "union"):
             for name, moff, mt in typ.members:
-                if name and name.startswith("_") and name not in self.keep:
+                if name and name.startswith("_"):
                     self.img[off + moff:off + moff + mt.size] = \
                         bytes([value]) * mt.size
                 else:
                     self.poison(mt, off + moff, value)
 
-    def __init__(self, img, image_t, skip_padding=False, keep=()):
+    def __init__(self, img, image_t):
         self.img = img
         self.image_t = image_t
-        self.skip_padding = skip_padding
-        self.keep = set(keep)
-        self.unnameable = []            # pointers that land in dropped bytes
+        self.poisoned = False
         # Which segment each image offset belongs to, and the macro for it.
         self.segs = []
         for member, tname, macro in SEGMENTS:
@@ -376,14 +383,11 @@ class Emitter:
         path, extra = found
         if not path:
             return f"{value:#06x}"
-        parts = [x for x in path.replace("[", ".[").split(".")
-                 if x.startswith("_") and x not in self.keep]
-        if self.skip_padding and parts:
-            # The field it names is not in the no-padding build, so the
-            # address cannot be computed. Say so rather than emit a number
-            # that was only true under the old layout.
-            self.unnameable.append((f"{macro}({path})", value))
-            return f"{value:#06x} /* was {macro}({path}) */"
+        if any(x.startswith("_") for x in path.replace("[", ".[").split(".")):
+            # The unmatched layout has no such field, so the address cannot
+            # be computed there. Name the bytes it points at instead.
+            raise SystemExit(f"gen_data: {value:#06x} points into padding, "
+                             f"{macro}({path}) - name that field in game.h")
         text = f"{macro}({path})"
         return text if extra == 0 else f"{text} + {extra}"
 
@@ -549,14 +553,19 @@ class Emitter:
         out = []
         arms = [self.arm(typ, off)] if typ.kind == "union" else typ.members
         for name, moff, mt in arms:
-            if self.skip_padding and name and name.startswith("_") \
-                    and name not in self.keep:
-                continue                # the no-padding build has no such field
             if self.zero(off + moff, mt.size):
                 continue
             if name is None:                    # anonymous: splice it in
                 out += self.members(mt, off + moff, ind, path)
                 continue
+            if name.startswith("_") and not self.poisoned:
+                # Padding is named for the line it is on, which moves with
+                # every edit above it - so it has to be zero, and these bytes
+                # are something. --poison is the exception: its file is a
+                # throwaway for the matching build, made against one header.
+                raise SystemExit(
+                    f"gen_data: padding {path}.{name} at {off + moff:#x} is not "
+                    f"zero - make those bytes a field in game.h")
             sub = self.emit(mt, off + moff, ind, name, f"{path}.{name}")
             out += self.entry(sub, ind, f".{name} = ", ",")
         return out
@@ -602,40 +611,31 @@ PREAMBLE = '''/*
 const image_t popcorn_image_data = '''
 
 
-def generate(img, skip_padding=False, keep=(), poison=None):
+def generate(img, poison=None):
     global FN_NAMES
     FN_NAMES = defines(r"_FN$")
     image_t = load_types()
     if image_t.size != len(img):
         raise SystemExit(f"gen_data: image_t is {image_t.size:#x} but the "
                          f"image is {len(img):#x}")
-    em = Emitter(img, image_t, skip_padding, keep)
+    em = Emitter(img, image_t)
     if poison is not None:
         em.img = bytearray(em.img)
         em.poison(image_t, 0, poison)
+        em.poisoned = True
     body = em.emit(image_t, 0, 0)
-    if em.unnameable:
-        print(f"gen_data: {len(em.unnameable)} pointers name a field the "
-              f"no-padding build does not have:", file=sys.stderr)
-        seen = set()
-        for text, value in em.unnameable:
-            key = text.split("[")[0]
-            if key in seen:
-                continue
-            seen.add(key)
-            print(f"    {value:#06x}  {text}", file=sys.stderr)
     text = PREAMBLE + "\n".join(body) + ";\n"
-    if skip_padding:
-        # The no-padding header declares these and its accessors use them;
-        # only here is image_t complete enough to work them out.
-        text += ("\n/* Where each segment starts, for the no-padding build's "
-                 "accessors. */\n"
-                 "const int32_t popcorn_seg_assets = "
-                 "(int32_t)offsetof(image_t, seg_assets);\n"
-                 "const int32_t popcorn_seg_animations = "
-                 "(int32_t)offsetof(image_t, seg_animations);\n"
-                 "const int32_t popcorn_seg_runtime = "
-                 "(int32_t)offsetof(image_t, seg_runtime);\n")
+    # The unmatched layout's header declares these and its accessors use
+    # them; only here is image_t complete enough to work them out.
+    text += ("\n#ifndef MATCH_MEMORY_LAYOUT\n"
+             "/* Where each segment starts once the layout is the compiler's. */\n"
+             "const int32_t popcorn_seg_assets = "
+             "(int32_t)offsetof(image_t, seg_assets);\n"
+             "const int32_t popcorn_seg_animations = "
+             "(int32_t)offsetof(image_t, seg_animations);\n"
+             "const int32_t popcorn_seg_runtime = "
+             "(int32_t)offsetof(image_t, seg_runtime);\n"
+             "#endif\n")
     return text
 
 
@@ -647,14 +647,6 @@ def main():
                     help="regenerate and report whether data.c is up to date, "
                          "without writing it")
     ap.add_argument("--out", default=OUT)
-    ap.add_argument("--keep", default="",
-                    help="comma-separated `_`-named fields to put back. Must "
-                         "match gen_nopad.py's --keep exactly")
-    ap.add_argument("--skip-padding", action="store_true",
-                    help="omit every `_`-named field, for the no-padding "
-                         "build - the values still come from the image at "
-                         "their real offsets, so the output is the same data "
-                         "laid out the way game_nopad.h lays it out")
     ap.add_argument("--poison", nargs="?", const="0xcc", default=None,
                     metavar="BYTE",
                     help="fill every `_`-named field with this byte instead "
@@ -667,8 +659,7 @@ def main():
 
     sys.path.insert(0, HERE)
     from tools_dis import load_image
-    text = generate(load_image(), args.skip_padding,
-                    {x.strip() for x in args.keep.split(",") if x.strip()},
+    text = generate(load_image(),
                     None if args.poison is None else int(args.poison, 0))
 
     if args.check:

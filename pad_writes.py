@@ -40,9 +40,7 @@ import argparse
 import collections
 import os
 import re
-import subprocess
 import sys
-import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HEADER = os.path.join(HERE, "reconstruct", "src", "game.h")
@@ -64,23 +62,29 @@ POOL, STRIDE, POOL_END = 0x3138, 14, 0x3384
 
 
 def pad_ranges():
-    """Every `_pad_*` in global_t, as (name, offset, size), out of game.h."""
-    names = re.findall(r"uint8_t\s+(_pad_\w+)\s*\[", open(HEADER).read())
-    src = ['#include <stdio.h>', '#include <stddef.h>', '#include "game.h"',
-           "int main(void){"]
-    for n in names:
-        src.append(r'  printf("%s %zu %zu\n", "{0}", offsetof(global_t, {0}), '
-                   r'sizeof(((global_t*)0)->{0}));'.format(n))
-    src += ["  return 0; }"]
-    with tempfile.TemporaryDirectory() as d:
-        c, exe = os.path.join(d, "pads.c"), os.path.join(d, "pads")
-        open(c, "w").write("\n".join(src) + "\n")
-        subprocess.run(["gcc", "-I", os.path.dirname(HEADER), "-o", exe, c],
-                       check=True)
-        out = subprocess.run([exe], capture_output=True, text=True,
-                             check=True).stdout
-    return [(n, int(o), int(s)) for n, o, s in
-            (line.split() for line in out.splitlines())]
+    """Every padding field in global_t, as (name, offset, size).
+
+    Read out of the DWARF of a real compile of game.h, in the matching layout
+    - the only one with padding - through gen_data's reader, so this cannot
+    drift from the header. A padding field is PAD(n), named `_pad_<line>` for
+    the line it is on: the name moves with the header, the offset does not.
+    Members of a named sub-struct or union are not followed, since the bytes
+    of one union arm are another arm's fields.
+    """
+    sys.path.insert(0, HERE)
+    from gen_data import load_types
+    image = load_types()
+    glob = next(mt for name, off, mt in image.members if name == "seg_global")
+    out = []
+
+    def walk(t, base):
+        for name, off, mt in t.members:
+            if name is None and mt.kind in ("struct", "union"):
+                walk(mt, base + off)            # anonymous: its own fields
+            elif name and name.startswith("_"):
+                out.append((name, base + off, mt.size))
+    walk(glob, 0)
+    return out
 
 
 def handler_names():
