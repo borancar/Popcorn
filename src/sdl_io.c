@@ -69,6 +69,12 @@ static double delay_owed_ns;
 
 #define FRAME_NS (SDL_NS_PER_SECOND / 60)
 
+#ifdef __APPLE__
+#define RELEASE_CHORD "Ctrl+Option"
+#else
+#define RELEASE_CHORD "Ctrl+Alt"
+#endif
+
 int32_t io_init(int32_t scale)
 {
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
@@ -82,7 +88,9 @@ int32_t io_init(int32_t scale)
      * second answer to the same question, and disagreed with the registers as
      * soon as POPCORN_RGBI was set.  Compute it from them once, here. */
     cga_palette_update();
-    if (!SDL_CreateWindowAndRenderer("Popcorn", CGA_W * scale, CGA_H * scale,
+    if (!SDL_CreateWindowAndRenderer("Popcorn (press " RELEASE_CHORD
+                                     " for the overlay menu)",
+                                     CGA_W * scale, CGA_H * scale,
                                      0, &win, &ren)) {
         fprintf(stderr, "popcorn: SDL_CreateWindowAndRenderer: %s\n",
                 SDL_GetError());
@@ -162,12 +170,6 @@ static void present_now(void)
         draw_overlay();
     SDL_RenderPresent(ren);
 }
-
-#ifdef __APPLE__
-#define RELEASE_CHORD "Ctrl+Option"
-#else
-#define RELEASE_CHORD "Ctrl+Alt"
-#endif
 
 /* The card drawn over the frozen game. Lines starting with '#' are headings.
  * SDL's debug font is 8x8 and this is drawn in the 320x200 logical space, so
