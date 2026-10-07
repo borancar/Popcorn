@@ -14,6 +14,10 @@
 CC      ?= cc
 CFLAGS  ?= -O2 -g -std=c99 -Wall -Wextra -Wno-unused-parameter
 CFLAGS  += -Isrc
+# The layout the original has, byte for byte: what every check here compares
+# against. In CPPFLAGS, which the compile rule uses and `make nopad` leaves
+# out - see game.h for the other layout.
+CPPFLAGS += -DMATCH_MEMORY_LAYOUT
 CFLAGS  += $(shell pkg-config --cflags sdl3)
 LDLIBS  += $(shell pkg-config --libs sdl3) -lm
 
@@ -34,7 +38,8 @@ LDLIBS  += $(shell pkg-config --libs sdl3) -lm
 # sync points. They cost nothing when nothing has turned them on, and the
 # alternative is #ifdefs through a transcription, which would make the port
 # harder to read against the disassembly than it needs to be.
-GAME   = src/data.o src/exepack.o src/sdl_io.o src/game.o src/stubs.o
+GAME   = src/data.o src/exepack.o src/sdl_io.o src/game.o src/stubs.o \
+         src/layout_check.o
 CHECK  = tools/verify.o tools/lockstep.o tools/autoplay.o
 COMMON = $(GAME) $(CHECK)
 BIN    = popcorn
@@ -58,40 +63,24 @@ amiga:
 
 # ---------------------------------------------------------------- nopad ---
 #
-# `make nopad` builds popcorn-nopad: the same game with every `_`-named field
-# taken out of the structs, so each named field slides up against the next and
-# the image is a layout the original never had.
+# `make nopad` builds popcorn-nopad: the same game in game.h's other layout,
+# without MATCH_MEMORY_LAYOUT - every struct unpacked and every `_`-named
+# field gone, so the image is a layout the original never had. It is the
+# layout the Amiga build uses, here on the host.
 #
 # It is a test, and what it tests is whether anything is *read* that has not
 # been named. It can work at all only because data.c computes the game's own
 # pointers from the fields they point at, so moving a field moves every
 # pointer to it; what cannot follow is a read of a byte no field covers.
-# Anything that misbehaves in this binary is such a read.
-#
-# nopad/game.h arrives through -include, not through -I: `#include "game.h"`
-# is a quoted include, so src/game.c would find its own directory's copy
-# whatever -I said. Pulling the generated header in first means the guard is
-# already defined and src/game.h expands to nothing.
+# Anything that misbehaves in this binary is such a read. The harness flags
+# that reach into the image by address - --verify, --lockstep, --resume -
+# assume the original's layout and mean nothing here.
 NOPADBIN = popcorn-nopad
-NOPAD_SRC = nopad/data.c src/exepack.c src/sdl_io.c src/game.c src/stubs.c \
+NOPAD_SRC = src/data.c src/exepack.c src/sdl_io.c src/game.c src/stubs.c \
             tools/verify.c tools/lockstep.c tools/autoplay.c tools/devmain.c
 
-# KEEP puts named fields back, one at a time, to find which one a symptom
-# belongs to:
-#
-#     make nopad                       every `_` field dropped
-#     make nopad KEEP=_code2           that one put back
-#     make nopad KEEP=_code1,_code2    or several
-#
-# Both generators get the same list, because a header and a data file that
-# disagree about which fields exist is worse than either extreme. The recipe
-# regenerates every time rather than depending on file dates: KEEP is not a
-# file, and make cannot see it change.
 nopad:
-	cd .. && uv run gen_nopad.py $(if $(KEEP),--keep $(KEEP))
-	cd .. && uv run gen_data.py --skip-padding $(if $(KEEP),--keep $(KEEP)) \
-	         --out reconstruct/nopad/data.c
-	$(CC) $(CFLAGS) -include nopad/game.h -o $(NOPADBIN) $(NOPAD_SRC) $(LDLIBS)
+	$(CC) $(CFLAGS) -o $(NOPADBIN) $(NOPAD_SRC) $(LDLIBS)
 
 clean:
 	rm -f src/*.o tools/*.o $(BIN) $(DEVBIN) $(NOPADBIN)

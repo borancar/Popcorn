@@ -110,14 +110,14 @@ are Intuition IDCMP, `timer.device` and `audio.device`.
 `amiga/amiga_io.c` is the entire platform layer, implementing the same
 backend interface `src/sdl_io.c` does.
 
-It builds against `amiga/game_unpacked.h`, which is `game.h`
-without `packed`. A 68000 raises an address error on a word read from an
-odd address, and most of the shipped image's words sit at odd offsets.
-Unpacked, the compiler pads every word onto an even address, and `data.c`'s
-pointers follow the fields because they are computed from them. Every
-segment still fits in 16 bits. The header is generated from `game.h` and
-carries its hash, so the build stops rather than compile against a stale
-copy.
+It builds `game.h`'s other layout. With `MATCH_MEMORY_LAYOUT` defined, as
+the native build has it, every struct is packed and every byte of the
+original is there, so the image is the one `POPCORN.EXE` unpacks to.
+Without it the structs are unpacked and the padding is gone. A 68000 raises
+an address error on a word read from an odd address, and most of the
+shipped image's words sit at odd offsets; unpacked, the compiler puts every
+word on an even one, and `data.c`'s pointers follow the fields because they
+are computed from them. Every segment still fits in 16 bits.
 
 ## What this is
 
@@ -197,14 +197,13 @@ nothing else, because that command line is part of what the port is.
 | --- | --- |
 | `src/main.c` | `popcorn` — the game, and its one optional argument |
 | `src/game.c` | the transcription: every routine, each with its `1ac2:xxxx` |
-| `src/game.h` | types, the named image offsets, the backend interface |
+| `src/game.h` | types, the named image offsets, the backend interface - in either layout, by `MATCH_MEMORY_LAYOUT` |
+| `src/layout_check.c` | every offset the matching layout relies on, checked at compile time |
 | `src/data.c` | the game's data, written down — generated from `game.h` |
 | `src/exepack.c` | the EXEPACK decoder, which is what checks `data.c` |
 | `src/sdl_io.c` | window, presentation, keyboard, mouse, retrace, delay |
 | `amiga/amiga_io.c` | the same backend on AmigaOS: P96 screen, IDCMP, timer.device, audio.device |
 | `amiga/harness_stubs.c` | the checking harness, absent from this build, as no-ops |
-| `amiga/game_unpacked.h` | `game.h` without `packed`, for the 68000 — generated, never edited |
-| `amiga/seg_bases.c` | where each segment starts in the unpacked image |
 | `Makefile.amiga` | the cross build for AmigaOS 3.2 + Picasso96 |
 | `src/stubs.c` | what is not transcribed. One safety net is left in it |
 | `tools/devmain.c` | `popcorn-dev` — the same game with the harness flags |
